@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streamlick - Professional Browser-Based Live Streaming Studio</title>
+    <meta name="description" content="Create professional live streams with guests, custom branding, and multistreaming. All from your browser. $20/month unlimited.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-purple-600 to-blue-600">
+    <!-- Navigation -->
+    <nav class="container mx-auto px-6 py-6">
+        <div class="flex justify-between items-center">
+            <div class="text-white text-3xl font-bold">🎥 Streamlick</div>
+            <a href="/login" class="bg-white text-purple-600 px-6 py-2 rounded-lg font-semibold hover:bg-gray-100 transition">
+                Get Started
+            </a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="container mx-auto px-6 py-20 text-center">
+        <h1 class="text-5xl md:text-7xl font-bold text-white mb-6">
+            Professional Live Streaming<br>
+            <span class="text-yellow-300">Right from Your Browser</span>
+        </h1>
+        <p class="text-xl md:text-2xl text-white/90 mb-8 max-w-3xl mx-auto">
+            Host multi-guest streams, add custom branding, and broadcast to YouTube, Facebook, LinkedIn, Twitch—all at once. No downloads required.
+        </p>
+        <div class="flex gap-4 justify-center mb-6">
+            <a href="/login" class="bg-white text-purple-600 px-8 py-4 rounded-lg text-lg font-bold hover:bg-gray-100 transition shadow-lg">
+                Start Free Trial
+            </a>
+            <a href="#features" class="bg-purple-700/50 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-purple-700 transition border-2 border-white/30">
+                See Features
+            </a>
+        </div>
+        <p class="text-white/80 text-lg">
+            <strong>$20/month</strong> - Unlimited everything. Cancel anytime.
+        </p>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="bg-white py-20">
+        <div class="container mx-auto px-6">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+                    Everything You Need to Stream Like a Pro
+                </h2>
+                <p class="text-xl text-gray-600">
+                    One simple price. All features included.
+                </p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Feature 1 -->
+                <div class="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl p-8 hover:shadow-xl transition">
+                    <div class="text-5xl mb-4">🎬</div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-3">Multi-Participant</h3>
+                    <p class="text-gray-700">
+                        Invite up to 10 guests. Perfect for interviews, panels, podcasts, and webinars.
+                    </p>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl p-8 hover:shadow-xl transition">
+                    <div class="text-5xl mb-4">📡</div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-3">Multistreaming</h3>
+                    <p class="text-gray-700">
+                        Stream to YouTube, Facebook, LinkedIn, Twitch, and custom RTMP—all at once.
+                    </p>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl p-8 hover:shadow-xl transition">
+                    <div class="text-5xl mb-4">🎨</div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-3">Custom Branding</h3>
+                    <p class="text-gray-700">
+                        Add your logo, overlays, banners, and backgrounds. Look professional instantly.
+                    </p>
+                </div>
+
+                <!-- Feature 4 -->
+                <div class="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl p-8 hover:shadow-xl transition">
+                    <div class="text-5xl mb-4">💬</div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-3">Aggregate Chat</h3>
+                    <p class="text-gray-700">
+                        See comments from all platforms in one place. Display them on screen.
+                    </p>
+                </div>
+
+                <!-- Feature 5 -->
+                <div class="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl p-8 hover:shadow-xl transition">
+                    <div class="text-5xl mb-4">🖥️</div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-3">Screen Sharing</h3>
+                    <p class="text-gray-700">
+                        Share your screen for presentations, demos, and tutorials with one click.
+                    </p>
+                </div>
+
+                <!-- Feature 6 -->
+                <div class="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl p-8 hover:shadow-xl transition">
+                    <div class="text-5xl mb-4">📹</div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-3">HD Recording</h3>
+                    <p class="text-gray-700">
+                        Record your streams locally in 1080p. Download anytime.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section class="bg-gradient-to-br from-purple-600 to-blue-600 py-20">
+        <div class="container mx-auto px-6 text-center">
+            <h2 class="text-4xl md:text-5xl font-bold text-white mb-4">
+                Simple, Honest Pricing
+            </h2>
+            <p class="text-xl text-white/90 mb-12">
+                One plan. Everything included. No surprises.
+            </p>
+
+            <div class="max-w-lg mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden">
+                <div class="bg-gradient-to-r from-yellow-400 to-orange-500 p-6">
+                    <p class="text-white font-bold text-lg">🎯 MOST POPULAR</p>
+                </div>
+                <div class="p-8">
+                    <h3 class="text-3xl font-bold text-gray-900 mb-2">Pro Plan</h3>
+                    <div class="text-6xl font-bold text-purple-600 mb-6">
+                        $20<span class="text-2xl text-gray-600">/mo</span>
+                    </div>
+
+                    <ul class="text-left space-y-4 mb-8">
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            <span><strong>Up to 10 participants</strong> on screen simultaneously</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            <span><strong>Unlimited streaming</strong> to all platforms</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            <span><strong>1080p Full HD</strong> streaming quality</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            <span><strong>Local recording</strong> in HD quality</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            <span><strong>Custom branding</strong> & overlays</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            <span><strong>Priority support</strong> via email</span>
+                        </li>
+                    </ul>
+
+                    <a href="/login" class="block w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-4 rounded-lg text-lg font-bold hover:from-purple-700 hover:to-blue-700 transition">
+                        Start Free Trial
+                    </a>
+                    <p class="text-sm text-gray-600 mt-4">No credit card required to start</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="bg-white py-20">
+        <div class="container mx-auto px-6">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+                    Go Live in 3 Simple Steps
+                </h2>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-12 max-w-5xl mx-auto">
+                <div class="text-center">
+                    <div class="bg-purple-600 text-white w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-4">1</div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-2">Sign Up Free</h3>
+                    <p class="text-gray-600">Create your account with just your email. No credit card needed.</p>
+                </div>
+                <div class="text-center">
+                    <div class="bg-purple-600 text-white w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-4">2</div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-2">Connect Platforms</h3>
+                    <p class="text-gray-600">Link your YouTube, Facebook, Twitch, and other accounts.</p>
+                </div>
+                <div class="text-center">
+                    <div class="bg-purple-600 text-white w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-4">3</div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-2">Go Live!</h3>
+                    <p class="text-gray-600">Invite guests, customize your studio, and start streaming.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Use Cases -->
+    <section class="bg-gray-50 py-20">
+        <div class="container mx-auto px-6">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+                    Perfect For
+                </h2>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="bg-white rounded-xl p-6 text-center hover:shadow-lg transition">
+                    <div class="text-4xl mb-3">🎙️</div>
+                    <h4 class="font-bold text-gray-900 mb-2">Podcasters</h4>
+                    <p class="text-sm text-gray-600">Stream live episodes with remote guests</p>
+                </div>
+                <div class="bg-white rounded-xl p-6 text-center hover:shadow-lg transition">
+                    <div class="text-4xl mb-3">📚</div>
+                    <h4 class="font-bold text-gray-900 mb-2">Educators</h4>
+                    <p class="text-sm text-gray-600">Host online classes and workshops</p>
+                </div>
+                <div class="bg-white rounded-xl p-6 text-center hover:shadow-lg transition">
+                    <div class="text-4xl mb-3">💼</div>
+                    <h4 class="font-bold text-gray-900 mb-2">Businesses</h4>
+                    <p class="text-sm text-gray-600">Run webinars and product launches</p>
+                </div>
+                <div class="bg-white rounded-xl p-6 text-center hover:shadow-lg transition">
+                    <div class="text-4xl mb-3">🎮</div>
+                    <h4 class="font-bold text-gray-900 mb-2">Gamers</h4>
+                    <p class="text-sm text-gray-600">Stream gameplay to multiple platforms</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="bg-gradient-to-br from-purple-600 to-blue-600 py-20">
+        <div class="container mx-auto px-6 text-center">
+            <h2 class="text-4xl md:text-5xl font-bold text-white mb-6">
+                Ready to Start Streaming?
+            </h2>
+            <p class="text-xl text-white/90 mb-8 max-w-2xl mx-auto">
+                Join thousands of creators who trust Streamlick for their live streaming needs.
+            </p>
+            <a href="/login" class="inline-block bg-white text-purple-600 px-10 py-4 rounded-lg text-xl font-bold hover:bg-gray-100 transition shadow-lg">
+                Get Started Now
+            </a>
+            <p class="text-white/80 mt-6">
+                Start your free trial. No credit card required.
+            </p>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 text-white py-12">
+        <div class="container mx-auto px-6">
+            <div class="grid md:grid-cols-4 gap-8 mb-8">
+                <div>
+                    <h3 class="text-xl font-bold mb-4">🎥 Streamlick</h3>
+                    <p class="text-gray-400">Professional live streaming made simple.</p>
+                </div>
+                <div>
+                    <h4 class="font-bold mb-4">Product</h4>
+                    <ul class="space-y-2 text-gray-400">
+                        <li><a href="#features" class="hover:text-white">Features</a></li>
+                        <li><a href="/login" class="hover:text-white">Pricing</a></li>
+                        <li><a href="/login" class="hover:text-white">Sign Up</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-bold mb-4">Resources</h4>
+                    <ul class="space-y-2 text-gray-400">
+                        <li><a href="#" class="hover:text-white">Documentation</a></li>
+                        <li><a href="#" class="hover:text-white">Support</a></li>
+                        <li><a href="#" class="hover:text-white">Blog</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-bold mb-4">Contact</h4>
+                    <ul class="space-y-2 text-gray-400">
+                        <li><a href="mailto:support@streamlick.com" class="hover:text-white">support@streamlick.com</a></li>
+                        <li><a href="mailto:sales@streamlick.com" class="hover:text-white">sales@streamlick.com</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="border-t border-gray-800 pt-8 text-center text-gray-400">
+                <p>&copy; 2024 Streamlick. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

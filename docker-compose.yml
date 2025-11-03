@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: streamlick-postgres
+    environment:
+      POSTGRES_DB: streamlick_db
+      POSTGRES_USER: streamlick
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U streamlick"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: streamlick-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: streamlick-backend
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://streamlick:secret@postgres:5432/streamlick_db
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  media-server:
+    build:
+      context: ./media-server
+      dockerfile: Dockerfile
+    container_name: streamlick-media
+    ports:
+      - "3001:3001"
+      - "1935:1935"  # RTMP
+      - "40000-40100:40000-40100/udp"  # WebRTC
+    environment:
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+    depends_on:
+      - redis
+    volumes:
+      - ./media-server:/app
+      - /app/node_modules
+      - recordings:/app/recordings
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: streamlick-frontend
+    ports:
+      - "3002:3002"
+    environment:
+      VITE_API_URL: http://localhost:3000
+      VITE_MEDIA_SERVER_URL: http://localhost:3001
+    depends_on:
+      - backend
+      - media-server
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:
+  recordings:

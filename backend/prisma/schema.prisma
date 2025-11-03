@@ -1,0 +1,254 @@
+// Streamlick Database Schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  avatarUrl String?  @map("avatar_url")
+  planType  String   @default("free") @map("plan_type") // free, core, advanced, teams, business
+  role      String   @default("user") // user, admin
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  broadcasts    Broadcast[]
+  destinations  Destination[]
+  participants  Participant[]
+  assets        Asset[]
+  templates     StudioTemplate[]
+  subscriptions Subscription[]
+  mediaClips    MediaClip[]
+  bannedParticipants BannedParticipant[]
+
+  @@map("users")
+}
+
+model Broadcast {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  title          String
+  description    String?
+  status         String   @default("scheduled") // scheduled, live, ended, recording
+  scheduledAt    DateTime? @map("scheduled_at")
+  startedAt      DateTime? @map("started_at")
+  endedAt        DateTime? @map("ended_at")
+  durationSeconds Int?    @map("duration_seconds")
+  studioConfig   Json?    @map("studio_config") // Layout, branding, settings
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  participants          Participant[]
+  recordings            Recording[]
+  chatMessages          ChatMessage[]
+  broadcastDestinations BroadcastDestination[]
+
+  @@map("broadcasts")
+}
+
+model Destination {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  platform       String   // youtube, facebook, linkedin, twitch, custom_rtmp
+  platformUserId String?  @map("platform_user_id")
+  displayName    String?  @map("display_name")
+  rtmpUrl        String?  @map("rtmp_url")
+  streamKey      String?  @map("stream_key") // Encrypted
+  accessToken    String?  @map("access_token") // Encrypted
+  refreshToken   String?  @map("refresh_token") // Encrypted
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  broadcastDestinations BroadcastDestination[]
+
+  @@map("destinations")
+}
+
+model BroadcastDestination {
+  id            String   @id @default(uuid())
+  broadcastId   String   @map("broadcast_id")
+  destinationId String   @map("destination_id")
+  streamUrl     String?  @map("stream_url")
+  streamKey     String?  @map("stream_key") // Encrypted
+  status        String?  // pending, streaming, ended, error
+  viewerCount   Int      @default(0) @map("viewer_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  broadcast   Broadcast   @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  destination Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+
+  @@map("broadcast_destinations")
+}
+
+model Participant {
+  id            String    @id @default(uuid())
+  broadcastId   String    @map("broadcast_id")
+  userId        String?   @map("user_id")
+  joinLinkToken String?   @unique @map("join_link_token")
+  name          String?
+  role          String?   // host, guest, backstage
+  status        String?   // invited, joined, disconnected
+  joinedAt      DateTime? @map("joined_at")
+  leftAt        DateTime? @map("left_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("participants")
+}
+
+model Recording {
+  id              String   @id @default(uuid())
+  broadcastId     String   @map("broadcast_id")
+  filePath        String   @map("file_path")
+  fileSizeBytes   BigInt?  @map("file_size_bytes")
+  durationSeconds Int?     @map("duration_seconds")
+  quality         String?  // 720p, 1080p, 4k
+  format          String?  // mp4, webm
+  storageType     String?  // cloud, local
+  isAvailable     Boolean  @default(true) @map("is_available")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+
+  @@map("recordings")
+}
+
+model Asset {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  type          String?  // logo, overlay, background, banner
+  name          String?
+  fileUrl       String   @map("file_url")
+  fileSizeBytes BigInt?  @map("file_size_bytes")
+  mimeType      String?  @map("mime_type")
+  metadata      Json?    // Dimensions, format-specific data
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("assets")
+}
+
+model StudioTemplate {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  name      String
+  config    Json     // Full studio configuration
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("studio_templates")
+}
+
+model ChatMessage {
+  id          String   @id @default(uuid())
+  broadcastId String   @map("broadcast_id")
+  platform    String?
+  authorName  String?  @map("author_name")
+  messageText String?  @map("message_text")
+  isFeatured  Boolean  @default(false) @map("is_featured")
+  receivedAt  DateTime @default(now()) @map("received_at")
+
+  broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
+}
+
+model Subscription {
+  id                   String    @id @default(uuid())
+  userId               String    @map("user_id")
+  planType             String    @map("plan_type")
+  status               String?   // active, cancelled, expired
+  stripeSubscriptionId String?   @map("stripe_subscription_id")
+  currentPeriodStart   DateTime? @map("current_period_start")
+  currentPeriodEnd     DateTime? @map("current_period_end")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid())
+  category    String   // oauth, webhook, system, rtmp, logging
+  key         String
+  value       String   @db.Text
+  isEncrypted Boolean  @default(false) @map("is_encrypted")
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([category, key], name: "category_key")
+  @@map("system_settings")
+}
+
+model MediaClip {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  type          String   // video, audio, image
+  name          String
+  fileUrl       String   @map("file_url")
+  thumbnailUrl  String?  @map("thumbnail_url")
+  fileSizeBytes BigInt?  @map("file_size_bytes")
+  mimeType      String?  @map("mime_type")
+  durationMs    Int?     @map("duration_ms")
+  hotkey        String?  // Keyboard shortcut to trigger
+  volume        Int      @default(100) // 0-100
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("media_clips")
+}
+
+model DefaultAsset {
+  id           String   @id @default(uuid())
+  type         String   // backgrounds, sounds, images, overlays
+  name         String
+  category     String?  // office, studio, nature, etc.
+  url          String
+  thumbnailUrl String?  @map("thumbnail_url")
+  fileSizeBytes BigInt? @map("file_size_bytes")
+  mimeType     String?  @map("mime_type")
+  isDefault    Boolean  @default(true) @map("is_default")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([type])
+  @@index([type, isActive])
+  @@index([category])
+  @@map("default_assets")
+}
+
+model BannedParticipant {
+  id          String   @id @default(uuid())
+  broadcastId String   @map("broadcast_id")
+  userId      String   @map("user_id")
+  bannedBy    String   @map("banned_by") // User ID who banned
+  reason      String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([broadcastId, userId])
+  @@map("banned_participants")
+}

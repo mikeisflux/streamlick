@@ -1,0 +1,929 @@
+/**
+ * Video Compositor Service
+ *
+ * Combines multiple participant video streams into a single composite video
+ * using Canvas API. Supports:
+ * - Multiple layouts (grid, spotlight, sidebar, picture-in-picture)
+ * - Overlay graphics (logos, banners, lower thirds)
+ * - Background images
+ * - Recording and RTMP streaming
+ */
+
+import { audioMixerService } from './audio-mixer.service';
+
+interface ParticipantStream {
+  id: string;
+  name: string;
+  stream: MediaStream;
+  isLocal: boolean;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
+}
+
+interface LayoutConfig {
+  type: 'grid' | 'spotlight' | 'sidebar' | 'pip';
+  spotlightId?: string; // For spotlight layout
+  positions?: Array<{ x: number; y: number; width: number; height: number }>;
+}
+
+interface OverlayAsset {
+  id: string;
+  type: 'logo' | 'banner' | 'background';
+  url: string;
+  position?: { x: number; y: number; width?: number; height?: number };
+}
+
+interface ChatMessage {
+  id: string;
+  platform: 'youtube' | 'facebook' | 'twitch' | 'x' | 'rumble';
+  author: string;
+  message: string;
+  timestamp: Date;
+}
+
+interface LowerThird {
+  id: string;
+  name: string;
+  title?: string;
+  subtitle?: string;
+  style?: 'modern' | 'classic' | 'minimal' | 'bold';
+  position?: 'left' | 'center' | 'right';
+}
+
+class CompositorService {
+  private canvas: HTMLCanvasElement | null = null;
+  private ctx: CanvasRenderingContext2D | null = null;
+  private outputStream: MediaStream | null = null;
+  private videoElements: Map<string, HTMLVideoElement> = new Map();
+  private participants: Map<string, ParticipantStream> = new Map();
+  private overlays: OverlayAsset[] = [];
+  private background: OverlayAsset | null = null;
+  private layout: LayoutConfig = { type: 'grid' };
+  private animationFrameId: number | null = null;
+  private isCompositing = false;
+  private chatMessages: ChatMessage[] = [];
+  private showChat = false;
+  private lowerThird: LowerThird | null = null;
+  private mediaClipOverlay: HTMLVideoElement | HTMLImageElement | null = null;
+
+  // Canvas dimensions (3840x2160 for 4K UHD)
+  private readonly WIDTH = 3840;
+  private readonly HEIGHT = 2160;
+  private readonly FPS = 30;
+
+  // Performance tracking
+  private frameCount = 0;
+  private lastFrameTime = 0;
+  private lastFpsReport = 0;
+  private renderTimes: number[] = [];
+  private droppedFrames = 0;
+  private performanceCallback?: (metrics: any) => void;
+
+  constructor() {
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = this.WIDTH;
+    this.canvas.height = this.HEIGHT;
+    this.ctx = this.canvas.getContext('2d', {
+      alpha: false,
+      desynchronized: true,
+    });
+  }
+
+  /**
+   * Initialize compositor with participants
+   */
+  async initialize(participants: ParticipantStream[]): Promise<void> {
+    console.log('Initializing compositor with', participants.length, 'participants');
+
+    // Clear existing state
+    this.stop();
+    this.videoElements.clear();
+    this.participants.clear();
+
+    // Initialize audio mixer
+    audioMixerService.initialize();
+
+    // Create video elements and add audio for each participant
+    for (const participant of participants) {
+      await this.addParticipant(participant);
+
+      // Add participant audio to mixer
+      if (participant.audioEnabled && participant.stream) {
+        const audioTrack = participant.stream.getAudioTracks()[0];
+        if (audioTrack) {
+          const audioStream = new MediaStream([audioTrack]);
+          audioMixerService.addStream(participant.id, audioStream);
+        }
+      }
+    }
+
+    // Start compositing
+    this.start();
+  }
+
+  /**
+   * Add a participant to the composition
+   */
+  async addParticipant(participant: ParticipantStream): Promise<void> {
+    console.log('Adding participant to compositor:', participant.id);
+
+    const video = document.createElement('video');
+    video.srcObject = participant.stream;
+    video.autoplay = true;
+    video.playsInline = true;
+    video.muted = true; // Mute for composition (audio handled separately)
+
+    // Wait for video to be ready
+    await new Promise<void>((resolve) => {
+      video.onloadedmetadata = () => {
+        video.play();
+        resolve();
+      };
+    });
+
+    this.videoElements.set(participant.id, video);
+    this.participants.set(participant.id, participant);
+  }
+
+  /**
+   * Remove a participant from the composition
+   */
+  removeParticipant(participantId: string): void {
+    console.log('Removing participant from compositor:', participantId);
+
+    const video = this.videoElements.get(participantId);
+    if (video) {
+      video.pause();
+      video.srcObject = null;
+      this.videoElements.delete(participantId);
+    }
+
+    this.participants.delete(participantId);
+  }
+
+  /**
+   * Update layout configuration
+   */
+  setLayout(layout: LayoutConfig): void {
+    console.log('Updating compositor layout:', layout.type);
+    this.layout = layout;
+  }
+
+  /**
+   * Add overlay asset (logo, banner, etc.)
+   */
+  async addOverlay(overlay: OverlayAsset): Promise<void> {
+    console.log('Adding overlay:', overlay.type, overlay.id);
+
+    if (overlay.type === 'background') {
+      this.background = overlay;
+    } else {
+      this.overlays.push(overlay);
+    }
+  }
+
+  /**
+   * Remove overlay asset
+   */
+  removeOverlay(overlayId: string): void {
+    this.overlays = this.overlays.filter((o) => o.id !== overlayId);
+
+    if (this.background?.id === overlayId) {
+      this.background = null;
+    }
+  }
+
+  /**
+   * Add chat message to compositor
+   */
+  addChatMessage(message: ChatMessage): void {
+    this.chatMessages.push(message);
+
+    // Keep only last 50 messages
+    if (this.chatMessages.length > 50) {
+      this.chatMessages = this.chatMessages.slice(-50);
+    }
+  }
+
+  /**
+   * Toggle chat display on composite video
+   */
+  setShowChat(show: boolean): void {
+    this.showChat = show;
+  }
+
+  /**
+   * Clear all chat messages
+   */
+  clearChatMessages(): void {
+    this.chatMessages = [];
+  }
+
+  /**
+   * Show lower third overlay
+   */
+  showLowerThird(lowerThird: LowerThird): void {
+    this.lowerThird = lowerThird;
+  }
+
+  /**
+   * Hide lower third overlay
+   */
+  hideLowerThird(): void {
+    this.lowerThird = null;
+  }
+
+  /**
+   * Get current lower third
+   */
+  getLowerThird(): LowerThird | null {
+    return this.lowerThird;
+  }
+
+  /**
+   * Set media clip overlay (video or image)
+   */
+  setMediaClipOverlay(element: HTMLVideoElement | HTMLImageElement): void {
+    this.mediaClipOverlay = element;
+  }
+
+  /**
+   * Clear media clip overlay
+   */
+  clearMediaClipOverlay(): void {
+    this.mediaClipOverlay = null;
+  }
+
+  /**
+   * Get current media clip overlay
+   */
+  getMediaClipOverlay(): HTMLVideoElement | HTMLImageElement | null {
+    return this.mediaClipOverlay;
+  }
+
+  /**
+   * Start compositing loop
+   */
+  start(): void {
+    if (this.isCompositing) return;
+
+    console.log('Starting compositor');
+    this.isCompositing = true;
+
+    // Capture stream from canvas
+    const frameRate = this.FPS;
+    this.outputStream = this.canvas!.captureStream(frameRate);
+
+    // Start animation loop
+    this.animate();
+  }
+
+  /**
+   * Stop compositing
+   */
+  stop(): void {
+    console.log('Stopping compositor');
+    this.isCompositing = false;
+
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+
+    if (this.outputStream) {
+      this.outputStream.getTracks().forEach((track) => track.stop());
+      this.outputStream = null;
+    }
+
+    // Stop audio mixer
+    audioMixerService.stop();
+  }
+
+  /**
+   * Get the composite output stream (video + mixed audio)
+   */
+  getOutputStream(): MediaStream | null {
+    if (!this.outputStream) {
+      return null;
+    }
+
+    // Get mixed audio stream
+    const mixedAudioStream = audioMixerService.getOutputStream();
+
+    if (!mixedAudioStream) {
+      // Return video-only stream if no audio
+      return this.outputStream;
+    }
+
+    // Combine video from canvas with mixed audio
+    const compositeStream = new MediaStream();
+
+    // Add video track from canvas
+    const videoTrack = this.outputStream.getVideoTracks()[0];
+    if (videoTrack) {
+      compositeStream.addTrack(videoTrack);
+    }
+
+    // Add mixed audio track
+    const audioTrack = mixedAudioStream.getAudioTracks()[0];
+    if (audioTrack) {
+      compositeStream.addTrack(audioTrack);
+    }
+
+    return compositeStream;
+  }
+
+  /**
+   * Get the canvas element for direct rendering (e.g., media clip overlays)
+   */
+  getCanvas(): HTMLCanvasElement | null {
+    return this.canvas;
+  }
+
+  /**
+   * Main animation loop
+   */
+  private animate = (): void => {
+    if (!this.isCompositing || !this.ctx) return;
+
+    const frameStartTime = performance.now();
+
+    // Track frame timing
+    if (this.lastFrameTime > 0) {
+      const frameDelta = frameStartTime - this.lastFrameTime;
+      const expectedFrameTime = 1000 / this.FPS;
+
+      // Detect dropped frames (frame took longer than expected + 50% tolerance)
+      if (frameDelta > expectedFrameTime * 1.5) {
+        this.droppedFrames++;
+      }
+    }
+    this.lastFrameTime = frameStartTime;
+
+    try {
+      // Clear canvas
+      this.ctx.fillStyle = '#000000';
+      this.ctx.fillRect(0, 0, this.WIDTH, this.HEIGHT);
+
+      // Draw background if exists
+      if (this.background) {
+        this.drawBackground();
+      }
+
+      // Draw participants based on layout
+      this.drawParticipants();
+
+      // Draw overlays (logos, banners, lower thirds)
+      this.drawOverlays();
+
+      // Draw chat messages if enabled
+      if (this.showChat) {
+        this.drawChatMessages();
+      }
+
+      // Draw lower third if active
+      if (this.lowerThird) {
+        this.drawLowerThird();
+      }
+
+      // Draw media clip overlay if active (on top of everything)
+      if (this.mediaClipOverlay) {
+        this.drawMediaClipOverlay();
+      }
+    } catch (error) {
+      console.error('Compositor animation error:', error);
+    }
+
+    // Track render time
+    const renderTime = performance.now() - frameStartTime;
+    this.renderTimes.push(renderTime);
+
+    // Keep only last 100 render times
+    if (this.renderTimes.length > 100) {
+      this.renderTimes.shift();
+    }
+
+    this.frameCount++;
+
+    // Report performance metrics every 5 seconds
+    const now = Date.now();
+    if (now - this.lastFpsReport >= 5000) {
+      this.reportPerformanceMetrics();
+      this.lastFpsReport = now;
+    }
+
+    // Continue loop
+    this.animationFrameId = requestAnimationFrame(this.animate);
+  };
+
+  /**
+   * Report performance metrics
+   */
+  private reportPerformanceMetrics(): void {
+    if (this.renderTimes.length === 0) return;
+
+    const avgRenderTime = this.renderTimes.reduce((a, b) => a + b, 0) / this.renderTimes.length;
+    const maxRenderTime = Math.max(...this.renderTimes);
+    const minRenderTime = Math.min(...this.renderTimes);
+
+    const metrics = {
+      averageRenderTime: avgRenderTime.toFixed(2),
+      maxRenderTime: maxRenderTime.toFixed(2),
+      minRenderTime: minRenderTime.toFixed(2),
+      droppedFrames: this.droppedFrames,
+      totalFrames: this.frameCount,
+      dropRate: ((this.droppedFrames / this.frameCount) * 100).toFixed(2),
+      participantCount: this.participants.size,
+      overlayCount: this.overlays.length,
+      chatMessagesCount: this.chatMessages.length,
+    };
+
+    // Call performance callback if set
+    if (this.performanceCallback) {
+      this.performanceCallback(metrics);
+    }
+
+    console.log('Compositor performance:', metrics);
+  }
+
+  /**
+   * Set performance callback for external monitoring
+   */
+  setPerformanceCallback(callback: (metrics: any) => void): void {
+    this.performanceCallback = callback;
+  }
+
+  /**
+   * Get current performance metrics
+   */
+  getPerformanceMetrics(): any {
+    if (this.renderTimes.length === 0) return null;
+
+    const avgRenderTime = this.renderTimes.reduce((a, b) => a + b, 0) / this.renderTimes.length;
+
+    return {
+      averageRenderTime: avgRenderTime.toFixed(2),
+      droppedFrames: this.droppedFrames,
+      totalFrames: this.frameCount,
+      dropRate: ((this.droppedFrames / this.frameCount) * 100).toFixed(2),
+      participantCount: this.participants.size,
+    };
+  }
+
+  /**
+   * Draw background image
+   */
+  private drawBackground(): void {
+    if (!this.background || !this.ctx) return;
+
+    const img = new Image();
+    img.src = this.background.url;
+
+    // Draw stretched to fill canvas
+    this.ctx.drawImage(img, 0, 0, this.WIDTH, this.HEIGHT);
+  }
+
+  /**
+   * Draw all participants based on current layout
+   */
+  private drawParticipants(): void {
+    const participantArray = Array.from(this.participants.values());
+
+    switch (this.layout.type) {
+      case 'grid':
+        this.drawGridLayout(participantArray);
+        break;
+      case 'spotlight':
+        this.drawSpotlightLayout(participantArray);
+        break;
+      case 'sidebar':
+        this.drawSidebarLayout(participantArray);
+        break;
+      case 'pip':
+        this.drawPipLayout(participantArray);
+        break;
+    }
+  }
+
+  /**
+   * Draw grid layout
+   */
+  private drawGridLayout(participants: ParticipantStream[]): void {
+    if (participants.length === 0 || !this.ctx) return;
+
+    const count = participants.length;
+    const cols = Math.ceil(Math.sqrt(count));
+    const rows = Math.ceil(count / cols);
+
+    const cellWidth = this.WIDTH / cols;
+    const cellHeight = this.HEIGHT / rows;
+    const padding = 10;
+
+    participants.forEach((participant, index) => {
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+
+      const x = col * cellWidth + padding;
+      const y = row * cellHeight + padding;
+      const width = cellWidth - padding * 2;
+      const height = cellHeight - padding * 2;
+
+      this.drawParticipantVideo(participant.id, x, y, width, height);
+      this.drawParticipantName(participant.name, x, y, width, height);
+    });
+  }
+
+  /**
+   * Draw spotlight layout (one large, others small)
+   */
+  private drawSpotlightLayout(participants: ParticipantStream[]): void {
+    if (participants.length === 0 || !this.ctx) return;
+
+    const spotlightId = this.layout.spotlightId || participants[0]?.id;
+    const spotlight = participants.find((p) => p.id === spotlightId);
+    const others = participants.filter((p) => p.id !== spotlightId);
+
+    if (spotlight) {
+      // Draw main participant (80% of width)
+      const mainWidth = this.WIDTH * 0.8;
+      const mainHeight = this.HEIGHT;
+      this.drawParticipantVideo(spotlight.id, 0, 0, mainWidth, mainHeight);
+      this.drawParticipantName(spotlight.name, 0, 0, mainWidth, mainHeight);
+    }
+
+    // Draw others in sidebar (20% width)
+    const sidebarWidth = this.WIDTH * 0.2;
+    const cellHeight = others.length > 0 ? this.HEIGHT / others.length : 0;
+    const padding = 10;
+
+    others.forEach((participant, index) => {
+      const x = this.WIDTH - sidebarWidth + padding;
+      const y = index * cellHeight + padding;
+      const width = sidebarWidth - padding * 2;
+      const height = cellHeight - padding * 2;
+
+      this.drawParticipantVideo(participant.id, x, y, width, height);
+      this.drawParticipantName(participant.name, x, y, width, height);
+    });
+  }
+
+  /**
+   * Draw sidebar layout
+   */
+  private drawSidebarLayout(participants: ParticipantStream[]): void {
+    // Similar to spotlight but optimized for side-by-side
+    this.drawSpotlightLayout(participants);
+  }
+
+  /**
+   * Draw picture-in-picture layout
+   */
+  private drawPipLayout(participants: ParticipantStream[]): void {
+    if (participants.length === 0 || !this.ctx) return;
+
+    const main = participants[0];
+    const pip = participants[1];
+
+    // Draw main participant (full screen)
+    this.drawParticipantVideo(main.id, 0, 0, this.WIDTH, this.HEIGHT);
+    this.drawParticipantName(main.name, 0, 0, this.WIDTH, this.HEIGHT);
+
+    // Draw PIP in corner (20% size)
+    if (pip) {
+      const pipWidth = this.WIDTH * 0.2;
+      const pipHeight = this.HEIGHT * 0.2;
+      const x = this.WIDTH - pipWidth - 20;
+      const y = this.HEIGHT - pipHeight - 20;
+
+      this.drawParticipantVideo(pip.id, x, y, pipWidth, pipHeight);
+      this.drawParticipantName(pip.name, x, y, pipWidth, pipHeight);
+    }
+  }
+
+  /**
+   * Draw individual participant video
+   */
+  private drawParticipantVideo(
+    participantId: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): void {
+    if (!this.ctx) return;
+
+    const video = this.videoElements.get(participantId);
+    const participant = this.participants.get(participantId);
+
+    if (!video || !participant) return;
+
+    // Draw black background
+    this.ctx.fillStyle = '#1a1a1a';
+    this.ctx.fillRect(x, y, width, height);
+
+    // Draw video if enabled
+    if (participant.videoEnabled && video.readyState >= 2) {
+      // Calculate aspect ratio fit
+      const videoAspect = video.videoWidth / video.videoHeight;
+      const targetAspect = width / height;
+
+      let drawWidth = width;
+      let drawHeight = height;
+      let drawX = x;
+      let drawY = y;
+
+      if (videoAspect > targetAspect) {
+        // Video is wider
+        drawHeight = width / videoAspect;
+        drawY = y + (height - drawHeight) / 2;
+      } else {
+        // Video is taller
+        drawWidth = height * videoAspect;
+        drawX = x + (width - drawWidth) / 2;
+      }
+
+      this.ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
+    } else {
+      // Video disabled - show placeholder
+      this.ctx.fillStyle = '#333333';
+      this.ctx.fillRect(x, y, width, height);
+
+      // Draw camera off icon
+      this.ctx.fillStyle = '#666666';
+      this.ctx.font = `${Math.min(width, height) * 0.3}px Arial`;
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.fillText('📵', x + width / 2, y + height / 2);
+    }
+
+    // Draw border
+    this.ctx.strokeStyle = '#444444';
+    this.ctx.lineWidth = 2;
+    this.ctx.strokeRect(x, y, width, height);
+  }
+
+  /**
+   * Draw participant name label
+   */
+  private drawParticipantName(
+    name: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): void {
+    if (!this.ctx) return;
+
+    const fontSize = Math.max(12, Math.min(24, width * 0.05));
+    const padding = 10;
+    const labelHeight = fontSize + padding * 2;
+
+    // Draw semi-transparent background
+    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    this.ctx.fillRect(x, y + height - labelHeight, width, labelHeight);
+
+    // Draw name text
+    this.ctx.fillStyle = '#ffffff';
+    this.ctx.font = `${fontSize}px Arial`;
+    this.ctx.textAlign = 'left';
+    this.ctx.textBaseline = 'middle';
+    this.ctx.fillText(name, x + padding, y + height - labelHeight / 2);
+  }
+
+  /**
+   * Draw overlay graphics (logos, banners)
+   */
+  private drawOverlays(): void {
+    if (!this.ctx) return;
+
+    this.overlays.forEach((overlay) => {
+      const img = new Image();
+      img.src = overlay.url;
+
+      const pos = overlay.position || { x: 0, y: 0 };
+      const width = overlay.position?.width || img.width;
+      const height = overlay.position?.height || img.height;
+
+      this.ctx!.drawImage(img, pos.x, pos.y, width, height);
+    });
+  }
+
+  /**
+   * Draw chat messages on composite video
+   * Shows the most recent 3 messages in the bottom-right corner
+   */
+  private drawChatMessages(): void {
+    if (!this.ctx || this.chatMessages.length === 0) return;
+
+    const maxMessages = 3;
+    const recentMessages = this.chatMessages.slice(-maxMessages);
+
+    const chatWidth = 400;
+    const messageHeight = 80;
+    const padding = 20;
+    const gap = 10;
+
+    const startX = this.WIDTH - chatWidth - padding;
+    const startY = this.HEIGHT - (recentMessages.length * (messageHeight + gap)) - padding;
+
+    recentMessages.forEach((msg, index) => {
+      const y = startY + index * (messageHeight + gap);
+
+      // Draw message background
+      this.ctx!.fillStyle = 'rgba(17, 24, 39, 0.9)'; // gray-900 with opacity
+      this.ctx!.fillRect(startX, y, chatWidth, messageHeight);
+
+      // Draw platform indicator
+      const platformColors: Record<string, string> = {
+        youtube: '#FF0000',
+        facebook: '#1877F2',
+        twitch: '#9146FF',
+        x: '#000000',
+        rumble: '#85C742',
+      };
+
+      this.ctx!.fillStyle = platformColors[msg.platform] || '#666666';
+      this.ctx!.fillRect(startX, y, 4, messageHeight);
+
+      // Draw author name
+      this.ctx!.fillStyle = '#FFFFFF';
+      this.ctx!.font = 'bold 16px Arial';
+      this.ctx!.textAlign = 'left';
+      this.ctx!.textBaseline = 'top';
+
+      const textX = startX + 15;
+      const textY = y + 10;
+
+      this.ctx!.fillText(msg.author, textX, textY);
+
+      // Draw message (wrap text if needed)
+      this.ctx!.fillStyle = '#E5E7EB'; // gray-200
+      this.ctx!.font = '14px Arial';
+
+      const maxWidth = chatWidth - 30;
+      const words = msg.message.split(' ');
+      let line = '';
+      let lineY = textY + 25;
+
+      for (let i = 0; i < words.length; i++) {
+        const testLine = line + words[i] + ' ';
+        const metrics = this.ctx!.measureText(testLine);
+
+        if (metrics.width > maxWidth && i > 0) {
+          this.ctx!.fillText(line, textX, lineY);
+          line = words[i] + ' ';
+          lineY += 20;
+          if (lineY > y + messageHeight - 10) break; // Stop if out of space
+        } else {
+          line = testLine;
+        }
+      }
+      this.ctx!.fillText(line, textX, lineY);
+    });
+  }
+
+  /**
+   * Draw lower third overlay
+   * Shows name, title, and subtitle with styled background
+   */
+  private drawLowerThird(): void {
+    if (!this.ctx || !this.lowerThird) return;
+
+    const lt = this.lowerThird;
+    const padding = 30;
+    const innerPadding = 20;
+    const maxWidth = 600;
+    const minWidth = 400;
+
+    // Calculate position
+    let x = padding;
+    if (lt.position === 'center') {
+      x = (this.WIDTH - minWidth) / 2;
+    } else if (lt.position === 'right') {
+      x = this.WIDTH - maxWidth - padding;
+    }
+
+    const y = this.HEIGHT - 180;
+
+    // Calculate text metrics for sizing
+    this.ctx.font = 'bold 36px Arial';
+    const nameWidth = Math.max(minWidth, Math.min(maxWidth, this.ctx.measureText(lt.name).width + innerPadding * 2));
+
+    let totalHeight = 70;
+    if (lt.title) totalHeight += 30;
+    if (lt.subtitle) totalHeight += 25;
+
+    // Draw based on style
+    const style = lt.style || 'modern';
+
+    if (style === 'modern') {
+      // Gradient background
+      const gradient = this.ctx.createLinearGradient(x, y, x + nameWidth, y);
+      gradient.addColorStop(0, '#3B82F6');  // blue-500
+      gradient.addColorStop(1, '#2563EB');  // blue-600
+      this.ctx.fillStyle = gradient;
+      this.ctx.fillRect(x, y, nameWidth, totalHeight);
+
+      // Bottom accent line
+      this.ctx.fillStyle = '#60A5FA'; // blue-400
+      this.ctx.fillRect(x, y + totalHeight - 4, nameWidth, 4);
+    } else if (style === 'classic') {
+      // Solid dark background
+      this.ctx.fillStyle = 'rgba(17, 24, 39, 0.95)'; // gray-900
+      this.ctx.fillRect(x, y, nameWidth, totalHeight);
+
+      // Gold accent line
+      this.ctx.fillStyle = '#F59E0B'; // amber-500
+      this.ctx.fillRect(x, y, nameWidth, 4);
+    } else if (style === 'minimal') {
+      // Translucent background with blur effect simulation
+      this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      this.ctx.fillRect(x, y, nameWidth, totalHeight);
+
+      // Thin border
+      this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      this.ctx.lineWidth = 1;
+      this.ctx.strokeRect(x, y, nameWidth, totalHeight);
+    } else if (style === 'bold') {
+      // Bold red/orange gradient
+      const gradient = this.ctx.createLinearGradient(x, y, x + nameWidth, y);
+      gradient.addColorStop(0, '#DC2626');  // red-600
+      gradient.addColorStop(1, '#EA580C');  // orange-600
+      this.ctx.fillStyle = gradient;
+      this.ctx.fillRect(x, y, nameWidth, totalHeight);
+    }
+
+    // Draw text content
+    const textX = x + innerPadding;
+    let textY = y + innerPadding;
+
+    // Name
+    this.ctx.fillStyle = '#FFFFFF';
+    this.ctx.font = 'bold 36px Arial';
+    this.ctx.textAlign = 'left';
+    this.ctx.textBaseline = 'top';
+    this.ctx.fillText(lt.name, textX, textY);
+    textY += 40;
+
+    // Title
+    if (lt.title) {
+      this.ctx.fillStyle = style === 'minimal' ? '#FFFFFF' : '#E5E7EB'; // gray-200
+      this.ctx.font = '600 24px Arial';
+      this.ctx.fillText(lt.title, textX, textY);
+      textY += 30;
+    }
+
+    // Subtitle
+    if (lt.subtitle) {
+      this.ctx.fillStyle = style === 'minimal' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(229, 231, 235, 0.8)';
+      this.ctx.font = '20px Arial';
+      this.ctx.fillText(lt.subtitle, textX, textY);
+    }
+  }
+
+  /**
+   * Draw media clip overlay (video or image)
+   * Renders on top of everything else, centered on the canvas
+   */
+  private drawMediaClipOverlay(): void {
+    if (!this.ctx || !this.mediaClipOverlay) return;
+
+    const element = this.mediaClipOverlay;
+
+    // Calculate dimensions to maintain aspect ratio
+    let drawWidth = this.WIDTH;
+    let drawHeight = this.HEIGHT;
+    let drawX = 0;
+    let drawY = 0;
+
+    if (element instanceof HTMLVideoElement || element instanceof HTMLImageElement) {
+      const videoWidth = element instanceof HTMLVideoElement ? element.videoWidth : element.naturalWidth;
+      const videoHeight = element instanceof HTMLVideoElement ? element.videoHeight : element.naturalHeight;
+
+      if (videoWidth && videoHeight) {
+        const aspectRatio = videoWidth / videoHeight;
+        const canvasAspectRatio = this.WIDTH / this.HEIGHT;
+
+        if (aspectRatio > canvasAspectRatio) {
+          // Video is wider than canvas
+          drawWidth = this.WIDTH;
+          drawHeight = this.WIDTH / aspectRatio;
+          drawX = 0;
+          drawY = (this.HEIGHT - drawHeight) / 2;
+        } else {
+          // Video is taller than canvas
+          drawHeight = this.HEIGHT;
+          drawWidth = this.HEIGHT * aspectRatio;
+          drawX = (this.WIDTH - drawWidth) / 2;
+          drawY = 0;
+        }
+      }
+
+      // Draw the media clip
+      this.ctx.drawImage(element, drawX, drawY, drawWidth, drawHeight);
+    }
+  }
+}
+
+// Export singleton instance
+export const compositorService = new CompositorService();

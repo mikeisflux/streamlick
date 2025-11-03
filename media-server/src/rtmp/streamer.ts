@@ -1,0 +1,415 @@
+import ffmpeg from 'fluent-ffmpeg';
+import logger from '../utils/logger';
+import { diagnosticLogger } from '../services/diagnostic-logger.service';
+
+export interface RTMPDestination {
+  id: string;
+  platform: string;
+  rtmpUrl: string;
+  streamKey: string;
+}
+
+export interface StreamerOptions {
+  width: number;
+  height: number;
+  fps: number;
+  videoBitrate: string;
+  audioBitrate: string;
+}
+
+interface StreamerState {
+  command: any;
+  retryCount: number;
+  maxRetries: number;
+  lastError?: string;
+  isReconnecting: boolean;
+  reconnectTimer?: NodeJS.Timeout;
+}
+
+const activeStreamers = new Map<string, StreamerState>();
+const MAX_RETRIES = 5;
+const BASE_RETRY_DELAY = 2000; // 2 seconds
+
+/**
+ * Start RTMP streaming with automatic reconnection
+ */
+function createStream(
+  broadcastId: string,
+  dest: RTMPDestination,
+  options: StreamerOptions,
+  retryCount: number = 0
+): void {
+  const streamKey = `${broadcastId}-${dest.id}`;
+  const rtmpUrl = `${dest.rtmpUrl}/${dest.streamKey}`;
+
+  const command = ffmpeg()
+    .input('pipe:0')
+    .inputFormat('rawvideo')
+    .inputOptions([
+      `-pix_fmt yuv420p`,
+      `-s ${options.width}x${options.height}`,
+      `-r ${options.fps}`,
+    ])
+    .videoCodec('libx264')
+    .outputOptions([
+      '-preset veryfast',
+      '-tune zerolatency',
+      `-b:v ${options.videoBitrate}`,
+      `-maxrate ${options.videoBitrate}`,
+      '-bufsize 8000k',
+      '-g 60',
+      '-profile:v baseline',
+      '-level 3.1',
+      '-reconnect 1',
+      '-reconnect_streamed 1',
+      '-reconnect_delay_max 5',
+    ])
+    .audioCodec('aac')
+    .outputOptions([
+      `-b:a ${options.audioBitrate}`,
+      '-ar 48000',
+      '-ac 2',
+    ])
+    .format('flv')
+    .output(rtmpUrl);
+
+  command
+    .on('start', (commandLine) => {
+      const startTime = Date.now();
+      logger.info(`FFmpeg started for ${dest.platform} (attempt ${retryCount + 1})`);
+
+      // Diagnostic logging
+      diagnosticLogger.logFFmpeg(
+        'FFmpegStreamer',
+        `FFmpeg process started for ${dest.platform}`,
+        'info',
+        {
+          destination: dest.platform,
+          destinationId: dest.id,
+          rtmpUrl: dest.rtmpUrl,
+          attempt: retryCount + 1,
+          options: {
+            resolution: `${options.width}x${options.height}`,
+            fps: options.fps,
+            videoBitrate: options.videoBitrate,
+            audioBitrate: options.audioBitrate,
+          },
+          commandLine: commandLine.substring(0, 500), // Truncate for brevity
+          timestamp: startTime,
+        },
+        broadcastId
+      );
+
+      const state = activeStreamers.get(streamKey);
+      if (state) {
+        state.isReconnecting = false;
+        (state as any).startTime = startTime;
+      }
+    })
+    .on('error', (err, stdout, stderr) => {
+      logger.error(`FFmpeg error for ${dest.platform}:`, err.message);
+
+      const state = activeStreamers.get(streamKey);
+      if (!state) return;
+
+      state.lastError = err.message;
+      const duration = (state as any).startTime ? Date.now() - (state as any).startTime : 0;
+
+      // Diagnostic logging for errors
+      diagnosticLogger.logError(
+        'ffmpeg',
+        'FFmpegStreamer',
+        `FFmpeg process error for ${dest.platform}`,
+        err,
+        {
+          destination: dest.platform,
+          destinationId: dest.id,
+          retryCount: state.retryCount,
+          maxRetries: state.maxRetries,
+          duration,
+          stdout: stdout ? stdout.substring(0, 1000) : '',
+          stderr: stderr ? stderr.substring(0, 1000) : '',
+        },
+        broadcastId
+      );
+
+      // Check if we should retry
+      if (state.retryCount < state.maxRetries && !state.isReconnecting) {
+        state.isReconnecting = true;
+        state.retryCount++;
+
+        // Calculate exponential backoff delay
+        const delay = Math.min(BASE_RETRY_DELAY * Math.pow(2, state.retryCount - 1), 30000);
+
+        logger.info(
+          `Attempting to reconnect ${dest.platform} in ${delay}ms (attempt ${state.retryCount}/${state.maxRetries})`
+        );
+
+        // Log reconnection attempt
+        diagnosticLogger.logFFmpeg(
+          'FFmpegStreamer',
+          `Scheduling reconnection for ${dest.platform}`,
+          'warn',
+          {
+            destination: dest.platform,
+            delay,
+            attemptNumber: state.retryCount,
+            maxRetries: state.maxRetries,
+          },
+          broadcastId
+        );
+
+        // Schedule reconnection
+        state.reconnectTimer = setTimeout(() => {
+          logger.info(`Reconnecting to ${dest.platform}...`);
+          diagnosticLogger.logFFmpeg(
+            'FFmpegStreamer',
+            `Executing reconnection for ${dest.platform}`,
+            'info',
+            { destination: dest.platform, attemptNumber: state.retryCount },
+            broadcastId
+          );
+          createStream(broadcastId, dest, options, state.retryCount);
+        }, delay);
+      } else {
+        logger.error(
+          `Max retries (${state.maxRetries}) reached for ${dest.platform}. Giving up.`
+        );
+
+        // Log final failure
+        diagnosticLogger.logFFmpeg(
+          'FFmpegStreamer',
+          `Max retries reached for ${dest.platform}, stream failed`,
+          'error',
+          {
+            destination: dest.platform,
+            totalAttempts: state.retryCount,
+            lastError: state.lastError,
+          },
+          broadcastId
+        );
+
+        activeStreamers.delete(streamKey);
+      }
+    })
+    .on('end', () => {
+      logger.info(`FFmpeg ended for ${dest.platform}`);
+
+      const state = activeStreamers.get(streamKey);
+      const duration = (state as any)?.startTime ? Date.now() - (state as any).startTime : 0;
+
+      // Diagnostic logging for normal end
+      diagnosticLogger.logFFmpeg(
+        'FFmpegStreamer',
+        `FFmpeg process ended for ${dest.platform}`,
+        'info',
+        {
+          destination: dest.platform,
+          duration,
+          wasReconnecting: state?.isReconnecting || false,
+        },
+        broadcastId
+      );
+
+      if (state && !state.isReconnecting) {
+        // Stream ended unexpectedly, try to reconnect
+        if (state.retryCount < state.maxRetries) {
+          state.isReconnecting = true;
+          state.retryCount++;
+
+          const delay = Math.min(BASE_RETRY_DELAY * Math.pow(2, state.retryCount - 1), 30000);
+
+          logger.info(
+            `Stream ended unexpectedly for ${dest.platform}. Reconnecting in ${delay}ms...`
+          );
+
+          // Log unexpected end and reconnection
+          diagnosticLogger.logFFmpeg(
+            'FFmpegStreamer',
+            `Stream ended unexpectedly for ${dest.platform}, scheduling reconnection`,
+            'warn',
+            {
+              destination: dest.platform,
+              delay,
+              attemptNumber: state.retryCount,
+            },
+            broadcastId
+          );
+
+          state.reconnectTimer = setTimeout(() => {
+            createStream(broadcastId, dest, options, state.retryCount);
+          }, delay);
+        }
+      }
+    });
+
+  command.run();
+
+  // Store or update state
+  const existingState = activeStreamers.get(streamKey);
+  if (existingState) {
+    existingState.command = command;
+  } else {
+    activeStreamers.set(streamKey, {
+      command,
+      retryCount,
+      maxRetries: MAX_RETRIES,
+      isReconnecting: false,
+    });
+  }
+}
+
+export function startRTMPStream(
+  broadcastId: string,
+  destinations: RTMPDestination[],
+  options: StreamerOptions = {
+    width: 1920,
+    height: 1080,
+    fps: 30,
+    videoBitrate: '4000k',
+    audioBitrate: '160k',
+  }
+): void {
+  logger.info(`Starting RTMP stream for broadcast ${broadcastId}`);
+
+  // Create stream for each destination
+  destinations.forEach((dest) => {
+    const streamKey = `${broadcastId}-${dest.id}`;
+
+    if (activeStreamers.has(streamKey)) {
+      logger.warn(`Stream already active for ${dest.platform}`);
+      return;
+    }
+
+    createStream(broadcastId, dest, options, 0);
+  });
+
+  logger.info(`RTMP streaming started for broadcast ${broadcastId} to ${destinations.length} destinations`);
+}
+
+export function stopRTMPStream(broadcastId: string): void {
+  logger.info(`Stopping RTMP stream for broadcast ${broadcastId}`);
+
+  activeStreamers.forEach((state, key) => {
+    if (key.startsWith(broadcastId)) {
+      try {
+        // Clear any pending reconnection timers
+        if (state.reconnectTimer) {
+          clearTimeout(state.reconnectTimer);
+        }
+
+        // Kill the FFmpeg command
+        if (state.command) {
+          state.command.kill('SIGKILL');
+        }
+
+        activeStreamers.delete(key);
+      } catch (error) {
+        logger.error(`Error stopping stream ${key}:`, error);
+      }
+    }
+  });
+
+  logger.info(`RTMP stream stopped for broadcast ${broadcastId}`);
+}
+
+export function isStreamActive(broadcastId: string): boolean {
+  for (const key of activeStreamers.keys()) {
+    if (key.startsWith(broadcastId)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function getActiveStreams(): string[] {
+  return Array.from(activeStreamers.keys());
+}
+
+/**
+ * Get retry statistics for a specific destination
+ */
+export function getStreamStats(broadcastId: string, destinationId: string): {
+  retryCount: number;
+  maxRetries: number;
+  lastError?: string;
+  isReconnecting: boolean;
+} | null {
+  const streamKey = `${broadcastId}-${destinationId}`;
+  const state = activeStreamers.get(streamKey);
+
+  if (!state) {
+    return null;
+  }
+
+  return {
+    retryCount: state.retryCount,
+    maxRetries: state.maxRetries,
+    lastError: state.lastError,
+    isReconnecting: state.isReconnecting,
+  };
+}
+
+/**
+ * Get all stream stats for a broadcast
+ */
+export function getAllStreamStats(broadcastId: string): Map<string, any> {
+  const stats = new Map();
+
+  activeStreamers.forEach((state, key) => {
+    if (key.startsWith(broadcastId)) {
+      const destinationId = key.replace(`${broadcastId}-`, '');
+      stats.set(destinationId, {
+        retryCount: state.retryCount,
+        maxRetries: state.maxRetries,
+        lastError: state.lastError,
+        isReconnecting: state.isReconnecting,
+      });
+    }
+  });
+
+  return stats;
+}
+
+/**
+ * Manually retry a failed stream
+ */
+export function retryStream(
+  broadcastId: string,
+  destinationId: string,
+  dest: RTMPDestination,
+  options: StreamerOptions
+): boolean {
+  const streamKey = `${broadcastId}-${destinationId}`;
+  const state = activeStreamers.get(streamKey);
+
+  if (!state) {
+    logger.warn(`No stream state found for ${streamKey}`);
+    return false;
+  }
+
+  if (state.isReconnecting) {
+    logger.warn(`Stream ${streamKey} is already reconnecting`);
+    return false;
+  }
+
+  logger.info(`Manually retrying stream for ${dest.platform}`);
+
+  // Clear existing command if any
+  if (state.command) {
+    try {
+      state.command.kill('SIGKILL');
+    } catch (error) {
+      // Ignore
+    }
+  }
+
+  // Reset retry count
+  state.retryCount = 0;
+  state.lastError = undefined;
+
+  // Recreate stream
+  createStream(broadcastId, dest, options, 0);
+
+  return true;
+}

@@ -1,0 +1,34 @@
+{
+  "name": "streamlick",
+  "version": "1.0.0",
+  "description": "Browser-based live streaming studio platform",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend",
+    "media-server"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:media\" \"npm run dev:frontend\"",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:media": "npm run dev --workspace=media-server",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build": "npm run build --workspaces",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:media\" \"npm run start:frontend\"",
+    "start:backend": "npm run start --workspace=backend",
+    "start:media": "npm run start --workspace=media-server",
+    "start:frontend": "npm run preview --workspace=frontend",
+    "db:migrate": "npm run db:migrate --workspace=backend",
+    "db:seed": "npm run db:seed --workspace=backend",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:build": "docker-compose build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}
