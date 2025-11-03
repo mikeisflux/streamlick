@@ -275,3 +275,150 @@ model ModerationAction {
   @@index([isActive])
   @@map("moderation_actions")
 }
+
+model StreamMetric {
+  id          String   @id @default(uuid())
+  broadcastId String   @map("broadcast_id")
+  timestamp   DateTime @default(now())
+
+  // Viewer metrics
+  totalViewers     Int @default(0) @map("total_viewers")
+  peakViewers      Int @default(0) @map("peak_viewers")
+  youtubeViewers   Int @default(0) @map("youtube_viewers")
+  facebookViewers  Int @default(0) @map("facebook_viewers")
+  twitchViewers    Int @default(0) @map("twitch_viewers")
+  xViewers         Int @default(0) @map("x_viewers")
+  rumbleViewers    Int @default(0) @map("rumble_viewers")
+  linkedinViewers  Int @default(0) @map("linkedin_viewers")
+  customViewers    Int @default(0) @map("custom_viewers")
+
+  // Stream quality metrics
+  bitrate          Int? // kbps
+  framerate        Int? // fps
+  droppedFrames    Int  @default(0) @map("dropped_frames")
+  totalFrames      Int  @default(0) @map("total_frames")
+
+  // Network metrics
+  packetLoss       Float @default(0) @map("packet_loss") // percentage
+  rtt              Int?  // Round-trip time in ms
+
+  // Chat metrics
+  totalChatMessages Int @default(0) @map("total_chat_messages")
+  youtubeChatCount  Int @default(0) @map("youtube_chat_count")
+  facebookChatCount Int @default(0) @map("facebook_chat_count")
+  twitchChatCount   Int @default(0) @map("twitch_chat_count")
+  xChatCount        Int @default(0) @map("x_chat_count")
+  rumbleChatCount   Int @default(0) @map("rumble_chat_count")
+
+  @@index([broadcastId])
+  @@index([timestamp])
+  @@index([broadcastId, timestamp])
+  @@map("stream_metrics")
+}
+
+model BroadcastAnalytics {
+  id          String   @id @default(uuid())
+  broadcastId String   @unique @map("broadcast_id")
+  userId      String   @map("user_id")
+
+  // Overall statistics
+  totalDurationSeconds Int      @default(0) @map("total_duration_seconds")
+  startedAt            DateTime @map("started_at")
+  endedAt              DateTime? @map("ended_at")
+
+  // Viewer statistics
+  totalViewers         Int @default(0) @map("total_viewers")
+  peakViewers          Int @default(0) @map("peak_viewers")
+  averageViewers       Int @default(0) @map("average_viewers")
+  totalViewTimeSeconds Int @default(0) @map("total_view_time_seconds")
+
+  // Per-platform viewer stats
+  youtubeViews   Int @default(0) @map("youtube_views")
+  facebookViews  Int @default(0) @map("facebook_views")
+  twitchViews    Int @default(0) @map("twitch_views")
+  xViews         Int @default(0) @map("x_views")
+  rumbleViews    Int @default(0) @map("rumble_views")
+  linkedinViews  Int @default(0) @map("linkedin_views")
+  customViews    Int @default(0) @map("custom_views")
+
+  // Chat statistics
+  totalChatMessages Int @default(0) @map("total_chat_messages")
+  totalSuperChats   Int @default(0) @map("total_super_chats")
+  superChatRevenue  Float @default(0) @map("super_chat_revenue")
+
+  // Quality statistics
+  averageBitrate    Int @default(0) @map("average_bitrate")
+  averageFramerate  Int @default(0) @map("average_framerate")
+  totalDroppedFrames Int @default(0) @map("total_dropped_frames")
+
+  // Engagement statistics
+  totalParticipants Int @default(0) @map("total_participants")
+  averageWatchTime  Int @default(0) @map("average_watch_time") // seconds
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([startedAt])
+  @@map("broadcast_analytics")
+}
+
+model UserAnalytics {
+  id     String @id @default(uuid())
+  userId String @unique @map("user_id")
+
+  // Overall streaming statistics
+  totalBroadcasts      Int @default(0) @map("total_broadcasts")
+  totalStreamTime      Int @default(0) @map("total_stream_time") // seconds
+  totalViewers         Int @default(0) @map("total_viewers")
+  totalViewTime        Int @default(0) @map("total_view_time") // seconds
+
+  // Best performance
+  peakViewers          Int      @default(0) @map("peak_viewers")
+  peakViewersBroadcast String?  @map("peak_viewers_broadcast")
+  longestStreamSeconds Int      @default(0) @map("longest_stream_seconds")
+
+  // Platform usage
+  youtubeStreams   Int @default(0) @map("youtube_streams")
+  facebookStreams  Int @default(0) @map("facebook_streams")
+  twitchStreams    Int @default(0) @map("twitch_streams")
+  xStreams         Int @default(0) @map("x_streams")
+  rumbleStreams    Int @default(0) @map("rumble_streams")
+  linkedinStreams  Int @default(0) @map("linkedin_streams")
+
+  // Chat engagement
+  totalChatMessages Int @default(0) @map("total_chat_messages")
+  totalSuperChats   Int @default(0) @map("total_super_chats")
+  superChatRevenue  Float @default(0) @map("super_chat_revenue")
+
+  // Account activity
+  lastBroadcastAt DateTime? @map("last_broadcast_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("user_analytics")
+}
+
+model PlatformAnalytics {
+  id        String   @id @default(uuid())
+  date      DateTime // Daily aggregation
+  platform  String   // youtube, facebook, twitch, etc.
+
+  // Daily statistics
+  totalStreams      Int @default(0) @map("total_streams")
+  totalViewers      Int @default(0) @map("total_viewers")
+  totalStreamTime   Int @default(0) @map("total_stream_time") // seconds
+  totalChatMessages Int @default(0) @map("total_chat_messages")
+
+  // Average metrics
+  averageViewers       Int @default(0) @map("average_viewers")
+  averageBitrate       Int @default(0) @map("average_bitrate")
+  averageStreamLength  Int @default(0) @map("average_stream_length") // seconds
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([date, platform])
+  @@index([date])
+  @@index([platform])
+  @@map("platform_analytics")
+}
