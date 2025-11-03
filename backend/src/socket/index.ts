@@ -444,6 +444,90 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
       });
     });
 
+    // Screen share request (participant requests permission from host)
+    socket.on('request-screen-share', ({ participantId, participantName, hasAudio }) => {
+      const { broadcastId } = socket.data;
+      if (broadcastId) {
+        // Send request to host (broadcast owner)
+        socket.to(`broadcast:${broadcastId}`).emit('screen-share-request', {
+          participantId,
+          participantName,
+          hasAudio,
+        });
+        logger.info(`Screen share request from ${participantName} in broadcast ${broadcastId}`);
+      }
+    });
+
+    // Approve screen share (host approves participant's request)
+    socket.on('approve-screen-share', ({ participantId }) => {
+      const { broadcastId } = socket.data;
+      if (broadcastId) {
+        io.to(`broadcast:${broadcastId}`).emit('screen-share-approved', {
+          participantId,
+        });
+        logger.info(`Screen share approved for participant ${participantId} in broadcast ${broadcastId}`);
+      }
+    });
+
+    // Deny screen share (host denies participant's request)
+    socket.on('deny-screen-share', ({ participantId, reason }) => {
+      const { broadcastId } = socket.data;
+      if (broadcastId) {
+        io.to(`broadcast:${broadcastId}`).emit('screen-share-denied', {
+          participantId,
+          reason,
+        });
+        logger.info(`Screen share denied for participant ${participantId} in broadcast ${broadcastId}`);
+      }
+    });
+
+    // Broadcaster screen share started
+    socket.on('broadcaster-screen-share-started', ({ hasCamera, hasSystemAudio }) => {
+      const { broadcastId, participantId } = socket.data;
+      if (broadcastId) {
+        socket.to(`broadcast:${broadcastId}`).emit('broadcaster-screen-share-started', {
+          participantId,
+          hasCamera,
+          hasSystemAudio,
+        });
+        logger.info(`Broadcaster screen share started in broadcast ${broadcastId} (camera: ${hasCamera}, audio: ${hasSystemAudio})`);
+      }
+    });
+
+    // Broadcaster screen share stopped
+    socket.on('broadcaster-screen-share-stopped', () => {
+      const { broadcastId, participantId } = socket.data;
+      if (broadcastId) {
+        socket.to(`broadcast:${broadcastId}`).emit('broadcaster-screen-share-stopped', {
+          participantId,
+        });
+        logger.info(`Broadcaster screen share stopped in broadcast ${broadcastId}`);
+      }
+    });
+
+    // Participant screen share started (after approval)
+    socket.on('participant-screen-share-started', ({ participantId, hasAudio }) => {
+      const { broadcastId } = socket.data;
+      if (broadcastId) {
+        io.to(`broadcast:${broadcastId}`).emit('participant-screen-share-started', {
+          participantId,
+          hasAudio,
+        });
+        logger.info(`Participant ${participantId} screen share started in broadcast ${broadcastId}`);
+      }
+    });
+
+    // Participant screen share stopped
+    socket.on('participant-screen-share-stopped', ({ participantId }) => {
+      const { broadcastId } = socket.data;
+      if (broadcastId) {
+        io.to(`broadcast:${broadcastId}`).emit('participant-screen-share-stopped', {
+          participantId,
+        });
+        logger.info(`Participant ${participantId} screen share stopped in broadcast ${broadcastId}`);
+      }
+    });
+
     // Disconnect
     socket.on('disconnect', () => {
       const { broadcastId, participantId } = socket.data;

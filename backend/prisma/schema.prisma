@@ -63,6 +63,9 @@ model Destination {
   streamKey      String?  @map("stream_key") // Encrypted
   accessToken    String?  @map("access_token") // Encrypted
   refreshToken   String?  @map("refresh_token") // Encrypted
+  channelId      String?  @map("channel_id") // For platform-specific moderation
+  pageId         String?  @map("page_id") // For Facebook page moderation
+  username       String?  // Platform username for Twitch, etc.
   isActive       Boolean  @default(true) @map("is_active")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
@@ -251,4 +254,24 @@ model BannedParticipant {
 
   @@unique([broadcastId, userId])
   @@map("banned_participants")
+}
+
+model ModerationAction {
+  id          String    @id @default(uuid())
+  broadcastId String    @map("broadcast_id")
+  platform    String    // youtube, twitch, facebook, etc.
+  userId      String    @map("user_id") // Platform-specific user ID
+  username    String
+  action      String    // ban, timeout, unban
+  duration    Int?      // For timeouts, in seconds
+  reason      String?   @db.Text
+  moderatorId String    @map("moderator_id") // Streamlick user ID who performed the action
+  timestamp   DateTime  @default(now())
+  expiresAt   DateTime? @map("expires_at") // For timeouts
+  isActive    Boolean   @default(true) @map("is_active")
+
+  @@index([broadcastId])
+  @@index([platform, userId])
+  @@index([isActive])
+  @@map("moderation_actions")
 }

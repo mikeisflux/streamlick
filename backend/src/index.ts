@@ -21,6 +21,7 @@ import backgroundsRoutes from './api/backgrounds.routes';
 import adminAssetsRoutes from './api/admin-assets.routes';
 import adminSettingsRoutes from './api/admin-settings.routes';
 import adminTestingRoutes from './api/admin-testing.routes';
+import moderationRoutes from './api/moderation.routes';
 
 import initializeSocket from './socket';
 import logger from './utils/logger';
@@ -75,6 +76,7 @@ app.use('/api/admin/assets', adminAssetsRoutes);
 app.use('/api/assets', adminAssetsRoutes); // Public endpoint for defaults
 app.use('/api/admin', adminSettingsRoutes);
 app.use('/api/admin/testing', adminTestingRoutes);
+app.use('/api/moderation', moderationRoutes);
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
