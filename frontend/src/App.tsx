@@ -12,6 +12,7 @@ import { Settings } from './pages/Settings';
 import { AdminAssets } from './pages/AdminAssets';
 import { AdminLogs } from './pages/AdminLogs';
 import AdminSettings from './pages/AdminSettings';
+import AdminTesting from './pages/AdminTesting';
 import { Privacy } from './pages/Privacy';
 import { Terms } from './pages/Terms';
 import { FAQ } from './pages/FAQ';
@@ -90,6 +91,14 @@ function App() {
           element={
             <PrivateRoute>
               <AdminSettings />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin/testing"
+          element={
+            <PrivateRoute>
+              <AdminTesting />
             </PrivateRoute>
           }
         />
