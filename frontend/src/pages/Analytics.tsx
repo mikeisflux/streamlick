@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuthStore } from '../store/authStore';
+import { Button } from '../components/Button';
 
 interface UserAnalytics {
   totalBroadcasts: number;
@@ -39,7 +41,8 @@ interface BroadcastHistory {
 }
 
 export const Analytics: React.FC = () => {
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState<UserAnalytics | null>(null);
   const [history, setHistory] = useState<BroadcastHistory[]>([]);
@@ -106,19 +109,97 @@ export const Analytics: React.FC = () => {
     return broadcastDate >= cutoffDate;
   });
 
+  const renderHeader = () => (
+    <header className="bg-white shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-900">🎥 Streamlick</h1>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-600">{user?.email}</span>
+            <Button variant="ghost" size="sm" onClick={() => logout()}>
+              Logout
+            </Button>
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <nav className="mt-4 flex gap-6 border-t border-gray-200 pt-4">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
+          >
+            Broadcasts
+          </button>
+          <button
+            onClick={() => navigate('/analytics')}
+            className="text-sm font-medium text-primary-600 border-b-2 border-primary-600 pb-1"
+          >
+            Analytics
+          </button>
+          <button
+            onClick={() => navigate('/settings')}
+            className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
+          >
+            Settings
+          </button>
+          <button
+            onClick={() => navigate('/billing')}
+            className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
+          >
+            Billing
+          </button>
+          {user?.role === 'admin' && (
+            <>
+              <button
+                onClick={() => navigate('/admin/assets')}
+                className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
+              >
+                Admin Assets
+              </button>
+              <button
+                onClick={() => navigate('/admin/settings')}
+                className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
+              >
+                Admin Settings
+              </button>
+              <button
+                onClick={() => navigate('/admin/testing')}
+                className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
+              >
+                Testing
+              </button>
+              <button
+                onClick={() => navigate('/admin/logs')}
+                className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
+              >
+                Logs
+              </button>
+            </>
+          )}
+        </nav>
+      </div>
+    </header>
+  );
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-gray-400">Loading analytics...</div>
+      <div className="min-h-screen bg-gray-50">
+        {renderHeader()}
+        <div className="flex items-center justify-center h-96">
+          <div className="text-gray-600">Loading analytics...</div>
+        </div>
       </div>
     );
   }
 
   if (!analytics) {
     return (
-      <div className="flex flex-col items-center justify-center h-96">
-        <div className="text-gray-400 mb-4">No analytics data available</div>
-        <div className="text-sm text-gray-500">Start your first broadcast to see analytics!</div>
+      <div className="min-h-screen bg-gray-50">
+        {renderHeader()}
+        <div className="flex flex-col items-center justify-center h-96">
+          <div className="text-gray-600 mb-4">No analytics data available</div>
+          <div className="text-sm text-gray-500">Start your first broadcast to see analytics!</div>
+        </div>
       </div>
     );
   }
@@ -135,58 +216,61 @@ export const Analytics: React.FC = () => {
   const totalPlatformStreams = platformData.reduce((sum, p) => sum + p.value, 0);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Analytics Dashboard</h1>
-        <p className="text-gray-400">Track your streaming performance and engagement</p>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      {renderHeader()}
+
+      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        {/* Page Header */}
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">Analytics Dashboard</h2>
+          <p className="text-gray-600">Track your streaming performance and engagement</p>
+        </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {/* Total Broadcasts */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-gray-400 text-sm">Total Broadcasts</span>
+            <span className="text-gray-600 text-sm">Total Broadcasts</span>
             <span className="text-2xl">📺</span>
           </div>
-          <div className="text-3xl font-bold text-white">{analytics.totalBroadcasts}</div>
+          <div className="text-3xl font-bold text-gray-900">{analytics.totalBroadcasts}</div>
           <div className="text-xs text-gray-500 mt-1">
             {formatDuration(analytics.totalStreamTime)} total
           </div>
         </div>
 
         {/* Total Viewers */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-gray-400 text-sm">Total Viewers</span>
+            <span className="text-gray-600 text-sm">Total Viewers</span>
             <span className="text-2xl">👥</span>
           </div>
-          <div className="text-3xl font-bold text-white">{analytics.totalViewers.toLocaleString()}</div>
+          <div className="text-3xl font-bold text-gray-900">{analytics.totalViewers.toLocaleString()}</div>
           <div className="text-xs text-gray-500 mt-1">
             Peak: {analytics.peakViewers.toLocaleString()}
           </div>
         </div>
 
         {/* Chat Messages */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-gray-400 text-sm">Chat Messages</span>
+            <span className="text-gray-600 text-sm">Chat Messages</span>
             <span className="text-2xl">💬</span>
           </div>
-          <div className="text-3xl font-bold text-white">{analytics.totalChatMessages.toLocaleString()}</div>
+          <div className="text-3xl font-bold text-gray-900">{analytics.totalChatMessages.toLocaleString()}</div>
           <div className="text-xs text-gray-500 mt-1">
             {analytics.totalSuperChats} Super Chats
           </div>
         </div>
 
         {/* Revenue */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-gray-400 text-sm">Super Chat Revenue</span>
+            <span className="text-gray-600 text-sm">Super Chat Revenue</span>
             <span className="text-2xl">💰</span>
           </div>
-          <div className="text-3xl font-bold text-white">${analytics.superChatRevenue.toFixed(2)}</div>
+          <div className="text-3xl font-bold text-gray-900">${analytics.superChatRevenue.toFixed(2)}</div>
           <div className="text-xs text-gray-500 mt-1">
             From {analytics.totalSuperChats} donations
           </div>
@@ -196,8 +280,8 @@ export const Analytics: React.FC = () => {
       {/* Platform Distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Platform Usage Chart */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-          <h2 className="text-xl font-semibold text-white mb-6">Platform Distribution</h2>
+        <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">Platform Distribution</h2>
 
           {platformData.length > 0 ? (
             <div className="space-y-4">
@@ -205,7 +289,7 @@ export const Analytics: React.FC = () => {
                 <div key={platform.name}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm text-gray-300">{platform.name}</span>
-                    <span className="text-sm text-gray-400">
+                    <span className="text-sm text-gray-600">
                       {platform.value} ({Math.round((platform.value / totalPlatformStreams) * 100)}%)
                     </span>
                   </div>
@@ -229,26 +313,26 @@ export const Analytics: React.FC = () => {
         </div>
 
         {/* Best Performance */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-          <h2 className="text-xl font-semibold text-white mb-6">Best Performance</h2>
+        <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">Best Performance</h2>
 
           <div className="space-y-6">
             {/* Peak Viewers */}
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-2xl">🏆</span>
-                <span className="text-sm text-gray-400">Peak Viewers</span>
+                <span className="text-sm text-gray-600">Peak Viewers</span>
               </div>
-              <div className="text-3xl font-bold text-white">{analytics.peakViewers.toLocaleString()}</div>
+              <div className="text-3xl font-bold text-gray-900">{analytics.peakViewers.toLocaleString()}</div>
             </div>
 
             {/* Longest Stream */}
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-2xl">⏱️</span>
-                <span className="text-sm text-gray-400">Longest Stream</span>
+                <span className="text-sm text-gray-600">Longest Stream</span>
               </div>
-              <div className="text-3xl font-bold text-white">
+              <div className="text-3xl font-bold text-gray-900">
                 {formatDuration(analytics.longestStreamSeconds)}
               </div>
             </div>
@@ -258,9 +342,9 @@ export const Analytics: React.FC = () => {
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-2xl">📅</span>
-                  <span className="text-sm text-gray-400">Last Broadcast</span>
+                  <span className="text-sm text-gray-600">Last Broadcast</span>
                 </div>
-                <div className="text-lg font-medium text-white">
+                <div className="text-lg font-medium text-gray-900">
                   {formatDate(analytics.lastBroadcastAt)}
                 </div>
               </div>
@@ -270,7 +354,7 @@ export const Analytics: React.FC = () => {
       </div>
 
       {/* Broadcast History */}
-      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+      <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold text-white">Broadcast History</h2>
 
@@ -313,14 +397,14 @@ export const Analytics: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-400">Date</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-400">Duration</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-400">Viewers</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-400">Peak</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-400">Avg</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-400">Chat</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-400">Platforms</th>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Date</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Duration</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Viewers</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Peak</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Avg</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Chat</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Platforms</th>
                 </tr>
               </thead>
               <tbody>
@@ -335,8 +419,8 @@ export const Analytics: React.FC = () => {
                   ].filter(p => p.views > 0);
 
                   return (
-                    <tr key={broadcast.broadcastId} className="border-b border-gray-700 hover:bg-gray-750">
-                      <td className="py-3 px-4 text-sm text-white">{formatDate(broadcast.startedAt)}</td>
+                    <tr key={broadcast.broadcastId} className="border-b border-gray-200 hover:bg-gray-50">
+                      <td className="py-3 px-4 text-sm text-gray-900">{formatDate(broadcast.startedAt)}</td>
                       <td className="py-3 px-4 text-sm text-gray-300">
                         {formatDuration(broadcast.totalDurationSeconds)}
                       </td>
@@ -378,6 +462,7 @@ export const Analytics: React.FC = () => {
           </div>
         )}
       </div>
+      </main>
     </div>
   );
 };

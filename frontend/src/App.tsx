@@ -16,6 +16,7 @@ import AdminTesting from './pages/AdminTesting';
 import { Privacy } from './pages/Privacy';
 import { Terms } from './pages/Terms';
 import { FAQ } from './pages/FAQ';
+import { Analytics } from './pages/Analytics';
 import { useEffect } from 'react';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -67,6 +68,14 @@ function App() {
           element={
             <PrivateRoute>
               <Settings />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/analytics"
+          element={
+            <PrivateRoute>
+              <Analytics />
             </PrivateRoute>
           }
         />

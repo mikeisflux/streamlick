@@ -43,14 +43,72 @@ export function Dashboard() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">🎥 Streamlick</h1>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">{user?.email}</span>
-            <Button variant="ghost" size="sm" onClick={() => logout()}>
-              Logout
-            </Button>
+        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-gray-900">🎥 Streamlick</h1>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-600">{user?.email}</span>
+              <Button variant="ghost" size="sm" onClick={() => logout()}>
+                Logout
+              </Button>
+            </div>
           </div>
+
+          {/* Navigation */}
+          <nav className="mt-4 flex gap-6 border-t border-gray-200 pt-4">
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="text-sm font-medium text-primary-600 border-b-2 border-primary-600 pb-1"
+            >
+              Broadcasts
+            </button>
+            <button
+              onClick={() => navigate('/analytics')}
+              className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
+            >
+              Analytics
+            </button>
+            <button
+              onClick={() => navigate('/settings')}
+              className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
+            >
+              Settings
+            </button>
+            <button
+              onClick={() => navigate('/billing')}
+              className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
+            >
+              Billing
+            </button>
+            {user?.role === 'admin' && (
+              <>
+                <button
+                  onClick={() => navigate('/admin/assets')}
+                  className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
+                >
+                  Admin Assets
+                </button>
+                <button
+                  onClick={() => navigate('/admin/settings')}
+                  className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
+                >
+                  Admin Settings
+                </button>
+                <button
+                  onClick={() => navigate('/admin/testing')}
+                  className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
+                >
+                  Testing
+                </button>
+                <button
+                  onClick={() => navigate('/admin/logs')}
+                  className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
+                >
+                  Logs
+                </button>
+              </>
+            )}
+          </nav>
         </div>
       </header>
 
