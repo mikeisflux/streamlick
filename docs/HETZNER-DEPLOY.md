@@ -1,6 +1,6 @@
 # 🚀 Hetzner Cloud Deployment Guide
 
-**Deploy Streamlick for €4.15/month (~$4.50/month)**
+**Deploy Streamlick for €10.49/month (~$11.35/month) - Production Ready**
 
 Total setup time: **30 minutes**
 
@@ -8,11 +8,12 @@ Total setup time: **30 minutes**
 
 ## Why Hetzner?
 
-- ✅ **Cheapest**: €4.15/month vs $6+ on competitors
-- ✅ **Better specs**: 4GB RAM vs 2GB on DigitalOcean for same price
-- ✅ **Great performance**: Fast CPUs and SSD storage
-- ✅ **No hidden costs**: Traffic included (20TB/month)
+- ✅ **Best value**: €10.49/month for production-ready server
+- ✅ **Great specs**: CPX32 with 4 vCPU, 8GB RAM, 160GB NVMe
+- ✅ **Fast performance**: AMD EPYC-Genoa processors (30%+ faster than CX)
+- ✅ **No hidden costs**: 20TB traffic included
 - ✅ **Simple billing**: Pay as you go, cancel anytime
+- ✅ **€20 free credit**: Try it free for 2 months!
 
 ---
 
@@ -42,12 +43,19 @@ Total setup time: **30 minutes**
    - Ubuntu 22.04
 
 5. **Select Type:**
-   - **Shared vCPU** (cheapest)
-   - **CX22**: €4.15/month
-     - 2 vCPUs
-     - 4GB RAM
-     - 40GB SSD
+   - **Shared vCPU** → **CPX** (Performance)
+   - **CPX32**: €10.49/month (~$11.35) ⭐ **RECOMMENDED**
+     - 4 vCPUs (AMD EPYC-Genoa)
+     - 8GB RAM
+     - 160GB NVMe SSD
      - 20TB traffic
+
+   **Alternative for testing only:**
+   - **CX23**: €3.49/month (~$3.80)
+     - 2 vCPUs (older hardware)
+     - 4GB RAM
+     - 40GB NVMe
+     - ⚠️ NOT recommended for production (resource-limited)
 
 6. **Networking:**
    - ✅ Public IPv4 (free)
@@ -647,18 +655,24 @@ free -h
 
 **Monthly Costs:**
 
-- Hetzner CX22: €4.15/month
+- Hetzner CPX32: €10.49/month (~$11.35)
 - Domain (optional): ~$10-15/year ($1/month)
-- **Total: ~€4-5/month ($5-6/month)**
+- **Total: ~€11-12/month ($12-13/month)**
 
 **Free tiers available:**
 - SendGrid: 100 emails/day (free)
 - Stripe: No monthly fee (just transaction fees)
 - Platform APIs: All free for basic usage
+- €20 Hetzner credit: First 2 months FREE!
 
-**Upgrade path:**
-- CX32 (8GB RAM): €8.21/month - For 10-20 concurrent streams
-- CX42 (16GB RAM): €16.21/month - For 50+ concurrent streams
+**Scaling path (when you need more streams):**
+- Add CCX13 media server: €12.49/month (+3-5 streams)
+- Add CCX23 media server: €24.49/month (+8-12 streams)
+- See `/docs/SCALING-COSTS.md` for detailed scaling guide
+
+**Budget option (testing only):**
+- CX23: €3.49/month (~$3.80)
+- ⚠️ Not recommended for production (old hardware, resource-limited)
 
 ---
 
