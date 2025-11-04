@@ -3,6 +3,7 @@ import http from 'http';
 import { Server as SocketServer } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import os from 'os';
 import { createWorkers, createRouter, getRouter } from './mediasoup/worker';
 import { createWebRtcTransport, connectTransport, createProducer, createConsumer } from './mediasoup/transport';
 import { startRTMPStream, stopRTMPStream } from './rtmp/streamer';
@@ -28,9 +29,49 @@ app.use(express.json());
 // Store active rooms and their transports/producers/consumers
 const broadcasts = new Map<string, any>();
 
-// Health check
+// Health check with server stats
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  try {
+    // Get active streams count
+    const activeStreams = broadcasts.size;
+
+    // Get memory usage
+    const memUsage = process.memoryUsage();
+    const totalMemory = os.totalmem();
+    const usedMemory = totalMemory - os.freemem();
+    const memoryUsage = Math.round((usedMemory / totalMemory) * 100);
+
+    // Get CPU usage (average load over 1 minute)
+    const cpus = os.cpus();
+    const loadAvg = os.loadavg()[0]; // 1-minute load average
+    const cpuUsage = Math.min(Math.round((loadAvg / cpus.length) * 100), 100);
+
+    // Get uptime
+    const uptime = Math.round(process.uptime());
+
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      activeStreams,
+      cpuUsage,
+      memoryUsage,
+      uptime,
+      memory: {
+        used: Math.round(memUsage.heapUsed / 1024 / 1024), // MB
+        total: Math.round(memUsage.heapTotal / 1024 / 1024), // MB
+        external: Math.round(memUsage.external / 1024 / 1024), // MB
+      },
+      system: {
+        platform: os.platform(),
+        cpuCount: cpus.length,
+        totalMemory: Math.round(totalMemory / 1024 / 1024 / 1024), // GB
+        freeMemory: Math.round(os.freemem() / 1024 / 1024 / 1024), // GB
+      },
+    });
+  } catch (error) {
+    logger.error('Health check error:', error);
+    res.status(500).json({ status: 'error', error: 'Failed to get server stats' });
+  }
 });
 
 // Get router RTP capabilities

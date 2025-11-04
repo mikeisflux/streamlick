@@ -13,6 +13,7 @@ import { AdminAssets } from './pages/AdminAssets';
 import { AdminLogs } from './pages/AdminLogs';
 import AdminSettings from './pages/AdminSettings';
 import AdminTesting from './pages/AdminTesting';
+import { AdminServers } from './pages/AdminServers';
 import { Privacy } from './pages/Privacy';
 import { Terms } from './pages/Terms';
 import { FAQ } from './pages/FAQ';
@@ -108,6 +109,14 @@ function App() {
           element={
             <PrivateRoute>
               <AdminTesting />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin/servers"
+          element={
+            <PrivateRoute>
+              <AdminServers />
             </PrivateRoute>
           }
         />

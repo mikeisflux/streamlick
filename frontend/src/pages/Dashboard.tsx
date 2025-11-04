@@ -101,6 +101,12 @@ export function Dashboard() {
                   Testing
                 </button>
                 <button
+                  onClick={() => navigate('/admin/servers')}
+                  className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
+                >
+                  Servers
+                </button>
+                <button
                   onClick={() => navigate('/admin/logs')}
                   className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
                 >
