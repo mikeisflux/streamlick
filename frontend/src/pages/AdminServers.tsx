@@ -414,7 +414,10 @@ export function AdminServers() {
               <div className="p-6 space-y-4">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <p className="text-sm text-blue-900">
-                    <strong>Total time: 10 minutes</strong> | Cost: €33.11/month for CCX32
+                    <strong>Total time: 10 minutes</strong> | Cost: €11.99/month (~$13/month) for CCX13
+                  </p>
+                  <p className="text-xs text-blue-700 mt-1">
+                    Each CCX13 server handles 3-5 concurrent streams. Scale horizontally as needed.
                   </p>
                 </div>
 
@@ -424,7 +427,7 @@ export function AdminServers() {
                     <ol className="list-decimal list-inside space-y-1 text-sm text-gray-600 ml-4">
                       <li>Go to Hetzner Cloud console</li>
                       <li>Click "Create Server"</li>
-                      <li>Select: CCX32 (8 vCPU, 32GB RAM, €33.11/month)</li>
+                      <li>Select: <strong>CCX13</strong> (2 vCPU, 8GB RAM, €11.99/month) or <strong>CCX23</strong> (4 vCPU, 16GB, €24.49/month)</li>
                       <li>Image: Ubuntu 22.04</li>
                       <li>Add your SSH key</li>
                       <li>Click "Create & Buy"</li>
