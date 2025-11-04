@@ -42,6 +42,12 @@ function createStream(
   const streamKey = `${broadcastId}-${dest.id}`;
   const rtmpUrl = `${dest.rtmpUrl}/${dest.streamKey}`;
 
+  // Calculate encoder parameters dynamically for optimal streaming
+  // Based on industry best practices: YouTube (6-8Mbps), Twitch (6Mbps max), Facebook (4Mbps recommended)
+  const bitrateNumeric = parseInt(options.videoBitrate);
+  const bufsize = `${bitrateNumeric * 2}k`; // 2x bitrate for VBV buffer (industry standard)
+  const gopSize = options.fps * 2; // 2-second keyframe interval (required by YouTube, Twitch, Facebook)
+
   const command = ffmpeg()
     .input('pipe:0')
     .inputFormat('rawvideo')
@@ -52,14 +58,26 @@ function createStream(
     ])
     .videoCodec('libx264')
     .outputOptions([
+      // Encoding preset: veryfast = good quality/speed balance for live streaming
       '-preset veryfast',
+
+      // Tuning: zerolatency = minimize buffering for live streams
       '-tune zerolatency',
-      `-b:v ${options.videoBitrate}`,
-      `-maxrate ${options.videoBitrate}`,
-      '-bufsize 8000k',
-      '-g 60',
-      '-profile:v baseline',
-      '-level 3.1',
+
+      // CBR simulation for consistent bitrate (required by most platforms)
+      `-b:v ${options.videoBitrate}`,        // Target bitrate
+      `-minrate ${options.videoBitrate}`,    // Min bitrate (for CBR simulation)
+      `-maxrate ${options.videoBitrate}`,    // Max bitrate (for CBR simulation)
+      `-bufsize ${bufsize}`,                  // VBV buffer size (2x bitrate)
+
+      // GOP size: 2-second keyframe interval (platform requirement)
+      `-g ${gopSize}`,
+
+      // Profile: main provides better quality than baseline while maintaining compatibility
+      '-profile:v main',
+      '-level 4.0', // Level 4.0 supports 1080p @ 30fps
+
+      // Reconnection settings for resilient streaming
       '-reconnect 1',
       '-reconnect_streamed 1',
       '-reconnect_delay_max 5',
@@ -67,8 +85,8 @@ function createStream(
     .audioCodec('aac')
     .outputOptions([
       `-b:a ${options.audioBitrate}`,
-      '-ar 48000',
-      '-ac 2',
+      '-ar 48000',  // 48kHz sample rate (industry standard)
+      '-ac 2',      // Stereo audio
     ])
     .format('flv')
     .output(rtmpUrl);
