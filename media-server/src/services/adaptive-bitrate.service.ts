@@ -29,49 +29,80 @@ export interface BitrateAdjustment {
 /**
  * Adaptive Bitrate Control Service
  * Automatically adjusts stream quality based on network conditions
+ *
+ * Platform Compatibility:
+ * - YouTube: Max 51 Mbps, recommended 6-8 Mbps for 1080p
+ * - Twitch: Max 6000 Kbps (6 Mbps)
+ * - Facebook: Recommended 4000 Kbps for 1080p
+ * - LinkedIn: Max 5 Mbps
+ * - Twitter/X: Recommended 3-6 Mbps for 1080p
  */
 export class AdaptiveBitrateService extends EventEmitter {
   private profiles: BitrateProfile[] = [
+    // 4K profiles (for custom RTMP or YouTube 4K)
+    // WARNING: Exceeds Twitch, Facebook limits - use only for compatible platforms
     {
       name: '4K Ultra',
-      videoBitrate: 20000,
-      audioBitrate: 320,
+      videoBitrate: 20000, // 20 Mbps - YouTube 4K @ 60fps
+      audioBitrate: 256,   // High quality audio
       width: 3840,
       height: 2160,
       framerate: 60,
     },
     {
       name: '4K High',
-      videoBitrate: 15000,
-      audioBitrate: 256,
+      videoBitrate: 15000, // 15 Mbps - YouTube 4K @ 30fps
+      audioBitrate: 192,
       width: 3840,
       height: 2160,
       framerate: 30,
     },
+
+    // 1080p profiles (recommended for most platforms)
     {
       name: '1080p Ultra',
-      videoBitrate: 8000,
-      audioBitrate: 192,
+      videoBitrate: 8000, // 8 Mbps - YouTube recommended max for 1080p @ 60fps
+      audioBitrate: 160,  // Optimized for stereo
       width: 1920,
       height: 1080,
       framerate: 60,
     },
     {
       name: '1080p High',
-      videoBitrate: 6000,
-      audioBitrate: 192,
+      videoBitrate: 6000, // 6 Mbps - Twitch max, YouTube recommended for 1080p @ 30fps
+      audioBitrate: 160,
       width: 1920,
       height: 1080,
       framerate: 30,
     },
     {
-      name: '720p Medium',
-      videoBitrate: 3500,
+      name: '1080p Medium',
+      videoBitrate: 4000, // 4 Mbps - Facebook recommended for 1080p
+      audioBitrate: 128,
+      width: 1920,
+      height: 1080,
+      framerate: 30,
+    },
+
+    // 720p profiles (good fallback for network issues)
+    {
+      name: '720p High',
+      videoBitrate: 3500, // 3.5 Mbps - Good quality 720p
       audioBitrate: 128,
       width: 1280,
       height: 720,
       framerate: 30,
     },
+    {
+      name: '720p Medium',
+      videoBitrate: 2500, // 2.5 Mbps - Standard 720p
+      audioBitrate: 128,
+      width: 1280,
+      height: 720,
+      framerate: 30,
+    },
+
+    // Lower quality profiles (for poor network conditions)
     {
       name: '480p Low',
       videoBitrate: 1200,
@@ -109,8 +140,9 @@ export class AdaptiveBitrateService extends EventEmitter {
       return;
     }
 
-    // Set initial profile (default to 1080p High for compatibility)
-    const profile = initialProfile || this.profiles[3];
+    // Set initial profile (default to 1080p High @ 6000 kbps for maximum platform compatibility)
+    // 6000 kbps works for: Twitch (max), YouTube (recommended), Facebook, LinkedIn, Twitter/X
+    const profile = initialProfile || this.profiles[3]; // 1080p High (6000 kbps)
     this.currentProfiles.set(broadcastId, profile);
     this.stabilityCounters.set(broadcastId, { bad: 0, good: 0 });
     this.adjustmentHistory.set(broadcastId, []);
