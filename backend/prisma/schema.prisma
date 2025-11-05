@@ -1,0 +1,424 @@
+// Streamlick Database Schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  avatarUrl String?  @map("avatar_url")
+  planType  String   @default("free") @map("plan_type") // free, core, advanced, teams, business
+  role      String   @default("user") // user, admin
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  broadcasts    Broadcast[]
+  destinations  Destination[]
+  participants  Participant[]
+  assets        Asset[]
+  templates     StudioTemplate[]
+  subscriptions Subscription[]
+  mediaClips    MediaClip[]
+  bannedParticipants BannedParticipant[]
+
+  @@map("users")
+}
+
+model Broadcast {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  title          String
+  description    String?
+  status         String   @default("scheduled") // scheduled, live, ended, recording
+  scheduledAt    DateTime? @map("scheduled_at")
+  startedAt      DateTime? @map("started_at")
+  endedAt        DateTime? @map("ended_at")
+  durationSeconds Int?    @map("duration_seconds")
+  studioConfig   Json?    @map("studio_config") // Layout, branding, settings
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  participants          Participant[]
+  recordings            Recording[]
+  chatMessages          ChatMessage[]
+  broadcastDestinations BroadcastDestination[]
+
+  @@map("broadcasts")
+}
+
+model Destination {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  platform       String   // youtube, facebook, linkedin, twitch, custom_rtmp
+  platformUserId String?  @map("platform_user_id")
+  displayName    String?  @map("display_name")
+  rtmpUrl        String?  @map("rtmp_url")
+  streamKey      String?  @map("stream_key") // Encrypted
+  accessToken    String?  @map("access_token") // Encrypted
+  refreshToken   String?  @map("refresh_token") // Encrypted
+  channelId      String?  @map("channel_id") // For platform-specific moderation
+  pageId         String?  @map("page_id") // For Facebook page moderation
+  username       String?  // Platform username for Twitch, etc.
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  broadcastDestinations BroadcastDestination[]
+
+  @@map("destinations")
+}
+
+model BroadcastDestination {
+  id            String   @id @default(uuid())
+  broadcastId   String   @map("broadcast_id")
+  destinationId String   @map("destination_id")
+  streamUrl     String?  @map("stream_url")
+  streamKey     String?  @map("stream_key") // Encrypted
+  status        String?  // pending, streaming, ended, error
+  viewerCount   Int      @default(0) @map("viewer_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  broadcast   Broadcast   @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  destination Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+
+  @@map("broadcast_destinations")
+}
+
+model Participant {
+  id            String    @id @default(uuid())
+  broadcastId   String    @map("broadcast_id")
+  userId        String?   @map("user_id")
+  joinLinkToken String?   @unique @map("join_link_token")
+  name          String?
+  role          String?   // host, guest, backstage
+  status        String?   // invited, joined, disconnected
+  joinedAt      DateTime? @map("joined_at")
+  leftAt        DateTime? @map("left_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("participants")
+}
+
+model Recording {
+  id              String   @id @default(uuid())
+  broadcastId     String   @map("broadcast_id")
+  filePath        String   @map("file_path")
+  fileSizeBytes   BigInt?  @map("file_size_bytes")
+  durationSeconds Int?     @map("duration_seconds")
+  quality         String?  // 720p, 1080p, 4k
+  format          String?  // mp4, webm
+  storageType     String?  // cloud, local
+  isAvailable     Boolean  @default(true) @map("is_available")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+
+  @@map("recordings")
+}
+
+model Asset {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  type          String?  // logo, overlay, background, banner
+  name          String?
+  fileUrl       String   @map("file_url")
+  fileSizeBytes BigInt?  @map("file_size_bytes")
+  mimeType      String?  @map("mime_type")
+  metadata      Json?    // Dimensions, format-specific data
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("assets")
+}
+
+model StudioTemplate {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  name      String
+  config    Json     // Full studio configuration
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("studio_templates")
+}
+
+model ChatMessage {
+  id          String   @id @default(uuid())
+  broadcastId String   @map("broadcast_id")
+  platform    String?
+  authorName  String?  @map("author_name")
+  messageText String?  @map("message_text")
+  isFeatured  Boolean  @default(false) @map("is_featured")
+  receivedAt  DateTime @default(now()) @map("received_at")
+
+  broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
+}
+
+model Subscription {
+  id                   String    @id @default(uuid())
+  userId               String    @map("user_id")
+  planType             String    @map("plan_type")
+  status               String?   // active, cancelled, expired
+  stripeSubscriptionId String?   @map("stripe_subscription_id")
+  currentPeriodStart   DateTime? @map("current_period_start")
+  currentPeriodEnd     DateTime? @map("current_period_end")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid())
+  category    String   // oauth, webhook, system, rtmp, logging
+  key         String
+  value       String   @db.Text
+  isEncrypted Boolean  @default(false) @map("is_encrypted")
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([category, key], name: "category_key")
+  @@map("system_settings")
+}
+
+model MediaClip {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  type          String   // video, audio, image
+  name          String
+  fileUrl       String   @map("file_url")
+  thumbnailUrl  String?  @map("thumbnail_url")
+  fileSizeBytes BigInt?  @map("file_size_bytes")
+  mimeType      String?  @map("mime_type")
+  durationMs    Int?     @map("duration_ms")
+  hotkey        String?  // Keyboard shortcut to trigger
+  volume        Int      @default(100) // 0-100
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("media_clips")
+}
+
+model DefaultAsset {
+  id           String   @id @default(uuid())
+  type         String   // backgrounds, sounds, images, overlays
+  name         String
+  category     String?  // office, studio, nature, etc.
+  url          String
+  thumbnailUrl String?  @map("thumbnail_url")
+  fileSizeBytes BigInt? @map("file_size_bytes")
+  mimeType     String?  @map("mime_type")
+  isDefault    Boolean  @default(true) @map("is_default")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([type])
+  @@index([type, isActive])
+  @@index([category])
+  @@map("default_assets")
+}
+
+model BannedParticipant {
+  id          String   @id @default(uuid())
+  broadcastId String   @map("broadcast_id")
+  userId      String   @map("user_id")
+  bannedBy    String   @map("banned_by") // User ID who banned
+  reason      String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([broadcastId, userId])
+  @@map("banned_participants")
+}
+
+model ModerationAction {
+  id          String    @id @default(uuid())
+  broadcastId String    @map("broadcast_id")
+  platform    String    // youtube, twitch, facebook, etc.
+  userId      String    @map("user_id") // Platform-specific user ID
+  username    String
+  action      String    // ban, timeout, unban
+  duration    Int?      // For timeouts, in seconds
+  reason      String?   @db.Text
+  moderatorId String    @map("moderator_id") // Streamlick user ID who performed the action
+  timestamp   DateTime  @default(now())
+  expiresAt   DateTime? @map("expires_at") // For timeouts
+  isActive    Boolean   @default(true) @map("is_active")
+
+  @@index([broadcastId])
+  @@index([platform, userId])
+  @@index([isActive])
+  @@map("moderation_actions")
+}
+
+model StreamMetric {
+  id          String   @id @default(uuid())
+  broadcastId String   @map("broadcast_id")
+  timestamp   DateTime @default(now())
+
+  // Viewer metrics
+  totalViewers     Int @default(0) @map("total_viewers")
+  peakViewers      Int @default(0) @map("peak_viewers")
+  youtubeViewers   Int @default(0) @map("youtube_viewers")
+  facebookViewers  Int @default(0) @map("facebook_viewers")
+  twitchViewers    Int @default(0) @map("twitch_viewers")
+  xViewers         Int @default(0) @map("x_viewers")
+  rumbleViewers    Int @default(0) @map("rumble_viewers")
+  linkedinViewers  Int @default(0) @map("linkedin_viewers")
+  customViewers    Int @default(0) @map("custom_viewers")
+
+  // Stream quality metrics
+  bitrate          Int? // kbps
+  framerate        Int? // fps
+  droppedFrames    Int  @default(0) @map("dropped_frames")
+  totalFrames      Int  @default(0) @map("total_frames")
+
+  // Network metrics
+  packetLoss       Float @default(0) @map("packet_loss") // percentage
+  rtt              Int?  // Round-trip time in ms
+
+  // Chat metrics
+  totalChatMessages Int @default(0) @map("total_chat_messages")
+  youtubeChatCount  Int @default(0) @map("youtube_chat_count")
+  facebookChatCount Int @default(0) @map("facebook_chat_count")
+  twitchChatCount   Int @default(0) @map("twitch_chat_count")
+  xChatCount        Int @default(0) @map("x_chat_count")
+  rumbleChatCount   Int @default(0) @map("rumble_chat_count")
+
+  @@index([broadcastId])
+  @@index([timestamp])
+  @@index([broadcastId, timestamp])
+  @@map("stream_metrics")
+}
+
+model BroadcastAnalytics {
+  id          String   @id @default(uuid())
+  broadcastId String   @unique @map("broadcast_id")
+  userId      String   @map("user_id")
+
+  // Overall statistics
+  totalDurationSeconds Int      @default(0) @map("total_duration_seconds")
+  startedAt            DateTime @map("started_at")
+  endedAt              DateTime? @map("ended_at")
+
+  // Viewer statistics
+  totalViewers         Int @default(0) @map("total_viewers")
+  peakViewers          Int @default(0) @map("peak_viewers")
+  averageViewers       Int @default(0) @map("average_viewers")
+  totalViewTimeSeconds Int @default(0) @map("total_view_time_seconds")
+
+  // Per-platform viewer stats
+  youtubeViews   Int @default(0) @map("youtube_views")
+  facebookViews  Int @default(0) @map("facebook_views")
+  twitchViews    Int @default(0) @map("twitch_views")
+  xViews         Int @default(0) @map("x_views")
+  rumbleViews    Int @default(0) @map("rumble_views")
+  linkedinViews  Int @default(0) @map("linkedin_views")
+  customViews    Int @default(0) @map("custom_views")
+
+  // Chat statistics
+  totalChatMessages Int @default(0) @map("total_chat_messages")
+  totalSuperChats   Int @default(0) @map("total_super_chats")
+  superChatRevenue  Float @default(0) @map("super_chat_revenue")
+
+  // Quality statistics
+  averageBitrate    Int @default(0) @map("average_bitrate")
+  averageFramerate  Int @default(0) @map("average_framerate")
+  totalDroppedFrames Int @default(0) @map("total_dropped_frames")
+
+  // Engagement statistics
+  totalParticipants Int @default(0) @map("total_participants")
+  averageWatchTime  Int @default(0) @map("average_watch_time") // seconds
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([startedAt])
+  @@map("broadcast_analytics")
+}
+
+model UserAnalytics {
+  id     String @id @default(uuid())
+  userId String @unique @map("user_id")
+
+  // Overall streaming statistics
+  totalBroadcasts      Int @default(0) @map("total_broadcasts")
+  totalStreamTime      Int @default(0) @map("total_stream_time") // seconds
+  totalViewers         Int @default(0) @map("total_viewers")
+  totalViewTime        Int @default(0) @map("total_view_time") // seconds
+
+  // Best performance
+  peakViewers          Int      @default(0) @map("peak_viewers")
+  peakViewersBroadcast String?  @map("peak_viewers_broadcast")
+  longestStreamSeconds Int      @default(0) @map("longest_stream_seconds")
+
+  // Platform usage
+  youtubeStreams   Int @default(0) @map("youtube_streams")
+  facebookStreams  Int @default(0) @map("facebook_streams")
+  twitchStreams    Int @default(0) @map("twitch_streams")
+  xStreams         Int @default(0) @map("x_streams")
+  rumbleStreams    Int @default(0) @map("rumble_streams")
+  linkedinStreams  Int @default(0) @map("linkedin_streams")
+
+  // Chat engagement
+  totalChatMessages Int @default(0) @map("total_chat_messages")
+  totalSuperChats   Int @default(0) @map("total_super_chats")
+  superChatRevenue  Float @default(0) @map("super_chat_revenue")
+
+  // Account activity
+  lastBroadcastAt DateTime? @map("last_broadcast_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("user_analytics")
+}
+
+model PlatformAnalytics {
+  id        String   @id @default(uuid())
+  date      DateTime // Daily aggregation
+  platform  String   // youtube, facebook, twitch, etc.
+
+  // Daily statistics
+  totalStreams      Int @default(0) @map("total_streams")
+  totalViewers      Int @default(0) @map("total_viewers")
+  totalStreamTime   Int @default(0) @map("total_stream_time") // seconds
+  totalChatMessages Int @default(0) @map("total_chat_messages")
+
+  // Average metrics
+  averageViewers       Int @default(0) @map("average_viewers")
+  averageBitrate       Int @default(0) @map("average_bitrate")
+  averageStreamLength  Int @default(0) @map("average_stream_length") // seconds
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([date, platform])
+  @@index([date])
+  @@index([platform])
+  @@map("platform_analytics")
+}
