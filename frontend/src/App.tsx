@@ -25,6 +25,23 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
 }
 
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore((state) => ({
+    isAuthenticated: state.isAuthenticated,
+    user: state.user,
+  }));
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+
+  if (user?.role !== 'admin') {
+    return <Navigate to="/dashboard" />;
+  }
+
+  return <>{children}</>;
+}
+
 function App() {
   const checkAuth = useAuthStore((state) => state.checkAuth);
 
@@ -83,41 +100,41 @@ function App() {
         <Route
           path="/admin/assets"
           element={
-            <PrivateRoute>
+            <AdminRoute>
               <AdminAssets />
-            </PrivateRoute>
+            </AdminRoute>
           }
         />
         <Route
           path="/admin/logs"
           element={
-            <PrivateRoute>
+            <AdminRoute>
               <AdminLogs />
-            </PrivateRoute>
+            </AdminRoute>
           }
         />
         <Route
           path="/admin/settings"
           element={
-            <PrivateRoute>
+            <AdminRoute>
               <AdminSettings />
-            </PrivateRoute>
+            </AdminRoute>
           }
         />
         <Route
           path="/admin/testing"
           element={
-            <PrivateRoute>
+            <AdminRoute>
               <AdminTesting />
-            </PrivateRoute>
+            </AdminRoute>
           }
         />
         <Route
           path="/admin/servers"
           element={
-            <PrivateRoute>
+            <AdminRoute>
               <AdminServers />
-            </PrivateRoute>
+            </AdminRoute>
           }
         />
         <Route path="/privacy" element={<Privacy />} />

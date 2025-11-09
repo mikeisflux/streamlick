@@ -30,7 +30,7 @@ export function Landing() {
           </p>
           <div className="flex gap-4 justify-center">
             <Button size="lg" onClick={() => navigate('/login')} className="text-lg px-8 py-4">
-              Get Started Free
+              Start Streaming
             </Button>
             <Button
               size="lg"
@@ -41,7 +41,7 @@ export function Landing() {
               Try Demo
             </Button>
           </div>
-          <p className="text-white/80 mt-4">$20/month - Unlimited everything. Cancel anytime.</p>
+          <p className="text-white/80 mt-4">$20/month - All features included. Cancel anytime.</p>
         </section>
 
         {/* Features */}
@@ -96,6 +96,70 @@ export function Landing() {
               <h3 className="text-2xl font-bold mb-2">Recording & Storage</h3>
               <p className="text-white/80">
                 Record your streams in HD and access them anytime with unlimited cloud storage.
+              </p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">🎬</div>
+              <h3 className="text-2xl font-bold mb-2">Scene Manager</h3>
+              <p className="text-white/80">
+                Create multiple scenes with professional transitions. Switch between layouts instantly during your stream.
+              </p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">👥</div>
+              <h3 className="text-2xl font-bold mb-2">Real-Time Viewer Count</h3>
+              <p className="text-white/80">
+                Track viewers across all platforms in real-time with detailed analytics and platform breakdown.
+              </p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">📝</div>
+              <h3 className="text-2xl font-bold mb-2">Lower Thirds</h3>
+              <p className="text-white/80">
+                Add professional name and title overlays for guests with customizable styles and animations.
+              </p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">🛡️</div>
+              <h3 className="text-2xl font-bold mb-2">Chat Moderation</h3>
+              <p className="text-white/80">
+                Filter profanity, ban users, and manage chat across all platforms with powerful moderation tools.
+              </p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">🎨</div>
+              <h3 className="text-2xl font-bold mb-2">Chat Layout Customizer</h3>
+              <p className="text-white/80">
+                Position and style your chat overlay with 5 layouts, 8 positions, and 4 professional presets.
+              </p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">🎭</div>
+              <h3 className="text-2xl font-bold mb-2">Background Effects</h3>
+              <p className="text-white/80">
+                Blur backgrounds, add custom images, or use virtual backgrounds powered by AI.
+              </p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">🎵</div>
+              <h3 className="text-2xl font-bold mb-2">Media Library</h3>
+              <p className="text-white/80">
+                Upload and trigger video clips, images, and sound effects during your stream.
+              </p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">📊</div>
+              <h3 className="text-2xl font-bold mb-2">Analytics Dashboard</h3>
+              <p className="text-white/80">
+                Track performance with detailed analytics, viewer history, and engagement metrics across all platforms.
               </p>
             </div>
           </div>
@@ -200,9 +264,9 @@ export function Landing() {
               </li>
             </ul>
             <Button size="lg" className="w-full" onClick={() => navigate('/login')}>
-              Start Free Trial
+              Get Started
             </Button>
-            <p className="text-sm text-gray-600 mt-4">No credit card required to start</p>
+            <p className="text-sm text-gray-600 mt-4">Cancel anytime. Full access immediately.</p>
           </div>
         </section>
 
