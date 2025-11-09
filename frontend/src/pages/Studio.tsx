@@ -26,6 +26,13 @@ import { BannerEditorPanel } from '../components/BannerEditorPanel';
 import { BrandSettingsPanel } from '../components/BrandSettingsPanel';
 import { ParticipantsPanel } from '../components/ParticipantsPanel';
 import { RecordingControls } from '../components/RecordingControls';
+import { StylePanel } from '../components/StylePanel';
+import { NotesPanel } from '../components/NotesPanel';
+import { MediaAssetsPanel } from '../components/MediaAssetsPanel';
+import { PrivateChatPanel } from '../components/PrivateChatPanel';
+import { CommentsPanel } from '../components/CommentsPanel';
+import { ClipManager } from '../components/ClipManager';
+import { ProducerMode } from '../components/ProducerMode';
 import { clipPlayerService } from '../services/clip-player.service';
 import { backgroundProcessorService } from '../services/background-processor.service';
 import { Button } from '../components/Button';
@@ -1329,15 +1336,59 @@ export function Studio() {
           {/* Tab Headers */}
           <div className="border-b flex overflow-x-auto flex-shrink-0" style={{ borderColor: '#e0e0e0' }}>
             <button
-              onClick={() => setActiveRightTab('chat')}
+              onClick={() => setActiveRightTab('comments')}
               className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
-                activeRightTab === 'chat'
+                activeRightTab === 'comments'
                   ? 'text-gray-900 border-b-2'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
-              style={activeRightTab === 'chat' ? { borderColor: '#0066ff' } : {}}
+              style={activeRightTab === 'comments' ? { borderColor: '#0066ff' } : {}}
             >
-              Chat
+              Comments
+            </button>
+            <button
+              onClick={() => setActiveRightTab('banners')}
+              className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
+                activeRightTab === 'banners'
+                  ? 'text-gray-900 border-b-2'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              style={activeRightTab === 'banners' ? { borderColor: '#0066ff' } : {}}
+            >
+              Banners
+            </button>
+            <button
+              onClick={() => setActiveRightTab('media')}
+              className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
+                activeRightTab === 'media'
+                  ? 'text-gray-900 border-b-2'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              style={activeRightTab === 'media' ? { borderColor: '#0066ff' } : {}}
+            >
+              Media
+            </button>
+            <button
+              onClick={() => setActiveRightTab('style')}
+              className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
+                activeRightTab === 'style'
+                  ? 'text-gray-900 border-b-2'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              style={activeRightTab === 'style' ? { borderColor: '#0066ff' } : {}}
+            >
+              Style
+            </button>
+            <button
+              onClick={() => setActiveRightTab('notes')}
+              className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
+                activeRightTab === 'notes'
+                  ? 'text-gray-900 border-b-2'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              style={activeRightTab === 'notes' ? { borderColor: '#0066ff' } : {}}
+            >
+              Notes
             </button>
             <button
               onClick={() => setActiveRightTab('people')}
@@ -1349,6 +1400,17 @@ export function Studio() {
               style={activeRightTab === 'people' ? { borderColor: '#0066ff' } : {}}
             >
               People
+            </button>
+            <button
+              onClick={() => setActiveRightTab('chat')}
+              className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
+                activeRightTab === 'chat'
+                  ? 'text-gray-900 border-b-2'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              style={activeRightTab === 'chat' ? { borderColor: '#0066ff' } : {}}
+            >
+              Chat
             </button>
             <button
               onClick={() => setActiveRightTab('recording')}
@@ -1373,14 +1435,26 @@ export function Studio() {
 
           {/* Tab Content */}
           <div className="flex-1 overflow-y-auto">
-            {activeRightTab === 'chat' && (
+            {activeRightTab === 'comments' && <CommentsPanel broadcastId={broadcastId} />}
+            {activeRightTab === 'banners' && (
               <div className="p-4">
-                <ChatOverlay messages={chatMessages} showPlatformIcons={true} maxMessages={100} />
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Banners</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Manage your stream banners and overlays. Click the "Banners" button in the control bar for full editor.
+                </p>
+                <button
+                  onClick={() => setShowBannerDrawer(true)}
+                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                >
+                  Open Banner Editor
+                </button>
               </div>
             )}
-            {activeRightTab === 'people' && (
-              <ParticipantsPanel />
-            )}
+            {activeRightTab === 'media' && <MediaAssetsPanel broadcastId={broadcastId} />}
+            {activeRightTab === 'style' && <StylePanel broadcastId={broadcastId} />}
+            {activeRightTab === 'notes' && <NotesPanel broadcastId={broadcastId} />}
+            {activeRightTab === 'people' && <ParticipantsPanel />}
+            {activeRightTab === 'chat' && <PrivateChatPanel broadcastId={broadcastId} currentUserId={broadcast?.userId} />}
             {activeRightTab === 'recording' && (
               <RecordingControls
                 isRecording={isRecording}
