@@ -111,7 +111,6 @@ router.get('/youtube/callback', async (req, res) => {
         streamKey: encrypt(streamKey),
         accessToken: encrypt(access_token),
         refreshToken: refresh_token ? encrypt(refresh_token) : null,
-        expiresAt: new Date(Date.now() + expires_in * 1000),
         isEnabled: true,
       },
     });
@@ -206,7 +205,6 @@ router.get('/facebook/callback', async (req, res) => {
         streamKey: encrypt(''), // Facebook uses URL-based keys
         accessToken: encrypt(pageAccessToken),
         refreshToken: null,
-        expiresAt: null, // Page tokens don't expire
         isEnabled: true,
       },
     });
@@ -298,7 +296,6 @@ router.get('/twitch/callback', async (req, res) => {
         streamKey: encrypt(streamKey),
         accessToken: encrypt(access_token),
         refreshToken: refresh_token ? encrypt(refresh_token) : null,
-        expiresAt: null, // Twitch tokens don't have explicit expiry
         isEnabled: true,
       },
     });
@@ -394,7 +391,6 @@ router.get('/x/callback', async (req, res) => {
         streamKey: encrypt(''), // User must get from Media Studio
         accessToken: encrypt(access_token),
         refreshToken: refresh_token ? encrypt(refresh_token) : null,
-        expiresAt: null,
         isEnabled: true,
       },
     });
@@ -458,7 +454,6 @@ router.post('/rumble/setup', authenticate, async (req, res) => {
         streamKey: encrypt(streamKey),
         accessToken: encrypt(apiKey), // Store API key as access token
         refreshToken: null,
-        expiresAt: null,
         isEnabled: true,
       },
     });
@@ -543,7 +538,6 @@ router.get('/linkedin/callback', async (req, res) => {
         streamKey: encrypt(''), // Will be provided when creating live video
         accessToken: encrypt(access_token),
         refreshToken: null,
-        expiresAt: new Date(Date.now() + expires_in * 1000),
         isEnabled: true,
       },
     });

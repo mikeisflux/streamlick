@@ -64,15 +64,15 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req: Reques
     const { name } = req.body;
 
     // Save to database
-    const background = await prisma.defaultAsset.create({
+    const background = await prisma.asset.create({
       data: {
         id: uuidv4(),
         userId,
+        type: 'background',
         name: name || file.originalname,
-        url: `/uploads/backgrounds/${file.filename}`,
-        fileSize: file.size,
+        fileUrl: `/uploads/backgrounds/${file.filename}`,
+        fileSizeBytes: file.size,
         mimeType: file.mimetype,
-        isActive: true,
       },
     });
 
@@ -93,10 +93,10 @@ router.get('/custom', authMiddleware, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.userId;
 
-    const backgrounds = await prisma.defaultAsset.findMany({
+    const backgrounds = await prisma.asset.findMany({
       where: {
         userId,
-        isActive: true,
+        type: 'background',
       },
       orderBy: {
         createdAt: 'desc',
@@ -120,7 +120,7 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
     const userId = (req as any).user.userId;
 
     // Get background
-    const background = await prisma.defaultAsset.findUnique({
+    const background = await prisma.asset.findUnique({
       where: { id },
     });
 
@@ -139,7 +139,7 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
     }
 
     // Delete from database
-    await prisma.defaultAsset.delete({
+    await prisma.asset.delete({
       where: { id },
     });
 

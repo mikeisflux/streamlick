@@ -138,7 +138,6 @@ export class YouTubeChatPoller {
               platform: 'youtube',
               authorName: message.author,
               messageText: message.message,
-              timestamp: message.timestamp,
               metadata: {
                 isSuperChat: message.isSuperChat,
                 amount: message.superChatAmount,
@@ -279,7 +278,6 @@ export class FacebookChatPoller {
               platform: 'facebook',
               authorName: message.author,
               messageText: message.message,
-              timestamp: message.timestamp,
             },
           });
 
@@ -579,7 +577,6 @@ export class XChatPoller {
             platform: 'x',
             authorName: message.author,
             messageText: message.message,
-            timestamp: message.timestamp,
           },
         });
 
@@ -687,7 +684,6 @@ export class RumbleChatPoller {
             platform: 'rumble',
             authorName: message.author,
             messageText: message.message,
-            timestamp: message.timestamp,
             metadata: {
               isSuperChat: message.isSuperChat,
               amount: message.superChatAmount,
