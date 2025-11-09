@@ -23,7 +23,7 @@ DELETE FROM users;
 INSERT INTO users (id, email, password, name, plan_type, role, email_verified, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
-  'admin@streamlick.local',
+  'divinitycomicsinc@gmail.com',
   '$2a$10$Ve316yHFV92Xov6E9LmVXOp6BcKErCu28bJV5YW0pBbN2orkpDU3e',
   'Administrator',
   'business',
@@ -42,8 +42,8 @@ ON CONFLICT (email) DO UPDATE SET
 -- Verify
 SELECT id, email, name, role, plan_type, created_at
 FROM users
-WHERE email = 'admin@streamlick.local';
+WHERE email = 'divinitycomicsinc@gmail.com';
 
 \echo '✅ Admin user created successfully!'
-\echo 'Email: admin@streamlick.local'
+\echo 'Email: divinitycomicsinc@gmail.com'
 \echo 'Password: Good2Go!'
