@@ -18,6 +18,16 @@ dist/
 build/
 *.tsbuildinfo
 
+# TypeScript compiled artifacts in src (shouldn't be there, but git may track them)
+backend/src/**/*.js
+backend/src/**/*.js.map
+backend/src/**/*.d.ts
+!backend/src/types/express.d.ts
+frontend/src/**/*.js
+frontend/src/**/*.js.map
+media-server/src/**/*.js
+media-server/src/**/*.js.map
+
 # Config files (local overrides)
 vite.config.local.ts
 vite.config.local.js
