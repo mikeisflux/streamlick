@@ -1010,439 +1010,412 @@ export function Studio() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
-        <aside className="w-80 bg-gray-800 border-r border-gray-700 p-4 overflow-y-auto">
-          <div className="space-y-6">
-            {/* Destinations */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Stream Destinations</h3>
-              <div className="space-y-2">
-                {destinations.length === 0 ? (
-                  <p className="text-sm text-gray-500">No destinations configured</p>
-                ) : (
-                  destinations.map((dest) => {
-                    const platformIcons: Record<string, string> = {
-                      youtube: '📺',
-                      facebook: '👥',
-                      linkedin: '💼',
-                      twitch: '🎮',
-                      x: '𝕏',
-                      rumble: '🎬',
-                      custom: '📡',
-                    };
-                    const icon = platformIcons[dest.platform as keyof typeof platformIcons] || '📡';
 
-                    return (
-                      <label
-                        key={dest.id}
-                        className="flex items-center gap-2 text-sm text-gray-300 hover:bg-gray-700 p-2 rounded transition-colors cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedDestinations.includes(dest.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedDestinations([...selectedDestinations, dest.id]);
-                            } else {
-                              setSelectedDestinations(selectedDestinations.filter((id) => id !== dest.id));
-                            }
-                          }}
-                          className="rounded"
-                          disabled={isLive}
-                        />
-                        <span className="text-base">{icon}</span>
-                        <span className="flex-1 truncate">{dest.displayName || dest.platform}</span>
-                      </label>
-                    );
-                  })
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate('/settings?tab=destinations')}
-                  className="w-full mt-2"
-                >
-                  + Add Destination
-                </Button>
-              </div>
-            </div>
+      {/* Left Sidebar - Scenes (280px width) */}
+      {leftSidebarOpen && (
+        <aside
+          className="flex flex-col overflow-hidden border-r"
+          style={{
+            width: '280px',
+            backgroundColor: '#f5f5f5',
+            borderColor: '#e0e0e0'
+          }}
+        >
+          <div
+            className="sticky top-0 flex items-center justify-between px-4 border-b bg-white"
+            style={{ height: '56px', borderColor: '#e0e0e0' }}
+          >
+            <h3 className="text-sm font-semibold text-gray-800">Scenes</h3>
+            <button
+              onClick={() => setLeftSidebarOpen(false)}
+              className="text-gray-600 hover:text-gray-900"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            {/* Scene Manager Component Would Go Here */}
+            {showSceneManager && (
+              <SceneManager
+                scenes={scenes}
+                currentSceneId={currentSceneId}
+                onSceneChange={setCurrentSceneId}
+                onScenesUpdate={setScenes}
+              />
+            )}
 
-            {/* Participants */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">
-                Participants ({allParticipants.length})
-              </h3>
-
-              {/* Live Participants */}
-              <div className="mb-4">
-                <div className="text-xs font-semibold text-green-400 mb-2 flex items-center gap-1">
-                  <span className="w-2 h-2 bg-green-400 rounded-full"></span>
-                  LIVE ({allParticipants.filter((p) => p.role === 'host' || p.role === 'guest').length})
-                </div>
-                <div className="space-y-2">
-                  {allParticipants
-                    .filter((p) => p.role === 'host' || p.role === 'guest')
-                    .map((p) => {
-                      const isExpanded = selectedParticipant === p.id;
-                      const volume = participantVolumes.get(p.id) || 100;
-
-                      return (
-                        <div
-                          key={p.id}
-                          className="bg-gray-700 rounded overflow-hidden"
-                        >
-                          {/* Participant Header */}
-                          <div className="flex items-center justify-between p-2">
-                            <div className="flex items-center gap-2 flex-1">
-                              <span className="text-sm text-gray-300">{p.name}</span>
-                              {p.role === 'host' && (
-                                <span className="text-xs bg-primary-600 px-1.5 py-0.5 rounded text-white">Host</span>
-                              )}
-                              {p.isMuted && <span className="text-red-500 text-xs">🔇</span>}
-                            </div>
-                            {p.role === 'guest' && (
-                              <button
-                                onClick={() => setSelectedParticipant(isExpanded ? null : p.id)}
-                                className="text-gray-400 hover:text-white transition-colors p-1"
-                                title="Show controls"
-                              >
-                                {isExpanded ? '▼' : '▶'}
-                              </button>
-                            )}
-                          </div>
-
-                          {/* Participant Controls (Expanded) */}
-                          {isExpanded && p.role === 'guest' && (
-                            <div className="px-2 pb-2 space-y-2 border-t border-gray-600 pt-2">
-                              {/* Volume Control */}
-                              <div>
-                                <label className="text-xs text-gray-400 block mb-1">
-                                  Volume: {volume}%
-                                </label>
-                                <input
-                                  type="range"
-                                  min="0"
-                                  max="100"
-                                  value={volume}
-                                  onChange={(e) => handleVolumeChange(p.id, parseInt(e.target.value))}
-                                  className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
-                                />
-                              </div>
-
-                              {/* Control Buttons */}
-                              <div className="grid grid-cols-2 gap-2">
-                                {p.isMuted ? (
-                                  <button
-                                    onClick={() => handleUnmuteParticipant(p.id)}
-                                    className="text-xs px-2 py-1 bg-green-600 hover:bg-green-500 rounded transition-colors text-white"
-                                  >
-                                    🔊 Unmute
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => handleMuteParticipant(p.id)}
-                                    className="text-xs px-2 py-1 bg-yellow-600 hover:bg-yellow-500 rounded transition-colors text-white"
-                                  >
-                                    🔇 Mute
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => handleDemoteToBackstage(p.id)}
-                                  className="text-xs px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded transition-colors text-white"
-                                  disabled={isLive}
-                                >
-                                  ⬇ Backstage
-                                </button>
-                                <button
-                                  onClick={() => handleKickParticipant(p.id, p.name)}
-                                  className="text-xs px-2 py-1 bg-orange-600 hover:bg-orange-500 rounded transition-colors text-white"
-                                >
-                                  ⚠️ Kick
-                                </button>
-                                <button
-                                  onClick={() => handleBanParticipant(p.id, p.name)}
-                                  className="text-xs px-2 py-1 bg-red-600 hover:bg-red-500 rounded transition-colors text-white"
-                                >
-                                  🚫 Ban
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-
-              {/* Backstage Participants */}
-              <div>
-                <div className="text-xs font-semibold text-yellow-400 mb-2 flex items-center gap-1">
-                  <span className="w-2 h-2 bg-yellow-400 rounded-full"></span>
-                  BACKSTAGE ({allParticipants.filter((p) => p.role === 'backstage').length})
-                </div>
-                <div className="space-y-1">
-                  {allParticipants
-                    .filter((p) => p.role === 'backstage')
-                    .map((p) => (
-                      <div
-                        key={p.id}
-                        className="flex items-center justify-between text-sm text-gray-300 bg-gray-800 rounded p-2"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span>{p.name}</span>
-                          {p.isMuted && <span className="text-red-500 text-xs">🔇</span>}
-                        </div>
-                        <button
-                          onClick={() => handlePromoteToLive(p.id)}
-                          className="text-xs px-2 py-1 bg-green-600 hover:bg-green-500 rounded transition-colors"
-                        >
-                          Go Live
-                        </button>
-                      </div>
-                    ))}
-                  {allParticipants.filter((p) => p.role === 'backstage').length === 0 && (
-                    <p className="text-xs text-gray-500 italic">No guests waiting</p>
+            {/* Default scene card */}
+            <div
+              className="bg-white rounded shadow hover:shadow-md transition-shadow cursor-pointer border"
+              style={{ height: '180px', borderColor: '#e0e0e0' }}
+            >
+              <div className="h-full flex flex-col p-3">
+                <div className="flex-1 bg-black rounded mb-2 relative overflow-hidden">
+                  {localStream && videoEnabled && (
+                    <video
+                      ref={(el) => {
+                        if (el && localStream) el.srcObject = localStream;
+                      }}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                    />
                   )}
                 </div>
+                <p className="text-xs text-gray-700 font-medium">Default Scene</p>
               </div>
             </div>
+          </div>
+        </aside>
+      )}
 
-            {/* Layout Controls */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Layout</h3>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => handleLayoutChange('grid')}
-                  className={`p-2 rounded text-xs ${
-                    currentLayout === 'grid'
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                  disabled={!isLive}
-                >
-                  Grid
-                </button>
-                <button
-                  onClick={() => handleLayoutChange('spotlight')}
-                  className={`p-2 rounded text-xs ${
-                    currentLayout === 'spotlight'
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                  disabled={!isLive}
-                >
-                  Spotlight
-                </button>
-                <button
-                  onClick={() => handleLayoutChange('sidebar')}
-                  className={`p-2 rounded text-xs ${
-                    currentLayout === 'sidebar'
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                  disabled={!isLive}
-                >
-                  Sidebar
-                </button>
-                <button
-                  onClick={() => handleLayoutChange('pip')}
-                  className={`p-2 rounded text-xs ${
-                    currentLayout === 'pip'
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                  disabled={!isLive}
-                >
-                  PiP
-                </button>
-              </div>
-            </div>
-
-            {/* Recording Controls */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Recording</h3>
-              {isRecording && (
-                <div className="text-sm text-red-500 mb-2 font-mono">
-                  ⏺️ {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
+      {/* Main Canvas Area */}
+      <main
+        className="flex flex-col overflow-hidden"
+        style={{ backgroundColor: '#1a1a1a' }}
+      >
+        {/* Canvas Container - 16:9 aspect ratio, max-width 1920px */}
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div
+            className="relative bg-black"
+            style={{
+              width: '100%',
+              maxWidth: '1920px',
+              aspectRatio: '16 / 9'
+            }}
+          >
+            {/* Main Video Preview */}
+            <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: '#000000' }}>
+              {localStream && videoEnabled ? (
+                <video
+                  ref={(el) => {
+                    if (el && localStream) el.srcObject = localStream;
+                  }}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <svg className="w-16 h-16 text-gray-600 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    <p className="text-gray-500 text-sm">Camera Off</p>
+                  </div>
                 </div>
               )}
-              <Button
-                onClick={isRecording ? handleStopRecording : handleStartRecording}
-                variant={isRecording ? 'danger' : 'secondary'}
-                size="sm"
-                className="w-full"
-                disabled={!isLive}
-              >
-                {isRecording ? '⏹️ Stop Recording' : '⏺️ Start Recording'}
-              </Button>
-            </div>
 
-            {/* Chat Display Toggle */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Chat Options</h3>
-              <label className="flex items-center gap-2 text-sm text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={showChatOnStream}
-                  onChange={(e) => {
-                    setShowChatOnStream(e.target.checked);
-                    compositorService.setShowChat(e.target.checked);
-                  }}
-                  className="rounded"
-                />
-                Show chat on stream
-              </label>
-              <div className="mt-2 text-xs text-gray-500">
-                {chatMessages.length} messages
-              </div>
-            </div>
-
-            {/* Media Clips */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Media Clips</h3>
-              <Button
-                onClick={() => setShowMediaLibrary(true)}
-                variant="secondary"
-                size="sm"
-                className="w-full"
-              >
-                🎬 Open Media Library
-              </Button>
-              <p className="mt-2 text-xs text-gray-500">
-                Add video clips, sound effects, and images to your stream
-              </p>
-            </div>
-
-            {/* Background Effects */}
-            <div>
-              <BackgroundEffects
-                currentEffect={backgroundEffect}
-                onEffectChange={(effect) => {
-                  setBackgroundEffect(effect);
-                  if (localStream) {
-                    backgroundProcessorService.updateEffect(effect);
-                    toast.success(`Background effect: ${effect.type}`);
-                  }
+              {/* Resolution Badge - Centered Top */}
+              <div
+                className="absolute top-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-full text-sm font-semibold text-white"
+                style={{
+                  backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                  backdropFilter: 'blur(8px)'
                 }}
-              />
-            </div>
-
-            {/* Studio Tools */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Studio Tools</h3>
-              <div className="space-y-2">
-                <Button
-                  onClick={() => setShowChatLayoutCustomizer(true)}
-                  variant="secondary"
-                  size="sm"
-                  className="w-full"
-                >
-                  💬 Chat Layout
-                </Button>
-                <Button
-                  onClick={() => setShowChatModeration(true)}
-                  variant="secondary"
-                  size="sm"
-                  className="w-full"
-                >
-                  🛡️ Chat Moderation
-                </Button>
-                <Button
-                  onClick={() => handleShowLowerThird('Guest Name', 'Guest Title')}
-                  variant="secondary"
-                  size="sm"
-                  className="w-full"
-                >
-                  📝 Lower Third
-                </Button>
+              >
+                1080p HD
               </div>
-            </div>
 
-            {/* Stream Health Monitor */}
-            {broadcastId && (
-              <StreamHealthMonitor broadcastId={broadcastId} isLive={isLive} />
-            )}
-
-            {/* Bitrate Control */}
-            {broadcastId && (
-              <BitrateControl broadcastId={broadcastId} isLive={isLive} />
-            )}
-          </div>
-        </aside>
-
-        {/* Video Preview Area */}
-        <main className="flex-1 p-6 overflow-hidden">
-          <div className="h-full flex flex-col">
-            {/* Video Grid - Only show LIVE participants */}
-            <div className="flex-1 bg-black rounded-lg overflow-hidden p-4">
-              {(() => {
-                const liveParticipants = allParticipants.filter(
-                  (p) => p.role === 'host' || p.role === 'guest'
-                );
-                return (
-                  <VideoGrid participantCount={liveParticipants.length}>
-                    {liveParticipants.map((participant) => (
-                      <ParticipantVideo
-                        key={participant.id}
-                        stream={participant.stream}
-                        name={participant.name}
-                        isMuted={participant.isMuted}
-                        isLocal={participant.isLocal}
-                        className="aspect-video"
-                      />
+              {/* On-Screen Chat Overlay */}
+              {showChatOnStream && (
+                <div className="absolute bottom-20 right-4 w-80 bg-black/80 backdrop-blur-sm rounded-lg p-3 max-h-96 overflow-y-auto">
+                  <div className="space-y-2">
+                    {chatMessages.slice(-5).map((msg, i) => (
+                      <div key={i} className="text-white text-sm">
+                        <span className="font-semibold">{msg.userName}:</span> {msg.message}
+                      </div>
                     ))}
-                  </VideoGrid>
-                );
-              })()}
-            </div>
+                  </div>
+                </div>
+              )}
 
-            {/* Controls */}
-            <div className="mt-6 flex justify-center gap-4">
-              <button
-                onClick={handleToggleAudio}
-                className={`p-4 rounded-full ${
-                  audioEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600'
-                } text-white transition-colors`}
-                title={audioEnabled ? 'Mute' : 'Unmute'}
-              >
-                {audioEnabled ? '🎤' : '🔇'}
-              </button>
-              <button
-                onClick={handleToggleVideo}
-                className={`p-4 rounded-full ${
-                  videoEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600'
-                } text-white transition-colors`}
-                title={videoEnabled ? 'Stop Video' : 'Start Video'}
-              >
-                {videoEnabled ? '📹' : '📵'}
-              </button>
-              <button
-                onClick={handleToggleScreenShare}
-                className={`p-4 rounded-full ${
-                  isSharingScreen ? 'bg-primary-600' : 'bg-gray-700 hover:bg-gray-600'
-                } text-white transition-colors`}
-                title={isSharingScreen ? 'Stop Sharing' : 'Share Screen'}
-              >
-                🖥️
-              </button>
-              <button
-                onClick={() => navigate('/settings')}
-                className="p-4 rounded-full bg-gray-700 hover:bg-gray-600 text-white transition-colors"
-                title="Settings"
-              >
-                ⚙️
-              </button>
+              {/* User Label Overlay */}
+              {localStream && (
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-white text-sm font-medium">You (Host)</span>
+                      <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded">720p</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        </main>
+        </div>
 
-        {/* Chat Panel */}
-        <aside className="w-96 bg-gray-800 border-l border-gray-700 overflow-hidden">
-          <ChatOverlay messages={chatMessages} showPlatformIcons={true} maxMessages={100} />
+        {/* Layout Bar - 72px height */}
+        <div
+          className="flex items-center justify-center gap-2 border-t px-4 overflow-x-auto"
+          style={{
+            height: '72px',
+            backgroundColor: '#2d2d2d',
+            borderColor: '#404040'
+          }}
+        >
+          {/* 9 Layout Buttons */}
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((layoutId) => (
+            <button
+              key={layoutId}
+              onClick={() => setSelectedLayout(layoutId)}
+              className="rounded hover:bg-gray-600 transition-all flex items-center justify-center flex-shrink-0"
+              style={{
+                width: '56px',
+                height: '56px',
+                backgroundColor: selectedLayout === layoutId ? '#0066ff' : '#3d3d3d'
+              }}
+              title={`Layout ${layoutId}`}
+            >
+              <span className="text-white text-xs">{layoutId}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Bottom Control Bar - 80px height */}
+        <div
+          className="flex items-center justify-between px-6 border-t"
+          style={{
+            height: '80px',
+            backgroundColor: '#2d2d2d',
+            borderColor: '#404040'
+          }}
+        >
+          {/* Left Section */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowDestinationsDrawer(true)}
+              className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm transition-colors"
+            >
+              Destinations
+            </button>
+            <button
+              onClick={() => setShowBannerDrawer(true)}
+              className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm transition-colors"
+            >
+              Banners
+            </button>
+            <button
+              onClick={() => setShowBrandDrawer(true)}
+              className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm transition-colors"
+            >
+              Brand
+            </button>
+
+            {/* Killer Features */}
+            <div className="h-8 w-px bg-gray-600" />
+            <button
+              onClick={() => setCaptionsEnabled(!captionsEnabled)}
+              className={`p-2 rounded ${
+                captionsEnabled ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'
+              } text-white transition-colors`}
+              title="AI Captions"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setClipRecordingEnabled(!clipRecordingEnabled)}
+              className={`p-2 rounded ${
+                clipRecordingEnabled ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'
+              } text-white transition-colors`}
+              title="Clip Recording"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setShowClipManager(true)}
+              className="p-2 rounded bg-gray-700 hover:bg-gray-600 text-white transition-colors"
+              title="Clip Manager"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Center Section - Media Controls */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleAudio}
+              className={`p-3 rounded-full ${
+                audioEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'
+              } text-white transition-colors`}
+              title={audioEnabled ? 'Mute' : 'Unmute'}
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+            </button>
+            <button
+              className="p-3 rounded-full bg-gray-700 hover:bg-gray-600 text-white transition-colors"
+              title="Speaker"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              </svg>
+            </button>
+            <button
+              onClick={toggleVideo}
+              className={`p-3 rounded-full ${
+                videoEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'
+              } text-white transition-colors`}
+              title={videoEnabled ? 'Stop Camera' : 'Start Camera'}
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
+            <button
+              onClick={isSharingScreen ? stopScreenShare : startScreenShare}
+              className={`p-3 rounded-full ${
+                isSharingScreen ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'
+              } text-white transition-colors`}
+              title={isSharingScreen ? 'Stop Screen Share' : 'Share Screen'}
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Right Section */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowProducerMode(true)}
+              className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold transition-colors"
+              title="Producer Mode"
+            >
+              Producer Mode
+            </button>
+            <button
+              onClick={() => setShowInviteDrawer(true)}
+              className="px-6 py-3 rounded-lg bg-green-600 hover:bg-green-700 text-white font-semibold transition-colors"
+            >
+              Invite Guests
+            </button>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="p-3 rounded-full bg-gray-700 hover:bg-gray-600 text-white transition-colors"
+              title="Settings"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </main>
+
+      {/* Right Sidebar - Tabbed Panels (320px width) */}
+      {rightSidebarOpen && (
+        <aside
+          className="flex flex-col overflow-hidden border-l"
+          style={{
+            width: '320px',
+            backgroundColor: '#ffffff',
+            borderColor: '#e0e0e0',
+            zIndex: 800
+          }}
+        >
+          {/* Tab Headers */}
+          <div className="border-b flex overflow-x-auto flex-shrink-0" style={{ borderColor: '#e0e0e0' }}>
+            <button
+              onClick={() => setActiveRightTab('chat')}
+              className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
+                activeRightTab === 'chat'
+                  ? 'text-gray-900 border-b-2'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              style={activeRightTab === 'chat' ? { borderColor: '#0066ff' } : {}}
+            >
+              Chat
+            </button>
+            <button
+              onClick={() => setActiveRightTab('people')}
+              className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
+                activeRightTab === 'people'
+                  ? 'text-gray-900 border-b-2'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              style={activeRightTab === 'people' ? { borderColor: '#0066ff' } : {}}
+            >
+              People
+            </button>
+            <button
+              onClick={() => setActiveRightTab('recording')}
+              className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
+                activeRightTab === 'recording'
+                  ? 'text-gray-900 border-b-2'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+              style={activeRightTab === 'recording' ? { borderColor: '#0066ff' } : {}}
+            >
+              Recording
+            </button>
+            <button
+              onClick={() => setRightSidebarOpen(false)}
+              className="ml-auto p-3 text-gray-500 hover:text-gray-900"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          <div className="flex-1 overflow-y-auto">
+            {activeRightTab === 'chat' && (
+              <div className="p-4">
+                <ChatOverlay messages={chatMessages} showPlatformIcons={true} maxMessages={100} />
+              </div>
+            )}
+            {activeRightTab === 'people' && (
+              <ParticipantsPanel />
+            )}
+            {activeRightTab === 'recording' && (
+              <RecordingControls
+                isRecording={isRecording}
+                duration={recordingDuration}
+                onStart={handleStartRecording}
+                onStop={handleStopRecording}
+              />
+            )}
+          </div>
         </aside>
-      </div>
+      )}
+
+      {/* Toggle Buttons (when sidebars are collapsed) */}
+      {!leftSidebarOpen && (
+        <button
+          onClick={() => setLeftSidebarOpen(true)}
+          className="fixed left-2 top-1/2 transform -translate-y-1/2 p-2 rounded-r bg-gray-700 hover:bg-gray-600 text-white shadow-lg z-50"
+          style={{ zIndex: 900 }}
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      )}
+      {!rightSidebarOpen && (
+        <button
+          onClick={() => setRightSidebarOpen(true)}
+          className="fixed right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-l bg-gray-700 hover:bg-gray-600 text-white shadow-lg z-50"
+          style={{ zIndex: 900 }}
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+        </button>
+      )}
 
       {/* Hotkey Reference */}
       {showHotkeyReference && <HotkeyReference />}
