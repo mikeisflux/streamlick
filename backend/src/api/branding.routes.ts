@@ -12,6 +12,9 @@ import logger from '../utils/logger';
 
 const router = Router();
 
+// All routes require admin authentication
+router.use(authenticateToken, requireAdmin);
+
 // Create upload directory if it doesn't exist
 const uploadDir = path.join(__dirname, '../../public/assets/branding');
 if (!fs.existsSync(uploadDir)) {
@@ -75,12 +78,9 @@ const upload = multer({
 /**
  * POST /api/admin/branding
  * Upload logo/favicon and save branding settings
- * Requires admin authentication
  */
 router.post(
   '/',
-  authenticateToken,
-  requireAdmin,
   upload.fields([
     { name: 'logo', maxCount: 1 },
     { name: 'favicon', maxCount: 1 },
