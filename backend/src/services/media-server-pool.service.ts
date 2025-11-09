@@ -45,8 +45,15 @@ class MediaServerPool {
    * MEDIA_SERVERS=http://server1:3001,http://server2:3001,http://server3:3001
    */
   private initializeFromEnv() {
-    const serversEnv = process.env.MEDIA_SERVERS || 'http://localhost:3001';
-    const serverUrls = serversEnv.split(',').map(s => s.trim());
+    const serversEnv = process.env.MEDIA_SERVERS || '';
+
+    // If no servers configured, start with empty pool
+    if (!serversEnv || serversEnv.trim() === '') {
+      logger.info('No media servers configured. Pool starting empty. Add servers via admin panel.');
+      return;
+    }
+
+    const serverUrls = serversEnv.split(',').map(s => s.trim()).filter(s => s);
 
     serverUrls.forEach((url, index) => {
       const serverId = `media-server-${index + 1}`;
