@@ -29,7 +29,7 @@ interface SystemConfig {
 }
 
 export default function AdminSettings() {
-  const [activeTab, setActiveTab] = useState<'oauth' | 'system' | 'webhooks' | 'rtmp'>('oauth');
+  const [activeTab, setActiveTab] = useState<'oauth' | 'system' | 'webhooks' | 'rtmp' | 'branding'>('oauth');
   const [oauthConfig, setOAuthConfig] = useState<OAuthConfig>({
     youtube: { clientId: '', clientSecret: '', enabled: false },
     facebook: { clientId: '', clientSecret: '', enabled: false },
@@ -346,6 +346,162 @@ export default function AdminSettings() {
     );
   };
 
+  const renderBrandingTab = () => {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold text-white mb-2">Website Branding</h2>
+          <p className="text-gray-400">
+            Customize your platform's appearance, logo, colors, and visual identity.
+          </p>
+        </div>
+
+        {/* Logo & Images */}
+        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <h3 className="text-xl font-semibold text-white mb-4">📷 Logos & Images</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Main Logo</label>
+              <input
+                type="file"
+                accept="image/*"
+                className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300"
+              />
+              <p className="text-xs text-gray-500 mt-1">Recommended: SVG or PNG, max 500KB</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Favicon</label>
+              <input
+                type="file"
+                accept="image/x-icon,image/png"
+                className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300"
+              />
+              <p className="text-xs text-gray-500 mt-1">Recommended: ICO or PNG, 32x32px</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Brand Colors */}
+        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <h3 className="text-xl font-semibold text-white mb-4">🎨 Brand Colors</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Primary Color</label>
+              <div className="flex gap-2">
+                <input
+                  type="color"
+                  defaultValue="#6366f1"
+                  className="h-10 w-16 rounded border border-gray-600"
+                />
+                <input
+                  type="text"
+                  defaultValue="#6366f1"
+                  className="flex-1 px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300"
+                  placeholder="#6366f1"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Secondary Color</label>
+              <div className="flex gap-2">
+                <input
+                  type="color"
+                  defaultValue="#8b5cf6"
+                  className="h-10 w-16 rounded border border-gray-600"
+                />
+                <input
+                  type="text"
+                  defaultValue="#8b5cf6"
+                  className="flex-1 px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300"
+                  placeholder="#8b5cf6"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Accent Color</label>
+              <div className="flex gap-2">
+                <input
+                  type="color"
+                  defaultValue="#ec4899"
+                  className="h-10 w-16 rounded border border-gray-600"
+                />
+                <input
+                  type="text"
+                  defaultValue="#ec4899"
+                  className="flex-1 px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300"
+                  placeholder="#ec4899"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Typography */}
+        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <h3 className="text-xl font-semibold text-white mb-4">✍️ Typography</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Heading Font</label>
+              <select className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300">
+                <option>Inter</option>
+                <option>Roboto</option>
+                <option>Poppins</option>
+                <option>Montserrat</option>
+                <option>Open Sans</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Body Font</label>
+              <select className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300">
+                <option>Inter</option>
+                <option>Roboto</option>
+                <option>Poppins</option>
+                <option>Lato</option>
+                <option>Source Sans Pro</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Platform Name */}
+        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <h3 className="text-xl font-semibold text-white mb-4">🏷️ Platform Identity</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Platform Name</label>
+              <input
+                type="text"
+                defaultValue="Streamlick"
+                className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300"
+                placeholder="Enter platform name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Tagline</label>
+              <input
+                type="text"
+                defaultValue="Browser-based Live Streaming Studio"
+                className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300"
+                placeholder="Enter tagline"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Save Button */}
+        <div className="flex justify-end">
+          <button
+            onClick={() => toast.success('Branding settings saved!')}
+            disabled={saving}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+          >
+            {saving ? 'Saving...' : 'Save Branding Settings'}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 p-8">
       <div className="max-w-6xl mx-auto">
@@ -399,6 +555,16 @@ export default function AdminSettings() {
             >
               📡 RTMP
             </button>
+            <button
+              onClick={() => setActiveTab('branding')}
+              className={`flex-1 px-6 py-4 font-semibold transition-colors ${
+                activeTab === 'branding'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-400 hover:bg-gray-750 hover:text-white'
+              }`}
+            >
+              🎨 Branding
+            </button>
           </div>
         </div>
 
@@ -414,6 +580,7 @@ export default function AdminSettings() {
             {activeTab === 'system' && renderSystemTab()}
             {activeTab === 'webhooks' && renderWebhooksTab()}
             {activeTab === 'rtmp' && renderRTMPTab()}
+            {activeTab === 'branding' && renderBrandingTab()}
           </>
         )}
       </div>
