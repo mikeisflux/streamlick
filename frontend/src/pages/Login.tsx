@@ -83,15 +83,6 @@ export function Login() {
             {isLoading ? 'Signing in...' : 'Sign In'}
           </Button>
         </form>
-
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600">
-            Default admin: <span className="font-mono font-semibold">admin@streamlick.local</span>
-          </p>
-          <p className="text-xs text-gray-500 mt-1">
-            Password: Good2Go!
-          </p>
-        </div>
       </div>
     </div>
   );
