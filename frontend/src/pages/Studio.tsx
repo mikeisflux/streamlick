@@ -97,6 +97,28 @@ export function Studio() {
   const [showParticipantsDrawer, setShowParticipantsDrawer] = useState(false);
   const [showRecordingDrawer, setShowRecordingDrawer] = useState(false);
 
+  // Sidebar and panel state for new layout
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
+  const [activeRightTab, setActiveRightTab] = useState<'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording'>('chat');
+  const [selectedLayout, setSelectedLayout] = useState<number>(1);
+
+  // Settings modal state
+  const [showSettings, setShowSettings] = useState(false);
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>('');
+  const [selectedVideoDevice, setSelectedVideoDevice] = useState<string>('');
+
+  // Killer features state
+  const [showClipManager, setShowClipManager] = useState(false);
+  const [showProducerMode, setShowProducerMode] = useState(false);
+  const [captionsEnabled, setCaptionsEnabled] = useState(false);
+  const [clipRecordingEnabled, setClipRecordingEnabled] = useState(false);
+
+  // Drawer state consolidation
+  const [activeDrawer, setActiveDrawer] = useState<'destinations' | 'invite' | 'banners' | 'brand' | null>(null);
+
   const { broadcast, isLive, setIsLive, setBroadcast } = useStudioStore();
   const {
     localStream,
@@ -925,66 +947,63 @@ export function Studio() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col">
-      {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-6 py-4">
-        <div className="flex items-center justify-between">
+    <div className="h-screen w-screen overflow-hidden grid" style={{
+      gridTemplateRows: '60px 1fr',
+      gridTemplateColumns: leftSidebarOpen && rightSidebarOpen
+        ? '280px 1fr 320px'
+        : leftSidebarOpen
+        ? '280px 1fr 0px'
+        : rightSidebarOpen
+        ? '0px 1fr 320px'
+        : '0px 1fr 0px',
+      backgroundColor: '#1a1a1a'
+    }}>
+      {/* Top Bar - 60px fixed height */}
+      <header style={{
+        gridColumn: '1 / -1',
+        height: '60px',
+        backgroundColor: '#2d2d2d',
+        borderBottom: '1px solid #404040',
+        display: 'flex',
+        alignItems: 'center',
+        paddingLeft: '24px',
+        paddingRight: '24px',
+        zIndex: 1000
+      }}>
+        <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="text-gray-400 hover:text-white"
-            >
-              ← Back
-            </button>
-            <div>
-              <h1 className="text-xl font-bold text-white">{broadcast?.title || 'Studio'}</h1>
-              <div className="flex items-center gap-4 mt-1">
-                {isLive && (
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                    </span>
-                    <span className="text-red-500 text-sm font-semibold">LIVE</span>
-                  </div>
-                )}
-                {isLive && (
-                  <div className="text-xs text-gray-300 flex items-center gap-2">
-                    <span>👥 {viewerCounts.total} viewers</span>
-                  </div>
-                )}
+            <h1 style={{ width: '140px', fontSize: '20px', fontWeight: 'bold', color: '#ffffff' }}>
+              Streamlick
+            </h1>
+            {isLive && (
+              <div className="flex items-center gap-2">
+                <span className="flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                </span>
+                <span className="text-red-500 text-sm font-semibold">LIVE</span>
               </div>
-            </div>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <Button onClick={() => setShowDestinationsDrawer(true)} variant="ghost" size="sm">
-              📡 Destinations
-            </Button>
-            <Button onClick={() => setShowInviteDrawer(true)} variant="ghost" size="sm">
-              👥 Invite
-            </Button>
-            <Button onClick={() => setShowBannerDrawer(true)} variant="ghost" size="sm">
-              📝 Banners
-            </Button>
-            <Button onClick={() => setShowBrandDrawer(true)} variant="ghost" size="sm">
-              🎨 Brand
-            </Button>
-            <Button onClick={() => setShowParticipantsDrawer(true)} variant="ghost" size="sm">
-              🎭 Participants
-            </Button>
-            <Button onClick={() => setShowRecordingDrawer(true)} variant="ghost" size="sm">
-              ⏺️ Recording
-            </Button>
-            <Button onClick={() => setShowSceneManager(!showSceneManager)} variant="ghost" size="sm">
-              🎬 Scenes
-            </Button>
+          <div className="flex items-center gap-3">
+            <span className="text-white text-sm">{broadcast?.title || 'Untitled Broadcast'}</span>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="text-gray-300 hover:text-white"
+              title="Settings"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
             {!isLive ? (
               <Button onClick={handleGoLive} variant="primary" size="lg" disabled={isInitializing}>
-                {isInitializing ? 'Initializing...' : '🔴 Go Live'}
+                {isInitializing ? 'Initializing...' : 'Go Live'}
               </Button>
             ) : (
               <Button onClick={handleEndBroadcast} variant="danger" size="lg">
-                ⏹️ End Broadcast
+                End Broadcast
               </Button>
             )}
           </div>
