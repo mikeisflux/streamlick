@@ -2889,6 +2889,155 @@ export function Studio() {
                     </div>
                   )}
                 </div>
+
+                {/* Vertical Simulcast */}
+                <div className="border-t border-gray-200 pt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900">Vertical Video Simulcast (9:16)</h3>
+                      <p className="text-xs text-gray-500 mt-1">Auto-crop for TikTok/Instagram Reels/Shorts</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={verticalSimulcastEnabled}
+                        onChange={(e) => setVerticalSimulcastEnabled(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-pink-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+                    </label>
+                  </div>
+
+                  {verticalSimulcastEnabled && (
+                    <div className="space-y-4 pl-2">
+                      {/* Resolution Selector */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-900 mb-2">
+                          Output Resolution
+                        </label>
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="verticalRes"
+                              value="1080x1920"
+                              checked={verticalResolution === '1080x1920'}
+                              onChange={(e) => setVerticalResolution('1080x1920')}
+                              className="w-4 h-4 text-pink-600"
+                            />
+                            <span className="text-sm text-gray-700">1080x1920 (Full HD)</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="verticalRes"
+                              value="720x1280"
+                              checked={verticalResolution === '720x1280'}
+                              onChange={(e) => setVerticalResolution('720x1280')}
+                              className="w-4 h-4 text-pink-600"
+                            />
+                            <span className="text-sm text-gray-700">720x1280 (HD)</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="verticalRes"
+                              value="540x960"
+                              checked={verticalResolution === '540x960'}
+                              onChange={(e) => setVerticalResolution('540x960')}
+                              className="w-4 h-4 text-pink-600"
+                            />
+                            <span className="text-sm text-gray-700">540x960 (SD)</span>
+                          </label>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Higher resolutions look better but require more processing power
+                        </p>
+                      </div>
+
+                      {/* Info Box */}
+                      <div className="bg-pink-50 border border-pink-200 rounded-lg p-3">
+                        <div className="flex gap-2">
+                          <svg className="w-5 h-5 text-pink-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <div className="text-xs text-gray-700">
+                            <p className="font-medium mb-1">How it works:</p>
+                            <ul className="list-disc list-inside space-y-0.5">
+                              <li>Auto-crops 16:9 to 9:16 format</li>
+                              <li>Centers on action with smooth panning</li>
+                              <li>Perfect for vertical social media</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Advanced Analytics */}
+                <div className="border-t border-gray-200 pt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900">Advanced Analytics & AI</h3>
+                      <p className="text-xs text-gray-500 mt-1">Real-time insights and recommendations</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={analyticsEnabled}
+                        onChange={(e) => setAnalyticsEnabled(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                    </label>
+                  </div>
+
+                  {analyticsEnabled && (
+                    <div className="space-y-4 pl-2">
+                      {/* Current Stats */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <div className="text-xs text-gray-500 mb-1">Current Viewers</div>
+                          <div className="text-2xl font-bold text-gray-900">{analyticsMetrics?.currentViewers || 0}</div>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <div className="text-xs text-gray-500 mb-1">Total Viewers</div>
+                          <div className="text-2xl font-bold text-gray-900">{analyticsMetrics?.totalViewers || 0}</div>
+                        </div>
+                      </div>
+
+                      {/* View Dashboard Button */}
+                      <button
+                        onClick={() => setShowAnalyticsDashboard(true)}
+                        className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        Open Analytics Dashboard
+                      </button>
+
+                      {/* Info Box */}
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                        <div className="flex gap-2">
+                          <svg className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          <div className="text-xs text-gray-700">
+                            <p className="font-medium mb-1">AI-Powered Insights:</p>
+                            <ul className="list-disc list-inside space-y-0.5">
+                              <li>Viewer engagement analysis</li>
+                              <li>Drop-off rate detection</li>
+                              <li>Content pacing recommendations</li>
+                              <li>Real-time heatmaps</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
