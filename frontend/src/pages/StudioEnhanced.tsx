@@ -25,6 +25,13 @@ import { ViewerCount } from '../components/ViewerCount';
 import { LowerThird } from '../components/LowerThird';
 import { ScreenShareManager } from '../components/ScreenShareManager';
 import { PlatformLogos } from '../components/PlatformLogos';
+import { Drawer } from '../components/Drawer';
+import { DestinationsPanel } from '../components/DestinationsPanel';
+import { InviteGuestsPanel } from '../components/InviteGuestsPanel';
+import { BannerEditorPanel } from '../components/BannerEditorPanel';
+import { BrandSettingsPanel } from '../components/BrandSettingsPanel';
+import { ParticipantsPanel } from '../components/ParticipantsPanel';
+import { RecordingControls } from '../components/RecordingControls';
 import { clipPlayerService } from '../services/clip-player.service';
 import { backgroundProcessorService } from '../services/background-processor.service';
 import { Button } from '../components/Button';
@@ -88,6 +95,14 @@ export function StudioEnhanced() {
   const [showChatLayoutCustomizer, setShowChatLayoutCustomizer] = useState(false);
   const [showChatModeration, setShowChatModeration] = useState(false);
   const [showSceneManager, setShowSceneManager] = useState(false);
+
+  // Drawer panel state
+  const [showDestinationsDrawer, setShowDestinationsDrawer] = useState(false);
+  const [showInviteDrawer, setShowInviteDrawer] = useState(false);
+  const [showBannerDrawer, setShowBannerDrawer] = useState(false);
+  const [showBrandDrawer, setShowBrandDrawer] = useState(false);
+  const [showParticipantsDrawer, setShowParticipantsDrawer] = useState(false);
+  const [showRecordingDrawer, setShowRecordingDrawer] = useState(false);
 
   const { broadcast, isLive, setIsLive, setBroadcast } = useStudioStore();
   const {
@@ -949,7 +964,25 @@ export function StudioEnhanced() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Button onClick={() => setShowDestinationsDrawer(true)} variant="ghost" size="sm">
+              📡 Destinations
+            </Button>
+            <Button onClick={() => setShowInviteDrawer(true)} variant="ghost" size="sm">
+              👥 Invite
+            </Button>
+            <Button onClick={() => setShowBannerDrawer(true)} variant="ghost" size="sm">
+              📝 Banners
+            </Button>
+            <Button onClick={() => setShowBrandDrawer(true)} variant="ghost" size="sm">
+              🎨 Brand
+            </Button>
+            <Button onClick={() => setShowParticipantsDrawer(true)} variant="ghost" size="sm">
+              🎭 Participants
+            </Button>
+            <Button onClick={() => setShowRecordingDrawer(true)} variant="ghost" size="sm">
+              ⏺️ Recording
+            </Button>
             <Button onClick={() => setShowSceneManager(!showSceneManager)} variant="ghost" size="sm">
               🎬 Scenes
             </Button>
@@ -1516,6 +1549,84 @@ export function StudioEnhanced() {
           onHide={handleHideLowerThird}
         />
       )}
+
+      {/* Slide-Out Drawer Panels */}
+      <Drawer
+        isOpen={showDestinationsDrawer}
+        onClose={() => setShowDestinationsDrawer(false)}
+        title="Streaming Destinations"
+        size="lg"
+      >
+        <DestinationsPanel
+          destinations={destinations}
+          selectedDestinations={selectedDestinations}
+          onDestinationToggle={(destId) => {
+            if (selectedDestinations.includes(destId)) {
+              setSelectedDestinations(selectedDestinations.filter(id => id !== destId));
+            } else {
+              setSelectedDestinations([...selectedDestinations, destId]);
+            }
+          }}
+          isLive={isLive}
+        />
+      </Drawer>
+
+      <Drawer
+        isOpen={showInviteDrawer}
+        onClose={() => setShowInviteDrawer(false)}
+        title="Invite Guests"
+        size="md"
+      >
+        <InviteGuestsPanel broadcastId={broadcastId || ''} />
+      </Drawer>
+
+      <Drawer
+        isOpen={showBannerDrawer}
+        onClose={() => setShowBannerDrawer(false)}
+        title="Banner & Overlay Editor"
+        size="xl"
+      >
+        <BannerEditorPanel broadcastId={broadcastId || ''} />
+      </Drawer>
+
+      <Drawer
+        isOpen={showBrandDrawer}
+        onClose={() => setShowBrandDrawer(false)}
+        title="Brand Settings"
+        size="lg"
+      >
+        <BrandSettingsPanel />
+      </Drawer>
+
+      <Drawer
+        isOpen={showParticipantsDrawer}
+        onClose={() => setShowParticipantsDrawer(false)}
+        title="Manage Participants"
+        size="md"
+      >
+        <ParticipantsPanel
+          participants={allParticipants}
+          onPromoteToLive={handlePromoteToLive}
+          onDemoteToBackstage={handleDemoteToBackstage}
+          onMute={(id) => handleMuteParticipant(id)}
+          onUnmute={(id) => handleUnmuteParticipant(id)}
+          onKick={(id, name) => handleKickParticipant(id, name)}
+        />
+      </Drawer>
+
+      <Drawer
+        isOpen={showRecordingDrawer}
+        onClose={() => setShowRecordingDrawer(false)}
+        title="Recording Controls"
+        size="md"
+      >
+        <RecordingControls
+          isRecording={isRecording}
+          recordingDuration={recordingDuration}
+          onStartRecording={handleStartRecording}
+          onStopRecording={handleStopRecording}
+        />
+      </Drawer>
     </div>
   );
 }
