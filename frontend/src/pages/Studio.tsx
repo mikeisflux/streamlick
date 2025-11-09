@@ -35,6 +35,8 @@ import { ClipManager } from '../components/ClipManager';
 import { ProducerMode } from '../components/ProducerMode';
 import { clipPlayerService } from '../services/clip-player.service';
 import { backgroundProcessorService } from '../services/background-processor.service';
+import { clipRecordingService } from '../services/clip-recording.service';
+import { captionService, Caption, POPULAR_LANGUAGES } from '../services/caption.service';
 import { Button } from '../components/Button';
 import toast from 'react-hot-toast';
 import api from '../services/api';
@@ -124,6 +126,12 @@ export function Studio() {
   const [showProducerMode, setShowProducerMode] = useState(false);
   const [captionsEnabled, setCaptionsEnabled] = useState(false);
   const [clipRecordingEnabled, setClipRecordingEnabled] = useState(false);
+  const [showClipDurationSelector, setShowClipDurationSelector] = useState(false);
+
+  // AI Captions state
+  const [currentCaption, setCurrentCaption] = useState<Caption | null>(null);
+  const [captionLanguage, setCaptionLanguage] = useState('en-US');
+  const [showLanguageSelector, setShowLanguageSelector] = useState(false);
 
   // Chat overlay position and size state
   const [chatOverlayPosition, setChatOverlayPosition] = useState({ x: 0, y: 0 });
@@ -1152,6 +1160,117 @@ export function Studio() {
     }
   };
 
+  // Clip Recording Handlers
+  const handleCreateClip = async (duration: 30 | 60) => {
+    try {
+      if (!clipRecordingService.isActive()) {
+        toast.error('Clip recording buffer not active');
+        return;
+      }
+
+      const bufferDuration = clipRecordingService.getBufferDuration();
+      if (bufferDuration < duration) {
+        toast.error(`Not enough buffer (${bufferDuration}s available, ${duration}s requested)`);
+        return;
+      }
+
+      setShowClipDurationSelector(false);
+      toast.loading('Creating clip...', { id: 'clip-creation' });
+
+      const clipData = await clipRecordingService.createClip(duration);
+
+      // Save to file system
+      clipRecordingService.saveClip(clipData, `streamlick-clip-${duration}s-${Date.now()}.webm`);
+
+      toast.success(`${duration}s clip saved!`, { id: 'clip-creation' });
+    } catch (error) {
+      console.error('Failed to create clip:', error);
+      toast.error('Failed to create clip', { id: 'clip-creation' });
+    }
+  };
+
+  // Manage clip recording buffer lifecycle
+  useEffect(() => {
+    if (clipRecordingEnabled && localStream && compositorService.getOutputStream()) {
+      const stream = compositorService.getOutputStream() || localStream;
+      clipRecordingService.startBuffer(stream, { bufferDuration: 60 })
+        .then(() => {
+          toast.success('Clip recording buffer started (60s rolling buffer)');
+        })
+        .catch((error) => {
+          console.error('Failed to start clip buffer:', error);
+          toast.error('Failed to start clip recording buffer');
+          setClipRecordingEnabled(false);
+        });
+    } else if (!clipRecordingEnabled && clipRecordingService.isActive()) {
+      clipRecordingService.stopBuffer();
+      toast.success('Clip recording buffer stopped');
+    }
+
+    return () => {
+      if (clipRecordingService.isActive()) {
+        clipRecordingService.stopBuffer();
+      }
+    };
+  }, [clipRecordingEnabled, localStream]);
+
+  // Manage AI captions lifecycle
+  useEffect(() => {
+    if (captionsEnabled) {
+      if (!captionService.isSupported()) {
+        toast.error('Speech recognition not supported in this browser');
+        setCaptionsEnabled(false);
+        return;
+      }
+
+      captionService.onCaption((caption: Caption) => {
+        setCurrentCaption(caption);
+
+        // Clear interim captions after 3 seconds
+        if (!caption.isFinal) {
+          setTimeout(() => {
+            setCurrentCaption((prev) => {
+              if (prev && !prev.isFinal && prev.text === caption.text) {
+                return null;
+              }
+              return prev;
+            });
+          }, 3000);
+        } else {
+          // Clear final captions after 5 seconds
+          setTimeout(() => {
+            setCurrentCaption((prev) => {
+              if (prev && prev.isFinal && prev.text === caption.text) {
+                return null;
+              }
+              return prev;
+            });
+          }, 5000);
+        }
+      });
+
+      captionService.onError((error: string) => {
+        console.error('Caption error:', error);
+        if (error !== 'no-speech' && error !== 'aborted') {
+          toast.error(`Caption error: ${error}`);
+        }
+      });
+
+      captionService.start({ language: captionLanguage });
+      toast.success(`AI Captions started (${POPULAR_LANGUAGES.find(l => l.code === captionLanguage)?.name})`);
+    } else if (!captionsEnabled && captionService.active()) {
+      captionService.stop();
+      setCurrentCaption(null);
+      toast.success('AI Captions stopped');
+    }
+
+    return () => {
+      if (captionService.active()) {
+        captionService.stop();
+      }
+    };
+  }, [captionsEnabled, captionLanguage]);
+
   // Chat Layout Handlers
   // Lower Third Handlers
   const handleShowLowerThird = (name: string, title: string) => {
@@ -1412,6 +1531,39 @@ export function Studio() {
                 </div>
               )}
 
+              {/* AI Caption Overlay */}
+              {captionsEnabled && currentCaption && (
+                <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 max-w-4xl px-4">
+                  <div
+                    className={`px-6 py-3 rounded-lg text-center transition-opacity duration-300 ${
+                      currentCaption.isFinal ? 'bg-black/90' : 'bg-black/70'
+                    }`}
+                    style={{
+                      backdropFilter: 'blur(8px)',
+                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
+                    }}
+                  >
+                    <p
+                      className={`text-white font-semibold leading-tight ${
+                        currentCaption.isFinal ? 'text-lg' : 'text-base opacity-80'
+                      }`}
+                      style={{
+                        textShadow: '2px 2px 4px rgba(0, 0, 0, 0.8)',
+                      }}
+                    >
+                      {currentCaption.text}
+                    </p>
+                    {!currentCaption.isFinal && (
+                      <div className="flex items-center justify-center gap-1 mt-1">
+                        <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
+                        <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
+                        <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* User Label Overlay */}
               {localStream && (
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
@@ -1486,28 +1638,51 @@ export function Studio() {
 
             {/* Killer Features */}
             <div className="h-8 w-px bg-gray-600" />
-            <button
-              onClick={() => setCaptionsEnabled(!captionsEnabled)}
-              className={`p-2 rounded ${
-                captionsEnabled ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'
-              } text-white transition-colors`}
-              title="AI Captions"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-              </svg>
-            </button>
+            {/* AI Captions with language selector */}
+            <div className="relative flex items-center">
+              <button
+                onClick={() => setCaptionsEnabled(!captionsEnabled)}
+                className={`p-2 rounded-l ${
+                  captionsEnabled ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'
+                } text-white transition-colors`}
+                title={captionsEnabled ? 'Stop AI Captions' : 'Start AI Captions'}
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setShowLanguageSelector(!showLanguageSelector)}
+                className={`p-2 pr-3 rounded-r border-l border-gray-600 ${
+                  captionsEnabled ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'
+                } text-white transition-colors`}
+                title="Select Language"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
             <button
               onClick={() => setClipRecordingEnabled(!clipRecordingEnabled)}
               className={`p-2 rounded ${
                 clipRecordingEnabled ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'
               } text-white transition-colors`}
-              title="Clip Recording"
+              title={clipRecordingEnabled ? 'Stop Clip Buffer' : 'Start Clip Buffer (60s rolling)'}
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
               </svg>
             </button>
+            {clipRecordingEnabled && (
+              <button
+                onClick={() => setShowClipDurationSelector(true)}
+                className="px-3 py-2 rounded bg-green-600 hover:bg-green-700 text-white text-sm font-semibold transition-colors animate-pulse"
+                title="Create instant clip"
+              >
+                ✂️ Create Clip
+              </button>
+            )}
             <button
               onClick={() => setShowClipManager(true)}
               className="p-2 rounded bg-gray-700 hover:bg-gray-600 text-white transition-colors"
@@ -2265,6 +2440,134 @@ export function Studio() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Clip Duration Selector Popup */}
+      {showClipDurationSelector && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-2xl p-6 max-w-md w-full mx-4">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">✂️</span>
+                <h2 className="text-xl font-bold text-gray-900">Create Instant Clip</h2>
+              </div>
+              <button
+                onClick={() => setShowClipDurationSelector(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Info */}
+            <p className="text-sm text-gray-600 mb-6">
+              Select clip duration to capture the last 30 or 60 seconds from the rolling buffer.
+            </p>
+
+            {/* Buffer Status */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
+              <div className="flex items-center gap-2 text-sm text-blue-800">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>
+                  Buffer: {clipRecordingService.getBufferDuration()}s available
+                </span>
+              </div>
+            </div>
+
+            {/* Duration Buttons */}
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <button
+                onClick={() => handleCreateClip(30)}
+                disabled={clipRecordingService.getBufferDuration() < 30}
+                className={`py-6 px-4 rounded-lg border-2 transition-all ${
+                  clipRecordingService.getBufferDuration() >= 30
+                    ? 'border-green-500 bg-green-50 hover:bg-green-100 hover:border-green-600'
+                    : 'border-gray-300 bg-gray-100 cursor-not-allowed opacity-50'
+                }`}
+              >
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-gray-900 mb-1">30s</div>
+                  <div className="text-xs text-gray-600">Last 30 seconds</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleCreateClip(60)}
+                disabled={clipRecordingService.getBufferDuration() < 60}
+                className={`py-6 px-4 rounded-lg border-2 transition-all ${
+                  clipRecordingService.getBufferDuration() >= 60
+                    ? 'border-purple-500 bg-purple-50 hover:bg-purple-100 hover:border-purple-600'
+                    : 'border-gray-300 bg-gray-100 cursor-not-allowed opacity-50'
+                }`}
+              >
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-gray-900 mb-1">60s</div>
+                  <div className="text-xs text-gray-600">Last 60 seconds</div>
+                </div>
+              </button>
+            </div>
+
+            {/* Footer Note */}
+            <p className="text-xs text-gray-500 text-center">
+              Clips are automatically saved to your downloads folder
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Language Selector Popup */}
+      {showLanguageSelector && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setShowLanguageSelector(false)}
+          />
+          <div
+            className="fixed bottom-24 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-2xl z-50"
+            style={{ width: '400px', maxHeight: '500px' }}
+          >
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-900">Select Caption Language</h3>
+              <p className="text-xs text-gray-500 mt-1">Choose language for real-time transcription</p>
+            </div>
+            <div className="overflow-y-auto max-h-96 p-2">
+              {POPULAR_LANGUAGES.map((lang) => (
+                <button
+                  key={lang.code}
+                  onClick={() => {
+                    setCaptionLanguage(lang.code);
+                    setShowLanguageSelector(false);
+                    if (captionsEnabled) {
+                      captionService.changeLanguage(lang.code);
+                      toast.success(`Language changed to ${lang.name}`);
+                    }
+                  }}
+                  className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors rounded ${
+                    captionLanguage === lang.code ? 'bg-blue-50 border border-blue-200' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{lang.flag}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">{lang.name}</p>
+                      <p className="text-xs text-gray-500">{lang.code}</p>
+                    </div>
+                    {captionLanguage === lang.code && (
+                      <svg className="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
