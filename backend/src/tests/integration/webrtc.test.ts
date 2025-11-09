@@ -1,5 +1,6 @@
 import { Server } from 'socket.io';
-import { io as ioClient, Socket } from 'socket.io-client';
+import ioClient from 'socket.io-client';
+import type { Socket as ClientSocket } from 'socket.io-client';
 import http from 'http';
 import initializeSocket from '../../socket';
 import prisma from '../../database/prisma';
@@ -8,8 +9,8 @@ import { generateAccessToken } from '../../auth/jwt';
 describe('WebRTC/MediaSoup Integration Tests', () => {
   let httpServer: http.Server;
   let io: Server;
-  let clientSocket1: Socket;
-  let clientSocket2: Socket;
+  let clientSocket1: ClientSocket;
+  let clientSocket2: ClientSocket;
   let testUser1: any;
   let testUser2: any;
   let testBroadcast: any;
