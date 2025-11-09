@@ -1551,8 +1551,11 @@ export function Studio() {
               <SceneManager
                 scenes={scenes}
                 currentSceneId={currentSceneId}
-                onSceneChange={setCurrentSceneId}
-                onScenesUpdate={setScenes}
+                onSceneChange={handleSceneChange}
+                onSceneCreate={handleSceneCreate}
+                onSceneUpdate={handleSceneUpdate}
+                onSceneDelete={handleSceneDelete}
+                onSceneDuplicate={handleSceneDuplicate}
               />
             )}
 
@@ -1661,7 +1664,7 @@ export function Studio() {
                     <div className="space-y-2">
                       {chatMessages.slice(-10).map((msg, i) => (
                         <div key={i} className="text-white text-sm">
-                          <span className="font-semibold">{msg.userName}:</span> {msg.message}
+                          <span className="font-semibold">{msg.author}:</span> {msg.message}
                         </div>
                       ))}
                     </div>
@@ -2116,10 +2119,7 @@ export function Studio() {
             {activeRightTab === 'chat' && <PrivateChatPanel broadcastId={broadcastId} currentUserId={broadcast?.userId} />}
             {activeRightTab === 'recording' && (
               <RecordingControls
-                isRecording={isRecording}
-                duration={recordingDuration}
-                onStart={handleStartRecording}
-                onStop={handleStopRecording}
+                broadcastId={broadcastId}
               />
             )}
           </div>

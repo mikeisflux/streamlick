@@ -24,6 +24,15 @@ export const authService = {
     localStorage.removeItem('user');
   },
 
+  async verifyEmail(token: string): Promise<{ user: User; accessToken: string; refreshToken: string }> {
+    const response = await api.post('/auth/verify-email', { token });
+    return response.data;
+  },
+
+  async resendVerification(email: string): Promise<void> {
+    await api.post('/auth/resend-verification', { email });
+  },
+
   setAuth(accessToken: string, refreshToken: string, user: User): void {
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);

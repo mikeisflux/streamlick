@@ -19,8 +19,8 @@ export function VerifyAuth() {
 
     const verify = async () => {
       try {
-        const { user, accessToken } = await authService.verifyToken(token);
-        login(accessToken, user);
+        const { user, accessToken, refreshToken } = await authService.verifyEmail(token);
+        login(accessToken, refreshToken, user);
         navigate('/dashboard');
       } catch (err) {
         setError('Invalid or expired link. Please try again.');

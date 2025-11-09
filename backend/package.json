@@ -4,6 +4,7 @@
   "description": "Streamlick API server",
   "main": "dist/index.js",
   "scripts": {
+    "postinstall": "prisma generate || echo 'Warning: Prisma generate failed. Run npm run db:generate manually.'",
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
