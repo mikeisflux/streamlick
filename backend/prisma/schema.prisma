@@ -16,6 +16,9 @@ model User {
   avatarUrl String?  @map("avatar_url")
   planType  String   @default("free") @map("plan_type") // free, core, advanced, teams, business
   role      String   @default("user") // user, admin
+  emailVerified            Boolean   @default(false) @map("email_verified")
+  emailVerificationToken   String?   @map("email_verification_token")
+  emailVerificationExpiry  DateTime? @map("email_verification_expiry")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

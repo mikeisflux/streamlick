@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './store/authStore';
 import { Login } from './pages/Login';
 import { VerifyAuth } from './pages/VerifyAuth';
+import { VerifyEmail } from './pages/VerifyEmail';
 import { Dashboard } from './pages/Dashboard';
 import { Studio } from './pages/Studio';
 import { GuestJoin } from './pages/GuestJoin';
@@ -57,6 +58,7 @@ function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/auth/verify" element={<VerifyAuth />} />
+        <Route path="/auth/verify-email" element={<VerifyEmail />} />
         <Route path="/join/:token" element={<GuestJoin />} />
         <Route
           path="/dashboard"

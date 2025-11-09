@@ -5,12 +5,22 @@
 ALTER TABLE users
 ADD COLUMN IF NOT EXISTS password TEXT;
 
--- Step 2: Delete all existing users (and cascading data)
+-- Step 2: Add email verification columns if they don't exist
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS email_verification_token TEXT;
+
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS email_verification_expiry TIMESTAMP WITH TIME ZONE;
+
+-- Step 3: Delete all existing users (and cascading data)
 DELETE FROM users;
 
--- Step 3: Create admin user
+-- Step 4: Create admin user
 -- Password: Good2Go! (hashed with bcrypt, 10 rounds)
-INSERT INTO users (id, email, password, name, plan_type, role, created_at, updated_at)
+INSERT INTO users (id, email, password, name, plan_type, role, email_verified, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'admin@streamlick.local',
@@ -18,6 +28,7 @@ VALUES (
   'Administrator',
   'business',
   'admin',
+  TRUE,
   NOW(),
   NOW()
 )
@@ -25,7 +36,8 @@ ON CONFLICT (email) DO UPDATE SET
   password = EXCLUDED.password,
   name = EXCLUDED.name,
   role = EXCLUDED.role,
-  plan_type = EXCLUDED.plan_type;
+  plan_type = EXCLUDED.plan_type,
+  email_verified = TRUE;
 
 -- Verify
 SELECT id, email, name, role, plan_type, created_at
