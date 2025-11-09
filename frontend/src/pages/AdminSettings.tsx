@@ -42,6 +42,19 @@ export default function AdminSettings() {
   const [systemConfig, setSystemConfig] = useState<SystemConfig>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [faviconFile, setFaviconFile] = useState<File | null>(null);
+  const [heroFile, setHeroFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string>('');
+  const [faviconPreview, setFaviconPreview] = useState<string>('');
+  const [heroPreview, setHeroPreview] = useState<string>('');
+  const [brandingConfig, setBrandingConfig] = useState({
+    primaryColor: '#6366f1',
+    secondaryColor: '#8b5cf6',
+    accentColor: '#ec4899',
+    platformName: 'Streamlick',
+    tagline: 'Browser-based Live Streaming Studio',
+  });
 
   useEffect(() => {
     loadConfig();
@@ -353,6 +366,126 @@ export default function AdminSettings() {
     );
   };
 
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file size (max 500KB)
+    if (file.size > 500 * 1024) {
+      toast.error('Logo file size must be less than 500KB');
+      return;
+    }
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    setLogoFile(file);
+
+    // Generate preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setLogoPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFaviconChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file size (max 100KB)
+    if (file.size > 100 * 1024) {
+      toast.error('Favicon file size must be less than 100KB');
+      return;
+    }
+
+    // Validate file type
+    const validTypes = ['image/x-icon', 'image/png', 'image/vnd.microsoft.icon'];
+    if (!validTypes.includes(file.type) && !file.name.endsWith('.ico')) {
+      toast.error('Please select an ICO or PNG file');
+      return;
+    }
+
+    setFaviconFile(file);
+
+    // Generate preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setFaviconPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleHeroChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file size (max 2MB for hero image)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Hero image file size must be less than 2MB');
+      return;
+    }
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    setHeroFile(file);
+
+    // Generate preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setHeroPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const saveBrandingSettings = async () => {
+    setSaving(true);
+    try {
+      const formData = new FormData();
+
+      // Add files if selected
+      if (logoFile) {
+        formData.append('logo', logoFile);
+      }
+      if (faviconFile) {
+        formData.append('favicon', faviconFile);
+      }
+      if (heroFile) {
+        formData.append('hero', heroFile);
+      }
+
+      // Add branding config as JSON
+      formData.append('config', JSON.stringify(brandingConfig));
+
+      const response = await api.post('/admin/branding', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      toast.success('Branding settings saved successfully!');
+
+      // Clear file selections after successful upload
+      setLogoFile(null);
+      setFaviconFile(null);
+      setHeroFile(null);
+
+      console.log('Branding saved:', response.data);
+    } catch (error: any) {
+      console.error('Failed to save branding:', error);
+      toast.error(error.response?.data?.error || 'Failed to save branding settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const renderBrandingTab = () => {
     return (
       <div className="space-y-6">
@@ -366,24 +499,57 @@ export default function AdminSettings() {
         {/* Logo & Images */}
         <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
           <h3 className="text-xl font-semibold text-white mb-4">📷 Logos & Images</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Main Logo</label>
               <input
                 type="file"
                 accept="image/*"
-                className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300"
+                onChange={handleLogoChange}
+                className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-700"
               />
               <p className="text-xs text-gray-500 mt-1">Recommended: SVG or PNG, max 500KB</p>
+              {logoPreview && (
+                <div className="mt-3">
+                  <p className="text-xs text-gray-400 mb-2">Preview:</p>
+                  <img src={logoPreview} alt="Logo preview" className="max-h-20 bg-white p-2 rounded" />
+                </div>
+              )}
+              <p className="text-xs text-gray-400 mt-2">Used in: Header, navigation</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Favicon</label>
               <input
                 type="file"
                 accept="image/x-icon,image/png"
-                className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300"
+                onChange={handleFaviconChange}
+                className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-700"
               />
               <p className="text-xs text-gray-500 mt-1">Recommended: ICO or PNG, 32x32px</p>
+              {faviconPreview && (
+                <div className="mt-3">
+                  <p className="text-xs text-gray-400 mb-2">Preview:</p>
+                  <img src={faviconPreview} alt="Favicon preview" className="max-h-8 bg-white p-1 rounded" />
+                </div>
+              )}
+              <p className="text-xs text-gray-400 mt-2">Used in: Browser tab</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Hero Image</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleHeroChange}
+                className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+              />
+              <p className="text-xs text-gray-500 mt-1">Recommended: JPG or PNG, max 2MB, 1920x600px</p>
+              {heroPreview && (
+                <div className="mt-3">
+                  <p className="text-xs text-gray-400 mb-2">Preview:</p>
+                  <img src={heroPreview} alt="Hero preview" className="max-h-32 w-full object-cover rounded" />
+                </div>
+              )}
+              <p className="text-xs text-gray-400 mt-2">Used in: Landing page banner</p>
             </div>
           </div>
         </div>
@@ -397,12 +563,14 @@ export default function AdminSettings() {
               <div className="flex gap-2">
                 <input
                   type="color"
-                  defaultValue="#6366f1"
-                  className="h-10 w-16 rounded border border-gray-600"
+                  value={brandingConfig.primaryColor}
+                  onChange={(e) => setBrandingConfig(prev => ({ ...prev, primaryColor: e.target.value }))}
+                  className="h-10 w-16 rounded border border-gray-600 cursor-pointer"
                 />
                 <input
                   type="text"
-                  defaultValue="#6366f1"
+                  value={brandingConfig.primaryColor}
+                  onChange={(e) => setBrandingConfig(prev => ({ ...prev, primaryColor: e.target.value }))}
                   className="flex-1 px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300"
                   placeholder="#6366f1"
                 />
@@ -413,12 +581,14 @@ export default function AdminSettings() {
               <div className="flex gap-2">
                 <input
                   type="color"
-                  defaultValue="#8b5cf6"
-                  className="h-10 w-16 rounded border border-gray-600"
+                  value={brandingConfig.secondaryColor}
+                  onChange={(e) => setBrandingConfig(prev => ({ ...prev, secondaryColor: e.target.value }))}
+                  className="h-10 w-16 rounded border border-gray-600 cursor-pointer"
                 />
                 <input
                   type="text"
-                  defaultValue="#8b5cf6"
+                  value={brandingConfig.secondaryColor}
+                  onChange={(e) => setBrandingConfig(prev => ({ ...prev, secondaryColor: e.target.value }))}
                   className="flex-1 px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300"
                   placeholder="#8b5cf6"
                 />
@@ -429,12 +599,14 @@ export default function AdminSettings() {
               <div className="flex gap-2">
                 <input
                   type="color"
-                  defaultValue="#ec4899"
-                  className="h-10 w-16 rounded border border-gray-600"
+                  value={brandingConfig.accentColor}
+                  onChange={(e) => setBrandingConfig(prev => ({ ...prev, accentColor: e.target.value }))}
+                  className="h-10 w-16 rounded border border-gray-600 cursor-pointer"
                 />
                 <input
                   type="text"
-                  defaultValue="#ec4899"
+                  value={brandingConfig.accentColor}
+                  onChange={(e) => setBrandingConfig(prev => ({ ...prev, accentColor: e.target.value }))}
                   className="flex-1 px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300"
                   placeholder="#ec4899"
                 />
@@ -478,7 +650,8 @@ export default function AdminSettings() {
               <label className="block text-sm font-medium text-gray-300 mb-2">Platform Name</label>
               <input
                 type="text"
-                defaultValue="Streamlick"
+                value={brandingConfig.platformName}
+                onChange={(e) => setBrandingConfig(prev => ({ ...prev, platformName: e.target.value }))}
                 className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300"
                 placeholder="Enter platform name"
               />
@@ -487,7 +660,8 @@ export default function AdminSettings() {
               <label className="block text-sm font-medium text-gray-300 mb-2">Tagline</label>
               <input
                 type="text"
-                defaultValue="Browser-based Live Streaming Studio"
+                value={brandingConfig.tagline}
+                onChange={(e) => setBrandingConfig(prev => ({ ...prev, tagline: e.target.value }))}
                 className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300"
                 placeholder="Enter tagline"
               />
@@ -498,7 +672,7 @@ export default function AdminSettings() {
         {/* Save Button */}
         <div className="flex justify-end">
           <button
-            onClick={() => toast.success('Branding settings saved!')}
+            onClick={saveBrandingSettings}
             disabled={saving}
             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
           >

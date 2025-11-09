@@ -86,67 +86,87 @@ router.get('/ssh-keys', async (req, res) => {
 
 /**
  * POST /api/infrastructure/deploy
- * Deploy a new media server (automated)
+ * Deploy a new server with specific role (automated)
  */
 router.post('/deploy', async (req, res) => {
   try {
-    const { name, serverType, location, sshKeys } = req.body;
+    const { name, serverType, location, role, sshKeys, backendUrl, upstreamServers } = req.body;
 
-    if (!name || !serverType || !location) {
+    if (!name || !serverType || !location || !role) {
       return res.status(400).json({
-        error: 'Missing required fields: name, serverType, location'
+        error: 'Missing required fields: name, serverType, location, role'
       });
     }
 
-    logger.info(`Starting automated deployment: ${name} (${serverType}) in ${location}`);
+    // Validate role
+    const validRoles = ['media-server', 'api-server', 'frontend-server', 'load-balancer', 'database-server', 'redis-server'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({
+        error: `Invalid role. Must be one of: ${validRoles.join(', ')}`
+      });
+    }
+
+    logger.info(`Starting automated deployment: ${name} (${role}) on ${serverType} in ${location}`);
 
     // Deploy server via Hetzner API
-    const server = await hetznerService.deployMediaServer({
+    const server = await hetznerService.deployServer({
       name,
       serverType,
       location,
+      role,
       sshKeys: sshKeys || [],
+      backendUrl,
+      upstreamServers,
     });
 
     // Wait for server to be ready (max 2 minutes)
     logger.info('Waiting for server to initialize...');
     await new Promise(resolve => setTimeout(resolve, 120000));
 
-    // Construct media server URL
-    const mediaServerUrl = `http://${server.public_net.ipv4.ip}:3001`;
+    // Construct response based on role
+    const responseData: any = {
+      success: true,
+      message: `${role} deployed successfully!`,
+      server: {
+        id: server.id,
+        name: server.name,
+        ip: server.public_net.ipv4.ip,
+        serverType: server.server_type.name,
+        role,
+      },
+    };
 
-    // Add to media server pool
-    try {
-      const serverId = mediaServerPool.addServer(mediaServerUrl);
-      logger.info(`Added server to pool: ${serverId}`);
+    // For media servers, try to auto-add to pool
+    if (role === 'media-server') {
+      const mediaServerUrl = `http://${server.public_net.ipv4.ip}:3001`;
+      responseData.server.url = mediaServerUrl;
 
-      res.json({
-        success: true,
-        message: 'Media server deployed successfully!',
-        server: {
-          id: server.id,
-          name: server.name,
-          ip: server.public_net.ipv4.ip,
-          url: mediaServerUrl,
-          serverType: server.server_type.name,
-          poolId: serverId,
-        },
-      });
-    } catch (poolError: any) {
-      logger.warn('Server deployed but failed to add to pool:', poolError.message);
-      res.json({
-        success: true,
-        message: 'Server deployed! Add manually to pool via "Add Server" button.',
-        server: {
-          id: server.id,
-          name: server.name,
-          ip: server.public_net.ipv4.ip,
-          url: mediaServerUrl,
-          serverType: server.server_type.name,
-        },
-        warning: 'Could not auto-add to pool. Add manually.',
-      });
+      try {
+        const serverId = mediaServerPool.addServer(mediaServerUrl);
+        logger.info(`Added media server to pool: ${serverId}`);
+        responseData.server.poolId = serverId;
+      } catch (poolError: any) {
+        logger.warn('Server deployed but failed to add to pool:', poolError.message);
+        responseData.warning = 'Could not auto-add to pool. Add manually via "Add Server" button.';
+      }
+    } else if (role === 'api-server') {
+      responseData.server.url = `http://${server.public_net.ipv4.ip}:3000`;
+      responseData.notes = 'Remember to update FRONTEND_URL and CORS_ORIGINS in backend/.env';
+    } else if (role === 'frontend-server') {
+      responseData.server.url = `http://${server.public_net.ipv4.ip}`;
+      responseData.notes = 'Install SSL with: certbot --nginx -d yourdomain.com';
+    } else if (role === 'load-balancer') {
+      responseData.server.url = `http://${server.public_net.ipv4.ip}`;
+      responseData.notes = 'Update upstream servers in /etc/nginx/sites-available/streamlick-lb and install SSL certificates';
+    } else if (role === 'database-server') {
+      responseData.server.url = `postgresql://streamlick:streamlick_prod_password@${server.public_net.ipv4.ip}:5432/streamlick_prod`;
+      responseData.notes = 'Remember to change the default password and restrict IP access!';
+    } else if (role === 'redis-server') {
+      responseData.server.url = `redis://:streamlick_redis_password@${server.public_net.ipv4.ip}:6379`;
+      responseData.notes = 'Remember to change the default password!';
     }
+
+    res.json(responseData);
   } catch (error: any) {
     logger.error('Deployment failed:', error);
     res.status(500).json({

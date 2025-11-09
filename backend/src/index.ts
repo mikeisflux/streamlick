@@ -25,6 +25,7 @@ import moderationRoutes from './api/moderation.routes';
 import analyticsRoutes from './api/analytics.routes';
 import mediaServersRoutes from './api/media-servers.routes';
 import infrastructureRoutes from './api/infrastructure.routes';
+import brandingRoutes from './api/branding.routes';
 
 import initializeSocket from './socket';
 import logger from './utils/logger';
@@ -56,6 +57,9 @@ app.use('/api/', limiter);
 // Serve uploaded media clips
 app.use('/uploads', express.static('uploads'));
 
+// Serve branding assets (logos, favicons)
+app.use('/assets/branding', express.static('public/assets/branding'));
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -83,6 +87,7 @@ app.use('/api/moderation', moderationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/media-servers', mediaServersRoutes);
 app.use('/api/infrastructure', infrastructureRoutes);
+app.use('/api/admin/branding', brandingRoutes);
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
