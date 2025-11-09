@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth.service';
+import { useAuthStore } from '../store/authStore';
 import { Button } from '../components/Button';
 import toast from 'react-hot-toast';
 
@@ -9,6 +10,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const login = useAuthStore((state) => state.login);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,7 +18,7 @@ export function Login() {
 
     try {
       const { accessToken, refreshToken, user } = await authService.login(email, password);
-      authService.setAuth(accessToken, refreshToken, user);
+      login(accessToken, refreshToken, user);
       toast.success(`Welcome back, ${user.name || user.email}!`);
 
       // Redirect based on role
