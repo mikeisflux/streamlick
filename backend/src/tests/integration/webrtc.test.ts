@@ -1,10 +1,11 @@
 import { Server } from 'socket.io';
 import ioClient from 'socket.io-client';
-import type { Socket as ClientSocket } from 'socket.io-client';
 import http from 'http';
 import initializeSocket from '../../socket';
 import prisma from '../../database/prisma';
 import { generateAccessToken } from '../../auth/jwt';
+
+type ClientSocket = ReturnType<typeof ioClient>;
 
 describe('WebRTC/MediaSoup Integration Tests', () => {
   let httpServer: http.Server;

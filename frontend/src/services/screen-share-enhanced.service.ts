@@ -10,8 +10,9 @@
  */
 
 import io from 'socket.io-client';
-import type { Socket } from 'socket.io-client';
 import { EventEmitter } from 'events';
+
+type Socket = ReturnType<typeof io>;
 
 export interface ScreenShareParticipant {
   participantId: string;
