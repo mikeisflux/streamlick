@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { multiTrackRecordingService, RecordedTrack } from '../services/multitrack-recording.service';
+import toast from 'react-hot-toast';
 
 interface ProducerModeProps {
   broadcastId?: string;
@@ -13,6 +15,7 @@ interface Participant {
   audioEnabled: boolean;
   videoEnabled: boolean;
   status: 'connected' | 'connecting' | 'disconnected';
+  stream?: MediaStream; // Add stream property for recording
 }
 
 export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeProps) {
@@ -47,6 +50,12 @@ export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeP
   const [mainAudioVolume, setMainAudioVolume] = useState(100);
   const [showOverlay, setShowOverlay] = useState(true);
 
+  // Multi-track recording state
+  const [isMultiTrackRecording, setIsMultiTrackRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [recordedTracks, setRecordedTracks] = useState<RecordedTrack[]>([]);
+  const [separateAudioVideo, setSeparateAudioVideo] = useState(true);
+
   const toggleParticipantRole = (participantId: string) => {
     setParticipants(
       participants.map((p) =>
@@ -74,6 +83,92 @@ export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeP
         p.id === participantId ? { ...p, videoEnabled: !p.videoEnabled } : p
       )
     );
+  };
+
+  // Multi-track recording handlers
+  const startMultiTrackRecording = async () => {
+    try {
+      // Filter only live participants with streams
+      const liveParticipants = participants
+        .filter((p) => p.role !== 'backstage' && p.stream)
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          stream: p.stream!,
+        }));
+
+      if (liveParticipants.length === 0) {
+        toast.error('No participants available for recording');
+        return;
+      }
+
+      await multiTrackRecordingService.startRecording(liveParticipants, {
+        separateAudioVideo,
+        videoBitsPerSecond: 5000000,
+        audioBitsPerSecond: 192000,
+      });
+
+      setIsMultiTrackRecording(true);
+      setRecordingDuration(0);
+      toast.success(`Multi-track recording started (${liveParticipants.length} participants)`);
+    } catch (error) {
+      console.error('Failed to start multi-track recording:', error);
+      toast.error('Failed to start recording');
+    }
+  };
+
+  const stopMultiTrackRecording = async () => {
+    try {
+      const tracks = await multiTrackRecordingService.stopRecording();
+      setRecordedTracks(tracks);
+      setIsMultiTrackRecording(false);
+      setRecordingDuration(0);
+
+      const totalSize = tracks.reduce((sum, t) => sum + t.size, 0);
+      const totalSizeMB = (totalSize / 1024 / 1024).toFixed(2);
+
+      toast.success(`Recording stopped. ${tracks.length} tracks ready (${totalSizeMB} MB total)`);
+    } catch (error) {
+      console.error('Failed to stop multi-track recording:', error);
+      toast.error('Failed to stop recording');
+    }
+  };
+
+  const downloadRecordedTracks = () => {
+    if (recordedTracks.length === 0) {
+      toast.error('No tracks to download');
+      return;
+    }
+
+    const sessionName = broadcastId || 'producer-session';
+    multiTrackRecordingService.downloadAllTracks(recordedTracks, sessionName);
+    toast.success(`Downloaded ${recordedTracks.length} tracks`);
+  };
+
+  // Update recording duration every second
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    if (isMultiTrackRecording) {
+      interval = setInterval(() => {
+        const duration = multiTrackRecordingService.getDuration();
+        setRecordingDuration(duration);
+      }, 1000);
+    }
+
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [isMultiTrackRecording]);
+
+  // Format duration (seconds to HH:MM:SS)
+  const formatDuration = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
   return (
@@ -164,6 +259,12 @@ export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeP
                             >
                               {participant.role}
                             </span>
+                            {isMultiTrackRecording && (
+                              <span className="flex items-center gap-1 text-xs bg-red-600 text-white px-2 py-0.5 rounded">
+                                <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span>
+                                REC
+                              </span>
+                            )}
                           </div>
 
                           {/* Controls */}
@@ -287,6 +388,114 @@ export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeP
                   />
                   <span className="text-white">Show overlay graphics</span>
                 </label>
+              </div>
+
+              {/* Multi-Track Recording */}
+              <div className="bg-gray-800 rounded-lg p-4 border-2 border-purple-600">
+                <div className="flex items-center gap-2 mb-4">
+                  <h3 className="text-lg font-semibold text-white">🎬 Multi-Track Recording</h3>
+                  {isMultiTrackRecording && (
+                    <span className="flex items-center gap-1 text-xs text-red-400">
+                      <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                      REC
+                    </span>
+                  )}
+                </div>
+
+                {isMultiTrackRecording ? (
+                  <>
+                    {/* Recording Status */}
+                    <div className="bg-red-900/30 border border-red-500 rounded-lg p-3 mb-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-white font-semibold">Recording...</span>
+                        <span className="text-red-400 font-mono text-lg">
+                          {formatDuration(recordingDuration)}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-300">
+                        {multiTrackRecordingService.getTrackCount()} tracks active
+                      </div>
+                    </div>
+
+                    {/* Stop Button */}
+                    <button
+                      onClick={stopMultiTrackRecording}
+                      className="w-full px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <rect x="6" y="6" width="12" height="12" rx="1" />
+                      </svg>
+                      Stop Recording
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {/* Settings */}
+                    <div className="space-y-3 mb-4">
+                      <label className="flex items-center gap-2 cursor-pointer text-sm">
+                        <input
+                          type="checkbox"
+                          checked={separateAudioVideo}
+                          onChange={(e) => setSeparateAudioVideo(e.target.checked)}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-white">
+                          Separate audio/video files
+                        </span>
+                      </label>
+                      <div className="text-xs text-gray-400">
+                        {separateAudioVideo
+                          ? 'Each participant: 2 files (audio + video)'
+                          : 'Each participant: 1 combined file'}
+                      </div>
+                    </div>
+
+                    {/* Start Button */}
+                    <button
+                      onClick={startMultiTrackRecording}
+                      disabled={participants.filter((p) => p.role !== 'backstage').length === 0}
+                      className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" />
+                      </svg>
+                      Start Recording
+                    </button>
+
+                    {/* Download Section */}
+                    {recordedTracks.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-gray-700">
+                        <div className="bg-green-900/30 border border-green-500 rounded-lg p-3 mb-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span className="text-white font-semibold">
+                              {recordedTracks.length} tracks ready
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-300">
+                            {(recordedTracks.reduce((sum, t) => sum + t.size, 0) / 1024 / 1024).toFixed(2)} MB total
+                          </div>
+                        </div>
+                        <button
+                          onClick={downloadRecordedTracks}
+                          className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                          </svg>
+                          Download All Tracks
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Info */}
+                <div className="mt-3 text-xs text-gray-400">
+                  💡 Record each participant separately for post-production editing
+                </div>
               </div>
 
               {/* Quick Actions */}
