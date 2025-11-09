@@ -37,6 +37,7 @@ import { clipPlayerService } from '../services/clip-player.service';
 import { backgroundProcessorService } from '../services/background-processor.service';
 import { clipRecordingService } from '../services/clip-recording.service';
 import { captionService, Caption, POPULAR_LANGUAGES } from '../services/caption.service';
+import { backgroundRemovalService, BackgroundOptions } from '../services/background-removal.service';
 import { Button } from '../components/Button';
 import toast from 'react-hot-toast';
 import api from '../services/api';
@@ -132,6 +133,16 @@ export function Studio() {
   const [currentCaption, setCurrentCaption] = useState<Caption | null>(null);
   const [captionLanguage, setCaptionLanguage] = useState('en-US');
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
+
+  // Smart Background Removal state
+  const [backgroundRemovalEnabled, setBackgroundRemovalEnabled] = useState(false);
+  const [backgroundRemovalOptions, setBackgroundRemovalOptions] = useState<BackgroundOptions>({
+    type: 'blur',
+    blurAmount: 15,
+    color: '#1a1a1a',
+    edgeSoftness: 0.3,
+  });
+  const [processedStream, setProcessedStream] = useState<MediaStream | null>(null);
 
   // Chat overlay position and size state
   const [chatOverlayPosition, setChatOverlayPosition] = useState({ x: 0, y: 0 });
@@ -1271,6 +1282,46 @@ export function Studio() {
     };
   }, [captionsEnabled, captionLanguage]);
 
+  // Manage Smart Background Removal lifecycle
+  useEffect(() => {
+    if (backgroundRemovalEnabled && localStream) {
+      const startBackgroundRemoval = async () => {
+        try {
+          // Load model if not already loaded
+          if (!backgroundRemovalService.isModelLoaded()) {
+            toast.loading('Loading AI background model...', { id: 'bg-model' });
+            await backgroundRemovalService.loadModel();
+            toast.success('Background removal ready', { id: 'bg-model' });
+          }
+
+          // Start background removal
+          const outputStream = await backgroundRemovalService.start(
+            localStream,
+            backgroundRemovalOptions
+          );
+          setProcessedStream(outputStream);
+          toast.success(`Background ${backgroundRemovalOptions.type} enabled`);
+        } catch (error) {
+          console.error('Failed to start background removal:', error);
+          toast.error('Failed to enable background removal');
+          setBackgroundRemovalEnabled(false);
+        }
+      };
+
+      startBackgroundRemoval();
+    } else if (!backgroundRemovalEnabled && backgroundRemovalService.isActive()) {
+      backgroundRemovalService.stop();
+      setProcessedStream(null);
+      toast.success('Background removal stopped');
+    }
+
+    return () => {
+      if (backgroundRemovalService.isActive()) {
+        backgroundRemovalService.stop();
+      }
+    };
+  }, [backgroundRemovalEnabled, localStream, backgroundRemovalOptions]);
+
   // Chat Layout Handlers
   // Lower Third Handlers
   const handleShowLowerThird = (name: string, title: string) => {
@@ -1690,6 +1741,17 @@ export function Studio() {
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setBackgroundRemovalEnabled(!backgroundRemovalEnabled)}
+              className={`p-2 rounded ${
+                backgroundRemovalEnabled ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-700 hover:bg-gray-600'
+              } text-white transition-colors`}
+              title={backgroundRemovalEnabled ? 'Disable Background Removal' : 'Enable Smart Background Removal'}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
             </button>
           </div>
@@ -2413,6 +2475,120 @@ export function Studio() {
                       </div>
                     </label>
                   </div>
+                </div>
+
+                {/* Smart Background Removal */}
+                <div className="border-t border-gray-200 pt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900">Smart Background Removal</h3>
+                      <p className="text-xs text-gray-500 mt-1">AI-powered background effects</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={backgroundRemovalEnabled}
+                        onChange={(e) => setBackgroundRemovalEnabled(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                    </label>
+                  </div>
+
+                  {backgroundRemovalEnabled && (
+                    <div className="space-y-4 pl-2">
+                      {/* Background Type */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-900 mb-2">
+                          Background Type
+                        </label>
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="bgType"
+                              value="blur"
+                              checked={backgroundRemovalOptions.type === 'blur'}
+                              onChange={(e) => setBackgroundRemovalOptions({ ...backgroundRemovalOptions, type: 'blur' })}
+                              className="w-4 h-4 text-purple-600"
+                            />
+                            <span className="text-sm text-gray-700">Blur Background</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="bgType"
+                              value="color"
+                              checked={backgroundRemovalOptions.type === 'color'}
+                              onChange={(e) => setBackgroundRemovalOptions({ ...backgroundRemovalOptions, type: 'color' })}
+                              className="w-4 h-4 text-purple-600"
+                            />
+                            <span className="text-sm text-gray-700">Solid Color</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="bgType"
+                              value="image"
+                              checked={backgroundRemovalOptions.type === 'image'}
+                              onChange={(e) => setBackgroundRemovalOptions({ ...backgroundRemovalOptions, type: 'image' })}
+                              className="w-4 h-4 text-purple-600"
+                            />
+                            <span className="text-sm text-gray-700">Custom Image</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Blur Amount */}
+                      {backgroundRemovalOptions.type === 'blur' && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-900 mb-2">
+                            Blur Amount: {backgroundRemovalOptions.blurAmount}px
+                          </label>
+                          <input
+                            type="range"
+                            min="5"
+                            max="30"
+                            value={backgroundRemovalOptions.blurAmount || 15}
+                            onChange={(e) => setBackgroundRemovalOptions({ ...backgroundRemovalOptions, blurAmount: parseInt(e.target.value) })}
+                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                          />
+                        </div>
+                      )}
+
+                      {/* Background Color */}
+                      {backgroundRemovalOptions.type === 'color' && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-900 mb-2">
+                            Background Color
+                          </label>
+                          <input
+                            type="color"
+                            value={backgroundRemovalOptions.color || '#1a1a1a'}
+                            onChange={(e) => setBackgroundRemovalOptions({ ...backgroundRemovalOptions, color: e.target.value })}
+                            className="w-full h-10 rounded cursor-pointer"
+                          />
+                        </div>
+                      )}
+
+                      {/* Edge Softness */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-900 mb-2">
+                          Edge Softness: {Math.round((backgroundRemovalOptions.edgeSoftness || 0.3) * 100)}%
+                        </label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.1"
+                          value={backgroundRemovalOptions.edgeSoftness || 0.3}
+                          onChange={(e) => setBackgroundRemovalOptions({ ...backgroundRemovalOptions, edgeSoftness: parseFloat(e.target.value) })}
+                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Higher values create smoother edges</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
