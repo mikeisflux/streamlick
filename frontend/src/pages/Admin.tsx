@@ -4,7 +4,17 @@ import {
   Settings,
   FileText,
   TestTube2,
-  Image
+  Image,
+  BarChart3,
+  Users,
+  Radio,
+  Key,
+  Video,
+  Film,
+  Layout,
+  Shield,
+  CreditCard,
+  Cast
 } from 'lucide-react';
 
 export function Admin() {
@@ -43,6 +53,76 @@ export function Admin() {
       icon: Image,
       path: '/admin/assets',
       color: 'bg-pink-500/10 text-pink-400 border-pink-500/20',
+    },
+    {
+      title: 'Analytics',
+      description: 'View platform analytics and metrics',
+      icon: BarChart3,
+      path: '/analytics',
+      color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+    },
+    {
+      title: 'Users',
+      description: 'Manage user accounts and permissions',
+      icon: Users,
+      path: '/admin/users',
+      color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+    },
+    {
+      title: 'Broadcasts',
+      description: 'Monitor all live broadcasts',
+      icon: Radio,
+      path: '/admin/broadcasts',
+      color: 'bg-red-500/10 text-red-400 border-red-500/20',
+    },
+    {
+      title: 'OAuth Config',
+      description: 'Configure platform OAuth settings',
+      icon: Key,
+      path: '/admin/oauth',
+      color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+    },
+    {
+      title: 'Media Clips',
+      description: 'Manage media clip library',
+      icon: Video,
+      path: '/admin/clips',
+      color: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
+    },
+    {
+      title: 'Recordings',
+      description: 'View and manage recordings',
+      icon: Film,
+      path: '/admin/recordings',
+      color: 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20',
+    },
+    {
+      title: 'Templates',
+      description: 'Manage broadcast templates',
+      icon: Layout,
+      path: '/admin/templates',
+      color: 'bg-teal-500/10 text-teal-400 border-teal-500/20',
+    },
+    {
+      title: 'Moderation',
+      description: 'Content moderation and chat controls',
+      icon: Shield,
+      path: '/admin/moderation',
+      color: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+    },
+    {
+      title: 'Billing & Plans',
+      description: 'Manage subscription plans and billing',
+      icon: CreditCard,
+      path: '/admin/billing',
+      color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    },
+    {
+      title: 'Destinations',
+      description: 'Manage streaming destinations',
+      icon: Cast,
+      path: '/admin/destinations',
+      color: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
     },
   ];
 
