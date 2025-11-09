@@ -4,7 +4,7 @@ import { useAuthStore } from './store/authStore';
 import { Login } from './pages/Login';
 import { VerifyAuth } from './pages/VerifyAuth';
 import { Dashboard } from './pages/Dashboard';
-import { StudioEnhanced as Studio } from './pages/StudioEnhanced';
+import { Studio } from './pages/Studio';
 import { GuestJoin } from './pages/GuestJoin';
 import { Landing } from './pages/Landing';
 import { Billing } from './pages/Billing';
