@@ -94,14 +94,9 @@ export function AccountSettings() {
             <div>
               <p className="font-semibold text-gray-900 capitalize">{user?.planType} Plan</p>
               <p className="text-sm text-gray-600">
-                {user?.planType === 'free' ? 'Limited features' : '$20/month - All features included'}
+                $20/month - All features included
               </p>
             </div>
-            {user?.planType === 'free' && (
-              <Button onClick={() => window.location.href = '/billing'}>
-                Upgrade
-              </Button>
-            )}
           </div>
         </div>
       </div>

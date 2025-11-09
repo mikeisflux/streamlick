@@ -74,8 +74,6 @@ export function BillingSettings() {
     }
   };
 
-  const isPaid = user?.planType !== 'free';
-
   return (
     <div className="space-y-6">
       <div>
@@ -97,7 +95,7 @@ export function BillingSettings() {
                   {user?.planType} Plan
                 </h3>
                 <p className="text-sm text-gray-600 mt-1">
-                  {isPaid ? '$20/month - All features included' : 'Limited features'}
+                  $20/month - All features included
                 </p>
               </div>
               <span
@@ -109,7 +107,7 @@ export function BillingSettings() {
                     : 'bg-gray-100 text-gray-800'
                 }`}
               >
-                {subscription?.status || 'Free'}
+                {subscription?.status || 'Inactive'}
               </span>
             </div>
 

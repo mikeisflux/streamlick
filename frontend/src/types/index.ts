@@ -3,7 +3,7 @@ export interface User {
   email: string;
   name?: string;
   avatarUrl?: string;
-  planType: 'free' | 'core' | 'advanced' | 'teams' | 'business';
+  planType: 'pro'; // Single $20/month plan with all features
   createdAt: string;
 }
 

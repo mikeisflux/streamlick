@@ -11,12 +11,20 @@ import { useStudioStore } from '../store/studioStore';
 import { ParticipantVideo } from '../components/ParticipantVideo';
 import { VideoGrid } from '../components/VideoGrid';
 import { ChatOverlay, ChatMessage } from '../components/ChatOverlay';
+import { ChatLayoutCustomizer } from '../components/ChatLayoutCustomizer';
+import { ChatModeration } from '../components/ChatModeration';
 import { StreamHealthMonitor } from '../components/StreamHealthMonitor';
 import { BitrateControl } from '../components/BitrateControl';
 import { HotkeyReference } from '../components/HotkeyReference';
 import { HotkeyFeedback, useHotkeyFeedback } from '../components/HotkeyFeedback';
 import { MediaLibrary } from '../components/MediaLibrary';
 import { BackgroundEffects, BackgroundEffect } from '../components/BackgroundEffects';
+import { DraggableParticipant } from '../components/DraggableParticipant';
+import { SceneManager, Scene } from '../components/SceneManager';
+import { ViewerCount } from '../components/ViewerCount';
+import { LowerThird } from '../components/LowerThird';
+import { ScreenShareManager } from '../components/ScreenShareManager';
+import { PlatformLogos } from '../components/PlatformLogos';
 import { clipPlayerService } from '../services/clip-player.service';
 import { backgroundProcessorService } from '../services/background-processor.service';
 import { Button } from '../components/Button';
@@ -53,6 +61,33 @@ export function StudioEnhanced() {
   const [selectedParticipant, setSelectedParticipant] = useState<string | null>(null);
   const [backgroundEffect, setBackgroundEffect] = useState<BackgroundEffect>({ type: 'none' });
   const { messages: hotkeyMessages, showFeedback } = useHotkeyFeedback();
+
+  // New component state
+  const [scenes, setScenes] = useState<Scene[]>([
+    {
+      id: 'default',
+      name: 'Main Scene',
+      layout: 'grid',
+      participants: [],
+      overlays: [],
+    },
+  ]);
+  const [currentSceneId, setCurrentSceneId] = useState('default');
+  const [viewerCounts, setViewerCounts] = useState({
+    total: 0,
+    youtube: 0,
+    facebook: 0,
+    twitch: 0,
+    x: 0,
+    rumble: 0,
+    linkedin: 0,
+  });
+  const [showLowerThird, setShowLowerThird] = useState(false);
+  const [lowerThirdText, setLowerThirdText] = useState({ name: '', title: '' });
+  const [chatLayout, setChatLayout] = useState({ position: 'bottom-left', size: 'medium' });
+  const [showChatLayoutCustomizer, setShowChatLayoutCustomizer] = useState(false);
+  const [showChatModeration, setShowChatModeration] = useState(false);
+  const [showSceneManager, setShowSceneManager] = useState(false);
 
   const { broadcast, isLive, setIsLive, setBroadcast } = useStudioStore();
   const {
@@ -425,12 +460,25 @@ export function StudioEnhanced() {
       });
     };
 
+    const handleViewerCountUpdate = (counts: any) => {
+      setViewerCounts({
+        total: counts.total || 0,
+        youtube: counts.youtube || 0,
+        facebook: counts.facebook || 0,
+        twitch: counts.twitch || 0,
+        x: counts.x || 0,
+        rumble: counts.rumble || 0,
+        linkedin: counts.linkedin || 0,
+      });
+    };
+
     socketService.on('participant-joined', handleParticipantJoined);
     socketService.on('participant-left', handleParticipantLeft);
     socketService.on('media-state-changed', handleMediaStateChanged);
     socketService.on('chat-message', handleChatMessage);
     socketService.on('participant-promoted', handleParticipantPromoted);
     socketService.on('participant-demoted', handleParticipantDemoted);
+    socketService.on('viewer-count-update', handleViewerCountUpdate);
 
     return () => {
       socketService.off('participant-joined', handleParticipantJoined);
@@ -439,6 +487,7 @@ export function StudioEnhanced() {
       socketService.off('chat-message', handleChatMessage);
       socketService.off('participant-promoted', handleParticipantPromoted);
       socketService.off('participant-demoted', handleParticipantDemoted);
+      socketService.off('viewer-count-update', handleViewerCountUpdate);
     };
   }, [showChatOnStream]);
 
@@ -791,6 +840,60 @@ export function StudioEnhanced() {
     }
   };
 
+  // Scene Management Handlers
+  const handleSceneChange = (sceneId: string, transition?: any) => {
+    setCurrentSceneId(sceneId);
+    toast.success(`Switched to scene: ${scenes.find(s => s.id === sceneId)?.name || sceneId}`);
+  };
+
+  const handleSceneCreate = (scene: Scene) => {
+    setScenes(prev => [...prev, scene]);
+    toast.success(`Created scene: ${scene.name}`);
+  };
+
+  const handleSceneUpdate = (sceneId: string, updates: Partial<Scene>) => {
+    setScenes(prev => prev.map(s => s.id === sceneId ? { ...s, ...updates } : s));
+  };
+
+  const handleSceneDelete = (sceneId: string) => {
+    if (scenes.length <= 1) {
+      toast.error('Cannot delete the last scene');
+      return;
+    }
+    setScenes(prev => prev.filter(s => s.id !== sceneId));
+    if (currentSceneId === sceneId) {
+      setCurrentSceneId(scenes[0].id);
+    }
+    toast.success('Scene deleted');
+  };
+
+  const handleSceneDuplicate = (sceneId: string) => {
+    const scene = scenes.find(s => s.id === sceneId);
+    if (!scene) return;
+    const newScene = {
+      ...scene,
+      id: `${scene.id}-copy-${Date.now()}`,
+      name: `${scene.name} (Copy)`,
+    };
+    setScenes(prev => [...prev, newScene]);
+    toast.success(`Duplicated scene: ${scene.name}`);
+  };
+
+  // Chat Layout Handlers
+  const handleChatLayoutChange = (layout: any) => {
+    setChatLayout(layout);
+  };
+
+  // Lower Third Handlers
+  const handleShowLowerThird = (name: string, title: string) => {
+    setLowerThirdText({ name, title });
+    setShowLowerThird(true);
+  };
+
+  const handleHideLowerThird = () => {
+    setShowLowerThird(false);
+  };
+
   const allParticipants = [
     {
       id: 'local',
@@ -832,18 +935,24 @@ export function StudioEnhanced() {
             </button>
             <div>
               <h1 className="text-xl font-bold text-white">{broadcast?.title || 'Studio'}</h1>
-              {isLive && (
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-red-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                  </span>
-                  <span className="text-red-500 text-sm font-semibold">LIVE</span>
-                </div>
-              )}
+              <div className="flex items-center gap-4 mt-1">
+                {isLive && (
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-red-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                    </span>
+                    <span className="text-red-500 text-sm font-semibold">LIVE</span>
+                  </div>
+                )}
+                {isLive && <ViewerCount counts={viewerCounts} />}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <Button onClick={() => setShowSceneManager(!showSceneManager)} variant="ghost" size="sm">
+              🎬 Scenes
+            </Button>
             {!isLive ? (
               <Button onClick={handleGoLive} variant="primary" size="lg" disabled={isInitializing}>
                 {isInitializing ? 'Initializing...' : '🔴 Go Live'}
@@ -1176,6 +1285,37 @@ export function StudioEnhanced() {
               />
             </div>
 
+            {/* Studio Tools */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">Studio Tools</h3>
+              <div className="space-y-2">
+                <Button
+                  onClick={() => setShowChatLayoutCustomizer(true)}
+                  variant="secondary"
+                  size="sm"
+                  className="w-full"
+                >
+                  💬 Chat Layout
+                </Button>
+                <Button
+                  onClick={() => setShowChatModeration(true)}
+                  variant="secondary"
+                  size="sm"
+                  className="w-full"
+                >
+                  🛡️ Chat Moderation
+                </Button>
+                <Button
+                  onClick={() => handleShowLowerThird('Guest Name', 'Guest Title')}
+                  variant="secondary"
+                  size="sm"
+                  className="w-full"
+                >
+                  📝 Lower Third
+                </Button>
+              </div>
+            </div>
+
             {/* Stream Health Monitor */}
             {broadcastId && (
               <StreamHealthMonitor broadcastId={broadcastId} isLive={isLive} />
@@ -1286,6 +1426,95 @@ export function StudioEnhanced() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Scene Manager */}
+      {showSceneManager && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-700">
+              <h2 className="text-2xl font-bold text-white">Scene Manager</h2>
+              <button
+                onClick={() => setShowSceneManager(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <SceneManager
+                scenes={scenes}
+                currentSceneId={currentSceneId}
+                onSceneChange={handleSceneChange}
+                onSceneCreate={handleSceneCreate}
+                onSceneUpdate={handleSceneUpdate}
+                onSceneDelete={handleSceneDelete}
+                onSceneDuplicate={handleSceneDuplicate}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chat Layout Customizer */}
+      {showChatLayoutCustomizer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-700">
+              <h2 className="text-2xl font-bold text-white">Chat Layout Customizer</h2>
+              <button
+                onClick={() => setShowChatLayoutCustomizer(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <ChatLayoutCustomizer
+                currentLayout={chatLayout}
+                onLayoutChange={handleChatLayoutChange}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chat Moderation */}
+      {showChatModeration && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-700">
+              <h2 className="text-2xl font-bold text-white">Chat Moderation</h2>
+              <button
+                onClick={() => setShowChatModeration(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <ChatModeration
+                broadcastId={broadcastId || ''}
+                messages={chatMessages}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lower Third Overlay */}
+      {showLowerThird && (
+        <LowerThird
+          name={lowerThirdText.name}
+          title={lowerThirdText.title}
+          onHide={handleHideLowerThird}
+        />
       )}
     </div>
   );

@@ -184,12 +184,12 @@ const faqData: FAQItem[] = [
   {
     category: 'Billing & Plans',
     question: 'What subscription plans are available?',
-    answer: 'Streamlick offers multiple plans with different streaming hours, participant limits, resolution caps, and features. Visit the Billing page to see current plans and pricing. All plans support multi-streaming and core features.',
+    answer: 'Streamlick offers one simple plan: $20/month with ALL features included. No tiers, no limits - unlimited streaming hours, unlimited participants, full HD resolution, and access to every feature.',
   },
   {
     category: 'Billing & Plans',
     question: 'Can I cancel my subscription anytime?',
-    answer: 'Yes! You can cancel your subscription anytime from the Billing page or through the Stripe customer portal. Your subscription remains active until the end of your current billing period, then automatically downgrades to the free plan.',
+    answer: 'Yes! You can cancel your subscription anytime from the Billing page or through the Stripe customer portal. Your subscription remains active until the end of your current billing period.',
   },
   {
     category: 'Billing & Plans',

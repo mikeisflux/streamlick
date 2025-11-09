@@ -58,8 +58,8 @@ export const Analytics: React.FC = () => {
     try {
       setLoading(true);
       const [analyticsRes, historyRes] = await Promise.all([
-        api.get(`/api/analytics/user/${user?.id}`),
-        api.get(`/api/analytics/user/${user?.id}/broadcasts?limit=50`),
+        api.get(`/analytics/user/${user?.id}`),
+        api.get(`/analytics/user/${user?.id}/broadcasts?limit=50`),
       ]);
 
       setAnalytics(analyticsRes.data);
