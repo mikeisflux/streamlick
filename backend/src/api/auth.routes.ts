@@ -63,6 +63,7 @@ router.post('/verify-token', async (req, res) => {
         name: user.name,
         avatarUrl: user.avatarUrl,
         planType: user.planType,
+        role: user.role,
       },
     });
   } catch (error) {
@@ -82,6 +83,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
         name: true,
         avatarUrl: true,
         planType: true,
+        role: true,
         createdAt: true,
       },
     });
@@ -114,6 +116,7 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res) => {
         name: true,
         avatarUrl: true,
         planType: true,
+        role: true,
         createdAt: true,
       },
     });
