@@ -4,6 +4,9 @@ const prisma = new PrismaClient();
 
 async function setAdmin() {
   try {
+    // Get email from command line argument or use default
+    const targetEmail = process.argv[2] || 'divinitycomicsinc@gmail.com';
+
     // Get all users
     const users = await prisma.user.findMany({
       select: {
@@ -23,14 +26,25 @@ async function setAdmin() {
       return;
     }
 
-    // Set first user as admin
-    const firstUser = users[0];
+    // Find user by email
+    const targetUser = users.find(u => u.email === targetEmail);
+
+    if (!targetUser) {
+      console.log(`\n❌ User with email ${targetEmail} not found.`);
+      console.log('Available users:');
+      users.forEach((user: { id: string; email: string; role: string }) => {
+        console.log(`  - ${user.email}`);
+      });
+      return;
+    }
+
+    // Set user as admin
     await prisma.user.update({
-      where: { id: firstUser.id },
+      where: { id: targetUser.id },
       data: { role: 'admin' },
     });
 
-    console.log(`\n✅ Set ${firstUser.email} as admin`);
+    console.log(`\n✅ Set ${targetUser.email} as admin`);
   } catch (error) {
     console.error('Error:', error);
   } finally {

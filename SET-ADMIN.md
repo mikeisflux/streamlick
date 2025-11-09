@@ -3,6 +3,20 @@
 ## Problem
 The admin panel requires a user with `role='admin'`, but all users currently have `role='user'`.
 
+## Quick Setup for divinitycomicsinc@gmail.com
+
+To set `divinitycomicsinc@gmail.com` as admin, run:
+
+```bash
+# Using the SQL script
+cd backend
+psql $DATABASE_URL -f scripts/set-admin.sql
+
+# Or using the TypeScript script
+cd backend
+npx tsx scripts/set-admin.ts divinitycomicsinc@gmail.com
+```
+
 ## Solution
 
 ### Method 1: Direct Database Access
