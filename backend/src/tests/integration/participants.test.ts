@@ -24,6 +24,7 @@ describe('Participant Management Integration Tests', () => {
         email: 'host@participants.test',
         name: 'Host User',
         planType: 'core',
+        password: 'testpassword123',
       },
     });
 
@@ -32,6 +33,7 @@ describe('Participant Management Integration Tests', () => {
         email: 'guest@participants.test',
         name: 'Guest User',
         planType: 'free',
+        password: 'testpassword123',
       },
     });
 

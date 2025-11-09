@@ -48,7 +48,7 @@ describe('Authentication API', () => {
 
       // Create existing user
       await prisma.user.create({
-        data: { email, planType: 'core' },
+        data: { email, planType: 'core', password: 'testpassword123' },
       });
 
       const response = await request(app)
@@ -115,7 +115,7 @@ describe('Authentication API', () => {
     it('should verify valid token and return user with tokens', async () => {
       const email = 'verified@example.com';
       const user = await prisma.user.create({
-        data: { email, name: 'Test User', planType: 'free' },
+        data: { email, name: 'Test User', planType: 'free', password: 'testpassword123' },
       });
 
       (generateAccessToken as jest.Mock).mockReturnValue('access-token');
@@ -190,6 +190,7 @@ describe('Authentication API', () => {
           email: 'authenticated@example.com',
           name: 'Auth User',
           planType: 'core',
+          password: 'testpassword123',
         },
       });
 
@@ -232,6 +233,7 @@ describe('Authentication API', () => {
         data: {
           email: 'update@example.com',
           name: 'Old Name',
+          password: 'testpassword123',
         },
       });
 

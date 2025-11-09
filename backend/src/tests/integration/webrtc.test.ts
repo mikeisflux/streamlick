@@ -33,6 +33,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
             email: 'host@webrtc.test',
             name: 'Host User',
             planType: 'core',
+            password: 'testpassword123',
           },
         }),
         prisma.user.create({
@@ -40,6 +41,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
             email: 'guest@webrtc.test',
             name: 'Guest User',
             planType: 'free',
+            password: 'testpassword123',
           },
         }),
       ]).then(([user1, user2]) => {

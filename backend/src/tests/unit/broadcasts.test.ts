@@ -19,6 +19,7 @@ describe('Broadcasts API', () => {
         email: 'broadcaster@example.com',
         name: 'Test Broadcaster',
         planType: 'core',
+        password: 'testpassword123',
       },
     });
 
@@ -147,6 +148,7 @@ describe('Broadcasts API', () => {
         data: {
           email: 'other@example.com',
           planType: 'free',
+          password: 'testpassword123',
         },
       });
 
@@ -212,6 +214,7 @@ describe('Broadcasts API', () => {
         data: {
           email: 'intruder@example.com',
           planType: 'free',
+          password: 'testpassword123',
         },
       });
 
@@ -269,6 +272,7 @@ describe('Broadcasts API', () => {
         data: {
           email: 'hacker@example.com',
           planType: 'free',
+          password: 'testpassword123',
         },
       });
 
@@ -328,6 +332,7 @@ describe('Broadcasts API', () => {
         data: {
           email: 'deleter@example.com',
           planType: 'free',
+          password: 'testpassword123',
         },
       });
 

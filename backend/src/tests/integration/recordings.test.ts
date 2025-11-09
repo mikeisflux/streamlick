@@ -22,6 +22,7 @@ describe('Recording System Integration Tests', () => {
         email: 'recorder@test.com',
         name: 'Test Recorder',
         planType: 'core',
+        password: 'testpassword123',
       },
     });
 
@@ -235,6 +236,7 @@ describe('Recording System Integration Tests', () => {
         data: {
           email: 'other@test.com',
           planType: 'free',
+          password: 'testpassword123',
         },
       });
 
@@ -315,6 +317,7 @@ describe('Recording System Integration Tests', () => {
         data: {
           email: 'intruder@test.com',
           planType: 'free',
+          password: 'testpassword123',
         },
       });
 
@@ -436,6 +439,7 @@ describe('Recording System Integration Tests', () => {
         data: {
           email: 'hacker@test.com',
           planType: 'free',
+          password: 'testpassword123',
         },
       });
 
@@ -491,6 +495,7 @@ describe('Recording System Integration Tests', () => {
         data: {
           email: 'deleter@test.com',
           planType: 'free',
+          password: 'testpassword123',
         },
       });
 
@@ -550,6 +555,7 @@ describe('Recording System Integration Tests', () => {
         data: {
           email: 'free@test.com',
           planType: 'free',
+          password: 'testpassword123',
         },
       });
 
