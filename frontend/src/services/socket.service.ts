@@ -1,5 +1,4 @@
-import { io } from 'socket.io-client';
-import type { Socket } from 'socket.io-client';
+import { io, Socket } from 'socket.io-client';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -22,7 +21,7 @@ class SocketService {
       console.log('Socket disconnected');
     });
 
-    this.socket.on('error', (error) => {
+    this.socket.on('error', (error: Error) => {
       console.error('Socket error:', error);
     });
   }

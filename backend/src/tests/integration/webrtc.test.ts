@@ -1,6 +1,5 @@
 import { Server } from 'socket.io';
-import { io as ioClient } from 'socket.io-client';
-import type { Socket } from 'socket.io-client';
+import { io as ioClient, Socket } from 'socket.io-client';
 import http from 'http';
 import initializeSocket from '../../socket';
 import prisma from '../../database/prisma';
