@@ -125,6 +125,13 @@ export function Studio() {
   const [captionsEnabled, setCaptionsEnabled] = useState(false);
   const [clipRecordingEnabled, setClipRecordingEnabled] = useState(false);
 
+  // Chat overlay position and size state
+  const [chatOverlayPosition, setChatOverlayPosition] = useState({ x: 0, y: 0 });
+  const [chatOverlaySize, setChatOverlaySize] = useState({ width: 320, height: 384 });
+  const [isDraggingChat, setIsDraggingChat] = useState(false);
+  const [isResizingChat, setIsResizingChat] = useState(false);
+  const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
+
   // Drawer state consolidation
   const [activeDrawer, setActiveDrawer] = useState<'destinations' | 'invite' | 'banners' | 'brand' | null>(null);
 
@@ -153,6 +160,9 @@ export function Studio() {
         // Load destinations
         const destResponse = await api.get('/destinations');
         setDestinations(destResponse.data.filter((d: any) => d.isActive));
+
+        // Load available devices
+        await loadDevices();
 
         // Start camera
         await startCamera();
@@ -917,6 +927,231 @@ export function Studio() {
     toast.success(`Duplicated scene: ${scene.name}`);
   };
 
+  // Device Management Handlers
+  const loadDevices = async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter((d) => d.kind === 'audioinput');
+      const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+
+      setAudioDevices(audioInputs);
+      setVideoDevices(videoInputs);
+
+      // Set default devices if not already set
+      if (!selectedAudioDevice && audioInputs.length > 0) {
+        setSelectedAudioDevice(audioInputs[0].deviceId);
+      }
+      if (!selectedVideoDevice && videoInputs.length > 0) {
+        setSelectedVideoDevice(videoInputs[0].deviceId);
+      }
+    } catch (error) {
+      console.error('Failed to enumerate devices:', error);
+      toast.error('Failed to load media devices');
+    }
+  };
+
+  const handleAudioDeviceChange = async (deviceId: string) => {
+    try {
+      setSelectedAudioDevice(deviceId);
+
+      // Stop current audio track
+      if (localStream) {
+        localStream.getAudioTracks().forEach(track => track.stop());
+      }
+
+      // Get new audio stream with selected device
+      const newAudioStream = await navigator.mediaDevices.getUserMedia({
+        audio: { deviceId: { exact: deviceId } },
+      });
+
+      // Replace audio track in local stream
+      const newAudioTrack = newAudioStream.getAudioTracks()[0];
+      if (localStream) {
+        const oldAudioTrack = localStream.getAudioTracks()[0];
+        if (oldAudioTrack) {
+          localStream.removeTrack(oldAudioTrack);
+        }
+        localStream.addTrack(newAudioTrack);
+      }
+
+      toast.success('Microphone changed successfully');
+    } catch (error) {
+      console.error('Failed to change audio device:', error);
+      toast.error('Failed to change microphone');
+    }
+  };
+
+  const handleVideoDeviceChange = async (deviceId: string) => {
+    try {
+      setSelectedVideoDevice(deviceId);
+
+      // Stop current video track
+      if (localStream) {
+        localStream.getVideoTracks().forEach(track => track.stop());
+      }
+
+      // Get new video stream with selected device
+      const newVideoStream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: deviceId } },
+      });
+
+      // Replace video track in local stream
+      const newVideoTrack = newVideoStream.getVideoTracks()[0];
+      if (localStream) {
+        const oldVideoTrack = localStream.getVideoTracks()[0];
+        if (oldVideoTrack) {
+          localStream.removeTrack(oldVideoTrack);
+        }
+        localStream.addTrack(newVideoTrack);
+      }
+
+      toast.success('Camera changed successfully');
+    } catch (error) {
+      console.error('Failed to change video device:', error);
+      toast.error('Failed to change camera');
+    }
+  };
+
+  // Chat Overlay Drag/Resize Handlers
+  const handleChatOverlayDragStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingChat(true);
+    setDragStartPos({
+      x: e.clientX - chatOverlayPosition.x,
+      y: e.clientY - chatOverlayPosition.y,
+    });
+  };
+
+  const handleChatOverlayResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizingChat(true);
+    setDragStartPos({
+      x: e.clientX,
+      y: e.clientY,
+    });
+  };
+
+  // Mouse move handler for dragging and resizing
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDraggingChat) {
+        setChatOverlayPosition({
+          x: e.clientX - dragStartPos.x,
+          y: e.clientY - dragStartPos.y,
+        });
+      } else if (isResizingChat) {
+        const deltaX = e.clientX - dragStartPos.x;
+        const deltaY = e.clientY - dragStartPos.y;
+        setChatOverlaySize((prev) => ({
+          width: Math.max(200, prev.width + deltaX),
+          height: Math.max(150, prev.height + deltaY),
+        }));
+        setDragStartPos({ x: e.clientX, y: e.clientY });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingChat(false);
+      setIsResizingChat(false);
+    };
+
+    if (isDraggingChat || isResizingChat) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingChat, isResizingChat, dragStartPos, chatOverlayPosition]);
+
+  // Layout Icon Renderer
+  const renderLayoutIcon = (layoutId: number) => {
+    const iconProps = { className: "w-8 h-8", fill: "currentColor", viewBox: "0 0 24 24" };
+
+    switch (layoutId) {
+      case 1: // Grid 2x2
+        return (
+          <svg {...iconProps}>
+            <rect x="2" y="2" width="9" height="9" rx="1" />
+            <rect x="13" y="2" width="9" height="9" rx="1" />
+            <rect x="2" y="13" width="9" height="9" rx="1" />
+            <rect x="13" y="13" width="9" height="9" rx="1" />
+          </svg>
+        );
+      case 2: // Spotlight (one large, thumbnails on right)
+        return (
+          <svg {...iconProps}>
+            <rect x="2" y="2" width="13" height="20" rx="1" />
+            <rect x="17" y="2" width="5" height="6" rx="1" />
+            <rect x="17" y="9" width="5" height="6" rx="1" />
+            <rect x="17" y="16" width="5" height="6" rx="1" />
+          </svg>
+        );
+      case 3: // Sidebar left
+        return (
+          <svg {...iconProps}>
+            <rect x="2" y="2" width="7" height="20" rx="1" />
+            <rect x="11" y="2" width="11" height="20" rx="1" />
+          </svg>
+        );
+      case 4: // Picture-in-picture
+        return (
+          <svg {...iconProps}>
+            <rect x="2" y="2" width="20" height="20" rx="1" />
+            <rect x="13" y="13" width="7" height="7" rx="1" fill="white" />
+          </svg>
+        );
+      case 5: // Vertical split
+        return (
+          <svg {...iconProps}>
+            <rect x="2" y="2" width="9" height="20" rx="1" />
+            <rect x="13" y="2" width="9" height="20" rx="1" />
+          </svg>
+        );
+      case 6: // Horizontal split
+        return (
+          <svg {...iconProps}>
+            <rect x="2" y="2" width="20" height="9" rx="1" />
+            <rect x="2" y="13" width="20" height="9" rx="1" />
+          </svg>
+        );
+      case 7: // Grid 3x3
+        return (
+          <svg {...iconProps}>
+            <rect x="2" y="2" width="6" height="6" rx="1" />
+            <rect x="9" y="2" width="6" height="6" rx="1" />
+            <rect x="16" y="2" width="6" height="6" rx="1" />
+            <rect x="2" y="9" width="6" height="6" rx="1" />
+            <rect x="9" y="9" width="6" height="6" rx="1" />
+            <rect x="16" y="9" width="6" height="6" rx="1" />
+            <rect x="2" y="16" width="6" height="6" rx="1" />
+            <rect x="9" y="16" width="6" height="6" rx="1" />
+            <rect x="16" y="16" width="6" height="6" rx="1" />
+          </svg>
+        );
+      case 8: // Corner layout (4 corners)
+        return (
+          <svg {...iconProps}>
+            <rect x="2" y="2" width="8" height="8" rx="1" />
+            <rect x="14" y="2" width="8" height="8" rx="1" />
+            <rect x="2" y="14" width="8" height="8" rx="1" />
+            <rect x="14" y="14" width="8" height="8" rx="1" />
+          </svg>
+        );
+      case 9: // Full screen single
+        return (
+          <svg {...iconProps}>
+            <rect x="2" y="2" width="20" height="20" rx="1" />
+          </svg>
+        );
+      default:
+        return <span className="text-white text-xs">{layoutId}</span>;
+    }
+  };
+
   // Chat Layout Handlers
   // Lower Third Handlers
   const handleShowLowerThird = (name: string, title: string) => {
@@ -1130,16 +1365,50 @@ export function Studio() {
                 1080p HD
               </div>
 
-              {/* On-Screen Chat Overlay */}
+              {/* On-Screen Chat Overlay - Draggable & Resizable */}
               {showChatOnStream && (
-                <div className="absolute bottom-20 right-4 w-80 bg-black/80 backdrop-blur-sm rounded-lg p-3 max-h-96 overflow-y-auto">
-                  <div className="space-y-2">
-                    {chatMessages.slice(-5).map((msg, i) => (
-                      <div key={i} className="text-white text-sm">
-                        <span className="font-semibold">{msg.userName}:</span> {msg.message}
-                      </div>
-                    ))}
+                <div
+                  className="absolute bg-black/80 backdrop-blur-sm rounded-lg overflow-hidden"
+                  style={{
+                    left: `${chatOverlayPosition.x || 'auto'}px`,
+                    top: `${chatOverlayPosition.y || 'auto'}px`,
+                    right: chatOverlayPosition.x ? 'auto' : '16px',
+                    bottom: chatOverlayPosition.y ? 'auto' : '80px',
+                    width: `${chatOverlaySize.width}px`,
+                    height: `${chatOverlaySize.height}px`,
+                    cursor: isDraggingChat ? 'grabbing' : 'default',
+                  }}
+                >
+                  {/* Drag Handle */}
+                  <div
+                    onMouseDown={handleChatOverlayDragStart}
+                    className="bg-gray-800/50 px-3 py-2 flex items-center justify-between cursor-grab active:cursor-grabbing border-b border-gray-700"
+                  >
+                    <span className="text-white text-xs font-semibold">Live Chat</span>
+                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                    </svg>
                   </div>
+
+                  {/* Chat Messages */}
+                  <div className="p-3 overflow-y-auto" style={{ height: `calc(100% - 50px)` }}>
+                    <div className="space-y-2">
+                      {chatMessages.slice(-10).map((msg, i) => (
+                        <div key={i} className="text-white text-sm">
+                          <span className="font-semibold">{msg.userName}:</span> {msg.message}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Resize Handle */}
+                  <div
+                    onMouseDown={handleChatOverlayResizeStart}
+                    className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize"
+                    style={{
+                      background: 'linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.3) 50%)',
+                    }}
+                  />
                 </div>
               )}
 
@@ -1172,7 +1441,7 @@ export function Studio() {
             <button
               key={layoutId}
               onClick={() => setSelectedLayout(layoutId)}
-              className="rounded hover:bg-gray-600 transition-all flex items-center justify-center flex-shrink-0"
+              className="rounded hover:bg-gray-600 transition-all flex items-center justify-center flex-shrink-0 text-white"
               style={{
                 width: '56px',
                 height: '56px',
@@ -1180,7 +1449,7 @@ export function Studio() {
               }}
               title={`Layout ${layoutId}`}
             >
-              <span className="text-white text-xs">{layoutId}</span>
+              {renderLayoutIcon(layoutId)}
             </button>
           ))}
         </div>
@@ -1755,9 +2024,8 @@ export function Studio() {
                     <button
                       key={device.deviceId}
                       onClick={() => {
-                        setSelectedAudioDevice(device.deviceId);
+                        handleAudioDeviceChange(device.deviceId);
                         setShowMicSelector(false);
-                        // TODO: Apply device change to stream
                       }}
                       className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
                         selectedAudioDevice === device.deviceId ? 'bg-blue-50' : ''
@@ -1824,9 +2092,8 @@ export function Studio() {
                     <button
                       key={device.deviceId}
                       onClick={() => {
-                        setSelectedVideoDevice(device.deviceId);
+                        handleVideoDeviceChange(device.deviceId);
                         setShowCameraSelector(false);
-                        // TODO: Apply device change to stream
                       }}
                       className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
                         selectedVideoDevice === device.deviceId ? 'bg-blue-50' : ''
@@ -1884,7 +2151,7 @@ export function Studio() {
                   </label>
                   <select
                     value={selectedVideoDevice}
-                    onChange={(e) => setSelectedVideoDevice(e.target.value)}
+                    onChange={(e) => handleVideoDeviceChange(e.target.value)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     <option value="">Select Camera</option>
@@ -1906,7 +2173,7 @@ export function Studio() {
                   </label>
                   <select
                     value={selectedAudioDevice}
-                    onChange={(e) => setSelectedAudioDevice(e.target.value)}
+                    onChange={(e) => handleAudioDeviceChange(e.target.value)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     <option value="">Select Microphone</option>
