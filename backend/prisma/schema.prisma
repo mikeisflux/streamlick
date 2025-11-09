@@ -11,6 +11,7 @@ datasource db {
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
+  password  String   // Hashed password
   name      String?
   avatarUrl String?  @map("avatar_url")
   planType  String   @default("free") @map("plan_type") // free, core, advanced, teams, business

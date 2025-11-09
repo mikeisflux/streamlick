@@ -2,12 +2,13 @@ import api from './api';
 import { User } from '../types';
 
 export const authService = {
-  async sendMagicLink(email: string): Promise<void> {
-    await api.post('/auth/send-magic-link', { email });
+  async login(email: string, password: string): Promise<{ user: User; accessToken: string; refreshToken: string }> {
+    const response = await api.post('/auth/login', { email, password });
+    return response.data;
   },
 
-  async verifyToken(token: string): Promise<{ user: User; accessToken: string }> {
-    const response = await api.post('/auth/verify-token', { token });
+  async register(email: string, password: string, name?: string): Promise<{ user: User; accessToken: string; refreshToken: string }> {
+    const response = await api.post('/auth/register', { email, password, name });
     return response.data;
   },
 
@@ -19,11 +20,13 @@ export const authService = {
   async logout(): Promise<void> {
     await api.post('/auth/logout');
     localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
   },
 
-  setAuth(accessToken: string, user: User): void {
+  setAuth(accessToken: string, refreshToken: string, user: User): void {
     localStorage.setItem('accessToken', accessToken);
+    localStorage.setItem('refreshToken', refreshToken);
     localStorage.setItem('user', JSON.stringify(user));
   },
 
@@ -34,5 +37,10 @@ export const authService = {
 
   isAuthenticated(): boolean {
     return !!localStorage.getItem('accessToken');
+  },
+
+  isAdmin(): boolean {
+    const user = this.getUser();
+    return user?.role === 'admin';
   },
 };

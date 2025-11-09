@@ -1,54 +1,33 @@
 import { Router } from 'express';
+import bcrypt from 'bcryptjs';
 import prisma from '../database/prisma';
-import { generateMagicLinkToken, verifyMagicLinkToken, generateAccessToken, generateRefreshToken } from '../auth/jwt';
-import { sendMagicLink } from '../services/email';
+import { generateAccessToken, generateRefreshToken } from '../auth/jwt';
 import { authenticate, AuthRequest } from '../auth/middleware';
 import logger from '../utils/logger';
 
 const router = Router();
 
-// Send magic link
-router.post('/send-magic-link', async (req, res) => {
+// Login with email/password
+router.post('/login', async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, password } = req.body;
 
-    if (!email || !email.includes('@')) {
-      return res.status(400).json({ error: 'Valid email is required' });
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Find or create user
-    let user = await prisma.user.findUnique({ where: { email } });
+    // Find user by email
+    const user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
-      user = await prisma.user.create({
-        data: { email, planType: 'free' },
-      });
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const token = generateMagicLinkToken(email);
-    await sendMagicLink(email, token);
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, user.password);
 
-    res.json({ message: 'Magic link sent to your email' });
-  } catch (error) {
-    logger.error('Send magic link error:', error);
-    res.status(500).json({ error: 'Failed to send magic link' });
-  }
-});
-
-// Verify magic link token
-router.post('/verify-token', async (req, res) => {
-  try {
-    const { token } = req.body;
-
-    if (!token) {
-      return res.status(400).json({ error: 'Token is required' });
-    }
-
-    const payload = verifyMagicLinkToken(token);
-    const user = await prisma.user.findUnique({ where: { email: payload.email } });
-
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     const accessToken = generateAccessToken({ userId: user.id, email: user.email, role: user.role as 'user' | 'admin' });
@@ -67,8 +46,59 @@ router.post('/verify-token', async (req, res) => {
       },
     });
   } catch (error) {
-    logger.error('Verify token error:', error);
-    res.status(401).json({ error: 'Invalid or expired token' });
+    logger.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Register new user (optional - if you want to allow registration)
+router.post('/register', async (req, res) => {
+  try {
+    const { email, password, name } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+
+    if (existingUser) {
+      return res.status(409).json({ error: 'User already exists' });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        name,
+        planType: 'free',
+        role: 'user'
+      },
+    });
+
+    const accessToken = generateAccessToken({ userId: user.id, email: user.email, role: user.role as 'user' | 'admin' });
+    const refreshToken = generateRefreshToken({ userId: user.id, email: user.email, role: user.role as 'user' | 'admin' });
+
+    res.json({
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        planType: user.planType,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    logger.error('Register error:', error);
+    res.status(500).json({ error: 'Registration failed' });
   }
 });
 
