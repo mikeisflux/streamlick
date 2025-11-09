@@ -355,7 +355,7 @@ describe('Participant Management Integration Tests', () => {
     beforeEach(async () => {
       participant = await prisma.participant.create({
         data: {
-          broadcastId: testBroadcast.id,
+          broadcast: { connect: { id: testBroadcast.id } },
           user: { connect: { id: guestUser.id } },
           name: 'Bannable Guest',
           role: 'guest',

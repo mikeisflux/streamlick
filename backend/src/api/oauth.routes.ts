@@ -42,7 +42,7 @@ const LINKEDIN_SCOPES = ['w_member_social', 'r_liteprofile', 'r_organization_soc
 
 // Step 1: Initiate YouTube OAuth
 router.get('/youtube/authorize', authenticate, (req, res) => {
-  const userId = req.user!.id;
+  const userId = req.user!.userId;
   const state = Buffer.from(JSON.stringify({ userId, platform: 'youtube' })).toString('base64');
 
   const params = new URLSearchParams({
@@ -130,7 +130,7 @@ router.get('/youtube/callback', async (req, res) => {
 
 // Step 1: Initiate Facebook OAuth
 router.get('/facebook/authorize', authenticate, (req, res) => {
-  const userId = req.user!.id;
+  const userId = req.user!.userId;
   const state = Buffer.from(JSON.stringify({ userId, platform: 'facebook' })).toString('base64');
 
   const params = new URLSearchParams({
@@ -221,7 +221,7 @@ router.get('/facebook/callback', async (req, res) => {
 
 // Step 1: Initiate Twitch OAuth
 router.get('/twitch/authorize', authenticate, (req, res) => {
-  const userId = req.user!.id;
+  const userId = req.user!.userId;
   const state = Buffer.from(JSON.stringify({ userId, platform: 'twitch' })).toString('base64');
 
   const params = new URLSearchParams({
@@ -311,7 +311,7 @@ router.get('/twitch/callback', async (req, res) => {
 
 // Step 1: Initiate X OAuth
 router.get('/x/authorize', authenticate, (req, res) => {
-  const userId = req.user!.id;
+  const userId = req.user!.userId;
   const state = Buffer.from(JSON.stringify({ userId, platform: 'x' })).toString('base64');
 
   // Generate PKCE code verifier and challenge
@@ -408,7 +408,7 @@ router.get('/x/callback', async (req, res) => {
 // Step 1: Setup Rumble with API Key
 router.post('/rumble/setup', authenticate, async (req, res) => {
   try {
-    const userId = req.user!.id;
+    const userId = req.user!.userId;
     const { apiKey, channelUrl } = req.body;
 
     if (!apiKey || !channelUrl) {
@@ -467,7 +467,7 @@ router.post('/rumble/setup', authenticate, async (req, res) => {
 
 // Step 1: Initiate LinkedIn OAuth
 router.get('/linkedin/authorize', authenticate, (req, res) => {
-  const userId = req.user!.id;
+  const userId = req.user!.userId;
   const state = Buffer.from(JSON.stringify({ userId, platform: 'linkedin' })).toString('base64');
 
   const params = new URLSearchParams({
@@ -550,7 +550,7 @@ router.get('/linkedin/callback', async (req, res) => {
 router.delete('/disconnect/:destinationId', authenticate, async (req, res) => {
   try {
     const { destinationId } = req.params;
-    const userId = req.user!.id;
+    const userId = req.user!.userId;
 
     // Verify ownership
     const destination = await prisma.destination.findFirst({
