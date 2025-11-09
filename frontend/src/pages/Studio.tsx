@@ -38,6 +38,8 @@ import { backgroundProcessorService } from '../services/background-processor.ser
 import { clipRecordingService } from '../services/clip-recording.service';
 import { captionService, Caption, POPULAR_LANGUAGES } from '../services/caption.service';
 import { backgroundRemovalService, BackgroundOptions } from '../services/background-removal.service';
+import { verticalCompositorService } from '../services/vertical-compositor.service';
+import { analyticsService, EngagementMetrics, StreamInsight } from '../services/analytics.service';
 import { Button } from '../components/Button';
 import toast from 'react-hot-toast';
 import api from '../services/api';
@@ -143,6 +145,18 @@ export function Studio() {
     edgeSoftness: 0.3,
   });
   const [processedStream, setProcessedStream] = useState<MediaStream | null>(null);
+
+  // Vertical Simulcast state
+  const [verticalSimulcastEnabled, setVerticalSimulcastEnabled] = useState(false);
+  const [verticalStream, setVerticalStream] = useState<MediaStream | null>(null);
+  const [verticalResolution, setVerticalResolution] = useState<'1080x1920' | '720x1280' | '540x960'>('1080x1920');
+  const [showVerticalSettings, setShowVerticalSettings] = useState(false);
+
+  // Analytics state
+  const [analyticsEnabled, setAnalyticsEnabled] = useState(false);
+  const [showAnalyticsDashboard, setShowAnalyticsDashboard] = useState(false);
+  const [analyticsMetrics, setAnalyticsMetrics] = useState<EngagementMetrics | null>(null);
+  const [analyticsInsights, setAnalyticsInsights] = useState<StreamInsight[]>([]);
 
   // Chat overlay position and size state
   const [chatOverlayPosition, setChatOverlayPosition] = useState({ x: 0, y: 0 });
@@ -1322,6 +1336,88 @@ export function Studio() {
     };
   }, [backgroundRemovalEnabled, localStream, backgroundRemovalOptions]);
 
+  // Manage Vertical Simulcast lifecycle
+  useEffect(() => {
+    if (verticalSimulcastEnabled && localStream) {
+      const startVerticalSimulcast = async () => {
+        try {
+          // Get the source stream (processed or original)
+          const sourceStream = processedStream || compositorService.getOutputStream() || localStream;
+
+          // Start vertical compositor
+          const outputStream = await verticalCompositorService.start(sourceStream, {
+            outputWidth: parseInt(verticalResolution.split('x')[0]),
+            outputHeight: parseInt(verticalResolution.split('x')[1]),
+            cropMode: 'center',
+            smoothing: 0.15,
+          });
+
+          setVerticalStream(outputStream);
+          toast.success(`Vertical simulcast enabled (${verticalResolution} 9:16)`);
+        } catch (error) {
+          console.error('Failed to start vertical simulcast:', error);
+          toast.error('Failed to enable vertical simulcast');
+          setVerticalSimulcastEnabled(false);
+        }
+      };
+
+      startVerticalSimulcast();
+    } else if (!verticalSimulcastEnabled && verticalCompositorService.active()) {
+      verticalCompositorService.stop();
+      setVerticalStream(null);
+      toast.success('Vertical simulcast stopped');
+    }
+
+    return () => {
+      if (verticalCompositorService.active()) {
+        verticalCompositorService.stop();
+      }
+    };
+  }, [verticalSimulcastEnabled, localStream, processedStream, verticalResolution]);
+
+  // Manage Analytics lifecycle
+  useEffect(() => {
+    if (analyticsEnabled) {
+      analyticsService.startTracking();
+      toast.success('Analytics tracking started');
+
+      // Update metrics every 10 seconds
+      const metricsInterval = setInterval(() => {
+        setAnalyticsMetrics(analyticsService.getEngagementMetrics());
+        setAnalyticsInsights(analyticsService.generateInsights());
+      }, 10000);
+
+      return () => {
+        clearInterval(metricsInterval);
+        analyticsService.stopTracking();
+      };
+    } else if (!analyticsEnabled && analyticsService.active()) {
+      analyticsService.stopTracking();
+      toast.success('Analytics tracking stopped');
+    }
+  }, [analyticsEnabled]);
+
+  // Simulate viewer events for analytics (demo purposes)
+  useEffect(() => {
+    if (!analyticsEnabled) return;
+
+    // Simulate a viewer joining
+    const viewerId = `viewer-${Math.random().toString(36).substr(2, 9)}`;
+    analyticsService.recordViewerJoin(viewerId, { source: 'demo' });
+
+    // Simulate random engagement events
+    const engagementInterval = setInterval(() => {
+      if (Math.random() > 0.7) {
+        analyticsService.recordEngagement(viewerId, 'chat', { message: 'Demo engagement' });
+      }
+    }, 15000);
+
+    return () => {
+      clearInterval(engagementInterval);
+      analyticsService.recordViewerLeave(viewerId);
+    };
+  }, [analyticsEnabled]);
+
   // Chat Layout Handlers
   // Lower Third Handlers
   const handleShowLowerThird = (name: string, title: string) => {
@@ -1752,6 +1848,33 @@ export function Studio() {
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setVerticalSimulcastEnabled(!verticalSimulcastEnabled)}
+              className={`p-2 rounded ${
+                verticalSimulcastEnabled ? 'bg-pink-600 hover:bg-pink-700' : 'bg-gray-700 hover:bg-gray-600'
+              } text-white transition-colors`}
+              title={verticalSimulcastEnabled ? 'Disable Vertical Simulcast' : 'Enable Vertical Simulcast (9:16)'}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => {
+                setAnalyticsEnabled(!analyticsEnabled);
+                if (!analyticsEnabled) {
+                  setShowAnalyticsDashboard(true);
+                }
+              }}
+              className={`p-2 rounded ${
+                analyticsEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-700 hover:bg-gray-600'
+              } text-white transition-colors`}
+              title={analyticsEnabled ? 'Disable Analytics' : 'Enable Analytics Dashboard'}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
             </button>
           </div>
@@ -2220,6 +2343,182 @@ export function Studio() {
           producerId={broadcast?.userId}
           onClose={() => setShowProducerMode(false)}
         />
+      )}
+
+      {/* Analytics Dashboard Modal */}
+      {showAnalyticsDashboard && analyticsEnabled && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 rounded-lg shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-700 flex items-center justify-between bg-gray-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Analytics Dashboard</h2>
+                  <p className="text-sm text-gray-400">Real-time stream insights & AI recommendations</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAnalyticsDashboard(false)}
+                className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Metrics Grid */}
+              <div className="grid grid-cols-4 gap-4">
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                  <div className="text-sm text-gray-400 mb-1">Total Viewers</div>
+                  <div className="text-3xl font-bold text-white">{analyticsMetrics?.totalViewers || 0}</div>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                  <div className="text-sm text-gray-400 mb-1">Current Viewers</div>
+                  <div className="text-3xl font-bold text-green-400">{analyticsMetrics?.currentViewers || 0}</div>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                  <div className="text-sm text-gray-400 mb-1">Peak Viewers</div>
+                  <div className="text-3xl font-bold text-blue-400">{analyticsMetrics?.peakViewers || 0}</div>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                  <div className="text-sm text-gray-400 mb-1">Avg Watch Time</div>
+                  <div className="text-3xl font-bold text-purple-400">
+                    {Math.round((analyticsMetrics?.averageWatchTime || 0) / 60)}m
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Insights */}
+              {analyticsInsights && analyticsInsights.length > 0 && (
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    AI Insights & Recommendations
+                  </h3>
+                  <div className="space-y-3">
+                    {analyticsInsights.map((insight, index) => (
+                      <div
+                        key={index}
+                        className={`p-3 rounded-lg border ${
+                          insight.type === 'warning'
+                            ? 'bg-red-900/20 border-red-500'
+                            : insight.type === 'success'
+                            ? 'bg-green-900/20 border-green-500'
+                            : 'bg-blue-900/20 border-blue-500'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0">
+                            {insight.type === 'warning' && (
+                              <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                            )}
+                            {insight.type === 'success' && (
+                              <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            )}
+                            {insight.type === 'info' && (
+                              <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-white mb-1">{insight.message}</h4>
+                            <p className="text-sm text-gray-300">{insight.suggestion}</p>
+                            <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
+                              <span className="px-2 py-1 bg-gray-700 rounded">{insight.category}</span>
+                              <span>Severity: {insight.severity}/10</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Engagement Details */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                  <h3 className="text-lg font-semibold text-white mb-4">Engagement Rate</h3>
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-green-500 to-blue-500"
+                          style={{ width: `${Math.min(((analyticsMetrics?.engagementRate || 0) / 3) * 100, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="text-2xl font-bold text-white">
+                      {((analyticsMetrics?.engagementRate || 0) * 100).toFixed(0)}%
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-400 mt-2">
+                    Interactions per viewer
+                  </p>
+                </div>
+
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                  <h3 className="text-lg font-semibold text-white mb-4">Drop-off Rate</h3>
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-yellow-500 to-red-500"
+                          style={{ width: `${(analyticsMetrics?.dropOffRate || 0) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="text-2xl font-bold text-white">
+                      {((analyticsMetrics?.dropOffRate || 0) * 100).toFixed(0)}%
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-400 mt-2">
+                    Viewers who left
+                  </p>
+                </div>
+              </div>
+
+              {/* Heatmap Placeholder */}
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <h3 className="text-lg font-semibold text-white mb-4">Viewer Activity Heatmap</h3>
+                <div className="h-32 bg-gray-700 rounded-lg flex items-center justify-center">
+                  <div className="text-gray-400 text-sm">Heatmap visualization (requires charting library)</div>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">
+                  Shows when viewers joined/left during the stream
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-700 bg-gray-800 flex items-center justify-between">
+              <div className="text-sm text-gray-400">
+                Tracking duration: {Math.round(analyticsService.getStreamDuration() / 60)} minutes
+              </div>
+              <button
+                onClick={() => setShowAnalyticsDashboard(false)}
+                className="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Microphone Device Selector Popup */}
