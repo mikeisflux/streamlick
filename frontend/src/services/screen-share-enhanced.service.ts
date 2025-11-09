@@ -9,7 +9,8 @@
  * - Multiple screen share support
  */
 
-import { io, Socket } from 'socket.io-client';
+import { io } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
 import { EventEmitter } from 'events';
 
 export interface ScreenShareParticipant {
