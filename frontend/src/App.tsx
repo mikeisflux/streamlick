@@ -14,6 +14,7 @@ import { AdminLogs } from './pages/AdminLogs';
 import AdminSettings from './pages/AdminSettings';
 import AdminTesting from './pages/AdminTesting';
 import { AdminServers } from './pages/AdminServers';
+import { Admin } from './pages/Admin';
 import { Privacy } from './pages/Privacy';
 import { Terms } from './pages/Terms';
 import { FAQ } from './pages/FAQ';
@@ -95,6 +96,14 @@ function App() {
             <PrivateRoute>
               <Analytics />
             </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <Admin />
+            </AdminRoute>
           }
         />
         <Route
