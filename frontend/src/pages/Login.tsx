@@ -21,12 +21,8 @@ export function Login() {
       login(accessToken, refreshToken, user);
       toast.success(`Welcome back, ${user.name || user.email}!`);
 
-      // Redirect based on role
-      if (user.role === 'admin') {
-        navigate('/admin');
-      } else {
-        navigate('/dashboard');
-      }
+      // All users go to dashboard (admins can access /admin by typing URL)
+      navigate('/dashboard');
     } catch (error: any) {
       console.error('Login error:', error);
       toast.error(error.response?.data?.error || 'Invalid email or password');
