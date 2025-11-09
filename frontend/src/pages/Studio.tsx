@@ -1668,6 +1668,23 @@ export function Studio() {
       >
         <RecordingControls broadcastId={broadcastId} />
       </Drawer>
+
+      {/* Clip Manager Modal */}
+      {showClipManager && (
+        <ClipManager
+          broadcastId={broadcastId}
+          onClose={() => setShowClipManager(false)}
+        />
+      )}
+
+      {/* Producer Mode Modal */}
+      {showProducerMode && (
+        <ProducerMode
+          broadcastId={broadcastId}
+          producerId={broadcast?.userId}
+          onClose={() => setShowProducerMode(false)}
+        />
+      )}
     </div>
   );
 }
