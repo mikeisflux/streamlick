@@ -1,15 +1,28 @@
 import { useNavigate } from 'react-router-dom';
+import { useBranding } from '../context/BrandingContext';
 import { Button } from '../components/Button';
 
 export function Landing() {
   const navigate = useNavigate();
+  const { branding } = useBranding();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-500 to-purple-600">
       {/* Hero Section */}
       <header className="container mx-auto px-4 py-6">
         <nav className="flex items-center justify-between">
-          <div className="text-white text-2xl font-bold">🎥 Streamlick</div>
+          {branding?.logoUrl ? (
+            <img
+              src={branding.logoUrl.startsWith('http') ? branding.logoUrl : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${branding.logoUrl}`}
+              alt={branding.config?.platformName || 'Logo'}
+              className="h-10 object-contain cursor-pointer"
+              onClick={() => navigate('/')}
+            />
+          ) : (
+            <div className="text-white text-2xl font-bold cursor-pointer" onClick={() => navigate('/')}>
+              {branding?.config?.platformName || 'Streamlick'}
+            </div>
+          )}
           <Button variant="secondary" onClick={() => navigate('/login')}>
             Sign In
           </Button>
@@ -47,103 +60,129 @@ export function Landing() {
         {/* Features */}
         <section className="container mx-auto px-4 py-20">
           <div className="grid md:grid-cols-3 gap-8">
+            {/* AI Live Captions */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white border-2 border-yellow-300">
+              <div className="text-4xl mb-4">🤖</div>
+              <h3 className="text-2xl font-bold mb-2">AI Live Captions</h3>
+              <p className="text-white/80">
+                Real-time speech-to-text powered by AI. Automatically add professional captions to your stream with 95%+ accuracy in multiple languages.
+              </p>
+            </div>
+
+            {/* Instant Scene Clips */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white border-2 border-yellow-300">
+              <div className="text-4xl mb-4">✂️</div>
+              <h3 className="text-2xl font-bold mb-2">Instant Scene Clips</h3>
+              <p className="text-white/80">
+                Create viral clips during your live stream with one click. Instantly save and download the last 30 seconds in HD - perfect for social media highlights.
+              </p>
+            </div>
+
+            {/* Producer Mode */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white border-2 border-yellow-300">
+              <div className="text-4xl mb-4">🎛️</div>
+              <h3 className="text-2xl font-bold mb-2">Producer Mode</h3>
+              <p className="text-white/80">
+                Professional broadcast control room with pre-show lobby, countdown timers, and instant scene switching. Control everything like a TV studio.
+              </p>
+            </div>
+
+            {/* Advanced Scene Manager */}
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
               <div className="text-4xl mb-4">🎬</div>
-              <h3 className="text-2xl font-bold mb-2">Multi-Participant Streaming</h3>
+              <h3 className="text-2xl font-bold mb-2">Advanced Scene Manager</h3>
               <p className="text-white/80">
-                Invite up to 10 guests to join your broadcast. Perfect for interviews, panels,
-                and webinars.
+                Create unlimited scenes with professional transitions, templates, and hotkeys. Switch between layouts instantly during live streams like a pro.
               </p>
             </div>
 
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
-              <div className="text-4xl mb-4">📡</div>
-              <h3 className="text-2xl font-bold mb-2">Multistreaming</h3>
-              <p className="text-white/80">
-                Stream to YouTube, Facebook, LinkedIn, Twitch, X, Rumble, and any custom RTMP service
-                (Restream, Castr, Wowza, or your own server) simultaneously.
-              </p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
-              <div className="text-4xl mb-4">🎨</div>
-              <h3 className="text-2xl font-bold mb-2">Custom Branding</h3>
-              <p className="text-white/80">
-                Add logos, overlays, banners, and custom backgrounds to make your streams look
-                professional.
-              </p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
-              <div className="text-4xl mb-4">💬</div>
-              <h3 className="text-2xl font-bold mb-2">Aggregate Chat</h3>
-              <p className="text-white/80">
-                See and display comments from all platforms in one place. Feature messages on
-                screen.
-              </p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
-              <div className="text-4xl mb-4">🖥️</div>
-              <h3 className="text-2xl font-bold mb-2">Screen Sharing</h3>
-              <p className="text-white/80">
-                Share your screen for presentations, demos, and tutorials with just one click.
-              </p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
-              <div className="text-4xl mb-4">📹</div>
-              <h3 className="text-2xl font-bold mb-2">Recording & Storage</h3>
-              <p className="text-white/80">
-                Record your streams in HD and access them anytime with unlimited cloud storage.
-              </p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
-              <div className="text-4xl mb-4">🎬</div>
-              <h3 className="text-2xl font-bold mb-2">Scene Manager</h3>
-              <p className="text-white/80">
-                Create multiple scenes with professional transitions. Switch between layouts instantly during your stream.
-              </p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
-              <div className="text-4xl mb-4">👥</div>
-              <h3 className="text-2xl font-bold mb-2">Real-Time Viewer Count</h3>
-              <p className="text-white/80">
-                Track viewers across all platforms in real-time with detailed analytics and platform breakdown.
-              </p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
-              <div className="text-4xl mb-4">📝</div>
-              <h3 className="text-2xl font-bold mb-2">Lower Thirds</h3>
-              <p className="text-white/80">
-                Add professional name and title overlays for guests with customizable styles and animations.
-              </p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
-              <div className="text-4xl mb-4">🛡️</div>
-              <h3 className="text-2xl font-bold mb-2">Chat Moderation</h3>
-              <p className="text-white/80">
-                Filter profanity, ban users, and manage chat across all platforms with powerful moderation tools.
-              </p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
-              <div className="text-4xl mb-4">🎨</div>
-              <h3 className="text-2xl font-bold mb-2">Chat Layout Customizer</h3>
-              <p className="text-white/80">
-                Position and style your chat overlay with 5 layouts, 8 positions, and 4 professional presets.
-              </p>
-            </div>
-
+            {/* AI Background Effects */}
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
               <div className="text-4xl mb-4">🎭</div>
-              <h3 className="text-2xl font-bold mb-2">Background Effects</h3>
+              <h3 className="text-2xl font-bold mb-2">AI Background Removal</h3>
               <p className="text-white/80">
-                Blur backgrounds, add custom images, or use virtual backgrounds powered by AI.
+                Remove, blur, or replace backgrounds in real-time using AI. Add virtual backgrounds, custom images, or green screen effects without special equipment.
+              </p>
+            </div>
+
+            {/* Multi-Participant Streaming */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">👥</div>
+              <h3 className="text-2xl font-bold mb-2">Multi-Participant Streaming</h3>
+              <p className="text-white/80">
+                Invite up to 10 guests to join your broadcast. Perfect for interviews, panels, podcasts, and webinars with professional video quality.
+              </p>
+            </div>
+
+            {/* Multistreaming */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">📡</div>
+              <h3 className="text-2xl font-bold mb-2">Multistreaming to 6+ Platforms</h3>
+              <p className="text-white/80">
+                Stream to YouTube, Facebook, LinkedIn, Twitch, X, Rumble, and any custom RTMP service (Restream, Castr, Wowza) simultaneously with zero delay.
+              </p>
+            </div>
+
+            {/* Aggregate Chat */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">💬</div>
+              <h3 className="text-2xl font-bold mb-2">Unified Chat & Moderation</h3>
+              <p className="text-white/80">
+                See comments from ALL platforms in one place. Feature messages on screen, filter profanity, ban users, and moderate across all platforms instantly.
+              </p>
+            </div>
+
+            {/* Custom Branding */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">🎨</div>
+              <h3 className="text-2xl font-bold mb-2">Custom Branding & Overlays</h3>
+              <p className="text-white/80">
+                Upload your logo, add custom overlays, banners, lower thirds, and backgrounds. Make your streams look professional and on-brand.
+              </p>
+            </div>
+
+            {/* Screen Sharing */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">🖥️</div>
+              <h3 className="text-2xl font-bold mb-2">Screen Sharing & Presentations</h3>
+              <p className="text-white/80">
+                Share your screen for presentations, demos, and tutorials with one click. Switch between webcam and screen seamlessly.
+              </p>
+            </div>
+
+            {/* Recording & Storage */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">📹</div>
+              <h3 className="text-2xl font-bold mb-2">Cloud Recording & Storage</h3>
+              <p className="text-white/80">
+                Record your streams in 1080p HD and access them anytime with unlimited cloud storage. Download or share recordings instantly.
+              </p>
+            </div>
+
+            {/* Real-Time Viewer Count */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">📊</div>
+              <h3 className="text-2xl font-bold mb-2">Real-Time Analytics</h3>
+              <p className="text-white/80">
+                Track viewers across all platforms in real-time. See detailed analytics, platform breakdown, engagement metrics, and viewer history.
+              </p>
+            </div>
+
+            {/* Lower Thirds */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">📝</div>
+              <h3 className="text-2xl font-bold mb-2">Animated Lower Thirds</h3>
+              <p className="text-white/80">
+                Add professional name and title overlays for guests with customizable styles, colors, and smooth animations.
+              </p>
+            </div>
+
+            {/* Chat Layout Customizer */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-white">
+              <div className="text-4xl mb-4">💬</div>
+              <h3 className="text-2xl font-bold mb-2">Chat Layout Customizer</h3>
+              <p className="text-white/80">
+                Position and style your chat overlay with 5 layouts, 8 positions, and 4 professional presets. Full control over appearance.
               </p>
             </div>
 
