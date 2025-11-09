@@ -4,6 +4,7 @@ export interface User {
   name?: string;
   avatarUrl?: string;
   planType: 'pro'; // Single $20/month plan with all features
+  role?: 'user' | 'admin'; // User role for access control
   createdAt: string;
 }
 

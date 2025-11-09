@@ -1,31 +1,23 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { broadcastService } from '../services/broadcast.service';
 import { socketService } from '../services/socket.service';
 import { webrtcService } from '../services/webrtc.service';
 import { compositorService } from '../services/compositor.service';
-import { recordingService } from '../services/recording.service';
-import { hotkeyService } from '../services/hotkey.service';
 import { useMedia } from '../hooks/useMedia';
 import { useStudioStore } from '../store/studioStore';
 import { ParticipantVideo } from '../components/ParticipantVideo';
 import { VideoGrid } from '../components/VideoGrid';
 import { ChatOverlay, ChatMessage } from '../components/ChatOverlay';
-import { ChatLayoutCustomizer } from '../components/ChatLayoutCustomizer';
-import { ChatModeration } from '../components/ChatModeration';
 import { StreamHealthMonitor } from '../components/StreamHealthMonitor';
 import { BitrateControl } from '../components/BitrateControl';
 import { HotkeyReference } from '../components/HotkeyReference';
 import { HotkeyFeedback, useHotkeyFeedback } from '../components/HotkeyFeedback';
 import { MediaLibrary } from '../components/MediaLibrary';
 import { BackgroundEffects, BackgroundEffect } from '../components/BackgroundEffects';
-import { DraggableParticipant } from '../components/DraggableParticipant';
 import { SceneManager, Scene } from '../components/SceneManager';
 import { ViewerCount } from '../components/ViewerCount';
 import { LowerThird } from '../components/LowerThird';
-import { ScreenShareManager } from '../components/ScreenShareManager';
-import { PlatformLogos } from '../components/PlatformLogos';
-import { clipPlayerService } from '../services/clip-player.service';
 import { backgroundProcessorService } from '../services/background-processor.service';
 import { Button } from '../components/Button';
 import toast from 'react-hot-toast';
@@ -178,7 +170,7 @@ export function ProducerStudio() {
 
     const handleParticipantLeft = ({ participantId }: any) => {
       console.log('Participant left:', participantId);
-      toast.info('Participant left');
+      toast.success('Participant left');
       setRemoteParticipants((prev) => {
         const updated = new Map(prev);
         updated.delete(participantId);
@@ -411,7 +403,9 @@ export function ProducerStudio() {
                     </span>
                     <span className="text-red-500 text-xs font-semibold">LIVE</span>
                   </div>
-                  <ViewerCount counts={viewerCounts} />
+                  <div className="text-xs text-gray-300 flex items-center gap-2">
+                    <span>👥 {viewerCounts.total} viewers</span>
+                  </div>
                 </>
               )}
             </div>
@@ -716,9 +710,15 @@ export function ProducerStudio() {
 
       {showLowerThird && (
         <LowerThird
-          name={lowerThirdText.name}
-          title={lowerThirdText.title}
-          onHide={() => setShowLowerThird(false)}
+          data={{
+            id: Date.now().toString(),
+            name: lowerThirdText.name,
+            title: lowerThirdText.title,
+            duration: 5000,
+            style: 'modern',
+            position: 'left',
+          }}
+          onComplete={() => setShowLowerThird(false)}
         />
       )}
 

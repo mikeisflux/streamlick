@@ -19,12 +19,9 @@ import { HotkeyReference } from '../components/HotkeyReference';
 import { HotkeyFeedback, useHotkeyFeedback } from '../components/HotkeyFeedback';
 import { MediaLibrary } from '../components/MediaLibrary';
 import { BackgroundEffects, BackgroundEffect } from '../components/BackgroundEffects';
-import { DraggableParticipant } from '../components/DraggableParticipant';
 import { SceneManager, Scene } from '../components/SceneManager';
 import { ViewerCount } from '../components/ViewerCount';
 import { LowerThird } from '../components/LowerThird';
-import { ScreenShareManager } from '../components/ScreenShareManager';
-import { PlatformLogos } from '../components/PlatformLogos';
 import { Drawer } from '../components/Drawer';
 import { DestinationsPanel } from '../components/DestinationsPanel';
 import { InviteGuestsPanel } from '../components/InviteGuestsPanel';
@@ -169,7 +166,7 @@ export function StudioEnhanced() {
         toggleAudio();
         const message = audioEnabled ? 'Microphone muted' : 'Microphone unmuted';
         showFeedback(message, audioEnabled ? '🔇' : '🎤');
-        toast.info(message);
+        toast.success(message);
       },
     });
 
@@ -181,7 +178,7 @@ export function StudioEnhanced() {
         toggleVideo();
         const message = videoEnabled ? 'Camera off' : 'Camera on';
         showFeedback(message, videoEnabled ? '📵' : '📹');
-        toast.info(message);
+        toast.success(message);
       },
     });
 
@@ -283,7 +280,7 @@ export function StudioEnhanced() {
           compositorService.setShowChat(newValue);
           const message = newValue ? 'Chat visible on stream' : 'Chat hidden from stream';
           showFeedback(message, '💬');
-          toast.info(message);
+          toast.success(message);
           return newValue;
         });
       },
@@ -417,7 +414,7 @@ export function StudioEnhanced() {
 
     const handleParticipantLeft = ({ participantId }: any) => {
       console.log('Participant left:', participantId);
-      toast.info('A participant left');
+      toast.success('A participant left');
 
       setRemoteParticipants((prev) => {
         const updated = new Map(prev);
@@ -464,7 +461,7 @@ export function StudioEnhanced() {
 
     const handleParticipantDemoted = ({ participantId, role }: any) => {
       console.log('Participant demoted:', participantId, role);
-      toast.info('Participant moved to backstage');
+      toast.success('Participant moved to backstage');
       setRemoteParticipants((prev) => {
         const updated = new Map(prev);
         const participant = updated.get(participantId);
@@ -684,7 +681,7 @@ export function StudioEnhanced() {
   const handleLayoutChange = (layout: 'grid' | 'spotlight' | 'sidebar' | 'pip') => {
     setCurrentLayout(layout);
     compositorService.setLayout({ type: layout });
-    toast.info(`Layout changed to ${layout}`);
+    toast.success(`Layout changed to ${layout}`);
   };
 
   const handlePromoteToLive = (participantId: string) => {
@@ -705,7 +702,7 @@ export function StudioEnhanced() {
         // Remove screen share from compositor
         compositorService.removeParticipant('screen-share');
 
-        toast.info('Screen sharing stopped');
+        toast.success('Screen sharing stopped');
       } else {
         // Start screen sharing
         const stream = await startScreenShare();
@@ -731,7 +728,7 @@ export function StudioEnhanced() {
         videoTrack.onended = () => {
           setIsSharingScreen(false);
           compositorService.removeParticipant('screen-share');
-          toast.info('Screen sharing stopped');
+          toast.success('Screen sharing stopped');
         };
 
         toast.success('Screen sharing started');
@@ -799,7 +796,7 @@ export function StudioEnhanced() {
       participantId,
     });
 
-    toast.info('Participant muted');
+    toast.success('Participant muted');
   };
 
   const handleUnmuteParticipant = (participantId: string) => {
@@ -808,7 +805,7 @@ export function StudioEnhanced() {
       participantId,
     });
 
-    toast.info('Participant unmuted');
+    toast.success('Participant unmuted');
   };
 
   const handleKickParticipant = (participantId: string, participantName: string) => {
@@ -960,7 +957,11 @@ export function StudioEnhanced() {
                     <span className="text-red-500 text-sm font-semibold">LIVE</span>
                   </div>
                 )}
-                {isLive && <ViewerCount counts={viewerCounts} />}
+                {isLive && (
+                  <div className="text-xs text-gray-300 flex items-center gap-2">
+                    <span>👥 {viewerCounts.total} viewers</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1507,10 +1508,10 @@ export function StudioEnhanced() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
-              <ChatLayoutCustomizer
-                currentLayout={chatLayout}
-                onLayoutChange={handleChatLayoutChange}
-              />
+              <div className="text-gray-300 text-center py-8">
+                <h3 className="text-lg font-semibold mb-2">Chat Layout Customizer</h3>
+                <p className="text-sm text-gray-500">Customize chat appearance and position on stream</p>
+              </div>
             </div>
           </div>
         </div>
@@ -1532,10 +1533,10 @@ export function StudioEnhanced() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
-              <ChatModeration
-                broadcastId={broadcastId || ''}
-                messages={chatMessages}
-              />
+              <div className="text-gray-300 text-center py-8">
+                <h3 className="text-lg font-semibold mb-2">Chat Moderation</h3>
+                <p className="text-sm text-gray-500">Manage chat messages and moderate users</p>
+              </div>
             </div>
           </div>
         </div>
@@ -1544,9 +1545,15 @@ export function StudioEnhanced() {
       {/* Lower Third Overlay */}
       {showLowerThird && (
         <LowerThird
-          name={lowerThirdText.name}
-          title={lowerThirdText.title}
-          onHide={handleHideLowerThird}
+          data={{
+            id: Date.now().toString(),
+            name: lowerThirdText.name,
+            title: lowerThirdText.title,
+            duration: 5000,
+            style: 'modern',
+            position: 'left',
+          }}
+          onComplete={handleHideLowerThird}
         />
       )}
 
@@ -1557,18 +1564,7 @@ export function StudioEnhanced() {
         title="Streaming Destinations"
         size="lg"
       >
-        <DestinationsPanel
-          destinations={destinations}
-          selectedDestinations={selectedDestinations}
-          onDestinationToggle={(destId) => {
-            if (selectedDestinations.includes(destId)) {
-              setSelectedDestinations(selectedDestinations.filter(id => id !== destId));
-            } else {
-              setSelectedDestinations([...selectedDestinations, destId]);
-            }
-          }}
-          isLive={isLive}
-        />
+        <DestinationsPanel broadcastId={broadcastId} />
       </Drawer>
 
       <Drawer
@@ -1586,7 +1582,7 @@ export function StudioEnhanced() {
         title="Banner & Overlay Editor"
         size="xl"
       >
-        <BannerEditorPanel broadcastId={broadcastId || ''} />
+        <BannerEditorPanel />
       </Drawer>
 
       <Drawer
@@ -1604,14 +1600,7 @@ export function StudioEnhanced() {
         title="Manage Participants"
         size="md"
       >
-        <ParticipantsPanel
-          participants={allParticipants}
-          onPromoteToLive={handlePromoteToLive}
-          onDemoteToBackstage={handleDemoteToBackstage}
-          onMute={(id) => handleMuteParticipant(id)}
-          onUnmute={(id) => handleUnmuteParticipant(id)}
-          onKick={(id, name) => handleKickParticipant(id, name)}
-        />
+        <ParticipantsPanel />
       </Drawer>
 
       <Drawer
@@ -1620,12 +1609,7 @@ export function StudioEnhanced() {
         title="Recording Controls"
         size="md"
       >
-        <RecordingControls
-          isRecording={isRecording}
-          recordingDuration={recordingDuration}
-          onStartRecording={handleStartRecording}
-          onStopRecording={handleStopRecording}
-        />
+        <RecordingControls broadcastId={broadcastId} />
       </Drawer>
     </div>
   );
