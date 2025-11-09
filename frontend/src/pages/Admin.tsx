@@ -14,7 +14,8 @@ import {
   Layout,
   Shield,
   CreditCard,
-  Cast
+  Cast,
+  Palette
 } from 'lucide-react';
 
 export function Admin() {
@@ -32,6 +33,13 @@ export function Admin() {
       icon: Settings,
       path: '/admin/settings',
       color: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+    },
+    {
+      title: 'Branding',
+      description: 'Customize website logo, colors, and appearance',
+      icon: Palette,
+      path: '/admin/settings?tab=branding',
+      color: 'bg-pink-500/10 text-pink-400 border-pink-500/20',
     },
     {
       title: 'Logs',
