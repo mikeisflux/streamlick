@@ -116,6 +116,8 @@ export function Studio() {
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>('');
   const [selectedVideoDevice, setSelectedVideoDevice] = useState<string>('');
+  const [showMicSelector, setShowMicSelector] = useState(false);
+  const [showCameraSelector, setShowCameraSelector] = useState(false);
 
   // Killer features state
   const [showClipManager, setShowClipManager] = useState(false);
@@ -1250,17 +1252,31 @@ export function Studio() {
 
           {/* Center Section - Media Controls */}
           <div className="flex items-center gap-3">
-            <button
-              onClick={toggleAudio}
-              className={`p-3 rounded-full ${
-                audioEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'
-              } text-white transition-colors`}
-              title={audioEnabled ? 'Mute' : 'Unmute'}
-            >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-              </svg>
-            </button>
+            {/* Microphone with device selector */}
+            <div className="relative flex items-center">
+              <button
+                onClick={toggleAudio}
+                className={`p-3 rounded-l-full ${
+                  audioEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'
+                } text-white transition-colors`}
+                title={audioEnabled ? 'Mute' : 'Unmute'}
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setShowMicSelector(!showMicSelector)}
+                className={`p-3 pr-4 rounded-r-full border-l border-gray-600 ${
+                  audioEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'
+                } text-white transition-colors`}
+                title="Select Microphone"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
             <button
               className="p-3 rounded-full bg-gray-700 hover:bg-gray-600 text-white transition-colors"
               title="Speaker"
@@ -1269,17 +1285,31 @@ export function Studio() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
               </svg>
             </button>
-            <button
-              onClick={toggleVideo}
-              className={`p-3 rounded-full ${
-                videoEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'
-              } text-white transition-colors`}
-              title={videoEnabled ? 'Stop Camera' : 'Start Camera'}
-            >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-            </button>
+            {/* Camera with device selector */}
+            <div className="relative flex items-center">
+              <button
+                onClick={toggleVideo}
+                className={`p-3 rounded-l-full ${
+                  videoEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'
+                } text-white transition-colors`}
+                title={videoEnabled ? 'Stop Camera' : 'Start Camera'}
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setShowCameraSelector(!showCameraSelector)}
+                className={`p-3 pr-4 rounded-r-full border-l border-gray-600 ${
+                  videoEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'
+                } text-white transition-colors`}
+                title="Select Camera"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
             <button
               onClick={isSharingScreen ? stopScreenShare : startScreenShare}
               className={`p-3 rounded-full ${
@@ -1684,6 +1714,290 @@ export function Studio() {
           producerId={broadcast?.userId}
           onClose={() => setShowProducerMode(false)}
         />
+      )}
+
+      {/* Microphone Device Selector Popup */}
+      {showMicSelector && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setShowMicSelector(false)}
+          />
+          <div
+            className="fixed bottom-24 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-2xl z-50"
+            style={{ width: '320px', maxHeight: '400px' }}
+          >
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-900">Select Microphone</h3>
+              <p className="text-xs text-gray-500 mt-1">Choose your audio input device</p>
+            </div>
+            <div className="overflow-y-auto max-h-80">
+              {audioDevices.length === 0 ? (
+                <div className="p-6 text-center">
+                  <svg className="w-12 h-12 text-gray-400 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  </svg>
+                  <p className="text-sm text-gray-600">No microphones found</p>
+                  <button
+                    onClick={() => {
+                      navigator.mediaDevices.enumerateDevices().then((devices) => {
+                        setAudioDevices(devices.filter((d) => d.kind === 'audioinput'));
+                      });
+                    }}
+                    className="mt-3 text-xs text-blue-600 hover:text-blue-700"
+                  >
+                    Refresh Devices
+                  </button>
+                </div>
+              ) : (
+                <div className="py-2">
+                  {audioDevices.map((device) => (
+                    <button
+                      key={device.deviceId}
+                      onClick={() => {
+                        setSelectedAudioDevice(device.deviceId);
+                        setShowMicSelector(false);
+                        // TODO: Apply device change to stream
+                      }}
+                      className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
+                        selectedAudioDevice === device.deviceId ? 'bg-blue-50' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {selectedAudioDevice === device.deviceId && (
+                          <svg className="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {device.label || `Microphone ${device.deviceId.substring(0, 8)}`}
+                          </p>
+                          <p className="text-xs text-gray-500">Audio Input</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Camera Device Selector Popup */}
+      {showCameraSelector && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setShowCameraSelector(false)}
+          />
+          <div
+            className="fixed bottom-24 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-2xl z-50"
+            style={{ width: '320px', maxHeight: '400px' }}
+          >
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-900">Select Camera</h3>
+              <p className="text-xs text-gray-500 mt-1">Choose your video input device</p>
+            </div>
+            <div className="overflow-y-auto max-h-80">
+              {videoDevices.length === 0 ? (
+                <div className="p-6 text-center">
+                  <svg className="w-12 h-12 text-gray-400 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  <p className="text-sm text-gray-600">No cameras found</p>
+                  <button
+                    onClick={() => {
+                      navigator.mediaDevices.enumerateDevices().then((devices) => {
+                        setVideoDevices(devices.filter((d) => d.kind === 'videoinput'));
+                      });
+                    }}
+                    className="mt-3 text-xs text-blue-600 hover:text-blue-700"
+                  >
+                    Refresh Devices
+                  </button>
+                </div>
+              ) : (
+                <div className="py-2">
+                  {videoDevices.map((device) => (
+                    <button
+                      key={device.deviceId}
+                      onClick={() => {
+                        setSelectedVideoDevice(device.deviceId);
+                        setShowCameraSelector(false);
+                        // TODO: Apply device change to stream
+                      }}
+                      className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
+                        selectedVideoDevice === device.deviceId ? 'bg-blue-50' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {selectedVideoDevice === device.deviceId && (
+                          <svg className="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {device.label || `Camera ${device.deviceId.substring(0, 8)}`}
+                          </p>
+                          <p className="text-xs text-gray-500">Video Input</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Studio Settings</h2>
+                <p className="text-sm text-gray-600 mt-1">Configure your audio and video devices</p>
+              </div>
+              <button
+                onClick={() => setShowSettings(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-6">
+                {/* Video Device */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    Camera
+                  </label>
+                  <select
+                    value={selectedVideoDevice}
+                    onChange={(e) => setSelectedVideoDevice(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select Camera</option>
+                    {videoDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Camera ${device.deviceId.substring(0, 8)}`}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Choose which camera to use for your broadcast
+                  </p>
+                </div>
+
+                {/* Audio Input Device */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    Microphone
+                  </label>
+                  <select
+                    value={selectedAudioDevice}
+                    onChange={(e) => setSelectedAudioDevice(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select Microphone</option>
+                    {audioDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Microphone ${device.deviceId.substring(0, 8)}`}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Choose which microphone to use for your broadcast
+                  </p>
+                </div>
+
+                {/* Video Preview */}
+                {localStream && videoEnabled && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Camera Preview
+                    </label>
+                    <div className="bg-black rounded-lg overflow-hidden aspect-video">
+                      <video
+                        ref={(el) => {
+                          if (el && localStream) el.srcObject = localStream;
+                        }}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Additional Settings */}
+                <div className="border-t border-gray-200 pt-6">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Stream Quality</h3>
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="quality"
+                        value="720p"
+                        defaultChecked
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <div>
+                        <div className="font-medium text-gray-900">720p HD</div>
+                        <div className="text-xs text-gray-500">Recommended for most streams</div>
+                      </div>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="quality"
+                        value="1080p"
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <div>
+                        <div className="font-medium text-gray-900">1080p Full HD</div>
+                        <div className="text-xs text-gray-500">Higher quality, requires more bandwidth</div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+              <button
+                onClick={() => {
+                  // Refresh device list
+                  navigator.mediaDevices.enumerateDevices().then((devices) => {
+                    setAudioDevices(devices.filter((d) => d.kind === 'audioinput'));
+                    setVideoDevices(devices.filter((d) => d.kind === 'videoinput'));
+                  });
+                }}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded transition-colors"
+              >
+                Refresh Devices
+              </button>
+              <button
+                onClick={() => setShowSettings(false)}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
