@@ -133,7 +133,7 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
     }
 
     // Delete file
-    const filePath = path.join(__dirname, '../..', background.url);
+    const filePath = path.join(__dirname, '../..', background.fileUrl);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }

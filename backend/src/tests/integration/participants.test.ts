@@ -248,7 +248,7 @@ describe('Participant Management Integration Tests', () => {
     beforeEach(async () => {
       participant = await prisma.participant.create({
         data: {
-          broadcastId: testBroadcast.id,
+          broadcast: { connect: { id: testBroadcast.id } },
           user: { connect: { id: guestUser.id } },
           name: 'Controllable Guest',
           role: 'guest',
@@ -314,7 +314,7 @@ describe('Participant Management Integration Tests', () => {
     beforeEach(async () => {
       participant = await prisma.participant.create({
         data: {
-          broadcastId: testBroadcast.id,
+          broadcast: { connect: { id: testBroadcast.id } },
           user: { connect: { id: guestUser.id } },
           name: 'Kickable Guest',
           role: 'guest',
@@ -377,7 +377,7 @@ describe('Participant Management Integration Tests', () => {
       const ban = await prisma.bannedParticipant.findFirst({
         where: {
           broadcastId: testBroadcast.id,
-          user: { connect: { id: guestUser.id } },
+          user: { id: guestUser.id },
         },
       });
       expect(ban).toBeTruthy();
@@ -428,7 +428,7 @@ describe('Participant Management Integration Tests', () => {
       const ban = await prisma.bannedParticipant.findFirst({
         where: {
           broadcastId: testBroadcast.id,
-          user: { connect: { id: guestUser.id } },
+          user: { id: guestUser.id },
         },
       });
       expect(ban).toBeNull();

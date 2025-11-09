@@ -33,7 +33,8 @@ router.post('/:broadcastId/ban', authMiddleware, async (req: Request, res: Respo
     const ban = await prisma.bannedParticipant.create({
       data: {
         broadcastId,
-        userId: participantId,
+        user: { connect: { id: participantId } },
+        bannedBy: userId,
       },
     });
 
@@ -72,7 +73,7 @@ router.delete('/:broadcastId/ban/:participantId', authMiddleware, async (req: Re
     await prisma.bannedParticipant.deleteMany({
       where: {
         broadcastId,
-        userId: participantId,
+        user: { id: participantId },
       },
     });
 
@@ -130,7 +131,7 @@ router.get('/:broadcastId/ban-check/:participantId', async (req: Request, res: R
     const ban = await prisma.bannedParticipant.findFirst({
       where: {
         broadcastId,
-        userId: participantId,
+        user: { id: participantId },
       },
     });
 

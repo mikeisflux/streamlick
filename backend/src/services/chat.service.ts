@@ -138,10 +138,6 @@ export class YouTubeChatPoller {
               platform: 'youtube',
               authorName: message.author,
               messageText: message.message,
-              metadata: {
-                isSuperChat: message.isSuperChat,
-                amount: message.superChatAmount,
-              },
             },
           });
         }
@@ -684,10 +680,6 @@ export class RumbleChatPoller {
             platform: 'rumble',
             authorName: message.author,
             messageText: message.message,
-            metadata: {
-              isSuperChat: message.isSuperChat,
-              amount: message.superChatAmount,
-            },
           },
         });
 
