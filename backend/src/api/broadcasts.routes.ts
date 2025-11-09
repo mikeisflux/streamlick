@@ -220,11 +220,11 @@ router.get('/:id/stats', authenticate, async (req: AuthRequest, res) => {
       totalParticipants: broadcast.participants.length,
       totalMessages: broadcast.chatMessages.length,
       totalViewers: broadcast.broadcastDestinations.reduce(
-        (sum, dest) => sum + dest.viewerCount,
+        (sum: any, dest: any) => sum + dest.viewerCount,
         0
       ),
       duration: broadcast.durationSeconds,
-      platforms: broadcast.broadcastDestinations.map(dest => dest.status),
+      platforms: broadcast.broadcastDestinations.map((dest: any) => dest.status),
     };
 
     res.json(stats);

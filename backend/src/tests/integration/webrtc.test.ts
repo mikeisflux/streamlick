@@ -88,8 +88,8 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
         });
 
         Promise.all([
-          new Promise((resolve) => clientSocket1.on('connect', resolve)),
-          new Promise((resolve) => clientSocket2.on('connect', resolve)),
+          new Promise((resolve) => clientSocket1.on('connect', () => resolve(undefined))),
+          new Promise((resolve) => clientSocket2.on('connect', () => resolve(undefined))),
         ]).then(() => done());
       });
     });

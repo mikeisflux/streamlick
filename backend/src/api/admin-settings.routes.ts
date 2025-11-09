@@ -44,7 +44,7 @@ router.get('/settings', async (req, res) => {
     });
 
     // Decrypt sensitive values for admin viewing
-    const decryptedSettings = settings.map(setting => ({
+    const decryptedSettings = settings.map((setting: any) => ({
       ...setting,
       value: setting.isEncrypted ? decrypt(setting.value) : setting.value,
     }));
@@ -74,7 +74,7 @@ router.get('/settings/:category', async (req, res) => {
       },
     });
 
-    const decryptedSettings = settings.map(setting => ({
+    const decryptedSettings = settings.map((setting: any) => ({
       ...setting,
       value: setting.isEncrypted ? decrypt(setting.value) : setting.value,
     }));
@@ -165,7 +165,7 @@ router.get('/oauth-config', async (req, res) => {
       };
     });
 
-    oauthSettings.forEach(setting => {
+    oauthSettings.forEach((setting: any) => {
       const match = setting.key.match(/^(\w+)_(client_id|client_secret|enabled)$/);
       if (match) {
         const [, platform, field] = match;
@@ -284,7 +284,7 @@ router.get('/webhooks', async (req, res) => {
       where: { category: 'webhook' },
     });
 
-    const config = webhooks.map(webhook => ({
+    const config = webhooks.map((webhook: any) => ({
       id: webhook.id,
       key: webhook.key,
       value: webhook.isEncrypted ? decrypt(webhook.value) : webhook.value,
@@ -307,7 +307,7 @@ router.get('/system-config', async (req, res) => {
 
     const config: any = {};
 
-    systemConfig.forEach(setting => {
+    systemConfig.forEach((setting: any) => {
       config[setting.key] = setting.isEncrypted ? decrypt(setting.value) : setting.value;
     });
 

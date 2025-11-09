@@ -7,11 +7,11 @@ const REFRESH_TOKEN_EXPIRATION = process.env.REFRESH_TOKEN_EXPIRATION || '7d';
 const MAGIC_LINK_EXPIRATION = process.env.MAGIC_LINK_EXPIRATION || '15m';
 
 export function generateAccessToken(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRATION });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRATION } as any);
 }
 
 export function generateRefreshToken(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRATION });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRATION } as any);
 }
 
 export function generateMagicLinkToken(email: string): string {

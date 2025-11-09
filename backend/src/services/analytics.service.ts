@@ -235,17 +235,17 @@ export class AnalyticsService extends EventEmitter {
 
       // Calculate aggregates
       const totalMetrics = metrics.length;
-      const sumViewers = metrics.reduce((sum, m) => sum + m.totalViewers, 0);
-      const peakViewers = Math.max(...metrics.map(m => m.peakViewers));
+      const sumViewers = metrics.reduce((sum: any, m: any) => sum + m.totalViewers, 0);
+      const peakViewers = Math.max(...metrics.map((m: any) => m.peakViewers));
       const averageViewers = Math.floor(sumViewers / totalMetrics);
 
-      const sumBitrate = metrics.reduce((sum, m) => sum + (m.bitrate || 0), 0);
+      const sumBitrate = metrics.reduce((sum: any, m: any) => sum + (m.bitrate || 0), 0);
       const averageBitrate = Math.floor(sumBitrate / totalMetrics);
 
-      const sumFramerate = metrics.reduce((sum, m) => sum + (m.framerate || 0), 0);
+      const sumFramerate = metrics.reduce((sum: any, m: any) => sum + (m.framerate || 0), 0);
       const averageFramerate = Math.floor(sumFramerate / totalMetrics);
 
-      const totalDroppedFrames = metrics.reduce((sum, m) => sum + m.droppedFrames, 0);
+      const totalDroppedFrames = metrics.reduce((sum: any, m: any) => sum + m.droppedFrames, 0);
 
       const lastMetric = metrics[metrics.length - 1];
 

@@ -2,16 +2,11 @@ import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from './jwt';
 import logger from '../utils/logger';
 
-export interface AuthRequest extends Request {
-  user?: {
-    userId: string;
-    email: string;
-    role?: 'user' | 'admin';
-  };
-}
+// AuthRequest is now just an alias for Request (with user property added via declaration merging)
+export type AuthRequest = Request;
 
 export async function authenticate(
-  req: AuthRequest,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
@@ -35,7 +30,7 @@ export async function authenticate(
 }
 
 export function optionalAuth(
-  req: AuthRequest,
+  req: Request,
   res: Response,
   next: NextFunction
 ): void {
@@ -52,3 +47,24 @@ export function optionalAuth(
   }
   next();
 }
+
+export function requireAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  if (!req.user) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+
+  if (req.user.role !== 'admin') {
+    res.status(403).json({ error: 'Admin access required' });
+    return;
+  }
+
+  next();
+}
+
+// Alias for compatibility
+export const authenticateToken = authenticate;

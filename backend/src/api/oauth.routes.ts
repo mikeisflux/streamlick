@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import axios from 'axios';
 import { PrismaClient } from '@prisma/client';
-import { authenticate } from '../middleware/auth';
+import { authenticate } from '../auth/middleware';
 import { encrypt, decrypt } from '../utils/crypto';
 import logger from '../utils/logger';
 

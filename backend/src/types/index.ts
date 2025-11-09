@@ -2,6 +2,7 @@ export interface JwtPayload {
   userId: string;
   email: string;
   role?: 'user' | 'admin';
+  id?: string; // Alias for userId for compatibility
 }
 
 export interface MagicLinkToken {
