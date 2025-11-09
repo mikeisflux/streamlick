@@ -42,9 +42,9 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
       if (response.data.config?.platformName) {
         document.title = response.data.config.platformName;
       }
-    } catch (error) {
-      console.error('Failed to load branding:', error);
-      // Use defaults if API fails
+    } catch (error: any) {
+      console.log('Branding not available, using defaults');
+      // Use defaults if API fails (normal for public pages)
       setBranding({
         config: {
           primaryColor: '#6366f1',
