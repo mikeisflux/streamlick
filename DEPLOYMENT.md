@@ -29,6 +29,7 @@ npm install
 
 Run the SQL setup script to:
 - Add the password column to users table
+- Add email verification columns (email_verified, email_verification_token, email_verification_expiry)
 - Delete all existing users
 - Create the default admin account
 
@@ -81,19 +82,41 @@ After setup, you can log in with:
 ### Backend
 - ✅ Removed magic link authentication
 - ✅ Added password-based authentication with bcrypt
-- ✅ New endpoints: `/auth/login` and `/auth/register`
+- ✅ New endpoints: `/auth/login`, `/auth/register`, `/auth/verify-email`, `/auth/resend-verification`
+- ✅ Email verification system with 24-hour token expiration
+- ✅ Email validation and password strength requirements
 - ✅ Password column added to users table
+- ✅ Email verification columns added (verified status, tokens, expiry)
 
 ### Frontend
 - ✅ Login page now has email + password fields
 - ✅ Auto-redirect: admins → `/admin`, users → `/dashboard`
 - ✅ Updated authService with login() and register() methods
+- ✅ New VerifyEmail page for email verification flow
+- ✅ Email verification route: `/auth/verify-email`
 
 ### Database Schema
 ```sql
 -- Added to users table:
-password TEXT  -- Bcrypt hashed password
+password TEXT                       -- Bcrypt hashed password
+email_verified BOOLEAN              -- Email verification status (default: false)
+email_verification_token TEXT       -- Verification token
+email_verification_expiry TIMESTAMP -- Token expiration time
 ```
+
+### Studio UI (Major Updates)
+- ✅ All 7 panel components created and integrated
+  - StylePanel - Brand colors, themes, camera frames
+  - NotesPanel - Rich text editor + teleprompter mode
+  - MediaAssetsPanel - Brand assets, music, images, videos
+  - PrivateChatPanel - Host/guest real-time messaging
+  - CommentsPanel - Multi-platform comment aggregation
+  - ClipManager - Clip recording, management, downloads (modal)
+  - ProducerMode - Full production control dashboard (modal)
+- ✅ Right sidebar with 8 tabs: Comments, Banners, Media, Style, Notes, People, Chat, Recording
+- ✅ ClipManager and ProducerMode modals connected to control bar buttons
+- ✅ CSS Grid layout (280px | 1fr | 320px columns)
+- ✅ Proper responsive design and color scheme
 
 ## Troubleshooting
 
@@ -132,16 +155,24 @@ SELECT id, email, name, role FROM users WHERE email = 'admin@streamlick.local';
 \i scripts/setup-admin.sql
 ```
 
-## Studio UI Updates
+### Issue: Email verification emails not sending
+The system uses SendGrid for email delivery. In development mode (no SENDGRID_API_KEY), verification links are logged to the console instead.
 
-The Studio interface has also been completely redesigned with proper CSS Grid layout:
+```bash
+# Check backend logs for verification links
+pm2 logs streamlick-backend
 
-- ✅ Left sidebar (280px) with Scenes panel
-- ✅ Main canvas (16:9 aspect ratio, max 1920px)
-- ✅ Layout bar (72px) with 9 layout buttons
-- ✅ Bottom control bar (80px) with media controls and killer features
-- ✅ Right sidebar (320px) with tabbed panels (Chat, People, Recording)
-- ✅ Proper color scheme (#1a1a1a, #2d2d2d, #404040)
+# Or if running manually:
+# Look for "📧 Email Verification Link:" in console output
+```
+
+To enable email sending in production:
+```bash
+# Set environment variable
+export SENDGRID_API_KEY="your-sendgrid-api-key"
+export FROM_EMAIL="noreply@yourdomain.com"
+export FRONTEND_URL="https://yourdomain.com"
+```
 
 ## Next Steps
 
