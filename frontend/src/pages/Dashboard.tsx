@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { broadcastService } from '../services/broadcast.service';
 import { useAuthStore } from '../store/authStore';
+import { useBranding } from '../context/BrandingContext';
 import { Broadcast } from '../types';
 import { Button } from '../components/Button';
 import toast from 'react-hot-toast';
@@ -11,6 +12,7 @@ export function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  const { branding } = useBranding();
 
   useEffect(() => {
     loadBroadcasts();
@@ -45,7 +47,21 @@ export function Dashboard() {
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-900">🎥 Streamlick</h1>
+            {branding?.logoUrl ? (
+              <img
+                src={branding.logoUrl.startsWith('http') ? branding.logoUrl : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${branding.logoUrl}`}
+                alt={branding.config?.platformName || 'Logo'}
+                className="h-10 object-contain cursor-pointer"
+                onClick={() => navigate('/dashboard')}
+              />
+            ) : (
+              <h1
+                className="text-2xl font-bold text-gray-900 cursor-pointer"
+                onClick={() => navigate('/dashboard')}
+              >
+                {branding?.config?.platformName || 'Streamlick'}
+              </h1>
+            )}
             <div className="flex items-center gap-4">
               <span className="text-sm text-gray-600">{user?.email}</span>
               <Button variant="ghost" size="sm" onClick={() => logout()}>

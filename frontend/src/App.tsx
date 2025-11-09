@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './store/authStore';
+import { BrandingProvider } from './context/BrandingContext';
 import { Login } from './pages/Login';
 import { VerifyAuth } from './pages/VerifyAuth';
 import { VerifyEmail } from './pages/VerifyEmail';
@@ -52,14 +53,15 @@ function App() {
   }, [checkAuth]);
 
   return (
-    <BrowserRouter>
-      <Toaster position="top-right" />
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/auth/verify" element={<VerifyAuth />} />
-        <Route path="/auth/verify-email" element={<VerifyEmail />} />
-        <Route path="/join/:token" element={<GuestJoin />} />
+    <BrandingProvider>
+      <BrowserRouter>
+        <Toaster position="top-right" />
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/auth/verify" element={<VerifyAuth />} />
+          <Route path="/auth/verify-email" element={<VerifyEmail />} />
+          <Route path="/join/:token" element={<GuestJoin />} />
         <Route
           path="/dashboard"
           element={
@@ -153,6 +155,7 @@ function App() {
         <Route path="/faq" element={<FAQ />} />
       </Routes>
     </BrowserRouter>
+    </BrandingProvider>
   );
 }
 
