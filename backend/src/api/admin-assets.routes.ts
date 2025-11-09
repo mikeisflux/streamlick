@@ -137,7 +137,7 @@ router.post('/:type/upload', authMiddleware, adminMiddleware, (req: Request, res
           name: name || file.originalname,
           category: category || 'default',
           url: `/uploads/assets/${type}/${file.filename}`,
-          fileSize: file.size,
+          fileSizeBytes: file.size,
           mimeType: file.mimetype,
           isDefault: isDefault === 'true',
           isActive: true,

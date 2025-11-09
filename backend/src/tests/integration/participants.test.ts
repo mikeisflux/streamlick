@@ -249,7 +249,7 @@ describe('Participant Management Integration Tests', () => {
       participant = await prisma.participant.create({
         data: {
           broadcastId: testBroadcast.id,
-          userId: guestUser.id,
+          user: { id: guestUser.id },
           name: 'Controllable Guest',
           role: 'guest',
           status: 'joined',
@@ -315,7 +315,7 @@ describe('Participant Management Integration Tests', () => {
       participant = await prisma.participant.create({
         data: {
           broadcastId: testBroadcast.id,
-          userId: guestUser.id,
+          user: { id: guestUser.id },
           name: 'Kickable Guest',
           role: 'guest',
           status: 'joined',
@@ -356,7 +356,7 @@ describe('Participant Management Integration Tests', () => {
       participant = await prisma.participant.create({
         data: {
           broadcastId: testBroadcast.id,
-          userId: guestUser.id,
+          user: { id: guestUser.id },
           name: 'Bannable Guest',
           role: 'guest',
           status: 'joined',
@@ -377,7 +377,7 @@ describe('Participant Management Integration Tests', () => {
       const ban = await prisma.bannedParticipant.findFirst({
         where: {
           broadcastId: testBroadcast.id,
-          userId: guestUser.id,
+          user: { id: guestUser.id },
         },
       });
       expect(ban).toBeTruthy();
@@ -399,7 +399,7 @@ describe('Participant Management Integration Tests', () => {
         .set('Authorization', `Bearer ${hostToken}`)
         .send({
           broadcastId: testBroadcast.id,
-          userId: guestUser.id,
+          user: { id: guestUser.id },
           name: 'Trying to rejoin',
           role: 'guest',
         })
@@ -428,7 +428,7 @@ describe('Participant Management Integration Tests', () => {
       const ban = await prisma.bannedParticipant.findFirst({
         where: {
           broadcastId: testBroadcast.id,
-          userId: guestUser.id,
+          user: { id: guestUser.id },
         },
       });
       expect(ban).toBeNull();

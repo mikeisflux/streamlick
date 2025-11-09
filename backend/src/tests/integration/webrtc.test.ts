@@ -1,5 +1,6 @@
 import { Server } from 'socket.io';
-import { io as ioClient, Socket as ClientSocket } from 'socket.io-client';
+import { io as ioClient } from 'socket.io-client';
+import type { Socket as ClientSocket } from 'socket.io-client';
 import http from 'http';
 import initializeSocket from '../../socket';
 import prisma from '../../database/prisma';
@@ -109,7 +110,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
         participantId: testUser1.id,
       });
 
-      clientSocket1.on('studio-joined', (data) => {
+      clientSocket1.on('studio-joined', (data: any) => {
         expect(data).toHaveProperty('broadcastId', testBroadcast.id);
         expect(data).toHaveProperty('participants');
         expect(data.participants).toBeInstanceOf(Array);
@@ -123,7 +124,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
         participantId: testUser2.id,
       });
 
-      clientSocket2.on('studio-joined', (data) => {
+      clientSocket2.on('studio-joined', (data: any) => {
         expect(data).toHaveProperty('broadcastId', testBroadcast.id);
         done();
       });
@@ -134,7 +135,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
         auth: { token: token2 },
       });
 
-      clientSocket1.on('participant-joined', (data) => {
+      clientSocket1.on('participant-joined', (data: any) => {
         expect(data).toHaveProperty('participantId');
         expect(data).toHaveProperty('name');
         socket3.disconnect();
@@ -152,7 +153,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
 
   describe('Media State Management', () => {
     it('should broadcast media state changes', (done) => {
-      clientSocket2.on('media-state-changed', (data) => {
+      clientSocket2.on('media-state-changed', (data: any) => {
         expect(data).toMatchObject({
           participantId: testUser1.id,
           audio: false,
@@ -185,7 +186,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
     });
 
     it('should notify when participant mutes audio', (done) => {
-      clientSocket2.on('media-state-changed', (data) => {
+      clientSocket2.on('media-state-changed', (data: any) => {
         expect(data.audio).toBe(false);
         done();
       });
@@ -198,7 +199,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
     });
 
     it('should notify when participant turns off video', (done) => {
-      clientSocket2.on('media-state-changed', (data) => {
+      clientSocket2.on('media-state-changed', (data: any) => {
         expect(data.video).toBe(false);
         done();
       });
@@ -221,7 +222,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
         ],
       };
 
-      clientSocket2.on('layout-updated', (data) => {
+      clientSocket2.on('layout-updated', (data: any) => {
         expect(data).toEqual(newLayout);
         done();
       });
@@ -230,7 +231,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
     });
 
     it('should broadcast participant position changes', (done) => {
-      clientSocket2.on('participant-position-changed', (data) => {
+      clientSocket2.on('participant-position-changed', (data: any) => {
         expect(data).toMatchObject({
           participantId: testUser1.id,
           position: { x: 100, y: 100, width: 800, height: 600 },
@@ -252,7 +253,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
         sdp: 'mock-sdp-offer',
       };
 
-      clientSocket2.on('webrtc-offer', (data) => {
+      clientSocket2.on('webrtc-offer', (data: any) => {
         expect(data.from).toBe(testUser1.id);
         expect(data.offer).toEqual(mockOffer);
         done();
@@ -270,7 +271,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
         sdp: 'mock-sdp-answer',
       };
 
-      clientSocket1.on('webrtc-answer', (data) => {
+      clientSocket1.on('webrtc-answer', (data: any) => {
         expect(data.from).toBe(testUser2.id);
         expect(data.answer).toEqual(mockAnswer);
         done();
@@ -289,7 +290,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
         sdpMid: 'video',
       };
 
-      clientSocket2.on('ice-candidate', (data) => {
+      clientSocket2.on('ice-candidate', (data: any) => {
         expect(data.from).toBe(testUser1.id);
         expect(data.candidate).toEqual(mockCandidate);
         done();
@@ -304,7 +305,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
 
   describe('Screen Sharing', () => {
     it('should notify when screen sharing starts', (done) => {
-      clientSocket2.on('screen-share-started', (data) => {
+      clientSocket2.on('screen-share-started', (data: any) => {
         expect(data.participantId).toBe(testUser1.id);
         done();
       });
@@ -315,7 +316,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
     });
 
     it('should notify when screen sharing stops', (done) => {
-      clientSocket2.on('screen-share-stopped', (data) => {
+      clientSocket2.on('screen-share-stopped', (data: any) => {
         expect(data.participantId).toBe(testUser1.id);
         done();
       });
@@ -328,7 +329,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
 
   describe('Participant Lifecycle', () => {
     it('should notify when participant leaves', (done) => {
-      clientSocket1.on('participant-left', (data) => {
+      clientSocket1.on('participant-left', (data: any) => {
         expect(data).toHaveProperty('participantId');
         done();
       });
@@ -351,7 +352,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
         });
       });
 
-      clientSocket1.on('participant-left', (data) => {
+      clientSocket1.on('participant-left', (data: any) => {
         expect(data.participantId).toBe(testUser2.id);
         done();
       });
@@ -364,7 +365,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
 
   describe('Broadcast Controls', () => {
     it('should notify all participants when broadcast starts', (done) => {
-      clientSocket2.on('broadcast-status', (data) => {
+      clientSocket2.on('broadcast-status', (data: any) => {
         expect(data.status).toBe('live');
         done();
       });
@@ -375,7 +376,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
     });
 
     it('should notify all participants when broadcast ends', (done) => {
-      clientSocket2.on('broadcast-status', (data) => {
+      clientSocket2.on('broadcast-status', (data: any) => {
         expect(data.status).toBe('ended');
         done();
       });
@@ -393,7 +394,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
         participantId: testUser1.id,
       });
 
-      clientSocket1.on('error', (data) => {
+      clientSocket1.on('error', (data: any) => {
         expect(data).toHaveProperty('message');
         done();
       });
@@ -402,7 +403,7 @@ describe('WebRTC/MediaSoup Integration Tests', () => {
     it('should handle unauthorized access', (done) => {
       const unauthorizedSocket = ioClient(`http://localhost:${(httpServer.address() as any).port}`);
 
-      unauthorizedSocket.on('connect_error', (error) => {
+      unauthorizedSocket.on('connect_error', (error: any) => {
         expect(error.message).toContain('unauthorized');
         unauthorizedSocket.disconnect();
         done();

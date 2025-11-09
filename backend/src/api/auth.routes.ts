@@ -51,8 +51,8 @@ router.post('/verify-token', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const accessToken = generateAccessToken({ userId: user.id, email: user.email, role: user.role });
-    const refreshToken = generateRefreshToken({ userId: user.id, email: user.email, role: user.role });
+    const accessToken = generateAccessToken({ userId: user.id, email: user.email, role: user.role as 'user' | 'admin' });
+    const refreshToken = generateRefreshToken({ userId: user.id, email: user.email, role: user.role as 'user' | 'admin' });
 
     res.json({
       accessToken,

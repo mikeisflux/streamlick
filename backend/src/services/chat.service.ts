@@ -52,7 +52,7 @@ export class YouTubeChatPoller {
         where: {
           userId: this.userId,
           platform: 'youtube',
-          isEnabled: true,
+          isActive: true,
         },
       });
 
@@ -137,7 +137,7 @@ export class YouTubeChatPoller {
               broadcastId: this.broadcastId,
               platform: 'youtube',
               authorName: message.author,
-              content: message.message,
+              messageText: message.message,
               timestamp: message.timestamp,
               metadata: {
                 isSuperChat: message.isSuperChat,
@@ -198,7 +198,7 @@ export class FacebookChatPoller {
         where: {
           userId: this.userId,
           platform: 'facebook',
-          isEnabled: true,
+          isActive: true,
         },
       });
 
@@ -278,7 +278,7 @@ export class FacebookChatPoller {
               broadcastId: this.broadcastId,
               platform: 'facebook',
               authorName: message.author,
-              content: message.message,
+              messageText: message.message,
               timestamp: message.timestamp,
             },
           });
@@ -334,7 +334,7 @@ export class TwitchChatPoller {
         where: {
           userId: this.userId,
           platform: 'twitch',
-          isEnabled: true,
+          isActive: true,
         },
       });
 
@@ -515,7 +515,7 @@ export class XChatPoller {
         where: {
           userId: this.userId,
           platform: 'x',
-          isEnabled: true,
+          isActive: true,
         },
       });
 
@@ -578,7 +578,7 @@ export class XChatPoller {
             broadcastId: this.broadcastId,
             platform: 'x',
             authorName: message.author,
-            content: message.message,
+            messageText: message.message,
             timestamp: message.timestamp,
           },
         });
@@ -634,7 +634,7 @@ export class RumbleChatPoller {
         where: {
           userId: this.userId,
           platform: 'rumble',
-          isEnabled: true,
+          isActive: true,
         },
       });
 
@@ -686,7 +686,7 @@ export class RumbleChatPoller {
             broadcastId: this.broadcastId,
             platform: 'rumble',
             authorName: message.author,
-            content: message.message,
+            messageText: message.message,
             timestamp: message.timestamp,
             metadata: {
               isSuperChat: message.isSuperChat,

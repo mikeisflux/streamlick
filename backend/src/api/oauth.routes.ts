@@ -106,7 +106,7 @@ router.get('/youtube/callback', async (req, res) => {
       data: {
         userId,
         platform: 'youtube',
-        name: channel.snippet.title,
+        displayName: channel.snippet.title,
         rtmpUrl: 'rtmp://a.rtmp.youtube.com/live2',
         streamKey: encrypt(streamKey),
         accessToken: encrypt(access_token),
@@ -201,7 +201,7 @@ router.get('/facebook/callback', async (req, res) => {
       data: {
         userId,
         platform: 'facebook',
-        name: page.name,
+        displayName: page.name,
         rtmpUrl: streamUrl,
         streamKey: encrypt(''), // Facebook uses URL-based keys
         accessToken: encrypt(pageAccessToken),
@@ -293,7 +293,7 @@ router.get('/twitch/callback', async (req, res) => {
       data: {
         userId,
         platform: 'twitch',
-        name: twitchUser.display_name,
+        displayName: twitchUser.display_name,
         rtmpUrl: `rtmp://live.twitch.tv/app`,
         streamKey: encrypt(streamKey),
         accessToken: encrypt(access_token),
@@ -389,7 +389,7 @@ router.get('/x/callback', async (req, res) => {
       data: {
         userId,
         platform: 'x',
-        name: `@${xUser.username}`,
+        displayName: `@${xUser.username}`,
         rtmpUrl: 'rtmp://fa.contribute.live-video.net/app', // X/Twitter Media Studio RTMP
         streamKey: encrypt(''), // User must get from Media Studio
         accessToken: encrypt(access_token),
@@ -453,7 +453,7 @@ router.post('/rumble/setup', authenticate, async (req, res) => {
       data: {
         userId,
         platform: 'rumble',
-        name: userData.username || 'Rumble',
+        displayName: userData.username || 'Rumble',
         rtmpUrl,
         streamKey: encrypt(streamKey),
         accessToken: encrypt(apiKey), // Store API key as access token
@@ -538,7 +538,7 @@ router.get('/linkedin/callback', async (req, res) => {
       data: {
         userId,
         platform: 'linkedin',
-        name: displayName,
+        displayName: displayName,
         rtmpUrl: '', // Will be provided when creating live video
         streamKey: encrypt(''), // Will be provided when creating live video
         accessToken: encrypt(access_token),
