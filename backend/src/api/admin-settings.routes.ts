@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import prisma from '../database/prisma';
 import { authenticate, AuthRequest } from '../auth/middleware';
-import { encrypt, decrypt } from '../utils/encryption';
+import { encrypt, decrypt } from '../utils/crypto';
 import logger from '../utils/logger';
 
 const router = Router();

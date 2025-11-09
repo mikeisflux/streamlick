@@ -12,7 +12,7 @@
 
 import axios from 'axios';
 import prisma from '../database/prisma';
-import { decrypt } from '../utils/encryption';
+import { decrypt } from '../utils/crypto';
 import logger from '../utils/logger';
 
 export interface ModerationAction {
