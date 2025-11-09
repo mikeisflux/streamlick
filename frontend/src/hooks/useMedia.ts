@@ -40,7 +40,7 @@ export function useMedia() {
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           cursor: 'always',
-        },
+        } as MediaTrackConstraints,
         audio: true,
       });
       setScreenStream(stream);

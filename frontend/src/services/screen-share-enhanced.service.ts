@@ -131,7 +131,7 @@ export class ScreenShareEnhancedService extends EventEmitter {
         video: {
           cursor: 'always',
           displaySurface: 'monitor',
-        },
+        } as MediaTrackConstraints,
         audio: includeSystemAudio ? {
           echoCancellation: false,
           noiseSuppression: false,
@@ -280,7 +280,7 @@ export class ScreenShareEnhancedService extends EventEmitter {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           cursor: 'always',
-        },
+        } as MediaTrackConstraints,
         audio: {
           echoCancellation: false,
           noiseSuppression: false,

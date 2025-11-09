@@ -280,14 +280,37 @@ export function ProducerStudio() {
         throw new Error('No local stream available');
       }
 
-      const compositeStream = await compositorService.createCompositeStream({
-        localStream,
-        remoteStreams: Array.from(remoteParticipants.values())
-          .filter(p => p.role === 'host' || p.role === 'guest')
-          .map(p => p.stream)
-          .filter(Boolean) as MediaStream[],
-        layout: currentLayout,
-      });
+      // Initialize compositor with participants
+      const participants = [
+        {
+          id: 'local',
+          name: 'You',
+          stream: localStream,
+          isLocal: true,
+          audioEnabled: audioEnabled,
+          videoEnabled: videoEnabled,
+        },
+        ...Array.from(remoteParticipants.values())
+          .filter(p => (p.role === 'host' || p.role === 'guest') && p.stream)
+          .map(p => ({
+            id: p.id,
+            name: p.name,
+            stream: p.stream!,
+            isLocal: false,
+            audioEnabled: true,
+            videoEnabled: true,
+          }))
+      ];
+
+      await compositorService.initialize(participants);
+      compositorService.setLayout({ type: currentLayout });
+      compositorService.start();
+
+      const compositeStream = compositorService.getOutputStream();
+
+      if (!compositeStream) {
+        throw new Error('Failed to create composite stream');
+      }
 
       const compositeVideoTrack = compositeStream.getVideoTracks()[0];
       const compositeAudioTrack = compositeStream.getAudioTracks()[0];

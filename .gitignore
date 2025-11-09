@@ -6,13 +6,22 @@ pnpm-lock.yaml
 
 # Environment
 .env
+.env.*
 .env.local
+.env.development
 .env.production
+.env.test
+*.env
 
 # Build outputs
 dist/
 build/
 *.tsbuildinfo
+
+# Config files (local overrides)
+vite.config.local.ts
+vite.config.local.js
+tsconfig.local.json
 
 # Logs
 logs/

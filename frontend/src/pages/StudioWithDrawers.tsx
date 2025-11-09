@@ -258,7 +258,6 @@ export function Studio() {
       }
 
       // Start new stream with selected device
-      // @ts-expect-error - Stream for future use
       const _stream = await navigator.mediaDevices.getUserMedia({
         audio: { deviceId: { exact: deviceId } },
         video: selectedVideoDevice ? { deviceId: { exact: selectedVideoDevice } } : true,
@@ -281,7 +280,6 @@ export function Studio() {
       }
 
       // Start new stream with selected device
-      // @ts-expect-error - Stream for future use
       const _stream = await navigator.mediaDevices.getUserMedia({
         audio: selectedAudioDevice ? { deviceId: { exact: selectedAudioDevice } } : true,
         video: { deviceId: { exact: deviceId } },

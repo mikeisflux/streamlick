@@ -11,8 +11,6 @@ import { useStudioStore } from '../store/studioStore';
 import { ParticipantVideo } from '../components/ParticipantVideo';
 import { VideoGrid } from '../components/VideoGrid';
 import { ChatOverlay, ChatMessage } from '../components/ChatOverlay';
-import { ChatLayoutCustomizer } from '../components/ChatLayoutCustomizer';
-import { ChatModeration } from '../components/ChatModeration';
 import { StreamHealthMonitor } from '../components/StreamHealthMonitor';
 import { BitrateControl } from '../components/BitrateControl';
 import { HotkeyReference } from '../components/HotkeyReference';
@@ -20,7 +18,6 @@ import { HotkeyFeedback, useHotkeyFeedback } from '../components/HotkeyFeedback'
 import { MediaLibrary } from '../components/MediaLibrary';
 import { BackgroundEffects, BackgroundEffect } from '../components/BackgroundEffects';
 import { SceneManager, Scene } from '../components/SceneManager';
-import { ViewerCount } from '../components/ViewerCount';
 import { LowerThird } from '../components/LowerThird';
 import { Drawer } from '../components/Drawer';
 import { DestinationsPanel } from '../components/DestinationsPanel';
@@ -88,7 +85,6 @@ export function StudioEnhanced() {
   });
   const [showLowerThird, setShowLowerThird] = useState(false);
   const [lowerThirdText, setLowerThirdText] = useState({ name: '', title: '' });
-  const [chatLayout, setChatLayout] = useState({ position: 'bottom-left', size: 'medium' });
   const [showChatLayoutCustomizer, setShowChatLayoutCustomizer] = useState(false);
   const [showChatModeration, setShowChatModeration] = useState(false);
   const [showSceneManager, setShowSceneManager] = useState(false);
@@ -104,7 +100,6 @@ export function StudioEnhanced() {
   const { broadcast, isLive, setIsLive, setBroadcast } = useStudioStore();
   const {
     localStream,
-    screenStream,
     audioEnabled,
     videoEnabled,
     startCamera,
@@ -753,7 +748,7 @@ export function StudioEnhanced() {
   const handlePlayClip = async (clip: any) => {
     try {
       // Get the compositor canvas for video overlay
-      const canvas = compositorService.getCanvas();
+      const canvas = compositorService.getCanvas() || undefined;
 
       if (clip.type === 'video') {
         await clipPlayerService.playVideoClip(clip, canvas, compositorService);
@@ -892,10 +887,6 @@ export function StudioEnhanced() {
   };
 
   // Chat Layout Handlers
-  const handleChatLayoutChange = (layout: any) => {
-    setChatLayout(layout);
-  };
-
   // Lower Third Handlers
   const handleShowLowerThird = (name: string, title: string) => {
     setLowerThirdText({ name, title });

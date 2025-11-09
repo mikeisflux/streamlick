@@ -2,15 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-}
-
 @layer utilities {
   @keyframes fade-in-down {
     0% {
