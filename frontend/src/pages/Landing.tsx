@@ -31,7 +31,17 @@ export function Landing() {
 
       <main>
         {/* Hero */}
-        <section className="container mx-auto px-4 py-20 text-center">
+        <section
+          className="container mx-auto px-4 py-20 text-center relative"
+          style={branding?.heroUrl ? {
+            backgroundImage: `linear-gradient(rgba(99, 102, 241, 0.8), rgba(139, 92, 246, 0.8)), url(${branding.heroUrl.startsWith('http') ? branding.heroUrl : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${branding.heroUrl}`})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            borderRadius: '1rem',
+            marginTop: '2rem',
+            padding: '5rem 1rem'
+          } : {}}
+        >
           <h1 className="text-5xl md:text-7xl font-bold text-white mb-6">
             Professional Live Streaming
             <br />
