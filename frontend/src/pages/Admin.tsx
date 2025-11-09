@@ -15,11 +15,19 @@ import {
   Shield,
   CreditCard,
   Cast,
-  Palette
+  Palette,
+  Rocket
 } from 'lucide-react';
 
 export function Admin() {
   const adminSections = [
+    {
+      title: 'Infrastructure',
+      description: 'Deploy and scale servers with one click',
+      icon: Rocket,
+      path: '/admin/servers',
+      color: 'bg-sky-500/10 text-sky-400 border-sky-500/20',
+    },
     {
       title: 'Servers',
       description: 'Manage and monitor streaming servers',

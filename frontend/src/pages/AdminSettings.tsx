@@ -26,6 +26,7 @@ interface SystemConfig {
   enable_diagnostic_logging?: string;
   max_broadcast_participants?: string;
   max_concurrent_broadcasts?: string;
+  hetzner_api_key?: string;
 }
 
 export default function AdminSettings() {
@@ -214,6 +215,12 @@ export default function AdminSettings() {
           { key: 'aws_secret_access_key', label: 'AWS Secret Access Key', type: 'password', description: 'AWS secret key' },
           { key: 's3_bucket_name', label: 'S3 Bucket Name', type: 'text', description: 'Bucket for storing recordings' },
           { key: 'redis_url', label: 'Redis URL', type: 'text', description: 'Redis connection for caching' },
+        ],
+      },
+      {
+        category: 'Infrastructure & Deployment',
+        fields: [
+          { key: 'hetzner_api_key', label: 'Hetzner Cloud API Key', type: 'password', description: 'For automatic server provisioning and scaling' },
         ],
       },
       {
