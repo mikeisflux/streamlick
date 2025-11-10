@@ -29,9 +29,14 @@ media-server/src/**/*.js
 media-server/src/**/*.js.map
 
 # Config files (local overrides)
+vite.config.*.ts
+vite.config.*.js
 vite.config.local.ts
 vite.config.local.js
 tsconfig.local.json
+tsconfig.*.json
+!tsconfig.json
+!tsconfig.node.json
 
 # Logs
 logs/
