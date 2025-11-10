@@ -110,8 +110,7 @@ export function Studio() {
   const [showRecordingDrawer, setShowRecordingDrawer] = useState(false);
 
   // Sidebar and panel state for new layout
-  const [leftSidebarOpen, setLeftSidebarOpen] = useState(false);
-  const [leftSidebarHovered, setLeftSidebarHovered] = useState(false);
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
   const [activeRightTab, setActiveRightTab] = useState<'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording'>('chat');
   const [selectedLayout, setSelectedLayout] = useState<number>(1);
@@ -1457,23 +1456,17 @@ export function Studio() {
     );
   }
 
-  const showLeftSidebar = leftSidebarOpen || leftSidebarHovered;
-
   return (
     <div className="h-screen w-screen overflow-hidden grid" style={{
       gridTemplateRows: '60px 1fr',
-      gridTemplateColumns: showLeftSidebar && rightSidebarOpen
+      gridTemplateColumns: leftSidebarOpen && rightSidebarOpen
         ? '280px 1fr 320px'
-        : showLeftSidebar
+        : leftSidebarOpen
         ? '280px 1fr 0px'
         : rightSidebarOpen
         ? '0px 1fr 320px'
         : '0px 1fr 0px',
-      backgroundColor: '#1a1a1a',
-      transform: 'scale(0.8)',
-      transformOrigin: 'top left',
-      width: '125%',
-      height: '125%'
+      backgroundColor: '#1a1a1a'
     }}>
       {/* Top Bar - 60px fixed height */}
       <header style={{
@@ -1529,11 +1522,9 @@ export function Studio() {
 
 
       {/* Left Sidebar - Scenes (280px width) */}
-      {showLeftSidebar && (
+      {leftSidebarOpen && (
         <aside
-          onMouseEnter={() => setLeftSidebarHovered(true)}
-          onMouseLeave={() => setLeftSidebarHovered(false)}
-          className="flex flex-col overflow-hidden border-r transition-all duration-200"
+          className="flex flex-col overflow-hidden border-r"
           style={{
             width: '280px',
             backgroundColor: '#f5f5f5',
@@ -1546,22 +1537,12 @@ export function Studio() {
           >
             <h3 className="text-sm font-semibold text-gray-800">Scenes</h3>
             <button
-              onClick={() => {
-                setLeftSidebarOpen(!leftSidebarOpen);
-                setLeftSidebarHovered(false);
-              }}
+              onClick={() => setLeftSidebarOpen(false)}
               className="text-gray-600 hover:text-gray-900"
-              title={leftSidebarOpen ? "Unpin scenes panel" : "Pin scenes panel"}
             >
-              {leftSidebarOpen ? (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                </svg>
-              ) : (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                </svg>
-              )}
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
@@ -2145,17 +2126,17 @@ export function Studio() {
         </aside>
       )}
 
-      {/* Hover trigger for left sidebar (when not pinned) */}
+      {/* Toggle Buttons (when sidebars are collapsed) */}
       {!leftSidebarOpen && (
-        <div
-          onMouseEnter={() => setLeftSidebarHovered(true)}
-          className="fixed left-0 top-0 h-full w-2 z-50"
+        <button
+          onClick={() => setLeftSidebarOpen(true)}
+          className="fixed left-2 top-1/2 transform -translate-y-1/2 p-2 rounded-r bg-gray-700 hover:bg-gray-600 text-white shadow-lg z-50"
           style={{ zIndex: 900 }}
         >
-          <div className="absolute left-0 top-1/2 transform -translate-y-1/2 pl-1">
-            <div className="w-1 h-16 bg-gray-600 rounded-r opacity-30 hover:opacity-100 transition-opacity"></div>
-          </div>
-        </div>
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
       )}
       {!rightSidebarOpen && (
         <button
