@@ -107,8 +107,8 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
           {/* Progress indicator */}
           <div className="flex items-center justify-center space-x-2 mt-6">
             <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
-            <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse delay-75"></div>
-            <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse delay-150"></div>
+            <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse" style={{ animationDelay: '75ms' }}></div>
+            <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse" style={{ animationDelay: '150ms' }}></div>
           </div>
 
           {/* Cancel button */}
@@ -122,15 +122,6 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
           )}
         </div>
       </div>
-
-      <style jsx>{`
-        .delay-75 {
-          animation-delay: 75ms;
-        }
-        .delay-150 {
-          animation-delay: 150ms;
-        }
-      `}</style>
     </div>
   );
 };

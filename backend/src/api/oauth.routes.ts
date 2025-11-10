@@ -87,9 +87,12 @@ router.get('/youtube/callback', async (req, res) => {
 
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
 
+    // Calculate token expiration (expires_in is in seconds, default 1 hour)
+    const tokenExpiresAt = new Date(Date.now() + (expires_in || 3600) * 1000);
+
     // Get YouTube channel info
     const channelResponse = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
-      params: { part: 'snippet', mine: true },
+      params: { part: 'snippet,id', mine: true },
       headers: { Authorization: `Bearer ${access_token}` },
     });
 
@@ -98,24 +101,20 @@ router.get('/youtube/callback', async (req, res) => {
       return res.status(400).json({ error: 'No YouTube channel found' });
     }
 
-    // Get stream key
-    const streamKeyResponse = await axios.get('https://www.googleapis.com/youtube/v3/liveStreams', {
-      params: { part: 'cdn', mine: true },
-      headers: { Authorization: `Bearer ${access_token}` },
-    });
-
-    const streamKey = streamKeyResponse.data.items?.[0]?.cdn?.ingestionInfo?.streamName || '';
-
     // Store destination
+    // Note: Live stream RTMP URLs are created dynamically when broadcast starts
     await prisma.destination.create({
       data: {
         userId,
         platform: 'youtube',
+        platformUserId: channel.id,
         displayName: channel.snippet.title,
-        rtmpUrl: 'rtmp://a.rtmp.youtube.com/live2',
-        streamKey: encrypt(streamKey),
+        channelId: channel.id,
+        rtmpUrl: null, // Will be set when creating live broadcast
+        streamKey: null, // Will be set when creating live broadcast
         accessToken: encrypt(access_token),
         refreshToken: refresh_token ? encrypt(refresh_token) : null,
+        tokenExpiresAt,
       },
     });
 

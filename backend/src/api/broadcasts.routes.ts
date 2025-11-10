@@ -8,6 +8,11 @@ import {
   endFacebookLiveVideo,
   validateFacebookToken,
 } from '../services/facebook.service';
+import {
+  createYouTubeLiveBroadcast,
+  endYouTubeLiveBroadcast,
+  getValidYouTubeToken,
+} from '../services/youtube.service';
 import { getIOInstance } from '../socket/io-instance';
 
 const router = Router();
@@ -236,6 +241,32 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
                 logger.info(`Created Facebook live video: ${liveVideoId}`);
               }
 
+              // Handle YouTube live broadcast creation
+              if (destination.platform === 'youtube' && destination.channelId) {
+                try {
+                  // Get valid token (auto-refreshes if needed)
+                  const accessToken = await getValidYouTubeToken(destination.id);
+
+                  // Create YouTube live broadcast
+                  const ytBroadcast = await createYouTubeLiveBroadcast(
+                    accessToken,
+                    broadcast.title,
+                    broadcast.description || undefined,
+                    undefined, // scheduledStartTime (use current time)
+                    'public' // privacyStatus
+                  );
+
+                  streamUrl = ytBroadcast.rtmpUrl;
+                  streamKey = ytBroadcast.streamKey;
+                  liveVideoId = ytBroadcast.broadcastId;
+
+                  logger.info(`Created YouTube live broadcast: ${liveVideoId}`);
+                } catch (error) {
+                  logger.error(`Failed to create YouTube live broadcast for destination ${destination.id}:`, error);
+                  continue; // Skip this destination
+                }
+              }
+
               // Create broadcast destination record
               const broadcastDest = await prisma.broadcastDestination.create({
                 data: {
@@ -322,6 +353,21 @@ router.post('/:id/end', authenticate, async (req: AuthRequest, res) => {
           const accessToken = decrypt(broadcastDest.destination.accessToken);
           await endFacebookLiveVideo(broadcastDest.liveVideoId, accessToken);
           logger.info(`Ended Facebook live video: ${broadcastDest.liveVideoId}`);
+        }
+
+        // End YouTube live broadcasts
+        if (
+          broadcastDest.liveVideoId &&
+          broadcastDest.destination.platform === 'youtube'
+        ) {
+          try {
+            const accessToken = await getValidYouTubeToken(broadcastDest.destination.id);
+            await endYouTubeLiveBroadcast(broadcastDest.liveVideoId, accessToken);
+            logger.info(`Ended YouTube live broadcast: ${broadcastDest.liveVideoId}`);
+          } catch (error) {
+            logger.error(`Failed to end YouTube live broadcast ${broadcastDest.liveVideoId}:`, error);
+            // Continue with other destinations
+          }
         }
 
         // Update broadcast destination status
