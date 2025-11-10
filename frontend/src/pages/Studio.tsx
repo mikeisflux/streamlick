@@ -1762,7 +1762,8 @@ export function Studio() {
           style={{
             height: '80px',
             backgroundColor: '#2d2d2d',
-            borderColor: '#404040'
+            borderColor: '#404040',
+            marginLeft: '-90px'
           }}
         >
           {/* Left Section */}
