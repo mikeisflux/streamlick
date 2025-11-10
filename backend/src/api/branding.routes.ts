@@ -135,12 +135,13 @@ router.post(
         config,
       });
 
-      // Delete old files before saving new ones to avoid accumulation
+      // Delete old files, excluding the newly uploaded ones
       const existingFiles = fs.existsSync(uploadDir) ? fs.readdirSync(uploadDir) : [];
 
       if (files?.logo?.[0]) {
-        // Delete old logo files
-        existingFiles.filter(f => f.startsWith('logo-')).forEach(f => {
+        const newLogoFilename = files.logo[0].filename;
+        // Delete old logo files (excluding the new one)
+        existingFiles.filter(f => f.startsWith('logo-') && f !== newLogoFilename).forEach(f => {
           try {
             fs.unlinkSync(path.join(uploadDir, f));
             logger.info('Deleted old logo:', f);
@@ -152,8 +153,9 @@ router.post(
       }
 
       if (files?.favicon?.[0]) {
-        // Delete old favicon files
-        existingFiles.filter(f => f.startsWith('favicon-')).forEach(f => {
+        const newFaviconFilename = files.favicon[0].filename;
+        // Delete old favicon files (excluding the new one)
+        existingFiles.filter(f => f.startsWith('favicon-') && f !== newFaviconFilename).forEach(f => {
           try {
             fs.unlinkSync(path.join(uploadDir, f));
             logger.info('Deleted old favicon:', f);
@@ -165,8 +167,9 @@ router.post(
       }
 
       if (files?.hero?.[0]) {
-        // Delete old hero files
-        existingFiles.filter(f => f.startsWith('hero-')).forEach(f => {
+        const newHeroFilename = files.hero[0].filename;
+        // Delete old hero files (excluding the new one)
+        existingFiles.filter(f => f.startsWith('hero-') && f !== newHeroFilename).forEach(f => {
           try {
             fs.unlinkSync(path.join(uploadDir, f));
             logger.info('Deleted old hero:', f);
