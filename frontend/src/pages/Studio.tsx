@@ -152,7 +152,7 @@ export function Studio() {
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
   const [activeRightTab, setActiveRightTab] = useState<'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording'>('chat');
-  const [selectedLayout, setSelectedLayout] = useState<number>(1);
+  const [selectedLayout, setSelectedLayout] = useState<number>(9);
 
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
@@ -1223,6 +1223,61 @@ export function Studio() {
     };
   }, [isDraggingChat, isResizingChat, isDraggingAnalytics, isResizingAnalytics, dragStartPos, chatOverlayPosition, analyticsDashboardPosition]);
 
+  // Get layout styles based on selected layout
+  const getLayoutStyles = (layoutId: number) => {
+    switch (layoutId) {
+      case 1: // Grid 2x2
+        return {
+          container: 'grid grid-cols-2 grid-rows-2 gap-2 p-2',
+          mainVideo: 'col-span-1 row-span-1',
+        };
+      case 2: // Spotlight (one large, thumbnails on right)
+        return {
+          container: 'flex gap-2 p-2',
+          mainVideo: 'flex-1',
+          sidebar: 'flex flex-col gap-2 w-1/4',
+        };
+      case 3: // Sidebar left (narrow left, wide right)
+        return {
+          container: 'flex gap-2 p-2',
+          sidebar: 'flex flex-col gap-2 w-1/4',
+          mainVideo: 'flex-1',
+        };
+      case 4: // Picture-in-picture
+        return {
+          container: 'relative',
+          mainVideo: 'absolute inset-0',
+          pip: 'absolute bottom-4 right-4 w-1/4 h-1/4',
+        };
+      case 5: // Vertical split 50/50
+        return {
+          container: 'flex gap-2 p-2',
+          mainVideo: 'flex-1',
+        };
+      case 6: // Horizontal split 50/50
+        return {
+          container: 'flex flex-col gap-2 p-2',
+          mainVideo: 'flex-1',
+        };
+      case 7: // Grid 3x3
+        return {
+          container: 'grid grid-cols-3 grid-rows-3 gap-2 p-2',
+          mainVideo: 'col-span-1 row-span-1',
+        };
+      case 8: // Grid 2x2 (larger)
+        return {
+          container: 'grid grid-cols-2 grid-rows-2 gap-4 p-4',
+          mainVideo: 'col-span-1 row-span-1',
+        };
+      case 9: // Full screen (single)
+      default:
+        return {
+          container: 'relative',
+          mainVideo: 'absolute inset-0',
+        };
+    }
+  };
+
   // Layout Icon Renderer
   const renderLayoutIcon = (layoutId: number) => {
     const iconProps = { className: "w-8 h-8", fill: "currentColor", viewBox: "0 0 24 24" };
@@ -1745,24 +1800,134 @@ export function Studio() {
               aspectRatio: '16 / 9'
             }}
           >
-            {/* Main Video Preview */}
-            <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: '#000000' }}>
-              {localStream && videoEnabled ? (
-                <video
-                  ref={mainVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                  style={{ willChange: 'auto' }}
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <div className="text-center">
-                    <svg className="w-16 h-16 text-gray-600 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    <p className="text-gray-500 text-sm">Camera Off</p>
+            {/* Main Video Preview with Dynamic Layout */}
+            <div
+              className={`absolute inset-0 overflow-hidden ${getLayoutStyles(selectedLayout).container}`}
+              style={{ backgroundColor: '#000000' }}
+            >
+              {/* Main Video */}
+              <div className={`relative bg-black rounded overflow-hidden ${getLayoutStyles(selectedLayout).mainVideo}`}>
+                {localStream && videoEnabled ? (
+                  <video
+                    ref={mainVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                    style={{ willChange: 'auto' }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="text-center">
+                      <svg className="w-16 h-16 text-gray-600 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      <p className="text-gray-500 text-sm">Camera Off</p>
+                    </div>
+                  </div>
+                )}
+                {/* Video Label */}
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-white text-xs font-medium">You (Host)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional video slots for grid layouts */}
+              {(selectedLayout === 1 || selectedLayout === 8) && (
+                <>
+                  {[1, 2, 3].map((slot) => (
+                    <div key={slot} className={`relative bg-gray-900 rounded overflow-hidden ${getLayoutStyles(selectedLayout).mainVideo}`}>
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-center">
+                          <svg className="w-12 h-12 text-gray-700 mx-auto mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          <p className="text-gray-600 text-xs">Empty Slot</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {/* 3x3 Grid Layout */}
+              {selectedLayout === 7 && (
+                <>
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((slot) => (
+                    <div key={slot} className={`relative bg-gray-900 rounded overflow-hidden ${getLayoutStyles(selectedLayout).mainVideo}`}>
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-center">
+                          <svg className="w-8 h-8 text-gray-700 mx-auto mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          <p className="text-gray-600 text-xs">Empty</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {/* Sidebar layout with thumbnails (2) */}
+              {selectedLayout === 2 && (
+                <div className={getLayoutStyles(selectedLayout).sidebar}>
+                  {[1, 2, 3].map((slot) => (
+                    <div key={slot} className="relative bg-gray-900 rounded overflow-hidden flex-1">
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-center">
+                          <svg className="w-8 h-8 text-gray-700 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Vertical split 50/50 (5) */}
+              {selectedLayout === 5 && (
+                <div className="relative bg-gray-900 rounded overflow-hidden flex-1">
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="text-center">
+                      <svg className="w-12 h-12 text-gray-700 mx-auto mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      <p className="text-gray-600 text-xs">Empty Slot</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sidebar left layout (3) */}
+              {selectedLayout === 3 && (
+                <div className={getLayoutStyles(selectedLayout).sidebar} style={{ order: -1 }}>
+                  {[1, 2, 3].map((slot) => (
+                    <div key={slot} className="relative bg-gray-900 rounded overflow-hidden flex-1">
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-center">
+                          <svg className="w-8 h-8 text-gray-700 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Horizontal split layout (6) */}
+              {selectedLayout === 6 && (
+                <div className="relative bg-gray-900 rounded overflow-hidden flex-1">
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="text-center">
+                      <svg className="w-12 h-12 text-gray-700 mx-auto mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      <p className="text-gray-600 text-xs">Empty Slot</p>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1829,18 +1994,6 @@ export function Studio() {
 
               {/* AI Caption Overlay */}
               {captionsEnabled && <CaptionOverlayMemo caption={currentCaption} />}
-
-              {/* User Label Overlay */}
-              {localStream && (
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-white text-sm font-medium">You (Host)</span>
-                      <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded">720p</span>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
