@@ -229,7 +229,7 @@ router.post('/oauth-config/:platform', async (req, res) => {
     const { platform } = req.params;
     const { clientId, clientSecret, enabled, redirectUri } = req.body;
 
-    const updates = [];
+    const updates: any[] = [];
 
     if (clientId !== undefined) {
       updates.push(
@@ -401,7 +401,7 @@ router.get('/system-config', async (req, res) => {
 // Update system configuration
 router.post('/system-config', async (req, res) => {
   try {
-    const updates = [];
+    const updates: any[] = [];
 
     for (const [key, value] of Object.entries(req.body)) {
       // Skip undefined, null, or empty string values to avoid overwriting existing settings

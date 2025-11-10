@@ -197,7 +197,7 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
           }
         }, 1000);
 
-        const broadcastDestinations = [];
+        const broadcastDestinations: any[] = [];
 
         // If destinations are specified, create live videos for each platform
         if (destinationIds && destinationIds.length > 0) {
@@ -213,7 +213,7 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
             try {
               let streamUrl = destination.rtmpUrl;
               let streamKey = destination.streamKey ? decrypt(destination.streamKey) : '';
-              let liveVideoId = null;
+              let liveVideoId: string | null = null;
 
               // Handle Facebook live video creation
               if (destination.platform === 'facebook' && destination.pageId && destination.accessToken) {
