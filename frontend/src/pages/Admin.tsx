@@ -14,7 +14,8 @@ import {
   Palette,
   Rocket,
   FileEdit,
-  HardDrive
+  HardDrive,
+  Mail
 } from 'lucide-react';
 
 export function Admin() {
@@ -149,6 +150,13 @@ export function Admin() {
       icon: Layout,
       path: '/admin/templates',
       color: 'bg-teal-500/10 text-teal-400 border-teal-500/20',
+    },
+    {
+      title: 'Email Management',
+      description: 'Manage mailboxes, send and receive emails',
+      icon: Mail,
+      path: '/admin/emails',
+      color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
     },
   ];
 

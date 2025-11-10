@@ -30,6 +30,7 @@ import infrastructureRoutes from './api/infrastructure.routes';
 import brandingRoutes, { publicBrandingRouter } from './api/branding.routes';
 import tokenWarningsRoutes from './api/token-warnings.routes';
 import pageContentRoutes from './api/page-content.routes';
+import emailsRoutes from './api/emails.routes';
 
 import initializeSocket from './socket';
 import logger from './utils/logger';
@@ -116,6 +117,7 @@ app.use('/api/infrastructure', infrastructureRoutes);
 app.use('/api/branding', publicBrandingRouter); // Public branding endpoint
 app.use('/api/token-warnings', tokenWarningsRoutes);
 app.use('/api/page-content', pageContentRoutes); // Public endpoint for getting page content
+app.use('/api/emails', emailsRoutes); // Email management routes
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

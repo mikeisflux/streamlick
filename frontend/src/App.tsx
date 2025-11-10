@@ -22,6 +22,7 @@ import { AdminUsers } from './pages/AdminUsers';
 import { AdminBroadcasts } from './pages/AdminBroadcasts';
 import { AdminTemplates } from './pages/AdminTemplates';
 import { AdminAnalytics } from './pages/AdminAnalytics';
+import { AdminEmails } from './pages/AdminEmails';
 import { Privacy } from './pages/Privacy';
 import { Terms } from './pages/Terms';
 import { DataDeletion } from './pages/DataDeletion';
@@ -193,6 +194,14 @@ function App() {
           element={
             <AdminRoute>
               <AdminAnalytics />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/emails"
+          element={
+            <AdminRoute>
+              <AdminEmails />
             </AdminRoute>
           }
         />
