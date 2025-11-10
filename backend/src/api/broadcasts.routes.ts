@@ -8,6 +8,7 @@ import {
   endFacebookLiveVideo,
   validateFacebookToken,
 } from '../services/facebook.service';
+import { getIOInstance } from '../socket/io-instance';
 
 const router = Router();
 
@@ -155,82 +156,133 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Broadcast not found' });
     }
 
-    // Update broadcast status
-    const updated = await prisma.broadcast.update({
+    // Set broadcast to countdown status
+    await prisma.broadcast.update({
       where: { id: req.params.id },
       data: {
-        status: 'live',
+        status: 'countdown',
         startedAt: new Date(),
       },
     });
 
-    // If destinations are specified, create live videos for each platform
-    if (destinationIds && destinationIds.length > 0) {
-      const destinations = await prisma.destination.findMany({
-        where: {
-          id: { in: destinationIds },
-          userId: req.user!.userId,
-          isActive: true,
-        },
-      });
+    // Return immediately to start countdown on frontend
+    res.json({
+      message: 'Countdown started',
+      broadcastId: broadcast.id,
+      countdown: 15,
+      status: 'countdown'
+    });
 
-      const broadcastDestinations = [];
+    // Asynchronously prepare destinations during countdown
+    setImmediate(async () => {
+      try {
+        const io = getIOInstance();
+        let countdownSeconds = 15;
 
-      for (const destination of destinations) {
-        try {
-          let streamUrl = destination.rtmpUrl;
-          let streamKey = destination.streamKey ? decrypt(destination.streamKey) : '';
-          let liveVideoId = null;
+        // Emit countdown ticks
+        const countdownInterval = setInterval(() => {
+          countdownSeconds--;
+          io.to(`broadcast:${broadcast.id}`).emit('countdown-tick', {
+            broadcastId: broadcast.id,
+            secondsRemaining: countdownSeconds,
+          });
 
-          // Handle Facebook live video creation
-          if (destination.platform === 'facebook' && destination.pageId && destination.accessToken) {
-            const accessToken = decrypt(destination.accessToken);
-
-            // Validate token before use
-            const isValid = await validateFacebookToken(accessToken);
-            if (!isValid) {
-              logger.error(`Facebook token expired for destination ${destination.id}`);
-              continue; // Skip this destination
-            }
-
-            // Create Facebook live video
-            const liveVideo = await createFacebookLiveVideo(
-              destination.pageId,
-              accessToken,
-              broadcast.title,
-              broadcast.description || undefined
-            );
-
-            streamUrl = liveVideo.rtmpUrl;
-            streamKey = liveVideo.streamKey;
-            liveVideoId = liveVideo.liveVideoId;
-
-            logger.info(`Created Facebook live video: ${liveVideoId}`);
+          if (countdownSeconds <= 0) {
+            clearInterval(countdownInterval);
           }
+        }, 1000);
 
-          // Create broadcast destination record
-          const broadcastDest = await prisma.broadcastDestination.create({
-            data: {
-              broadcastId: broadcast.id,
-              destinationId: destination.id,
-              streamUrl,
-              streamKey: streamKey ? encrypt(streamKey) : null,
-              liveVideoId,
-              status: 'pending',
+        const broadcastDestinations = [];
+
+        // If destinations are specified, create live videos for each platform
+        if (destinationIds && destinationIds.length > 0) {
+          const destinations = await prisma.destination.findMany({
+            where: {
+              id: { in: destinationIds },
+              userId: req.user!.userId,
+              isActive: true,
             },
           });
 
-          broadcastDestinations.push(broadcastDest);
-        } catch (error) {
-          logger.error(`Error setting up destination ${destination.id}:`, error);
-          // Continue with other destinations
+          for (const destination of destinations) {
+            try {
+              let streamUrl = destination.rtmpUrl;
+              let streamKey = destination.streamKey ? decrypt(destination.streamKey) : '';
+              let liveVideoId = null;
+
+              // Handle Facebook live video creation
+              if (destination.platform === 'facebook' && destination.pageId && destination.accessToken) {
+                const accessToken = decrypt(destination.accessToken);
+
+                // Validate token before use
+                const isValid = await validateFacebookToken(accessToken);
+                if (!isValid) {
+                  logger.error(`Facebook token expired for destination ${destination.id}`);
+                  continue; // Skip this destination
+                }
+
+                // Create Facebook live video
+                const liveVideo = await createFacebookLiveVideo(
+                  destination.pageId,
+                  accessToken,
+                  broadcast.title,
+                  broadcast.description || undefined
+                );
+
+                streamUrl = liveVideo.rtmpUrl;
+                streamKey = liveVideo.streamKey;
+                liveVideoId = liveVideo.liveVideoId;
+
+                logger.info(`Created Facebook live video: ${liveVideoId}`);
+              }
+
+              // Create broadcast destination record
+              const broadcastDest = await prisma.broadcastDestination.create({
+                data: {
+                  broadcastId: broadcast.id,
+                  destinationId: destination.id,
+                  streamUrl,
+                  streamKey: streamKey ? encrypt(streamKey) : null,
+                  liveVideoId,
+                  status: 'pending',
+                },
+              });
+
+              broadcastDestinations.push(broadcastDest);
+            } catch (error) {
+              logger.error(`Error setting up destination ${destination.id}:`, error);
+              // Continue with other destinations
+            }
+          }
+
+          logger.info(`Broadcast prepared with ${broadcastDestinations.length} destinations`);
         }
+
+        // After countdown (15 seconds), update status to live
+        setTimeout(async () => {
+          try {
+            await prisma.broadcast.update({
+              where: { id: req.params.id },
+              data: {
+                status: 'live',
+              },
+            });
+
+            // Emit countdown complete event
+            io.to(`broadcast:${broadcast.id}`).emit('countdown-complete', {
+              broadcastId: broadcast.id,
+              status: 'live',
+            });
+
+            logger.info(`Broadcast ${req.params.id} went live after countdown`);
+          } catch (error) {
+            logger.error('Error updating broadcast to live after countdown:', error);
+          }
+        }, 15000); // 15 seconds
+      } catch (error) {
+        logger.error('Error preparing broadcast destinations:', error);
       }
-
-      logger.info(`Broadcast started with ${broadcastDestinations.length} destinations`);
-    }
-
-    res.json(updated);
+    });
   } catch (error) {
     logger.error('Start broadcast error:', error);
     res.status(500).json({ error: 'Failed to start broadcast' });

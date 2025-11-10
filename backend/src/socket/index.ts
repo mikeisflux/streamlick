@@ -4,6 +4,7 @@ import { verifyAccessToken } from '../auth/jwt';
 import { ChatManager, ChatMessage } from '../services/chat.service';
 import { streamHealthMonitor, StreamHealthMetrics } from '../services/stream-health.service';
 import logger from '../utils/logger';
+import { setIOInstance } from './io-instance';
 
 // Import adaptive bitrate service (will be available after media-server is compiled)
 // For now, we'll create placeholder types
@@ -539,6 +540,9 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
       logger.info(`Socket disconnected: ${socket.id}`);
     });
   });
+
+  // Set global io instance for use in routes
+  setIOInstance(io);
 
   return io;
 }
