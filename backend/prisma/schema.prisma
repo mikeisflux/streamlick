@@ -481,8 +481,8 @@ model Email {
   subject     String?   @default("")
   bodyText    String?   @map("body_text") @db.Text
   bodyHtml    String?   @map("body_html") @db.Text
-  attachments Json?
-  headers     Json?
+  attachments String?   @db.Text // JSON stored as text
+  headers     String?   @db.Text // JSON stored as text
   messageId   String?   @map("message_id")
   inReplyTo   String?   @map("in_reply_to")
   direction   String?   // inbound, outbound
