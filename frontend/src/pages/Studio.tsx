@@ -1029,9 +1029,17 @@ export function Studio() {
         localStream.getVideoTracks().forEach(track => track.stop());
       }
 
+      // Wait a bit for the camera to be fully released
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       // Get new video stream with selected device
       const newVideoStream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: deviceId } },
+        video: {
+          deviceId: { exact: deviceId },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 },
+        },
       });
 
       // Replace video track in local stream
@@ -1047,7 +1055,7 @@ export function Studio() {
       toast.success('Camera changed successfully');
     } catch (error) {
       console.error('Failed to change video device:', error);
-      toast.error('Failed to change camera');
+      toast.error('Failed to change camera. Make sure it\'s not being used by another application.');
     }
   };
 
