@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { broadcastService } from '../services/broadcast.service';
 import { socketService } from '../services/socket.service';
@@ -52,6 +52,45 @@ interface RemoteParticipant {
   videoEnabled: boolean;
   role: 'host' | 'guest' | 'backstage'; // host=always live, guest=live, backstage=waiting
 }
+
+// Memoized Caption Overlay Component to prevent re-renders
+const CaptionOverlayMemo = memo(({ caption }: { caption: Caption | null }) => {
+  if (!caption) return null;
+
+  return (
+    <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 max-w-4xl px-4 pointer-events-none">
+      <div
+        className={`px-6 py-3 rounded-lg text-center transition-opacity duration-300 ${
+          caption.isFinal ? 'bg-black/90' : 'bg-black/70'
+        }`}
+        style={{
+          backdropFilter: 'blur(8px)',
+          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
+        }}
+      >
+        <p
+          className={`text-white font-semibold leading-tight ${
+            caption.isFinal ? 'text-lg' : 'text-base opacity-80'
+          }`}
+          style={{
+            textShadow: '2px 2px 4px rgba(0, 0, 0, 0.8)',
+          }}
+        >
+          {caption.text}
+        </p>
+        {!caption.isFinal && (
+          <div className="flex items-center justify-center gap-1 mt-1">
+            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
+            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
+            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+CaptionOverlayMemo.displayName = 'CaptionOverlayMemo';
 
 export function Studio() {
   const { broadcastId } = useParams<{ broadcastId: string }>();
@@ -170,6 +209,10 @@ export function Studio() {
   const [isDraggingChat, setIsDraggingChat] = useState(false);
   const [isResizingChat, setIsResizingChat] = useState(false);
   const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
+  const chatOverlayRef = useRef<HTMLDivElement>(null);
+  const chatDragOffsetRef = useRef({ x: 0, y: 0 });
+  const mainVideoRef = useRef<HTMLVideoElement>(null);
+  const sidebarVideoRef = useRef<HTMLVideoElement>(null);
 
   // Drawer state consolidation
   const [activeDrawer, setActiveDrawer] = useState<'destinations' | 'invite' | 'banners' | 'brand' | null>(null);
@@ -1063,10 +1106,10 @@ export function Studio() {
   const handleChatOverlayDragStart = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsDraggingChat(true);
-    setDragStartPos({
+    chatDragOffsetRef.current = {
       x: e.clientX - chatOverlayPosition.x,
       y: e.clientY - chatOverlayPosition.y,
-    });
+    };
   };
 
   const handleChatOverlayResizeStart = (e: React.MouseEvent) => {
@@ -1101,11 +1144,21 @@ export function Studio() {
 
   // Mouse move handler for dragging and resizing
   useEffect(() => {
+    let animationFrameId: number;
+
     const handleMouseMove = (e: MouseEvent) => {
       if (isDraggingChat) {
-        setChatOverlayPosition({
-          x: e.clientX - dragStartPos.x,
-          y: e.clientY - dragStartPos.y,
+        // Use requestAnimationFrame and direct DOM manipulation to avoid re-renders
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId);
+        }
+        animationFrameId = requestAnimationFrame(() => {
+          const newX = e.clientX - chatDragOffsetRef.current.x;
+          const newY = e.clientY - chatDragOffsetRef.current.y;
+
+          if (chatOverlayRef.current) {
+            chatOverlayRef.current.style.transform = `translate(${newX}px, ${newY}px)`;
+          }
         });
       } else if (isResizingChat) {
         const deltaX = e.clientX - dragStartPos.x;
@@ -1132,10 +1185,28 @@ export function Studio() {
     };
 
     const handleMouseUp = () => {
+      if (isDraggingChat && chatOverlayRef.current) {
+        // Save the final position to state when dragging ends
+        const transform = chatOverlayRef.current.style.transform;
+        const match = transform.match(/translate\((-?\d+)px,\s*(-?\d+)px\)/);
+        if (match) {
+          setChatOverlayPosition({
+            x: parseInt(match[1]),
+            y: parseInt(match[2]),
+          });
+        }
+        // Reset transform
+        chatOverlayRef.current.style.transform = '';
+      }
+
       setIsDraggingChat(false);
       setIsResizingChat(false);
       setIsDraggingAnalytics(false);
       setIsResizingAnalytics(false);
+
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
     };
 
     if (isDraggingChat || isResizingChat || isDraggingAnalytics || isResizingAnalytics) {
@@ -1146,6 +1217,9 @@ export function Studio() {
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
     };
   }, [isDraggingChat, isResizingChat, isDraggingAnalytics, isResizingAnalytics, dragStartPos, chatOverlayPosition, analyticsDashboardPosition]);
 
@@ -1344,6 +1418,16 @@ export function Studio() {
       }
     };
   }, [captionsEnabled, captionLanguage]);
+
+  // Update video srcObject when localStream changes (prevents video element recreation)
+  useEffect(() => {
+    if (mainVideoRef.current && localStream) {
+      mainVideoRef.current.srcObject = localStream;
+    }
+    if (sidebarVideoRef.current && localStream) {
+      sidebarVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
 
   // Manage Smart Background Removal lifecycle
   useEffect(() => {
@@ -1630,13 +1714,12 @@ export function Studio() {
                 <div className="flex-1 bg-black rounded mb-2 relative overflow-hidden">
                   {localStream && videoEnabled && (
                     <video
-                      ref={(el) => {
-                        if (el && localStream) el.srcObject = localStream;
-                      }}
+                      ref={sidebarVideoRef}
                       autoPlay
                       playsInline
                       muted
                       className="w-full h-full object-cover"
+                      style={{ willChange: 'auto' }}
                     />
                   )}
                 </div>
@@ -1666,13 +1749,12 @@ export function Studio() {
             <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: '#000000' }}>
               {localStream && videoEnabled ? (
                 <video
-                  ref={(el) => {
-                    if (el && localStream) el.srcObject = localStream;
-                  }}
+                  ref={mainVideoRef}
                   autoPlay
                   playsInline
                   muted
                   className="w-full h-full object-cover"
+                  style={{ willChange: 'auto' }}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
@@ -1699,15 +1781,17 @@ export function Studio() {
               {/* On-Screen Chat Overlay - Draggable & Resizable */}
               {showChatOnStream && (
                 <div
+                  ref={chatOverlayRef}
                   className="absolute bg-black/80 backdrop-blur-sm rounded-lg overflow-hidden"
                   style={{
-                    left: `${chatOverlayPosition.x || 'auto'}px`,
-                    top: `${chatOverlayPosition.y || 'auto'}px`,
+                    left: chatOverlayPosition.x ? `${chatOverlayPosition.x}px` : 'auto',
+                    top: chatOverlayPosition.y ? `${chatOverlayPosition.y}px` : 'auto',
                     right: chatOverlayPosition.x ? 'auto' : '16px',
                     bottom: chatOverlayPosition.y ? 'auto' : '80px',
                     width: `${chatOverlaySize.width}px`,
                     height: `${chatOverlaySize.height}px`,
                     cursor: isDraggingChat ? 'grabbing' : 'default',
+                    willChange: isDraggingChat ? 'transform' : 'auto',
                   }}
                 >
                   {/* Drag Handle */}
@@ -1744,37 +1828,7 @@ export function Studio() {
               )}
 
               {/* AI Caption Overlay */}
-              {captionsEnabled && currentCaption && (
-                <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 max-w-4xl px-4">
-                  <div
-                    className={`px-6 py-3 rounded-lg text-center transition-opacity duration-300 ${
-                      currentCaption.isFinal ? 'bg-black/90' : 'bg-black/70'
-                    }`}
-                    style={{
-                      backdropFilter: 'blur(8px)',
-                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
-                    }}
-                  >
-                    <p
-                      className={`text-white font-semibold leading-tight ${
-                        currentCaption.isFinal ? 'text-lg' : 'text-base opacity-80'
-                      }`}
-                      style={{
-                        textShadow: '2px 2px 4px rgba(0, 0, 0, 0.8)',
-                      }}
-                    >
-                      {currentCaption.text}
-                    </p>
-                    {!currentCaption.isFinal && (
-                      <div className="flex items-center justify-center gap-1 mt-1">
-                        <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
-                        <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
-                        <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+              {captionsEnabled && <CaptionOverlayMemo caption={currentCaption} />}
 
               {/* User Label Overlay */}
               {localStream && (

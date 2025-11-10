@@ -12,6 +12,9 @@ pnpm-lock.yaml
 .env.production
 .env.test
 *.env
+!.env.example
+.env.backup
+.env.*.backup
 
 # Build outputs
 dist/
@@ -33,6 +36,9 @@ vite.config.*.ts
 vite.config.*.js
 vite.config.local.ts
 vite.config.local.js
+*.config.local.*
+config.local.*
+config/*.local.*
 tsconfig.local.json
 tsconfig.*.json
 !tsconfig.json
