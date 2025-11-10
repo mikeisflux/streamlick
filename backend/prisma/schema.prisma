@@ -58,21 +58,22 @@ model Broadcast {
 }
 
 model Destination {
-  id             String   @id @default(uuid())
-  userId         String   @map("user_id")
-  platform       String   // youtube, facebook, linkedin, twitch, custom_rtmp
-  platformUserId String?  @map("platform_user_id")
-  displayName    String?  @map("display_name")
-  rtmpUrl        String?  @map("rtmp_url")
-  streamKey      String?  @map("stream_key") // Encrypted
-  accessToken    String?  @map("access_token") // Encrypted
-  refreshToken   String?  @map("refresh_token") // Encrypted
-  channelId      String?  @map("channel_id") // For platform-specific moderation
-  pageId         String?  @map("page_id") // For Facebook page moderation
-  username       String?  // Platform username for Twitch, etc.
-  isActive       Boolean  @default(true) @map("is_active")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id             String    @id @default(uuid())
+  userId         String    @map("user_id")
+  platform       String    // youtube, facebook, linkedin, twitch, custom_rtmp
+  platformUserId String?   @map("platform_user_id")
+  displayName    String?   @map("display_name")
+  rtmpUrl        String?   @map("rtmp_url")
+  streamKey      String?   @map("stream_key") // Encrypted
+  accessToken    String?   @map("access_token") // Encrypted
+  refreshToken   String?   @map("refresh_token") // Encrypted
+  tokenExpiresAt DateTime? @map("token_expires_at") // When access token expires
+  channelId      String?   @map("channel_id") // For platform-specific moderation
+  pageId         String?   @map("page_id") // For Facebook page moderation
+  username       String?   // Platform username for Twitch, etc.
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   broadcastDestinations BroadcastDestination[]
@@ -86,6 +87,7 @@ model BroadcastDestination {
   destinationId String   @map("destination_id")
   streamUrl     String?  @map("stream_url")
   streamKey     String?  @map("stream_key") // Encrypted
+  liveVideoId   String?  @map("live_video_id") // Platform-specific live video ID (Facebook, YouTube, etc.)
   status        String?  // pending, streaming, ended, error
   viewerCount   Int      @default(0) @map("viewer_count")
   createdAt     DateTime @default(now()) @map("created_at")

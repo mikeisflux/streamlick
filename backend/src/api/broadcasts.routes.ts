@@ -2,6 +2,12 @@ import { Router } from 'express';
 import prisma from '../database/prisma';
 import { authenticate, AuthRequest } from '../auth/middleware';
 import logger from '../utils/logger';
+import { decrypt, encrypt } from '../utils/crypto';
+import {
+  createFacebookLiveVideo,
+  endFacebookLiveVideo,
+  validateFacebookToken,
+} from '../services/facebook.service';
 
 const router = Router();
 
@@ -136,6 +142,8 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res) => {
 // Start broadcast
 router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
   try {
+    const { destinationIds } = req.body; // Array of destination IDs to stream to
+
     const broadcast = await prisma.broadcast.findFirst({
       where: {
         id: req.params.id,
@@ -147,6 +155,7 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Broadcast not found' });
     }
 
+    // Update broadcast status
     const updated = await prisma.broadcast.update({
       where: { id: req.params.id },
       data: {
@@ -154,6 +163,72 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
         startedAt: new Date(),
       },
     });
+
+    // If destinations are specified, create live videos for each platform
+    if (destinationIds && destinationIds.length > 0) {
+      const destinations = await prisma.destination.findMany({
+        where: {
+          id: { in: destinationIds },
+          userId: req.user!.userId,
+          isActive: true,
+        },
+      });
+
+      const broadcastDestinations = [];
+
+      for (const destination of destinations) {
+        try {
+          let streamUrl = destination.rtmpUrl;
+          let streamKey = destination.streamKey ? decrypt(destination.streamKey) : '';
+          let liveVideoId = null;
+
+          // Handle Facebook live video creation
+          if (destination.platform === 'facebook' && destination.pageId && destination.accessToken) {
+            const accessToken = decrypt(destination.accessToken);
+
+            // Validate token before use
+            const isValid = await validateFacebookToken(accessToken);
+            if (!isValid) {
+              logger.error(`Facebook token expired for destination ${destination.id}`);
+              continue; // Skip this destination
+            }
+
+            // Create Facebook live video
+            const liveVideo = await createFacebookLiveVideo(
+              destination.pageId,
+              accessToken,
+              broadcast.title,
+              broadcast.description || undefined
+            );
+
+            streamUrl = liveVideo.rtmpUrl;
+            streamKey = liveVideo.streamKey;
+            liveVideoId = liveVideo.liveVideoId;
+
+            logger.info(`Created Facebook live video: ${liveVideoId}`);
+          }
+
+          // Create broadcast destination record
+          const broadcastDest = await prisma.broadcastDestination.create({
+            data: {
+              broadcastId: broadcast.id,
+              destinationId: destination.id,
+              streamUrl,
+              streamKey: streamKey ? encrypt(streamKey) : null,
+              liveVideoId,
+              status: 'pending',
+            },
+          });
+
+          broadcastDestinations.push(broadcastDest);
+        } catch (error) {
+          logger.error(`Error setting up destination ${destination.id}:`, error);
+          // Continue with other destinations
+        }
+      }
+
+      logger.info(`Broadcast started with ${broadcastDestinations.length} destinations`);
+    }
 
     res.json(updated);
   } catch (error) {
@@ -170,10 +245,42 @@ router.post('/:id/end', authenticate, async (req: AuthRequest, res) => {
         id: req.params.id,
         userId: req.user!.userId,
       },
+      include: {
+        broadcastDestinations: {
+          include: {
+            destination: true,
+          },
+        },
+      },
     });
 
     if (!broadcast) {
       return res.status(404).json({ error: 'Broadcast not found' });
+    }
+
+    // End all platform live videos
+    for (const broadcastDest of broadcast.broadcastDestinations) {
+      try {
+        // End Facebook live videos
+        if (
+          broadcastDest.liveVideoId &&
+          broadcastDest.destination.platform === 'facebook' &&
+          broadcastDest.destination.accessToken
+        ) {
+          const accessToken = decrypt(broadcastDest.destination.accessToken);
+          await endFacebookLiveVideo(broadcastDest.liveVideoId, accessToken);
+          logger.info(`Ended Facebook live video: ${broadcastDest.liveVideoId}`);
+        }
+
+        // Update broadcast destination status
+        await prisma.broadcastDestination.update({
+          where: { id: broadcastDest.id },
+          data: { status: 'ended' },
+        });
+      } catch (error) {
+        logger.error(`Error ending destination ${broadcastDest.id}:`, error);
+        // Continue with other destinations
+      }
     }
 
     const endedAt = new Date();

@@ -16,9 +16,14 @@ const YOUTUBE_SCOPES = [
   'https://www.googleapis.com/auth/youtube.force-ssl',
 ].join(' ');
 
-const FACEBOOK_AUTH_URL = 'https://www.facebook.com/v18.0/dialog/oauth';
-const FACEBOOK_TOKEN_URL = 'https://graph.facebook.com/v18.0/oauth/access_token';
-const FACEBOOK_SCOPES = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts'].join(',');
+const FACEBOOK_AUTH_URL = 'https://www.facebook.com/v24.0/dialog/oauth';
+const FACEBOOK_TOKEN_URL = 'https://graph.facebook.com/v24.0/oauth/access_token';
+const FACEBOOK_SCOPES = [
+  'publish_video',              // Required for creating live videos
+  'pages_manage_engagement',    // Required for managing live interactions
+  'pages_read_engagement',      // Required for reading page data
+  'pages_show_list',            // Required for listing pages
+].join(',');
 
 const TWITCH_AUTH_URL = 'https://id.twitch.tv/oauth2/authorize';
 const TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
@@ -155,7 +160,7 @@ router.get('/facebook/callback', async (req, res) => {
 
     const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
 
-    // Exchange code for token
+    // Step 1: Exchange code for short-lived token
     const tokenResponse = await axios.get(FACEBOOK_TOKEN_URL, {
       params: {
         client_id: process.env.FACEBOOK_APP_ID,
@@ -165,11 +170,26 @@ router.get('/facebook/callback', async (req, res) => {
       },
     });
 
-    const { access_token } = tokenResponse.data;
+    const { access_token: shortLivedToken } = tokenResponse.data;
+
+    // Step 2: Exchange short-lived token for long-lived token (~60 days)
+    const longLivedResponse = await axios.get('https://graph.facebook.com/v24.0/oauth/access_token', {
+      params: {
+        grant_type: 'fb_exchange_token',
+        client_id: process.env.FACEBOOK_APP_ID,
+        client_secret: process.env.FACEBOOK_APP_SECRET,
+        fb_exchange_token: shortLivedToken,
+      },
+    });
+
+    const { access_token: longLivedToken, expires_in } = longLivedResponse.data;
+
+    // Calculate token expiration date (expires_in is in seconds, default 60 days)
+    const tokenExpiresAt = new Date(Date.now() + (expires_in || 5184000) * 1000); // 5184000 = 60 days in seconds
 
     // Get user's pages
-    const pagesResponse = await axios.get('https://graph.facebook.com/v18.0/me/accounts', {
-      params: { access_token },
+    const pagesResponse = await axios.get('https://graph.facebook.com/v24.0/me/accounts', {
+      params: { access_token: longLivedToken },
     });
 
     const page = pagesResponse.data.data?.[0];
@@ -177,33 +197,36 @@ router.get('/facebook/callback', async (req, res) => {
       return res.status(400).json({ error: 'No Facebook page found' });
     }
 
-    // Get page access token
-    const pageAccessToken = page.access_token;
+    // Get page access token (short-lived)
+    const pageShortToken = page.access_token;
 
-    // Get live video stream key
-    const streamKeyResponse = await axios.get(
-      `https://graph.facebook.com/v18.0/${page.id}/live_videos`,
-      {
-        params: {
-          access_token: pageAccessToken,
-          fields: 'stream_url,secure_stream_url',
-        },
-      }
-    );
+    // Exchange page token for long-lived token
+    const pageLongLivedResponse = await axios.get('https://graph.facebook.com/v24.0/oauth/access_token', {
+      params: {
+        grant_type: 'fb_exchange_token',
+        client_id: process.env.FACEBOOK_APP_ID,
+        client_secret: process.env.FACEBOOK_APP_SECRET,
+        fb_exchange_token: pageShortToken,
+      },
+    });
 
-    const streamUrl = streamKeyResponse.data.data?.[0]?.secure_stream_url ||
-                      'rtmps://live-api-s.facebook.com:443/rtmp/';
+    const { access_token: pageLongLivedToken, expires_in: pageExpiresIn } = pageLongLivedResponse.data;
+    const pageTokenExpiresAt = new Date(Date.now() + (pageExpiresIn || 5184000) * 1000);
 
     // Store destination
+    // Note: Live video RTMP URLs are created dynamically when broadcast starts
     await prisma.destination.create({
       data: {
         userId,
         platform: 'facebook',
+        platformUserId: page.id,
         displayName: page.name,
-        rtmpUrl: streamUrl,
-        streamKey: encrypt(''), // Facebook uses URL-based keys
-        accessToken: encrypt(pageAccessToken),
+        pageId: page.id,
+        rtmpUrl: null, // Will be set when creating live video
+        streamKey: null, // Will be set when creating live video
+        accessToken: encrypt(pageLongLivedToken),
         refreshToken: null,
+        tokenExpiresAt: pageTokenExpiresAt,
       },
     });
 

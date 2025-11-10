@@ -1,7 +1,10 @@
 import crypto from 'crypto';
 
 const ALGORITHM = 'aes-256-gcm';
-const SECRET_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32);
+// ENCRYPTION_KEY must be a 32-byte hex string (64 characters)
+const SECRET_KEY = process.env.ENCRYPTION_KEY
+  ? Buffer.from(process.env.ENCRYPTION_KEY.slice(0, 64), 'hex')
+  : crypto.randomBytes(32);
 const IV_LENGTH = 16;
 const TAG_LENGTH = 16;
 

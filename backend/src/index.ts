@@ -27,11 +27,24 @@ import analyticsRoutes from './api/analytics.routes';
 import mediaServersRoutes from './api/media-servers.routes';
 import infrastructureRoutes from './api/infrastructure.routes';
 import brandingRoutes, { publicBrandingRouter } from './api/branding.routes';
+import tokenWarningsRoutes from './api/token-warnings.routes';
 
 import initializeSocket from './socket';
 import logger from './utils/logger';
 
 dotenv.config();
+
+// Validate critical environment variables at startup
+if (!process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_KEY.length < 32) {
+  logger.error('ENCRYPTION_KEY must be set and at least 32 characters long');
+  logger.error('Generate one with: openssl rand -hex 32');
+  process.exit(1);
+}
+
+if (!process.env.DATABASE_URL) {
+  logger.error('DATABASE_URL must be set');
+  process.exit(1);
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -97,6 +110,7 @@ app.use('/api/media-servers', mediaServersRoutes);
 app.use('/api/infrastructure', infrastructureRoutes);
 app.use('/api/branding', publicBrandingRouter); // Public branding endpoint
 app.use('/api/admin/branding', brandingRoutes);
+app.use('/api/token-warnings', tokenWarningsRoutes);
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
