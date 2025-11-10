@@ -2,8 +2,8 @@ import jwt from 'jsonwebtoken';
 import { JwtPayload, MagicLinkToken } from '../types';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret';
-const JWT_EXPIRATION = process.env.JWT_EXPIRATION || '15m';
-const REFRESH_TOKEN_EXPIRATION = process.env.REFRESH_TOKEN_EXPIRATION || '7d';
+const JWT_EXPIRATION = process.env.JWT_EXPIRATION || '30d'; // 30 days - users stay logged in
+const REFRESH_TOKEN_EXPIRATION = process.env.REFRESH_TOKEN_EXPIRATION || '90d'; // 90 days
 const MAGIC_LINK_EXPIRATION = process.env.MAGIC_LINK_EXPIRATION || '15m';
 
 export function generateAccessToken(payload: JwtPayload): string {
