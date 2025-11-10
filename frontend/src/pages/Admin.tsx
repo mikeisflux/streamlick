@@ -38,10 +38,10 @@ export function Admin() {
       try {
         // Fetch all stats in parallel
         const [serversRes, broadcastsRes, usersRes, storageRes] = await Promise.all([
-          api.get('/api/media-servers').catch(() => ({ data: [] })),
-          api.get('/api/broadcasts').catch(() => ({ data: [] })),
-          api.get('/api/admin/users').catch(() => ({ data: [] })),
-          api.get('/api/admin/storage-stats').catch(() => ({ data: { configured: false, totalSize: 0, objectCount: 0, formattedSize: '0 B', bucketName: '' } })),
+          api.get('/media-servers').catch(() => ({ data: [] })),
+          api.get('/broadcasts').catch(() => ({ data: [] })),
+          api.get('/admin/users').catch(() => ({ data: [] })),
+          api.get('/admin/storage-stats').catch(() => ({ data: { configured: false, totalSize: 0, objectCount: 0, formattedSize: '0 B', bucketName: '' } })),
         ]);
 
         setStats({

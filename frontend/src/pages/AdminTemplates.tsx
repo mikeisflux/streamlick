@@ -30,7 +30,7 @@ export function AdminTemplates() {
 
   const fetchTemplates = async () => {
     try {
-      const response = await api.get('/api/admin/templates');
+      const response = await api.get('/admin/templates');
       setTemplates(response.data || []);
     } catch (error) {
       console.error('Error fetching templates:', error);
@@ -48,7 +48,7 @@ export function AdminTemplates() {
     }
 
     try {
-      await api.post('/api/admin/templates', {
+      await api.post('/admin/templates', {
         ...newTemplate,
         settings: {},
       });
@@ -68,7 +68,7 @@ export function AdminTemplates() {
     }
 
     try {
-      await api.delete(`/api/admin/templates/${id}`);
+      await api.delete(`/admin/templates/${id}`);
       toast.success('Template deleted');
       fetchTemplates();
     } catch (error) {
@@ -79,7 +79,7 @@ export function AdminTemplates() {
 
   const duplicateTemplate = async (template: Template) => {
     try {
-      await api.post('/api/admin/templates', {
+      await api.post('/admin/templates', {
         name: `${template.name} (Copy)`,
         description: template.description,
         layout: template.layout,

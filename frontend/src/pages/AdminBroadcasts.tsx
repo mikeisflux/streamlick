@@ -56,7 +56,7 @@ export function AdminBroadcasts() {
 
   const fetchBroadcasts = async () => {
     try {
-      const response = await api.get('/api/admin/broadcasts');
+      const response = await api.get('/admin/broadcasts');
       setBroadcasts(response.data);
     } catch (error) {
       console.error('Error fetching broadcasts:', error);
@@ -74,7 +74,7 @@ export function AdminBroadcasts() {
     }
 
     try {
-      await api.delete(`/api/broadcasts/${id}`);
+      await api.delete(`/broadcasts/${id}`);
       toast.success('Broadcast deleted');
       fetchBroadcasts();
     } catch (error) {

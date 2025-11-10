@@ -19,6 +19,7 @@ import logsRoutes from './routes/logs.routes';
 import mediaClipsRoutes from './api/media-clips.routes';
 import participantControlRoutes from './routes/participant.routes';
 import backgroundsRoutes from './api/backgrounds.routes';
+import adminRoutes from './api/admin.routes';
 import adminAssetsRoutes from './api/admin-assets.routes';
 import adminSettingsRoutes from './api/admin-settings.routes';
 import adminTestingRoutes from './api/admin-testing.routes';
@@ -103,16 +104,17 @@ app.use('/api/broadcasts', participantControlRoutes);
 app.use('/api/backgrounds', backgroundsRoutes);
 app.use('/api/admin/assets', adminAssetsRoutes);
 app.use('/api/assets', adminAssetsRoutes); // Public endpoint for defaults
-app.use('/api/admin', adminSettingsRoutes);
 app.use('/api/admin/testing', adminTestingRoutes);
+app.use('/api/admin/branding', brandingRoutes);
+app.use('/api/admin/page-content', pageContentRoutes);
+app.use('/api/admin', adminRoutes); // Admin management routes (users, broadcasts, templates, analytics)
+app.use('/api/admin', adminSettingsRoutes); // Admin settings routes (system-config, storage-stats, etc)
 app.use('/api/moderation', moderationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/media-servers', mediaServersRoutes);
 app.use('/api/infrastructure', infrastructureRoutes);
 app.use('/api/branding', publicBrandingRouter); // Public branding endpoint
-app.use('/api/admin/branding', brandingRoutes);
 app.use('/api/token-warnings', tokenWarningsRoutes);
-app.use('/api/admin/page-content', pageContentRoutes);
 app.use('/api/page-content', pageContentRoutes); // Public endpoint for getting page content
 
 // Error handling

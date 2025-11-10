@@ -45,7 +45,7 @@ export function AdminUsers() {
 
   const fetchUsers = async () => {
     try {
-      const response = await api.get('/api/admin/users');
+      const response = await api.get('/admin/users');
       setUsers(response.data);
       setFilteredUsers(response.data);
     } catch (error) {
@@ -58,7 +58,7 @@ export function AdminUsers() {
 
   const toggleAdminStatus = async (userId: string, currentStatus: boolean) => {
     try {
-      await api.patch(`/api/admin/users/${userId}`, {
+      await api.patch(`/admin/users/${userId}`, {
         isAdmin: !currentStatus,
       });
       toast.success(`Admin status ${!currentStatus ? 'granted' : 'revoked'}`);
@@ -75,7 +75,7 @@ export function AdminUsers() {
     }
 
     try {
-      await api.delete(`/api/admin/users/${userId}`);
+      await api.delete(`/admin/users/${userId}`);
       toast.success('User deleted successfully');
       fetchUsers();
     } catch (error) {
