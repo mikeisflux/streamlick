@@ -1735,8 +1735,7 @@ export function Studio() {
           style={{
             height: '72px',
             backgroundColor: '#2d2d2d',
-            borderColor: '#404040',
-            marginLeft: '-90px'
+            borderColor: '#404040'
           }}
         >
           {/* 9 Layout Buttons */}
