@@ -57,11 +57,21 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// Serve uploaded media clips
-app.use('/uploads', express.static('uploads'));
+// Serve uploaded media clips with CORS
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  next();
+}, express.static('uploads'));
 
-// Serve branding assets (logos, favicons)
-app.use('/assets/branding', express.static(path.join(__dirname, '../public/assets/branding')));
+// Serve branding assets (logos, favicons) with CORS
+app.use('/assets/branding', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  next();
+}, express.static(path.join(__dirname, '../public/assets/branding')));
 
 // Health check
 app.get('/health', (req, res) => {
