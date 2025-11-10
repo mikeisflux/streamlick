@@ -59,7 +59,7 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// Serve uploaded media clips with CORS
+// Serve uploaded media clips and branding images with CORS
 app.use('/uploads', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -67,9 +67,6 @@ app.use('/uploads', (req, res, next) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   next();
 }, express.static('uploads'));
-
-// Note: Branding assets are now saved to frontend/public/site-images/
-// and served directly from the frontend (no CORS issues)
 
 // Health check
 app.get('/health', (req, res) => {

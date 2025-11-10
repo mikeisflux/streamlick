@@ -12,9 +12,9 @@ import logger from '../utils/logger';
 
 const router = Router();
 
-// Create upload directory in frontend public folder
-// This allows images to be served from same origin as the website (no CORS issues)
-const uploadDir = path.join(__dirname, '../../../frontend/public/site-images');
+// Create upload directory for branding images
+// Store in backend uploads folder so they persist and can be served with CORS headers
+const uploadDir = path.join(__dirname, '../../uploads/site-images');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true, mode: 0o755 });
 }
@@ -118,15 +118,15 @@ router.post(
       };
 
       if (files?.logo?.[0]) {
-        response.logoUrl = `/site-images/${files.logo[0].filename}`;
+        response.logoUrl = `/uploads/site-images/${files.logo[0].filename}`;
       }
 
       if (files?.favicon?.[0]) {
-        response.faviconUrl = `/site-images/${files.favicon[0].filename}`;
+        response.faviconUrl = `/uploads/site-images/${files.favicon[0].filename}`;
       }
 
       if (files?.hero?.[0]) {
-        response.heroUrl = `/site-images/${files.hero[0].filename}`;
+        response.heroUrl = `/uploads/site-images/${files.hero[0].filename}`;
       }
 
       // TODO: Store branding config in database (systemSettings table)
@@ -167,9 +167,9 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
         platformName: 'Streamlick',
         tagline: 'Browser-based Live Streaming Studio',
       },
-      logoUrl: logo ? `/site-images/${logo}` : null,
-      faviconUrl: favicon ? `/site-images/${favicon}` : null,
-      heroUrl: hero ? `/site-images/${hero}` : null,
+      logoUrl: logo ? `/uploads/site-images/${logo}` : null,
+      faviconUrl: favicon ? `/uploads/site-images/${favicon}` : null,
+      heroUrl: hero ? `/uploads/site-images/${hero}` : null,
     });
   } catch (error: any) {
     logger.error('Failed to get branding settings:', error);
@@ -203,9 +203,9 @@ publicBrandingRouter.get('/', async (req, res) => {
         platformName: 'Streamlick',
         tagline: 'Browser-based Live Streaming Studio',
       },
-      logoUrl: logo ? `/site-images/${logo}` : null,
-      faviconUrl: favicon ? `/site-images/${favicon}` : null,
-      heroUrl: hero ? `/site-images/${hero}` : null,
+      logoUrl: logo ? `/uploads/site-images/${logo}` : null,
+      faviconUrl: favicon ? `/uploads/site-images/${favicon}` : null,
+      heroUrl: hero ? `/uploads/site-images/${hero}` : null,
     });
   } catch (error: any) {
     logger.error('Failed to get branding settings:', error);
