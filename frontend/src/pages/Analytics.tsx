@@ -171,7 +171,7 @@ export const Analytics: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen">
         {renderHeader()}
         <div className="flex items-center justify-center h-96">
           <div className="text-gray-600">Loading analytics...</div>
@@ -182,7 +182,7 @@ export const Analytics: React.FC = () => {
 
   if (!analytics) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen">
         {renderHeader()}
         <div className="flex flex-col items-center justify-center h-96">
           <div className="text-gray-600 mb-4">No analytics data available</div>
@@ -204,7 +204,7 @@ export const Analytics: React.FC = () => {
   const totalPlatformStreams = platformData.reduce((sum, p) => sum + p.value, 0);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       {renderHeader()}
 
       <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">

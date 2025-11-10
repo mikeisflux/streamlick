@@ -39,7 +39,7 @@ export function VerifyEmail() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-700 via-blue-600 to-purple-800 flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-2xl max-w-md w-full p-8">
         {/* Status Icon */}
         <div className="flex justify-center mb-6">
