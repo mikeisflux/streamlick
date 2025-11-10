@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import api from '../services/api';
 import {
   Server,
   Settings,
@@ -8,19 +10,50 @@ import {
   BarChart3,
   Users,
   Radio,
-  Key,
-  Video,
-  Film,
   Layout,
-  Shield,
-  CreditCard,
-  Cast,
   Palette,
   Rocket,
   FileEdit
 } from 'lucide-react';
 
 export function Admin() {
+  const [stats, setStats] = useState({
+    activeServers: 0,
+    activeBroadcasts: 0,
+    totalUsers: 0,
+    systemStatus: 'Online',
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        // Fetch all stats in parallel
+        const [serversRes, broadcastsRes, usersRes] = await Promise.all([
+          api.get('/api/media-servers').catch(() => ({ data: [] })),
+          api.get('/api/broadcasts').catch(() => ({ data: [] })),
+          api.get('/api/admin/users').catch(() => ({ data: [] })),
+        ]);
+
+        setStats({
+          activeServers: serversRes.data.filter((s: any) => s.status === 'active').length || 0,
+          activeBroadcasts: broadcastsRes.data.filter((b: any) => b.status === 'live').length || 0,
+          totalUsers: usersRes.data.length || 0,
+          systemStatus: 'Online',
+        });
+      } catch (error) {
+        console.error('Error fetching stats:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+    // Refresh stats every 30 seconds
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const adminSections = [
     {
       title: 'Infrastructure',
@@ -82,7 +115,7 @@ export function Admin() {
       title: 'Analytics',
       description: 'View platform analytics and metrics',
       icon: BarChart3,
-      path: '/analytics',
+      path: '/admin/analytics',
       color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
     },
     {
@@ -100,53 +133,11 @@ export function Admin() {
       color: 'bg-red-500/10 text-red-400 border-red-500/20',
     },
     {
-      title: 'OAuth Config',
-      description: 'Configure platform OAuth settings',
-      icon: Key,
-      path: '/admin/oauth',
-      color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-    },
-    {
-      title: 'Media Clips',
-      description: 'Manage media clip library',
-      icon: Video,
-      path: '/admin/clips',
-      color: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
-    },
-    {
-      title: 'Recordings',
-      description: 'View and manage recordings',
-      icon: Film,
-      path: '/admin/recordings',
-      color: 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20',
-    },
-    {
       title: 'Templates',
       description: 'Manage broadcast templates',
       icon: Layout,
       path: '/admin/templates',
       color: 'bg-teal-500/10 text-teal-400 border-teal-500/20',
-    },
-    {
-      title: 'Moderation',
-      description: 'Content moderation and chat controls',
-      icon: Shield,
-      path: '/admin/moderation',
-      color: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-    },
-    {
-      title: 'Billing & Plans',
-      description: 'Manage subscription plans and billing',
-      icon: CreditCard,
-      path: '/admin/billing',
-      color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-    },
-    {
-      title: 'Destinations',
-      description: 'Manage streaming destinations',
-      icon: Cast,
-      path: '/admin/destinations',
-      color: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
     },
   ];
 
@@ -189,21 +180,50 @@ export function Admin() {
         <div className="mt-12">
           <h2 className="text-2xl font-bold mb-6">Quick Stats</h2>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-gray-800 rounded-lg p-6">
+            <div className="bg-gray-800 rounded-lg p-6 border border-red-500/20">
               <div className="text-gray-400 text-sm mb-1">Active Broadcasts</div>
-              <div className="text-3xl font-bold text-blue-400">-</div>
+              <div className="text-3xl font-bold text-red-400">
+                {loading ? '...' : stats.activeBroadcasts}
+              </div>
+              {!loading && stats.activeBroadcasts > 0 && (
+                <div className="text-xs text-red-400 mt-2 flex items-center gap-1">
+                  <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                  Live now
+                </div>
+              )}
             </div>
-            <div className="bg-gray-800 rounded-lg p-6">
+            <div className="bg-gray-800 rounded-lg p-6 border border-green-500/20">
               <div className="text-gray-400 text-sm mb-1">Active Servers</div>
-              <div className="text-3xl font-bold text-green-400">-</div>
+              <div className="text-3xl font-bold text-green-400">
+                {loading ? '...' : stats.activeServers}
+              </div>
+              {!loading && stats.activeServers > 0 && (
+                <div className="text-xs text-green-400 mt-2">
+                  Running
+                </div>
+              )}
             </div>
-            <div className="bg-gray-800 rounded-lg p-6">
+            <div className="bg-gray-800 rounded-lg p-6 border border-purple-500/20">
               <div className="text-gray-400 text-sm mb-1">Total Users</div>
-              <div className="text-3xl font-bold text-purple-400">-</div>
+              <div className="text-3xl font-bold text-purple-400">
+                {loading ? '...' : stats.totalUsers}
+              </div>
+              {!loading && (
+                <div className="text-xs text-gray-400 mt-2">
+                  Registered
+                </div>
+              )}
             </div>
-            <div className="bg-gray-800 rounded-lg p-6">
+            <div className="bg-gray-800 rounded-lg p-6 border border-green-500/20">
               <div className="text-gray-400 text-sm mb-1">System Status</div>
-              <div className="text-3xl font-bold text-green-400">✓</div>
+              <div className="text-3xl font-bold text-green-400">
+                {loading ? '...' : '✓'}
+              </div>
+              {!loading && (
+                <div className="text-xs text-green-400 mt-2">
+                  {stats.systemStatus}
+                </div>
+              )}
             </div>
           </div>
         </div>
