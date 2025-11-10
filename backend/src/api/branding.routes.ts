@@ -12,10 +12,11 @@ import logger from '../utils/logger';
 
 const router = Router();
 
-// Create upload directory if it doesn't exist
-const uploadDir = path.join(__dirname, '../../public/assets/branding');
+// Create upload directory in frontend public folder
+// This allows images to be served from same origin as the website (no CORS issues)
+const uploadDir = path.join(__dirname, '../../../frontend/public/site-images');
 if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+  fs.mkdirSync(uploadDir, { recursive: true, mode: 0o755 });
 }
 
 // Configure multer for file uploads
@@ -98,7 +99,18 @@ router.post(
         config,
       });
 
-      // Build response with file paths
+      // Set proper file permissions (644 - readable by all)
+      if (files?.logo?.[0]) {
+        fs.chmodSync(files.logo[0].path, 0o644);
+      }
+      if (files?.favicon?.[0]) {
+        fs.chmodSync(files.favicon[0].path, 0o644);
+      }
+      if (files?.hero?.[0]) {
+        fs.chmodSync(files.hero[0].path, 0o644);
+      }
+
+      // Build response with file paths (served from frontend /site-images/)
       const response: any = {
         success: true,
         message: 'Branding settings saved successfully',
@@ -106,15 +118,15 @@ router.post(
       };
 
       if (files?.logo?.[0]) {
-        response.logoUrl = `/assets/branding/${files.logo[0].filename}`;
+        response.logoUrl = `/site-images/${files.logo[0].filename}`;
       }
 
       if (files?.favicon?.[0]) {
-        response.faviconUrl = `/assets/branding/${files.favicon[0].filename}`;
+        response.faviconUrl = `/site-images/${files.favicon[0].filename}`;
       }
 
       if (files?.hero?.[0]) {
-        response.heroUrl = `/assets/branding/${files.hero[0].filename}`;
+        response.heroUrl = `/site-images/${files.hero[0].filename}`;
       }
 
       // TODO: Store branding config in database (systemSettings table)
@@ -155,9 +167,9 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
         platformName: 'Streamlick',
         tagline: 'Browser-based Live Streaming Studio',
       },
-      logoUrl: logo ? `/assets/branding/${logo}` : null,
-      faviconUrl: favicon ? `/assets/branding/${favicon}` : null,
-      heroUrl: hero ? `/assets/branding/${hero}` : null,
+      logoUrl: logo ? `/site-images/${logo}` : null,
+      faviconUrl: favicon ? `/site-images/${favicon}` : null,
+      heroUrl: hero ? `/site-images/${hero}` : null,
     });
   } catch (error: any) {
     logger.error('Failed to get branding settings:', error);
@@ -191,14 +203,54 @@ publicBrandingRouter.get('/', async (req, res) => {
         platformName: 'Streamlick',
         tagline: 'Browser-based Live Streaming Studio',
       },
-      logoUrl: logo ? `/assets/branding/${logo}` : null,
-      faviconUrl: favicon ? `/assets/branding/${favicon}` : null,
-      heroUrl: hero ? `/assets/branding/${hero}` : null,
+      logoUrl: logo ? `/site-images/${logo}` : null,
+      faviconUrl: favicon ? `/site-images/${favicon}` : null,
+      heroUrl: hero ? `/site-images/${hero}` : null,
     });
   } catch (error: any) {
     logger.error('Failed to get branding settings:', error);
     res.status(500).json({
       error: 'Failed to get branding settings',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * DELETE /api/admin/branding/:type
+ * Delete a branding image (logo, favicon, or hero)
+ */
+router.delete('/:type', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { type } = req.params;
+
+    if (!['logo', 'favicon', 'hero'].includes(type)) {
+      return res.status(400).json({ error: 'Invalid type. Must be logo, favicon, or hero' });
+    }
+
+    // Find the file to delete
+    const brandingFiles = fs.existsSync(uploadDir) ? fs.readdirSync(uploadDir) : [];
+    const fileToDelete = brandingFiles.find((f) => f.startsWith(`${type}-`));
+
+    if (!fileToDelete) {
+      return res.status(404).json({ error: `No ${type} image found` });
+    }
+
+    // Delete the file
+    const filePath = path.join(uploadDir, fileToDelete);
+    fs.unlinkSync(filePath);
+
+    logger.info(`Deleted ${type} image:`, fileToDelete);
+
+    res.json({
+      success: true,
+      message: `${type} image deleted successfully`,
+      deletedFile: fileToDelete
+    });
+  } catch (error: any) {
+    logger.error('Failed to delete branding image:', error);
+    res.status(500).json({
+      error: 'Failed to delete branding image',
       details: error.message,
     });
   }

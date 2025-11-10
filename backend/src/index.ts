@@ -68,14 +68,8 @@ app.use('/uploads', (req, res, next) => {
   next();
 }, express.static('uploads'));
 
-// Serve branding assets (logos, favicons) with CORS
-app.use('/assets/branding', (req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  next();
-}, express.static(path.join(__dirname, '../public/assets/branding')));
+// Note: Branding assets are now saved to frontend/public/site-images/
+// and served directly from the frontend (no CORS issues)
 
 // Health check
 app.get('/health', (req, res) => {

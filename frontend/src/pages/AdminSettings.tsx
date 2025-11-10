@@ -55,6 +55,9 @@ export default function AdminSettings() {
     platformName: 'Streamlick',
     tagline: 'Browser-based Live Streaming Studio',
   });
+  const [currentLogoUrl, setCurrentLogoUrl] = useState<string | null>(null);
+  const [currentFaviconUrl, setCurrentFaviconUrl] = useState<string | null>(null);
+  const [currentHeroUrl, setCurrentHeroUrl] = useState<string | null>(null);
 
   useEffect(() => {
     loadConfig();
@@ -69,6 +72,16 @@ export default function AdminSettings() {
       } else if (activeTab === 'system') {
         const response = await api.get('/admin/system-config');
         setSystemConfig(response.data);
+      } else if (activeTab === 'branding') {
+        const response = await api.get('/admin/branding');
+        if (response.data) {
+          setCurrentLogoUrl(response.data.logoUrl);
+          setCurrentFaviconUrl(response.data.faviconUrl);
+          setCurrentHeroUrl(response.data.heroUrl);
+          if (response.data.config) {
+            setBrandingConfig(response.data.config);
+          }
+        }
       }
     } catch (error: any) {
       console.error('Failed to load config:', error);
@@ -478,9 +491,38 @@ export default function AdminSettings() {
       setHeroFile(null);
 
       console.log('Branding saved:', response.data);
+
+      // Reload branding to get updated URLs
+      await loadConfig();
     } catch (error: any) {
       console.error('Failed to save branding:', error);
       toast.error(error.response?.data?.error || 'Failed to save branding settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteBrandingImage = async (type: 'logo' | 'favicon' | 'hero') => {
+    if (!confirm(`Are you sure you want to delete the ${type}?`)) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await api.delete(`/admin/branding/${type}`);
+      toast.success(`${type} deleted successfully!`);
+
+      // Clear the current URL
+      if (type === 'logo') {
+        setCurrentLogoUrl(null);
+      } else if (type === 'favicon') {
+        setCurrentFaviconUrl(null);
+      } else if (type === 'hero') {
+        setCurrentHeroUrl(null);
+      }
+    } catch (error: any) {
+      console.error(`Failed to delete ${type}:`, error);
+      toast.error(error.response?.data?.error || `Failed to delete ${type}`);
     } finally {
       setSaving(false);
     }
@@ -509,9 +551,23 @@ export default function AdminSettings() {
                 className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-700"
               />
               <p className="text-xs text-gray-500 mt-1">Recommended: SVG or PNG, max 500KB</p>
+              {currentLogoUrl && !logoPreview && (
+                <div className="mt-3">
+                  <p className="text-xs text-gray-400 mb-2">Current Logo:</p>
+                  <div className="flex items-center gap-2">
+                    <img src={currentLogoUrl} alt="Current logo" className="max-h-20 bg-white p-2 rounded" />
+                    <button
+                      onClick={() => deleteBrandingImage('logo')}
+                      className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )}
               {logoPreview && (
                 <div className="mt-3">
-                  <p className="text-xs text-gray-400 mb-2">Preview:</p>
+                  <p className="text-xs text-gray-400 mb-2">New Preview:</p>
                   <img src={logoPreview} alt="Logo preview" className="max-h-20 bg-white p-2 rounded" />
                 </div>
               )}
@@ -526,9 +582,23 @@ export default function AdminSettings() {
                 className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-700"
               />
               <p className="text-xs text-gray-500 mt-1">Recommended: ICO or PNG, 32x32px</p>
+              {currentFaviconUrl && !faviconPreview && (
+                <div className="mt-3">
+                  <p className="text-xs text-gray-400 mb-2">Current Favicon:</p>
+                  <div className="flex items-center gap-2">
+                    <img src={currentFaviconUrl} alt="Current favicon" className="max-h-8 bg-white p-1 rounded" />
+                    <button
+                      onClick={() => deleteBrandingImage('favicon')}
+                      className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )}
               {faviconPreview && (
                 <div className="mt-3">
-                  <p className="text-xs text-gray-400 mb-2">Preview:</p>
+                  <p className="text-xs text-gray-400 mb-2">New Preview:</p>
                   <img src={faviconPreview} alt="Favicon preview" className="max-h-8 bg-white p-1 rounded" />
                 </div>
               )}
@@ -543,9 +613,23 @@ export default function AdminSettings() {
                 className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-700"
               />
               <p className="text-xs text-gray-500 mt-1">Recommended: JPG or PNG, max 2MB, 1920x600px</p>
+              {currentHeroUrl && !heroPreview && (
+                <div className="mt-3">
+                  <p className="text-xs text-gray-400 mb-2">Current Hero:</p>
+                  <div className="flex flex-col gap-2">
+                    <img src={currentHeroUrl} alt="Current hero" className="max-h-32 w-full object-cover rounded" />
+                    <button
+                      onClick={() => deleteBrandingImage('hero')}
+                      className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded self-start"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )}
               {heroPreview && (
                 <div className="mt-3">
-                  <p className="text-xs text-gray-400 mb-2">Preview:</p>
+                  <p className="text-xs text-gray-400 mb-2">New Preview:</p>
                   <img src={heroPreview} alt="Hero preview" className="max-h-32 w-full object-cover rounded" />
                 </div>
               )}
