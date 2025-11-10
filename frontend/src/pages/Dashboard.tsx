@@ -96,40 +96,6 @@ export function Dashboard() {
             >
               Billing
             </button>
-            {user?.role === 'admin' && (
-              <>
-                <button
-                  onClick={() => navigate('/admin/assets')}
-                  className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
-                >
-                  Admin Assets
-                </button>
-                <button
-                  onClick={() => navigate('/admin/settings')}
-                  className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
-                >
-                  Admin Settings
-                </button>
-                <button
-                  onClick={() => navigate('/admin/testing')}
-                  className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
-                >
-                  Testing
-                </button>
-                <button
-                  onClick={() => navigate('/admin/servers')}
-                  className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
-                >
-                  Servers
-                </button>
-                <button
-                  onClick={() => navigate('/admin/logs')}
-                  className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
-                >
-                  Logs
-                </button>
-              </>
-            )}
           </nav>
         </div>
       </header>
