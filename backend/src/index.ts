@@ -4,6 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
 
 import authRoutes from './api/auth.routes';
 import broadcastsRoutes from './api/broadcasts.routes';
@@ -60,7 +61,7 @@ app.use('/api/', limiter);
 app.use('/uploads', express.static('uploads'));
 
 // Serve branding assets (logos, favicons)
-app.use('/assets/branding', express.static('public/assets/branding'));
+app.use('/assets/branding', express.static(path.join(__dirname, '../public/assets/branding')));
 
 // Health check
 app.get('/health', (req, res) => {
