@@ -18,6 +18,11 @@ interface SystemConfig {
   aws_access_key_id?: string;
   aws_secret_access_key?: string;
   s3_bucket_name?: string;
+  r2_access_key_id?: string;
+  r2_secret_access_key?: string;
+  r2_bucket_name?: string;
+  r2_account_id?: string;
+  r2_public_url?: string;
   redis_url?: string;
   turn_server_url?: string;
   turn_username?: string;
@@ -240,6 +245,11 @@ export default function AdminSettings() {
           { key: 'aws_access_key_id', label: 'AWS Access Key ID', type: 'text', description: 'For S3 storage access' },
           { key: 'aws_secret_access_key', label: 'AWS Secret Access Key', type: 'password', description: 'AWS secret key' },
           { key: 's3_bucket_name', label: 'S3 Bucket Name', type: 'text', description: 'Bucket for storing recordings' },
+          { key: 'r2_account_id', label: 'Cloudflare R2 Account ID', type: 'text', description: 'Your Cloudflare account ID' },
+          { key: 'r2_access_key_id', label: 'R2 Access Key ID', type: 'text', description: 'Cloudflare R2 access key' },
+          { key: 'r2_secret_access_key', label: 'R2 Secret Access Key', type: 'password', description: 'Cloudflare R2 secret key' },
+          { key: 'r2_bucket_name', label: 'R2 Bucket Name', type: 'text', description: 'R2 bucket for assets/recordings' },
+          { key: 'r2_public_url', label: 'R2 Public URL', type: 'text', description: 'Public URL for R2 bucket (optional)' },
           { key: 'redis_url', label: 'Redis URL', type: 'text', description: 'Redis connection for caching' },
         ],
       },

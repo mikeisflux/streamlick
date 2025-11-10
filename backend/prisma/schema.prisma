@@ -428,3 +428,107 @@ model PlatformAnalytics {
   @@index([platform])
   @@map("platform_analytics")
 }
+
+model EmailProvider {
+  id          String   @id @default(uuid())
+  name        String
+  type        String   // sendgrid, mailgun, postmark, smtp
+  apiKey      String?  @map("api_key") // Encrypted
+  apiSecret   String?  @map("api_secret") // Encrypted
+  smtpHost    String?  @map("smtp_host")
+  smtpPort    Int?     @map("smtp_port")
+  smtpUser    String?  @map("smtp_user")
+  smtpPass    String?  @map("smtp_pass") // Encrypted
+  fromEmail   String   @map("from_email")
+  fromName    String   @map("from_name")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("email_providers")
+}
+
+model Mailbox {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String   // Encrypted
+  imapHost  String   @map("imap_host")
+  imapPort  Int      @map("imap_port")
+  smtpHost  String   @map("smtp_host")
+  smtpPort  Int      @map("smtp_port")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("mailboxes")
+}
+
+model Email {
+  id          String    @id @default(uuid())
+  mailboxId   String?   @map("mailbox_id")
+  from        String
+  to          String
+  subject     String
+  body        String    @db.Text
+  htmlBody    String?   @map("html_body") @db.Text
+  messageId   String?   @map("message_id")
+  inReplyTo   String?   @map("in_reply_to")
+  sentAt      DateTime? @map("sent_at")
+  receivedAt  DateTime? @map("received_at")
+  isRead      Boolean   @default(false) @map("is_read")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([mailboxId])
+  @@index([sentAt])
+  @@map("emails")
+}
+
+model SiteBranding {
+  id             String   @id @default(uuid())
+  logoUrl        String?  @map("logo_url")
+  faviconUrl     String?  @map("favicon_url")
+  heroUrl        String?  @map("hero_url")
+  primaryColor   String?  @map("primary_color")
+  secondaryColor String?  @map("secondary_color")
+  platformName   String   @default("Streamlick") @map("platform_name")
+  tagline        String?
+  config         Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("site_branding")
+}
+
+model CloudProvider {
+  id          String   @id @default(uuid())
+  name        String   // hetzner, aws, digitalocean, etc.
+  type        String   // compute, storage, dns
+  apiKey      String   @map("api_key") // Encrypted
+  apiSecret   String?  @map("api_secret") // Encrypted
+  region      String?
+  config      Json?    // Provider-specific configuration
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("cloud_providers")
+}
+
+model InfrastructureServer {
+  id             String   @id @default(uuid())
+  providerId     String?  @map("provider_id")
+  name           String
+  type           String   // media_server, database, cache, etc.
+  status         String   // provisioning, active, stopped, error
+  ipAddress      String?  @map("ip_address")
+  serverIdExternal String? @map("server_id_external") // Provider's server ID
+  region         String?
+  instanceType   String?  @map("instance_type")
+  specs          Json?    // CPU, RAM, storage specs
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([providerId])
+  @@index([status])
+  @@map("infrastructure_servers")
+}
