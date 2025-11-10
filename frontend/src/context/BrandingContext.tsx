@@ -30,7 +30,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
 
   const fetchBranding = async () => {
     try {
-      const response = await api.get('/admin/branding');
+      const response = await api.get('/branding');
       setBranding(response.data);
 
       // Update favicon if available

@@ -134,13 +134,49 @@ router.post(
 
 /**
  * GET /api/admin/branding
- * Get current branding settings
+ * Get current branding settings (requires admin auth)
  */
-router.get('/', async (req, res) => {
+router.get('/', authenticateToken, requireAdmin, async (req, res) => {
   try {
     // TODO: Fetch from database
     // For now, return default config
 
+    // Check if logo/favicon/hero files exist
+    const brandingFiles = fs.existsSync(uploadDir) ? fs.readdirSync(uploadDir) : [];
+    const logo = brandingFiles.find((f) => f.startsWith('logo-'));
+    const favicon = brandingFiles.find((f) => f.startsWith('favicon-'));
+    const hero = brandingFiles.find((f) => f.startsWith('hero-'));
+
+    res.json({
+      config: {
+        primaryColor: '#6366f1',
+        secondaryColor: '#8b5cf6',
+        accentColor: '#ec4899',
+        platformName: 'Streamlick',
+        tagline: 'Browser-based Live Streaming Studio',
+      },
+      logoUrl: logo ? `/assets/branding/${logo}` : null,
+      faviconUrl: favicon ? `/assets/branding/${favicon}` : null,
+      heroUrl: hero ? `/assets/branding/${hero}` : null,
+    });
+  } catch (error: any) {
+    logger.error('Failed to get branding settings:', error);
+    res.status(500).json({
+      error: 'Failed to get branding settings',
+      details: error.message,
+    });
+  }
+});
+
+// Public branding router for unauthenticated access
+export const publicBrandingRouter = Router();
+
+/**
+ * GET /api/branding
+ * Get current branding settings (public endpoint)
+ */
+publicBrandingRouter.get('/', async (req, res) => {
+  try {
     // Check if logo/favicon/hero files exist
     const brandingFiles = fs.existsSync(uploadDir) ? fs.readdirSync(uploadDir) : [];
     const logo = brandingFiles.find((f) => f.startsWith('logo-'));
