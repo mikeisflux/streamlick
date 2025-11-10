@@ -39,6 +39,7 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     // Validate file types
     if (file.fieldname === 'logo') {
+      // Recommended: 300x134px PNG or SVG
       const allowedTypes = /jpeg|jpg|png|gif|svg/;
       const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
       const mimetype = allowedTypes.test(file.mimetype);

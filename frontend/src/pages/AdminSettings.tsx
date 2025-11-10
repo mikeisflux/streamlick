@@ -550,7 +550,7 @@ export default function AdminSettings() {
                 onChange={handleLogoChange}
                 className="w-full px-4 py-2 bg-gray-900 border border-gray-600 rounded text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-700"
               />
-              <p className="text-xs text-gray-500 mt-1">Recommended: SVG or PNG, max 500KB</p>
+              <p className="text-xs text-gray-500 mt-1">Recommended: PNG or SVG, 300x134px, max 500KB</p>
               {currentLogoUrl && !logoPreview && (
                 <div className="mt-3">
                   <p className="text-xs text-gray-400 mb-2">Current Logo:</p>
