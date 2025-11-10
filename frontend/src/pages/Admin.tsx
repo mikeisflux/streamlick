@@ -13,7 +13,8 @@ import {
   Layout,
   Palette,
   Rocket,
-  FileEdit
+  FileEdit,
+  HardDrive
 } from 'lucide-react';
 
 export function Admin() {
@@ -23,16 +24,24 @@ export function Admin() {
     totalUsers: 0,
     systemStatus: 'Online',
   });
+  const [storageStats, setStorageStats] = useState({
+    configured: false,
+    totalSize: 0,
+    objectCount: 0,
+    formattedSize: '0 B',
+    bucketName: '',
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
         // Fetch all stats in parallel
-        const [serversRes, broadcastsRes, usersRes] = await Promise.all([
+        const [serversRes, broadcastsRes, usersRes, storageRes] = await Promise.all([
           api.get('/api/media-servers').catch(() => ({ data: [] })),
           api.get('/api/broadcasts').catch(() => ({ data: [] })),
           api.get('/api/admin/users').catch(() => ({ data: [] })),
+          api.get('/api/admin/storage-stats').catch(() => ({ data: { configured: false, totalSize: 0, objectCount: 0, formattedSize: '0 B', bucketName: '' } })),
         ]);
 
         setStats({
@@ -41,6 +50,8 @@ export function Admin() {
           totalUsers: usersRes.data.length || 0,
           systemStatus: 'Online',
         });
+
+        setStorageStats(storageRes.data);
       } catch (error) {
         console.error('Error fetching stats:', error);
       } finally {
@@ -179,7 +190,7 @@ export function Admin() {
         {/* Quick Stats */}
         <div className="mt-12">
           <h2 className="text-2xl font-bold mb-6">Quick Stats</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="bg-gray-800 rounded-lg p-6 border border-red-500/20">
               <div className="text-gray-400 text-sm mb-1">Active Broadcasts</div>
               <div className="text-3xl font-bold text-red-400">
@@ -211,6 +222,20 @@ export function Admin() {
               {!loading && (
                 <div className="text-xs text-gray-400 mt-2">
                   Registered
+                </div>
+              )}
+            </div>
+            <div className="bg-gray-800 rounded-lg p-6 border border-cyan-500/20">
+              <div className="flex items-center gap-2 text-gray-400 text-sm mb-1">
+                <HardDrive className="w-4 h-4" />
+                R2 Storage
+              </div>
+              <div className="text-2xl font-bold text-cyan-400">
+                {loading ? '...' : storageStats.configured ? storageStats.formattedSize : 'Not configured'}
+              </div>
+              {!loading && storageStats.configured && (
+                <div className="text-xs text-gray-400 mt-2">
+                  {storageStats.objectCount} objects
                 </div>
               )}
             </div>

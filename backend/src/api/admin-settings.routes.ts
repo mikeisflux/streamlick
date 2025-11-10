@@ -324,6 +324,11 @@ router.post('/system-config', async (req, res) => {
     const updates = [];
 
     for (const [key, value] of Object.entries(req.body)) {
+      // Skip undefined, null, or empty string values to avoid overwriting existing settings
+      if (value === undefined || value === null || value === '') {
+        continue;
+      }
+
       const isEncrypted = key.includes('secret') || key.includes('key') || key.includes('password');
 
       updates.push(
@@ -357,5 +362,100 @@ router.post('/system-config', async (req, res) => {
     res.status(500).json({ error: 'Failed to update system configuration' });
   }
 });
+
+// Get storage statistics
+router.get('/storage-stats', async (req, res) => {
+  try {
+    // Get R2 credentials from system settings
+    const r2Settings = await prisma.systemSetting.findMany({
+      where: {
+        category: 'system',
+        key: {
+          in: ['r2_account_id', 'r2_access_key_id', 'r2_secret_access_key', 'r2_bucket_name'],
+        },
+      },
+    });
+
+    const r2Config: any = {};
+    r2Settings.forEach((setting: any) => {
+      r2Config[setting.key] = setting.isEncrypted ? decrypt(setting.value) : setting.value;
+    });
+
+    // Check if R2 is configured
+    if (!r2Config.r2_access_key_id || !r2Config.r2_secret_access_key || !r2Config.r2_bucket_name || !r2Config.r2_account_id) {
+      return res.json({
+        configured: false,
+        totalSize: 0,
+        objectCount: 0,
+        bucketName: '',
+      });
+    }
+
+    // Use AWS SDK to connect to R2
+    const AWS = require('aws-sdk');
+
+    const s3 = new AWS.S3({
+      endpoint: `https://${r2Config.r2_account_id}.r2.cloudflarestorage.com`,
+      accessKeyId: r2Config.r2_access_key_id,
+      secretAccessKey: r2Config.r2_secret_access_key,
+      signatureVersion: 'v4',
+      region: 'auto',
+    });
+
+    // List objects to get statistics
+    let totalSize = 0;
+    let objectCount = 0;
+    let continuationToken: string | undefined = undefined;
+
+    try {
+      // Paginate through all objects
+      do {
+        const response: any = await s3.listObjectsV2({
+          Bucket: r2Config.r2_bucket_name,
+          ContinuationToken: continuationToken,
+        }).promise();
+
+        objectCount += response.KeyCount || 0;
+
+        if (response.Contents) {
+          response.Contents.forEach((obj: any) => {
+            totalSize += obj.Size || 0;
+          });
+        }
+
+        continuationToken = response.NextContinuationToken;
+      } while (continuationToken);
+
+      res.json({
+        configured: true,
+        totalSize,
+        objectCount,
+        bucketName: r2Config.r2_bucket_name,
+        formattedSize: formatBytes(totalSize),
+      });
+    } catch (error: any) {
+      logger.error('R2 stats error:', error);
+      res.json({
+        configured: true,
+        error: 'Failed to fetch R2 statistics',
+        totalSize: 0,
+        objectCount: 0,
+        bucketName: r2Config.r2_bucket_name,
+      });
+    }
+  } catch (error) {
+    logger.error('Get storage stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch storage statistics' });
+  }
+});
+
+// Helper function to format bytes
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
 
 export default router;
