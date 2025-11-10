@@ -200,11 +200,11 @@ export function Studio() {
         const destResponse = await api.get('/destinations');
         setDestinations(destResponse.data.filter((d: any) => d.isActive));
 
-        // Load available devices
-        await loadDevices();
-
-        // Start camera
+        // Start camera FIRST to request permissions
         await startCamera();
+
+        // Load available devices AFTER permissions are granted
+        await loadDevices();
 
         // Connect socket
         const token = localStorage.getItem('accessToken');
@@ -2597,11 +2597,7 @@ export function Studio() {
                   </svg>
                   <p className="text-sm text-gray-600">No microphones found</p>
                   <button
-                    onClick={() => {
-                      navigator.mediaDevices.enumerateDevices().then((devices) => {
-                        setAudioDevices(devices.filter((d) => d.kind === 'audioinput'));
-                      });
-                    }}
+                    onClick={loadDevices}
                     className="mt-3 text-xs text-blue-600 hover:text-blue-700"
                   >
                     Refresh Devices
@@ -2665,11 +2661,7 @@ export function Studio() {
                   </svg>
                   <p className="text-sm text-gray-600">No cameras found</p>
                   <button
-                    onClick={() => {
-                      navigator.mediaDevices.enumerateDevices().then((devices) => {
-                        setVideoDevices(devices.filter((d) => d.kind === 'videoinput'));
-                      });
-                    }}
+                    onClick={loadDevices}
                     className="mt-3 text-xs text-blue-600 hover:text-blue-700"
                   >
                     Refresh Devices
