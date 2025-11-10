@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   // Change these values to match your account
-  const userEmail = 'admin@streamlick.local'; // Your email
+  const userEmail = 'divinitycomicsinc@gmail.com'; // Your email
   const newPassword = 'Good2Go!'; // Your new password
 
   console.log('🔐 Resetting password...');
