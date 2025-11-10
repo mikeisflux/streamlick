@@ -135,14 +135,45 @@ router.post(
         config,
       });
 
-      // Set proper file permissions (644 - readable by all)
+      // Delete old files before saving new ones to avoid accumulation
+      const existingFiles = fs.existsSync(uploadDir) ? fs.readdirSync(uploadDir) : [];
+
       if (files?.logo?.[0]) {
+        // Delete old logo files
+        existingFiles.filter(f => f.startsWith('logo-')).forEach(f => {
+          try {
+            fs.unlinkSync(path.join(uploadDir, f));
+            logger.info('Deleted old logo:', f);
+          } catch (err) {
+            logger.error('Failed to delete old logo:', err);
+          }
+        });
         fs.chmodSync(files.logo[0].path, 0o644);
       }
+
       if (files?.favicon?.[0]) {
+        // Delete old favicon files
+        existingFiles.filter(f => f.startsWith('favicon-')).forEach(f => {
+          try {
+            fs.unlinkSync(path.join(uploadDir, f));
+            logger.info('Deleted old favicon:', f);
+          } catch (err) {
+            logger.error('Failed to delete old favicon:', err);
+          }
+        });
         fs.chmodSync(files.favicon[0].path, 0o644);
       }
+
       if (files?.hero?.[0]) {
+        // Delete old hero files
+        existingFiles.filter(f => f.startsWith('hero-')).forEach(f => {
+          try {
+            fs.unlinkSync(path.join(uploadDir, f));
+            logger.info('Deleted old hero:', f);
+          } catch (err) {
+            logger.error('Failed to delete old hero:', err);
+          }
+        });
         fs.chmodSync(files.hero[0].path, 0o644);
       }
 
