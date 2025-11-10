@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import api from '../services/api';
+import api, { API_URL } from '../services/api';
 
 interface OAuthConfig {
   youtube: { clientId: string; clientSecret: string; enabled: boolean };
@@ -558,7 +558,7 @@ export default function AdminSettings() {
                 <div className="mt-3">
                   <p className="text-xs text-gray-400 mb-2">Current Logo:</p>
                   <div className="flex items-center gap-2">
-                    <img src={currentLogoUrl} alt="Current logo" className="max-h-20 bg-white p-2 rounded" />
+                    <img src={currentLogoUrl.startsWith('http') ? currentLogoUrl : `${API_URL}${currentLogoUrl}`} alt="Current logo" className="max-h-20 bg-white p-2 rounded" />
                     <button
                       onClick={() => deleteBrandingImage('logo')}
                       className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
@@ -589,7 +589,7 @@ export default function AdminSettings() {
                 <div className="mt-3">
                   <p className="text-xs text-gray-400 mb-2">Current Favicon:</p>
                   <div className="flex items-center gap-2">
-                    <img src={currentFaviconUrl} alt="Current favicon" className="max-h-8 bg-white p-1 rounded" />
+                    <img src={currentFaviconUrl.startsWith('http') ? currentFaviconUrl : `${API_URL}${currentFaviconUrl}`} alt="Current favicon" className="max-h-8 bg-white p-1 rounded" />
                     <button
                       onClick={() => deleteBrandingImage('favicon')}
                       className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
@@ -620,7 +620,7 @@ export default function AdminSettings() {
                 <div className="mt-3">
                   <p className="text-xs text-gray-400 mb-2">Current Hero:</p>
                   <div className="flex flex-col gap-2">
-                    <img src={currentHeroUrl} alt="Current hero" className="max-h-32 w-full object-cover rounded" />
+                    <img src={currentHeroUrl.startsWith('http') ? currentHeroUrl : `${API_URL}${currentHeroUrl}`} alt="Current hero" className="max-h-32 w-full object-cover rounded" />
                     <button
                       onClick={() => deleteBrandingImage('hero')}
                       className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded self-start"
