@@ -485,10 +485,13 @@ export default function AdminSettings() {
 
       toast.success('Branding settings saved successfully!');
 
-      // Clear file selections after successful upload
+      // Clear file selections and previews after successful upload
       setLogoFile(null);
       setFaviconFile(null);
       setHeroFile(null);
+      setLogoPreview('');
+      setFaviconPreview('');
+      setHeroPreview('');
 
       console.log('Branding saved:', response.data);
 

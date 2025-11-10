@@ -19,6 +19,41 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true, mode: 0o755 });
 }
 
+// Path to branding config JSON file
+const configPath = path.join(__dirname, '../../uploads/branding-config.json');
+
+// Default branding config
+const defaultConfig = {
+  primaryColor: '#6366f1',
+  secondaryColor: '#8b5cf6',
+  accentColor: '#ec4899',
+  platformName: 'Streamlick',
+  tagline: 'Browser-based Live Streaming Studio',
+};
+
+// Helper functions to read/write branding config
+const readBrandingConfig = () => {
+  try {
+    if (fs.existsSync(configPath)) {
+      const data = fs.readFileSync(configPath, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    logger.error('Failed to read branding config:', error);
+  }
+  return defaultConfig;
+};
+
+const writeBrandingConfig = (config: any) => {
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    fs.chmodSync(configPath, 0o644);
+  } catch (error) {
+    logger.error('Failed to write branding config:', error);
+    throw error;
+  }
+};
+
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -111,11 +146,16 @@ router.post(
         fs.chmodSync(files.hero[0].path, 0o644);
       }
 
-      // Build response with file paths (served from frontend /site-images/)
+      // Save branding config to JSON file if provided
+      if (config && Object.keys(config).length > 0) {
+        writeBrandingConfig(config);
+      }
+
+      // Build response with file paths
       const response: any = {
         success: true,
         message: 'Branding settings saved successfully',
-        config,
+        config: config && Object.keys(config).length > 0 ? config : readBrandingConfig(),
       };
 
       if (files?.logo?.[0]) {
@@ -129,10 +169,6 @@ router.post(
       if (files?.hero?.[0]) {
         response.heroUrl = `/uploads/site-images/${files.hero[0].filename}`;
       }
-
-      // TODO: Store branding config in database (systemSettings table)
-      // For now, we'll return the config and file URLs
-      // In production, you should save this to a database table
 
       res.json(response);
     } catch (error: any) {
@@ -151,8 +187,8 @@ router.post(
  */
 router.get('/', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    // TODO: Fetch from database
-    // For now, return default config
+    // Read saved config from JSON file
+    const config = readBrandingConfig();
 
     // Check if logo/favicon/hero files exist
     const brandingFiles = fs.existsSync(uploadDir) ? fs.readdirSync(uploadDir) : [];
@@ -161,13 +197,7 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
     const hero = brandingFiles.find((f) => f.startsWith('hero-'));
 
     res.json({
-      config: {
-        primaryColor: '#6366f1',
-        secondaryColor: '#8b5cf6',
-        accentColor: '#ec4899',
-        platformName: 'Streamlick',
-        tagline: 'Browser-based Live Streaming Studio',
-      },
+      config,
       logoUrl: logo ? `/uploads/site-images/${logo}` : null,
       faviconUrl: favicon ? `/uploads/site-images/${favicon}` : null,
       heroUrl: hero ? `/uploads/site-images/${hero}` : null,
@@ -190,6 +220,9 @@ export const publicBrandingRouter = Router();
  */
 publicBrandingRouter.get('/', async (req, res) => {
   try {
+    // Read saved config from JSON file
+    const config = readBrandingConfig();
+
     // Check if logo/favicon/hero files exist
     const brandingFiles = fs.existsSync(uploadDir) ? fs.readdirSync(uploadDir) : [];
     const logo = brandingFiles.find((f) => f.startsWith('logo-'));
@@ -197,13 +230,7 @@ publicBrandingRouter.get('/', async (req, res) => {
     const hero = brandingFiles.find((f) => f.startsWith('hero-'));
 
     res.json({
-      config: {
-        primaryColor: '#6366f1',
-        secondaryColor: '#8b5cf6',
-        accentColor: '#ec4899',
-        platformName: 'Streamlick',
-        tagline: 'Browser-based Live Streaming Studio',
-      },
+      config,
       logoUrl: logo ? `/uploads/site-images/${logo}` : null,
       faviconUrl: favicon ? `/uploads/site-images/${favicon}` : null,
       heroUrl: hero ? `/uploads/site-images/${hero}` : null,
