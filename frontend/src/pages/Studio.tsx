@@ -158,6 +158,12 @@ export function Studio() {
   const [analyticsMetrics, setAnalyticsMetrics] = useState<EngagementMetrics | null>(null);
   const [analyticsInsights, setAnalyticsInsights] = useState<StreamInsight[]>([]);
 
+  // Analytics Dashboard position and size state
+  const [analyticsDashboardPosition, setAnalyticsDashboardPosition] = useState({ x: 100, y: 50 });
+  const [analyticsDashboardSize, setAnalyticsDashboardSize] = useState({ width: 800, height: 600 });
+  const [isDraggingAnalytics, setIsDraggingAnalytics] = useState(false);
+  const [isResizingAnalytics, setIsResizingAnalytics] = useState(false);
+
   // Chat overlay position and size state
   const [chatOverlayPosition, setChatOverlayPosition] = useState({ x: 0, y: 0 });
   const [chatOverlaySize, setChatOverlaySize] = useState({ width: 320, height: 384 });
@@ -1065,6 +1071,26 @@ export function Studio() {
     });
   };
 
+  // Analytics Dashboard Drag/Resize Handlers
+  const handleAnalyticsDashboardDragStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingAnalytics(true);
+    setDragStartPos({
+      x: e.clientX - analyticsDashboardPosition.x,
+      y: e.clientY - analyticsDashboardPosition.y,
+    });
+  };
+
+  const handleAnalyticsDashboardResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizingAnalytics(true);
+    setDragStartPos({
+      x: e.clientX,
+      y: e.clientY,
+    });
+  };
+
   // Mouse move handler for dragging and resizing
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -1081,15 +1107,30 @@ export function Studio() {
           height: Math.max(150, prev.height + deltaY),
         }));
         setDragStartPos({ x: e.clientX, y: e.clientY });
+      } else if (isDraggingAnalytics) {
+        setAnalyticsDashboardPosition({
+          x: e.clientX - dragStartPos.x,
+          y: e.clientY - dragStartPos.y,
+        });
+      } else if (isResizingAnalytics) {
+        const deltaX = e.clientX - dragStartPos.x;
+        const deltaY = e.clientY - dragStartPos.y;
+        setAnalyticsDashboardSize((prev) => ({
+          width: Math.max(400, prev.width + deltaX),
+          height: Math.max(300, prev.height + deltaY),
+        }));
+        setDragStartPos({ x: e.clientX, y: e.clientY });
       }
     };
 
     const handleMouseUp = () => {
       setIsDraggingChat(false);
       setIsResizingChat(false);
+      setIsDraggingAnalytics(false);
+      setIsResizingAnalytics(false);
     };
 
-    if (isDraggingChat || isResizingChat) {
+    if (isDraggingChat || isResizingChat || isDraggingAnalytics || isResizingAnalytics) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     }
@@ -1098,7 +1139,7 @@ export function Studio() {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDraggingChat, isResizingChat, dragStartPos, chatOverlayPosition]);
+  }, [isDraggingChat, isResizingChat, isDraggingAnalytics, isResizingAnalytics, dragStartPos, chatOverlayPosition, analyticsDashboardPosition]);
 
   // Layout Icon Renderer
   const renderLayoutIcon = (layoutId: number) => {
@@ -2337,10 +2378,22 @@ export function Studio() {
 
       {/* Analytics Dashboard Modal */}
       {showAnalyticsDashboard && analyticsEnabled && (
-        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 rounded-lg shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 bg-black/50 z-50 pointer-events-none">
+          <div
+            className="bg-gray-900 rounded-lg shadow-2xl overflow-hidden flex flex-col pointer-events-auto"
+            style={{
+              position: 'absolute',
+              left: `${analyticsDashboardPosition.x}px`,
+              top: `${analyticsDashboardPosition.y}px`,
+              width: `${analyticsDashboardSize.width}px`,
+              height: `${analyticsDashboardSize.height}px`,
+            }}
+          >
             {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-700 flex items-center justify-between bg-gray-800">
+            <div
+              className="px-6 py-4 border-b border-gray-700 flex items-center justify-between bg-gray-800 cursor-move"
+              onMouseDown={handleAnalyticsDashboardDragStart}
+            >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
                   <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2496,7 +2549,7 @@ export function Studio() {
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-700 bg-gray-800 flex items-center justify-between">
+            <div className="px-6 py-4 border-t border-gray-700 bg-gray-800 flex items-center justify-between relative">
               <div className="text-sm text-gray-400">
                 Tracking duration: {Math.round(analyticsService.getStreamDuration() / 60)} minutes
               </div>
@@ -2505,6 +2558,16 @@ export function Studio() {
                 className="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
               >
                 Close
+              </button>
+              {/* Resize Handle */}
+              <button
+                onMouseDown={handleAnalyticsDashboardResizeStart}
+                className="absolute bottom-0 right-0 w-6 h-6 cursor-se-resize text-gray-500 hover:text-gray-300 flex items-center justify-center"
+                title="Resize"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
+                  <path d="M16 16V10h-2v4h-4v2h6zM0 0v6h2V2h4V0H0z" />
+                </svg>
               </button>
             </div>
           </div>
