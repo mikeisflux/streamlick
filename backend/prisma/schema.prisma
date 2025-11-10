@@ -432,7 +432,7 @@ model PlatformAnalytics {
 model EmailProvider {
   id          String   @id @default(uuid())
   name        String
-  type        String   // sendgrid, mailgun, postmark, smtp
+  type        String?  @default("sendgrid") // sendgrid, mailgun, postmark, smtp
   apiKey      String?  @map("api_key") // Encrypted
   apiSecret   String?  @map("api_secret") // Encrypted
   smtpHost    String?  @map("smtp_host")
@@ -451,11 +451,11 @@ model EmailProvider {
 model Mailbox {
   id        String   @id @default(uuid())
   email     String   @unique
-  password  String   // Encrypted
-  imapHost  String   @map("imap_host")
-  imapPort  Int      @map("imap_port")
-  smtpHost  String   @map("smtp_host")
-  smtpPort  Int      @map("smtp_port")
+  password  String?  // Encrypted
+  imapHost  String?  @map("imap_host")
+  imapPort  Int?     @map("imap_port")
+  smtpHost  String?  @map("smtp_host")
+  smtpPort  Int?     @map("smtp_port")
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -466,10 +466,10 @@ model Mailbox {
 model Email {
   id          String    @id @default(uuid())
   mailboxId   String?   @map("mailbox_id")
-  from        String
-  to          String
-  subject     String
-  body        String    @db.Text
+  from        String?   @default("")
+  to          String?   @default("")
+  subject     String?   @default("")
+  body        String?   @default("") @db.Text
   htmlBody    String?   @map("html_body") @db.Text
   messageId   String?   @map("message_id")
   inReplyTo   String?   @map("in_reply_to")
@@ -502,7 +502,7 @@ model SiteBranding {
 model CloudProvider {
   id          String   @id @default(uuid())
   name        String   // hetzner, aws, digitalocean, etc.
-  type        String   // compute, storage, dns
+  type        String?  @default("compute") // compute, storage, dns
   apiKey      String   @map("api_key") // Encrypted
   apiSecret   String?  @map("api_secret") // Encrypted
   region      String?
