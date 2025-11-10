@@ -31,13 +31,27 @@ export function Landing() {
 
       <main>
         {/* Hero */}
-        <section className="container mx-auto px-4 py-20 text-center">
-          <h1 className="text-5xl md:text-7xl font-bold text-white mb-6">
+        <section
+          className="container mx-auto px-4 py-20 text-center relative rounded-2xl overflow-hidden"
+          style={{
+            backgroundImage: branding?.heroUrl
+              ? `linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url(${branding.heroUrl.startsWith('http') ? branding.heroUrl : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${branding.heroUrl}`})`
+              : undefined,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            minHeight: '500px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+        >
+          <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 drop-shadow-lg">
             Professional Live Streaming
             <br />
             <span className="text-yellow-300">Right from Your Browser</span>
           </h1>
-          <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-3xl mx-auto">
+          <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-3xl mx-auto drop-shadow-lg">
             Create professional live streams with guests, custom branding, and multistreaming to
             YouTube, Facebook, X (Twitter), Twitch, Rumble, LinkedIn, and more. No downloads required.
           </p>
@@ -54,7 +68,7 @@ export function Landing() {
               Try Demo
             </Button>
           </div>
-          <p className="text-white/80 mt-4">$20/month - All features included. Cancel anytime.</p>
+          <p className="text-white/80 mt-4 drop-shadow-lg">$20/month - All features included. Cancel anytime.</p>
         </section>
 
         {/* Features */}
