@@ -16,7 +16,8 @@ export function Landing() {
             <img
               src={branding.logoUrl.startsWith('http') ? branding.logoUrl : `${API_URL}${branding.logoUrl}`}
               alt={branding.config?.platformName || 'Logo'}
-              className="h-10 object-contain cursor-pointer"
+              className="cursor-pointer"
+              style={{ width: '300px', height: '134px', objectFit: 'contain' }}
               onClick={() => navigate('/')}
             />
           ) : (
