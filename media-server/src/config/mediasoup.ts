@@ -11,7 +11,7 @@ export const mediasoupConfig = {
       'rtp',
       'srtp',
       'rtcp',
-    ],
+    ] as any,
     rtcMinPort: 40000,
     rtcMaxPort: 40100,
   },
@@ -66,7 +66,7 @@ export const mediasoupConfig = {
           'x-google-start-bitrate': 2000,
         },
       },
-    ] as RtpCodecCapability[],
+    ] as any,
   },
   webRtcTransport: {
     listenIps: [

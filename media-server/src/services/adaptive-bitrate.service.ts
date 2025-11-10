@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import logger from '../../../backend/src/utils/logger';
+import logger from '../utils/logger';
 
 export interface BitrateProfile {
   name: string;

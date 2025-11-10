@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
-import logger from '../../../backend/src/utils/logger';
+import logger from '../utils/logger';
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug' | 'performance';
 export type LogCategory = 'rtp-pipeline' | 'ffmpeg' | 'compositor' | 'network' | 'system';

@@ -13,7 +13,7 @@ export async function createWebRtcTransport(router: Router): Promise<WebRtcTrans
     }
   });
 
-  transport.on('close', () => {
+  transport.on('@close', () => {
     logger.info(`WebRTC transport closed [id:${transport.id}]`);
   });
 
