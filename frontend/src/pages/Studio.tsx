@@ -104,6 +104,8 @@ export function Studio() {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [currentLayout, setCurrentLayout] = useState<'grid' | 'spotlight' | 'sidebar' | 'pip'>('grid');
   const [isSharingScreen, setIsSharingScreen] = useState(false);
+  const [screenShareStream, setScreenShareStream] = useState<MediaStream | null>(null);
+  const screenShareVideoRef = useRef<HTMLVideoElement>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [showChatOnStream, setShowChatOnStream] = useState(true);
   const [showHotkeyReference, setShowHotkeyReference] = useState(false);
@@ -816,6 +818,7 @@ export function Studio() {
         // Stop screen sharing
         stopScreenShare();
         setIsSharingScreen(false);
+        setScreenShareStream(null);
 
         // Remove screen share from compositor
         compositorService.removeParticipant('screen-share');
@@ -825,6 +828,7 @@ export function Studio() {
         // Start screen sharing
         const stream = await startScreenShare();
         setIsSharingScreen(true);
+        setScreenShareStream(stream);
 
         // Add screen share to compositor
         await compositorService.addParticipant({
@@ -845,6 +849,7 @@ export function Studio() {
         // Handle screen share stopped by user (clicking browser's stop button)
         videoTrack.onended = () => {
           setIsSharingScreen(false);
+          setScreenShareStream(null);
           compositorService.removeParticipant('screen-share');
           toast.success('Screen sharing stopped');
         };
@@ -855,6 +860,7 @@ export function Studio() {
       console.error('Screen share error:', error);
       toast.error('Failed to share screen');
       setIsSharingScreen(false);
+      setScreenShareStream(null);
     }
   };
 
@@ -1224,7 +1230,18 @@ export function Studio() {
   }, [isDraggingChat, isResizingChat, isDraggingAnalytics, isResizingAnalytics, dragStartPos, chatOverlayPosition, analyticsDashboardPosition]);
 
   // Get layout styles based on selected layout
-  const getLayoutStyles = (layoutId: number) => {
+  const getLayoutStyles = (layoutId: number | 'screenshare') => {
+    // Screen share layout overrides all other layouts
+    if (layoutId === 'screenshare') {
+      return {
+        container: 'flex gap-2 p-2',
+        sidebar: 'flex flex-col gap-2',
+        sidebarWidth: 'w-[20%]',
+        mainVideo: 'flex-1',
+        screenShare: 'flex-1 w-[80%]',
+      };
+    }
+
     switch (layoutId) {
       case 1: // Grid 2x2
         return {
@@ -1483,6 +1500,13 @@ export function Studio() {
       sidebarVideoRef.current.srcObject = localStream;
     }
   }, [localStream]);
+
+  // Update screen share video srcObject
+  useEffect(() => {
+    if (screenShareVideoRef.current && screenShareStream) {
+      screenShareVideoRef.current.srcObject = screenShareStream;
+    }
+  }, [screenShareStream]);
 
   // Manage Smart Background Removal lifecycle
   useEffect(() => {
@@ -1802,11 +1826,99 @@ export function Studio() {
           >
             {/* Main Video Preview with Dynamic Layout */}
             <div
-              className={`absolute inset-0 overflow-hidden ${getLayoutStyles(selectedLayout).container}`}
+              className={`absolute inset-0 overflow-hidden ${getLayoutStyles(isSharingScreen || screenShareStream ? 'screenshare' : selectedLayout).container}`}
               style={{ backgroundColor: '#000000' }}
             >
-              {/* Main Video */}
-              <div className={`relative bg-black rounded overflow-hidden ${getLayoutStyles(selectedLayout).mainVideo}`}>
+              {/* Screen Share Layout - Active when screen sharing */}
+              {(isSharingScreen || screenShareStream) ? (
+                <>
+                  {/* Left Sidebar - Participant Thumbnails (20%) */}
+                  <div className={`${getLayoutStyles('screenshare').sidebar} ${getLayoutStyles('screenshare').sidebarWidth} gap-2`}>
+                    {/* Host Video */}
+                    <div className="relative bg-black rounded overflow-hidden flex-1">
+                      {localStream && videoEnabled ? (
+                        <video
+                          ref={mainVideoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          className="w-full h-full object-cover"
+                          style={{ willChange: 'auto' }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <div className="text-center">
+                            <svg className="w-8 h-8 text-gray-600 mx-auto mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                        </div>
+                      )}
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-1">
+                        <span className="text-white text-xs font-medium">You</span>
+                      </div>
+                    </div>
+
+                    {/* Remote Participants - Up to 4 slots */}
+                    {Array.from(remoteParticipants.values())
+                      .filter((p) => p.id !== 'screen-share')
+                      .slice(0, 4)
+                      .map((participant) => (
+                        <div key={participant.id} className="relative bg-gray-900 rounded overflow-hidden flex-1">
+                          {participant.stream && participant.videoEnabled ? (
+                            <video
+                              autoPlay
+                              playsInline
+                              muted
+                              ref={(el) => {
+                                if (el && participant.stream) el.srcObject = participant.stream;
+                              }}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <svg className="w-8 h-8 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                            </div>
+                          )}
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-1">
+                            <span className="text-white text-xs font-medium truncate">{participant.name}</span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+
+                  {/* Right Side - Screen Share (80%) */}
+                  <div className={`relative bg-black rounded overflow-hidden ${getLayoutStyles('screenshare').screenShare}`}>
+                    {screenShareStream ? (
+                      <video
+                        ref={screenShareVideoRef}
+                        autoPlay
+                        playsInline
+                        className="w-full h-full object-contain"
+                        style={{ willChange: 'auto', backgroundColor: '#000' }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-center">
+                          <svg className="w-16 h-16 text-gray-600 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                          <p className="text-gray-500 text-sm">Screen Share</p>
+                        </div>
+                      </div>
+                    )}
+                    <div className="absolute top-2 left-2 bg-blue-600 px-3 py-1 rounded text-white text-xs font-semibold">
+                      🖥️ Screen Sharing
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Normal Layout - When not screen sharing */}
+                  {/* Main Video */}
+                  <div className={`relative bg-black rounded overflow-hidden ${getLayoutStyles(selectedLayout).mainVideo}`}>
                 {localStream && videoEnabled ? (
                   <video
                     ref={mainVideoRef}
@@ -1931,17 +2043,21 @@ export function Studio() {
                   </div>
                 </div>
               )}
+                </>
+              )}
 
-              {/* Resolution Badge - Centered Top */}
-              <div
-                className="absolute top-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-full text-sm font-semibold text-white"
-                style={{
-                  backgroundColor: 'rgba(0, 0, 0, 0.6)',
-                  backdropFilter: 'blur(8px)'
-                }}
-              >
-                1080p HD
-              </div>
+              {/* Resolution Badge - Centered Top (only show when not screen sharing) */}
+              {!isSharingScreen && !screenShareStream && (
+                <div
+                  className="absolute top-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-full text-sm font-semibold text-white"
+                  style={{
+                    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                    backdropFilter: 'blur(8px)'
+                  }}
+                >
+                  1080p HD
+                </div>
+              )}
 
               {/* On-Screen Chat Overlay - Draggable & Resizable */}
               {showChatOnStream && (
