@@ -52,8 +52,7 @@ export function Dashboard() {
               <img
                 src={branding.logoUrl.startsWith('http') ? branding.logoUrl : `${API_URL}${branding.logoUrl}`}
                 alt={branding.config?.platformName || 'Logo'}
-                className="cursor-pointer"
-                style={{ width: '300px', height: '134px', objectFit: 'contain' }}
+                className="w-[300px] h-[134px] object-contain cursor-pointer"
                 onClick={() => navigate('/dashboard')}
               />
             ) : (
