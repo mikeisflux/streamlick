@@ -43,7 +43,6 @@ router.get('/users', async (req: Request, res: Response) => {
         role: true,
         emailVerified: true,
         createdAt: true,
-        lastLogin: true,
       },
       orderBy: {
         createdAt: 'desc',
@@ -87,7 +86,6 @@ router.patch('/users/:id', async (req: Request, res: Response) => {
         role: true,
         emailVerified: true,
         createdAt: true,
-        lastLogin: true,
       },
     });
 
@@ -159,9 +157,17 @@ router.get('/broadcasts', async (req: Request, res: Response) => {
 // Get all templates
 router.get('/templates', async (req: Request, res: Response) => {
   try {
-    const templates = await prisma.broadcastTemplate.findMany({
+    const templates = await prisma.studioTemplate.findMany({
       orderBy: {
         createdAt: 'desc',
+      },
+      include: {
+        user: {
+          select: {
+            email: true,
+            name: true,
+          },
+        },
       },
     });
 
@@ -175,18 +181,19 @@ router.get('/templates', async (req: Request, res: Response) => {
 // Create template
 router.post('/templates', async (req: Request, res: Response) => {
   try {
-    const { name, description, layout, settings } = req.body;
+    const { name, config } = req.body;
+    const userId = (req as any).user.userId;
 
     if (!name) {
       return res.status(400).json({ error: 'Template name is required' });
     }
 
-    const template = await prisma.broadcastTemplate.create({
+    const template = await prisma.studioTemplate.create({
       data: {
+        userId,
         name,
-        description: description || null,
-        layout: layout || 9,
-        settings: settings || {},
+        config: config || {},
+        isDefault: false,
       },
     });
 
@@ -203,7 +210,7 @@ router.delete('/templates/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    await prisma.broadcastTemplate.delete({
+    await prisma.studioTemplate.delete({
       where: { id },
     });
 
