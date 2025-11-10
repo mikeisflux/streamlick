@@ -17,8 +17,10 @@ import AdminSettings from './pages/AdminSettings';
 import AdminTesting from './pages/AdminTesting';
 import { AdminServers } from './pages/AdminServers';
 import { Admin } from './pages/Admin';
+import AdminPageManager from './pages/AdminPageManager';
 import { Privacy } from './pages/Privacy';
 import { Terms } from './pages/Terms';
+import { DataDeletion } from './pages/DataDeletion';
 import { FAQ } from './pages/FAQ';
 import { Analytics } from './pages/Analytics';
 import { useEffect } from 'react';
@@ -150,8 +152,17 @@ function App() {
             </AdminRoute>
           }
         />
+        <Route
+          path="/admin/pages"
+          element={
+            <AdminRoute>
+              <AdminPageManager />
+            </AdminRoute>
+          }
+        />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
+        <Route path="/data-deletion" element={<DataDeletion />} />
         <Route path="/faq" element={<FAQ />} />
       </Routes>
     </BrowserRouter>

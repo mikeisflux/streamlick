@@ -16,7 +16,8 @@ import {
   CreditCard,
   Cast,
   Palette,
-  Rocket
+  Rocket,
+  FileEdit
 } from 'lucide-react';
 
 export function Admin() {
@@ -48,6 +49,13 @@ export function Admin() {
       icon: Palette,
       path: '/admin/settings?tab=branding',
       color: 'bg-pink-500/10 text-pink-400 border-pink-500/20',
+    },
+    {
+      title: 'Page Manager',
+      description: 'Edit Privacy Policy, Terms, and Data Deletion pages',
+      icon: FileEdit,
+      path: '/admin/pages',
+      color: 'bg-teal-500/10 text-teal-400 border-teal-500/20',
     },
     {
       title: 'Logs',

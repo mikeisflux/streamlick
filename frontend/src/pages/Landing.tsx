@@ -340,6 +340,38 @@ export function Landing() {
 
       {/* Footer */}
       <footer className="container mx-auto px-4 py-8 text-center text-white/80">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-6 mb-4">
+          <a
+            href="/privacy"
+            className="hover:text-white transition-colors underline"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/privacy');
+            }}
+          >
+            Privacy Policy
+          </a>
+          <a
+            href="/terms"
+            className="hover:text-white transition-colors underline"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/terms');
+            }}
+          >
+            Terms of Service
+          </a>
+          <a
+            href="/data-deletion"
+            className="hover:text-white transition-colors underline"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/data-deletion');
+            }}
+          >
+            Data Deletion Instructions
+          </a>
+        </div>
         <p>&copy; 2024 Streamlick. All rights reserved.</p>
       </footer>
     </div>

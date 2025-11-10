@@ -28,6 +28,7 @@ import mediaServersRoutes from './api/media-servers.routes';
 import infrastructureRoutes from './api/infrastructure.routes';
 import brandingRoutes, { publicBrandingRouter } from './api/branding.routes';
 import tokenWarningsRoutes from './api/token-warnings.routes';
+import pageContentRoutes from './api/page-content.routes';
 
 import initializeSocket from './socket';
 import logger from './utils/logger';
@@ -111,6 +112,8 @@ app.use('/api/infrastructure', infrastructureRoutes);
 app.use('/api/branding', publicBrandingRouter); // Public branding endpoint
 app.use('/api/admin/branding', brandingRoutes);
 app.use('/api/token-warnings', tokenWarningsRoutes);
+app.use('/api/admin/page-content', pageContentRoutes);
+app.use('/api/page-content', pageContentRoutes); // Public endpoint for getting page content
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
