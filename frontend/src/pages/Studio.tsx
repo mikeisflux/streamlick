@@ -1575,12 +1575,12 @@ export function Studio() {
       </header>
 
 
-      {/* Left Sidebar - Scenes (188px width) */}
+      {/* Left Sidebar - Scenes (280px width) */}
       {leftSidebarOpen && (
         <aside
           className="flex flex-col overflow-hidden border-r"
           style={{
-            width: '188px',
+            width: '280px',
             backgroundColor: '#f5f5f5',
             borderColor: '#e0e0e0'
           }}
