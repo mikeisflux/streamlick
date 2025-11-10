@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   VideoCameraIcon,
   CheckCircleIcon,
@@ -6,6 +6,7 @@ import {
   PlusIcon,
   EyeIcon,
 } from '@heroicons/react/24/outline';
+import api from '../services/api';
 
 interface StreamDestination {
   id: string;
@@ -22,78 +23,148 @@ interface DestinationsPanelProps {
   broadcastId?: string;
 }
 
-export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
-  const [destinations, setDestinations] = useState<StreamDestination[]>([
-    {
-      id: '1',
-      name: 'YouTube',
-      platform: 'youtube',
-      enabled: false,
-      connected: false,
-      viewerCount: 0,
-    },
-    {
-      id: '2',
-      name: 'Facebook Live',
-      platform: 'facebook',
-      enabled: false,
-      connected: false,
-      viewerCount: 0,
-    },
-    {
-      id: '3',
-      name: 'LinkedIn Live',
-      platform: 'linkedin',
-      enabled: false,
-      connected: false,
-      viewerCount: 0,
-    },
-    {
-      id: '4',
-      name: 'Twitch',
-      platform: 'twitch',
-      enabled: false,
-      connected: false,
-      viewerCount: 0,
-    },
-  ]);
+// Available platforms that can be connected
+const AVAILABLE_PLATFORMS = [
+  { platform: 'youtube', name: 'YouTube' },
+  { platform: 'facebook', name: 'Facebook Live' },
+  { platform: 'linkedin', name: 'LinkedIn Live' },
+  { platform: 'twitch', name: 'Twitch' },
+];
 
+export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
+  const [destinations, setDestinations] = useState<StreamDestination[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showCustomRtmp, setShowCustomRtmp] = useState(false);
   const [customRtmpUrl, setCustomRtmpUrl] = useState('');
   const [customStreamKey, setCustomStreamKey] = useState('');
 
-  const toggleDestination = (id: string) => {
-    setDestinations((prev) =>
-      prev.map((dest) =>
-        dest.id === id ? { ...dest, enabled: !dest.enabled } : dest
-      )
-    );
+  // Load user's connected destinations
+  useEffect(() => {
+    loadDestinations();
+  }, []);
+
+  const loadDestinations = async () => {
+    try {
+      const response = await api.get('/destinations');
+      const connectedDestinations = response.data;
+
+      // Merge with available platforms
+      const merged = AVAILABLE_PLATFORMS.map(available => {
+        const connected = connectedDestinations.find(
+          (d: any) => d.platform === available.platform
+        );
+
+        return {
+          id: connected?.id || available.platform,
+          name: connected?.displayName || available.name,
+          platform: available.platform as any,
+          enabled: connected?.isActive || false,
+          connected: !!connected,
+          viewerCount: 0,
+          rtmpUrl: connected?.rtmpUrl,
+        };
+      });
+
+      // Add custom RTMP destinations
+      const customDestinations = connectedDestinations
+        .filter((d: any) => d.platform === 'custom')
+        .map((d: any) => ({
+          id: d.id,
+          name: d.displayName || 'Custom RTMP',
+          platform: 'custom' as any,
+          enabled: d.isActive,
+          connected: true,
+          viewerCount: 0,
+          rtmpUrl: d.rtmpUrl,
+        }));
+
+      setDestinations([...merged, ...customDestinations]);
+    } catch (error) {
+      console.error('Failed to load destinations:', error);
+      // Show default platforms even if API fails
+      setDestinations(AVAILABLE_PLATFORMS.map(p => ({
+        id: p.platform,
+        name: p.name,
+        platform: p.platform as any,
+        enabled: false,
+        connected: false,
+        viewerCount: 0,
+      })));
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const addCustomRtmp = () => {
+  const toggleDestination = async (id: string) => {
+    const destination = destinations.find(d => d.id === id);
+    if (!destination || !destination.connected) {
+      // If not connected, just toggle locally
+      setDestinations((prev) =>
+        prev.map((dest) =>
+          dest.id === id ? { ...dest, enabled: !dest.enabled } : dest
+        )
+      );
+      return;
+    }
+
+    try {
+      // Update on backend
+      await api.patch(`/destinations/${id}`, {
+        isActive: !destination.enabled,
+      });
+
+      setDestinations((prev) =>
+        prev.map((dest) =>
+          dest.id === id ? { ...dest, enabled: !dest.enabled } : dest
+        )
+      );
+    } catch (error) {
+      console.error('Failed to toggle destination:', error);
+      alert('Failed to update destination status');
+    }
+  };
+
+  const addCustomRtmp = async () => {
     if (!customRtmpUrl || !customStreamKey) {
       return;
     }
 
-    const newDestination: StreamDestination = {
-      id: `custom-${Date.now()}`,
-      name: 'Custom RTMP',
-      platform: 'custom',
-      enabled: true,
-      connected: false,
-      viewerCount: 0,
-      rtmpUrl: customRtmpUrl,
-      streamKey: customStreamKey,
-    };
+    try {
+      const response = await api.post('/destinations', {
+        platform: 'custom',
+        displayName: 'Custom RTMP',
+        rtmpUrl: customRtmpUrl,
+        streamKey: customStreamKey,
+      });
 
-    setDestinations((prev) => [...prev, newDestination]);
-    setShowCustomRtmp(false);
-    setCustomRtmpUrl('');
-    setCustomStreamKey('');
+      const newDestination: StreamDestination = {
+        id: response.data.id,
+        name: response.data.displayName,
+        platform: 'custom',
+        enabled: true,
+        connected: true,
+        viewerCount: 0,
+        rtmpUrl: response.data.rtmpUrl,
+      };
+
+      setDestinations((prev) => [...prev, newDestination]);
+      setShowCustomRtmp(false);
+      setCustomRtmpUrl('');
+      setCustomStreamKey('');
+    } catch (error) {
+      console.error('Failed to add custom RTMP:', error);
+      alert('Failed to add custom RTMP destination');
+    }
   };
 
-  const removeDestination = (id: string) => {
-    setDestinations((prev) => prev.filter((dest) => dest.id !== id));
+  const removeDestination = async (id: string) => {
+    try {
+      await api.delete(`/destinations/${id}`);
+      setDestinations((prev) => prev.filter((dest) => dest.id !== id));
+    } catch (error) {
+      console.error('Failed to remove destination:', error);
+      alert('Failed to remove destination');
+    }
   };
 
   const getPlatformIcon = (platform: string) => {
@@ -115,14 +186,53 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
   };
 
   const connectDestination = async (id: string) => {
-    // TODO: Implement actual platform OAuth/connection flow
-    console.log('Connecting to destination:', id);
-    setDestinations((prev) =>
-      prev.map((dest) =>
-        dest.id === id ? { ...dest, connected: true } : dest
-      )
-    );
+    const destination = destinations.find(d => d.id === id);
+    if (!destination) return;
+
+    try {
+      // Call OAuth authorize endpoint
+      const response = await api.get(`/oauth/${destination.platform}/authorize`);
+
+      if (response.data.url) {
+        // Open OAuth window
+        const width = 600;
+        const height = 700;
+        const left = window.screenX + (window.outerWidth - width) / 2;
+        const top = window.screenY + (window.outerHeight - height) / 2;
+
+        const popup = window.open(
+          response.data.url,
+          `${destination.platform}_oauth`,
+          `width=${width},height=${height},left=${left},top=${top}`
+        );
+
+        // Poll for popup close or success
+        const pollTimer = setInterval(() => {
+          if (popup?.closed) {
+            clearInterval(pollTimer);
+            // Reload destinations after OAuth completes
+            loadDestinations();
+          }
+        }, 500);
+      }
+    } catch (error) {
+      console.error('OAuth error:', error);
+      alert(`Failed to connect to ${destination.name}. Please try again.`);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+          <div className="h-20 bg-gray-200 rounded"></div>
+          <div className="h-20 bg-gray-200 rounded"></div>
+          <div className="h-20 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-4">
@@ -132,7 +242,7 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
           Stream Destinations
         </h3>
         <p className="text-sm text-gray-600">
-          Select where you want to stream. {broadcastId ? `Broadcast: ${broadcastId}` : ''}
+          Connect and select where you want to stream. {broadcastId ? `Broadcast: ${broadcastId}` : ''}
         </p>
       </div>
 
@@ -154,7 +264,8 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
                   type="checkbox"
                   checked={dest.enabled}
                   onChange={() => toggleDestination(dest.id)}
-                  className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                  disabled={!dest.connected && dest.platform !== 'custom'}
+                  className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 disabled:opacity-50"
                 />
 
                 {/* Platform Icon */}
@@ -166,7 +277,7 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
 
               {/* Connection Status */}
               <div className="flex items-center space-x-2">
-                {dest.enabled && !dest.connected && (
+                {!dest.connected && dest.platform !== 'custom' && (
                   <button
                     onClick={() => connectDestination(dest.id)}
                     className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
@@ -175,9 +286,10 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
                   </button>
                 )}
                 {dest.connected ? (
-                  <CheckCircleIcon className="w-5 h-5 text-green-600" />
-                ) : dest.enabled ? (
-                  <XCircleIcon className="w-5 h-5 text-gray-400" />
+                  <div className="flex items-center space-x-1">
+                    <CheckCircleIcon className="w-5 h-5 text-green-600" />
+                    <span className="text-xs text-green-600">Connected</span>
+                  </div>
                 ) : null}
               </div>
             </div>
@@ -204,7 +316,6 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
             {dest.platform === 'custom' && dest.enabled && (
               <div className="ml-8 mt-2 space-y-1 text-xs text-gray-500">
                 <div className="truncate">URL: {dest.rtmpUrl}</div>
-                <div className="truncate">Key: {dest.streamKey?.substring(0, 20)}...</div>
               </div>
             )}
           </div>
