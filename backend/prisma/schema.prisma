@@ -432,6 +432,7 @@ model PlatformAnalytics {
 model EmailProvider {
   id          String   @id @default(uuid())
   name        String
+  displayName String?  @map("display_name")
   type        String?  @default("sendgrid") // sendgrid, mailgun, postmark, smtp
   apiKey      String?  @map("api_key") // Encrypted
   apiSecret   String?  @map("api_secret") // Encrypted
@@ -441,6 +442,8 @@ model EmailProvider {
   smtpPass    String?  @map("smtp_pass") // Encrypted
   fromEmail   String   @map("from_email")
   fromName    String   @map("from_name")
+  enabled     Boolean  @default(true)
+  isDefault   Boolean  @default(false) @map("is_default")
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -449,16 +452,20 @@ model EmailProvider {
 }
 
 model Mailbox {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String?  // Encrypted
-  imapHost  String?  @map("imap_host")
-  imapPort  Int?     @map("imap_port")
-  smtpHost  String?  @map("smtp_host")
-  smtpPort  Int?     @map("smtp_port")
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(uuid())
+  name          String?
+  email         String   @unique
+  password      String?  // Encrypted
+  type          String?  // imap, pop3, etc
+  imapHost      String?  @map("imap_host")
+  imapPort      Int?     @map("imap_port")
+  smtpHost      String?  @map("smtp_host")
+  smtpPort      Int?     @map("smtp_port")
+  syncFrequency Int?     @map("sync_frequency") // minutes
+  autoReply     String?  @map("auto_reply") @db.Text
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@map("mailboxes")
 }
@@ -466,17 +473,26 @@ model Mailbox {
 model Email {
   id          String    @id @default(uuid())
   mailboxId   String?   @map("mailbox_id")
-  from        String?   @default("")
-  to          String?   @default("")
+  fromEmail   String?   @default("") @map("from_email")
+  fromName    String?   @map("from_name")
+  toEmail     String?   @default("") @map("to_email")
+  ccEmails    String?   @map("cc_emails") @db.Text
+  bccEmails   String?   @map("bcc_emails") @db.Text
   subject     String?   @default("")
-  body        String?   @default("") @db.Text
-  htmlBody    String?   @map("html_body") @db.Text
+  bodyText    String?   @map("body_text") @db.Text
+  bodyHtml    String?   @map("body_html") @db.Text
+  attachments Json?
+  headers     Json?
   messageId   String?   @map("message_id")
   inReplyTo   String?   @map("in_reply_to")
+  direction   String?   // inbound, outbound
+  status      String?   // draft, queued, sent, delivered, failed
+  errorMessage String?  @map("error_message") @db.Text
   sentAt      DateTime? @map("sent_at")
   receivedAt  DateTime? @map("received_at")
   isRead      Boolean   @default(false) @map("is_read")
   createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   @@index([mailboxId])
   @@index([sentAt])
@@ -484,17 +500,28 @@ model Email {
 }
 
 model SiteBranding {
-  id             String   @id @default(uuid())
-  logoUrl        String?  @map("logo_url")
-  faviconUrl     String?  @map("favicon_url")
-  heroUrl        String?  @map("hero_url")
-  primaryColor   String?  @map("primary_color")
-  secondaryColor String?  @map("secondary_color")
-  platformName   String   @default("Streamlick") @map("platform_name")
-  tagline        String?
-  config         Json?
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id               String   @id @default(uuid())
+  siteName         String?  @map("site_name")
+  siteTagline      String?  @map("site_tagline")
+  platformName     String   @default("Streamlick") @map("platform_name")
+  tagline          String?
+  logoUrl          String?  @map("logo_url")
+  faviconUrl       String?  @map("favicon_url")
+  heroUrl          String?  @map("hero_url")
+  primaryColor     String?  @map("primary_color")
+  secondaryColor   String?  @map("secondary_color")
+  accentColor      String?  @map("accent_color")
+  backgroundColor  String?  @map("background_color")
+  textColor        String?  @map("text_color")
+  metaTitle        String?  @map("meta_title")
+  metaDescription  String?  @map("meta_description") @db.Text
+  metaKeywords     String?  @map("meta_keywords") @db.Text
+  showPoweredBy    Boolean  @default(true) @map("show_powered_by")
+  maintenanceMode  Boolean  @default(false) @map("maintenance_mode")
+  isActive         Boolean  @default(true) @map("is_active")
+  config           Json?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   @@map("site_branding")
 }
@@ -502,10 +529,13 @@ model SiteBranding {
 model CloudProvider {
   id          String   @id @default(uuid())
   name        String   // hetzner, aws, digitalocean, etc.
+  displayName String?  @map("display_name")
   type        String?  @default("compute") // compute, storage, dns
   apiKey      String   @map("api_key") // Encrypted
   apiSecret   String?  @map("api_secret") // Encrypted
   region      String?
+  enabled     Boolean  @default(true)
+  isDefault   Boolean  @default(false) @map("is_default")
   config      Json?    // Provider-specific configuration
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -520,10 +550,14 @@ model InfrastructureServer {
   name           String
   type           String   // media_server, database, cache, etc.
   status         String   // provisioning, active, stopped, error
+  healthStatus   String?  @map("health_status") // healthy, unhealthy, unknown
   ipAddress      String?  @map("ip_address")
-  serverIdExternal String? @map("server_id_external") // Provider's server ID
+  externalId     String?  @map("external_id") // Provider's server ID
+  serverSize     String?  @map("server_size") // cx11, cx21, etc
   region         String?
   instanceType   String?  @map("instance_type")
+  cpuCores       Int?     @map("cpu_cores")
+  memoryGb       Int?     @map("memory_gb")
   specs          Json?    // CPU, RAM, storage specs
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
