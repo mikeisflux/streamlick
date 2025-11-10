@@ -183,12 +183,13 @@ router.get('/oauth-config', async (req, res) => {
       config[platform] = {
         clientId: '',
         clientSecret: '',
+        redirectUri: '',
         enabled: false,
       };
     });
 
     oauthSettings.forEach((setting: any) => {
-      const match = setting.key.match(/^(\w+)_(client_id|client_secret|enabled)$/);
+      const match = setting.key.match(/^(\w+)_(client_id|client_secret|redirect_uri|enabled)$/);
       if (match) {
         const [, platform, field] = match;
         if (config[platform]) {
@@ -206,6 +207,8 @@ router.get('/oauth-config', async (req, res) => {
             config[platform].clientId = value;
           } else if (field === 'client_secret') {
             config[platform].clientSecret = value;
+          } else if (field === 'redirect_uri') {
+            config[platform].redirectUri = value;
           } else if (field === 'enabled') {
             config[platform].enabled = value === 'true';
           }
@@ -224,7 +227,7 @@ router.get('/oauth-config', async (req, res) => {
 router.post('/oauth-config/:platform', async (req, res) => {
   try {
     const { platform } = req.params;
-    const { clientId, clientSecret, enabled } = req.body;
+    const { clientId, clientSecret, enabled, redirectUri } = req.body;
 
     const updates = [];
 
@@ -271,6 +274,30 @@ router.post('/oauth-config/:platform', async (req, res) => {
             value: encrypt(clientSecret),
             isEncrypted: true,
             description: `${platform} OAuth Client Secret`,
+          },
+        })
+      );
+    }
+
+    if (redirectUri !== undefined) {
+      updates.push(
+        prisma.systemSetting.upsert({
+          where: {
+            category_key: {
+              category: 'oauth',
+              key: `${platform}_redirect_uri`,
+            },
+          },
+          update: {
+            value: encrypt(redirectUri),
+            isEncrypted: true,
+          },
+          create: {
+            category: 'oauth',
+            key: `${platform}_redirect_uri`,
+            value: encrypt(redirectUri),
+            isEncrypted: true,
+            description: `${platform} OAuth Redirect URI`,
           },
         })
       );

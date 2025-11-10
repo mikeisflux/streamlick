@@ -35,8 +35,19 @@ async function getOAuthCredentials(platform: string): Promise<{
     const dbClientSecret = settings.find(s => s.key === `${platform}_client_secret`)?.value;
     const dbRedirectUri = settings.find(s => s.key === `${platform}_redirect_uri`)?.value;
 
-    // Decrypt if stored encrypted
+    // Decrypt all encrypted values
+    let clientId = dbClientId;
     let clientSecret = dbClientSecret;
+    let redirectUri = dbRedirectUri;
+
+    if (clientId) {
+      try {
+        clientId = decrypt(clientId);
+      } catch {
+        // If decryption fails, assume it's plain text
+      }
+    }
+
     if (clientSecret) {
       try {
         clientSecret = decrypt(clientSecret);
@@ -45,12 +56,20 @@ async function getOAuthCredentials(platform: string): Promise<{
       }
     }
 
+    if (redirectUri) {
+      try {
+        redirectUri = decrypt(redirectUri);
+      } catch {
+        // If decryption fails, assume it's plain text
+      }
+    }
+
     // Use database values if available, otherwise fall back to environment variables
     const envPrefix = platform.toUpperCase();
     return {
-      clientId: dbClientId || process.env[`${envPrefix}_CLIENT_ID`] || '',
+      clientId: clientId || process.env[`${envPrefix}_CLIENT_ID`] || '',
       clientSecret: clientSecret || process.env[`${envPrefix}_CLIENT_SECRET`] || '',
-      redirectUri: dbRedirectUri || process.env[`${envPrefix}_REDIRECT_URI`] || '',
+      redirectUri: redirectUri || process.env[`${envPrefix}_REDIRECT_URI`] || '',
     };
   } catch (error) {
     logger.error(`Error getting OAuth credentials for ${platform}:`, error);
