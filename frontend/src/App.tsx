@@ -18,6 +18,10 @@ import AdminTesting from './pages/AdminTesting';
 import { AdminServers } from './pages/AdminServers';
 import { Admin } from './pages/Admin';
 import AdminPageManager from './pages/AdminPageManager';
+import { AdminUsers } from './pages/AdminUsers';
+import { AdminBroadcasts } from './pages/AdminBroadcasts';
+import { AdminTemplates } from './pages/AdminTemplates';
+import { AdminAnalytics } from './pages/AdminAnalytics';
 import { Privacy } from './pages/Privacy';
 import { Terms } from './pages/Terms';
 import { DataDeletion } from './pages/DataDeletion';
@@ -157,6 +161,38 @@ function App() {
           element={
             <AdminRoute>
               <AdminPageManager />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <AdminRoute>
+              <AdminUsers />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/broadcasts"
+          element={
+            <AdminRoute>
+              <AdminBroadcasts />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/templates"
+          element={
+            <AdminRoute>
+              <AdminTemplates />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/analytics"
+          element={
+            <AdminRoute>
+              <AdminAnalytics />
             </AdminRoute>
           }
         />
