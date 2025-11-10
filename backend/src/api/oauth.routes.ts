@@ -8,6 +8,62 @@ import logger from '../utils/logger';
 const router = Router();
 const prisma = new PrismaClient();
 
+/**
+ * Get OAuth credentials from database (admin settings) or environment variables
+ */
+async function getOAuthCredentials(platform: string): Promise<{
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+}> {
+  try {
+    // Try to get from database first
+    const settings = await prisma.systemSetting.findMany({
+      where: {
+        category: 'oauth',
+        key: {
+          in: [
+            `${platform}_client_id`,
+            `${platform}_client_secret`,
+            `${platform}_redirect_uri`,
+          ],
+        },
+      },
+    });
+
+    const dbClientId = settings.find(s => s.key === `${platform}_client_id`)?.value;
+    const dbClientSecret = settings.find(s => s.key === `${platform}_client_secret`)?.value;
+    const dbRedirectUri = settings.find(s => s.key === `${platform}_redirect_uri`)?.value;
+
+    // Decrypt if stored encrypted
+    let clientSecret = dbClientSecret;
+    if (clientSecret) {
+      try {
+        clientSecret = decrypt(clientSecret);
+      } catch {
+        // If decryption fails, assume it's plain text
+      }
+    }
+
+    // Use database values if available, otherwise fall back to environment variables
+    const envPrefix = platform.toUpperCase();
+    return {
+      clientId: dbClientId || process.env[`${envPrefix}_CLIENT_ID`] || '',
+      clientSecret: clientSecret || process.env[`${envPrefix}_CLIENT_SECRET`] || '',
+      redirectUri: dbRedirectUri || process.env[`${envPrefix}_REDIRECT_URI`] || '',
+    };
+  } catch (error) {
+    logger.error(`Error getting OAuth credentials for ${platform}:`, error);
+    // Fall back to environment variables
+    const envPrefix = platform.toUpperCase();
+    return {
+      clientId: process.env[`${envPrefix}_CLIENT_ID`] || '',
+      clientSecret: process.env[`${envPrefix}_CLIENT_SECRET`] || '',
+      redirectUri: process.env[`${envPrefix}_REDIRECT_URI`] || '',
+    };
+  }
+}
+
 // OAuth URLs
 const YOUTUBE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const YOUTUBE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -46,22 +102,35 @@ const LINKEDIN_SCOPES = ['w_member_social', 'r_liteprofile', 'r_organization_soc
  */
 
 // Step 1: Initiate YouTube OAuth
-router.get('/youtube/authorize', authenticate, (req, res) => {
-  const userId = req.user!.userId;
-  const state = Buffer.from(JSON.stringify({ userId, platform: 'youtube' })).toString('base64');
+router.get('/youtube/authorize', authenticate, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const state = Buffer.from(JSON.stringify({ userId, platform: 'youtube' })).toString('base64');
 
-  const params = new URLSearchParams({
-    client_id: process.env.YOUTUBE_CLIENT_ID || '',
-    redirect_uri: process.env.YOUTUBE_REDIRECT_URI || '',
-    response_type: 'code',
-    scope: YOUTUBE_SCOPES,
-    state,
-    access_type: 'offline',
-    prompt: 'consent',
-  });
+    const credentials = await getOAuthCredentials('youtube');
 
-  const authUrl = `${YOUTUBE_AUTH_URL}?${params.toString()}`;
-  res.json({ url: authUrl });
+    if (!credentials.clientId || !credentials.redirectUri) {
+      return res.status(400).json({
+        error: 'YouTube OAuth not configured. Please configure in Admin Settings.'
+      });
+    }
+
+    const params = new URLSearchParams({
+      client_id: credentials.clientId,
+      redirect_uri: credentials.redirectUri,
+      response_type: 'code',
+      scope: YOUTUBE_SCOPES,
+      state,
+      access_type: 'offline',
+      prompt: 'consent',
+    });
+
+    const authUrl = `${YOUTUBE_AUTH_URL}?${params.toString()}`;
+    res.json({ url: authUrl });
+  } catch (error) {
+    logger.error('YouTube authorize error:', error);
+    res.status(500).json({ error: 'Failed to initialize YouTube OAuth' });
+  }
 });
 
 // Step 2: YouTube OAuth Callback
@@ -76,12 +145,14 @@ router.get('/youtube/callback', async (req, res) => {
     // Decode state
     const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
 
+    const credentials = await getOAuthCredentials('youtube');
+
     // Exchange code for tokens
     const tokenResponse = await axios.post(YOUTUBE_TOKEN_URL, {
       code,
-      client_id: process.env.YOUTUBE_CLIENT_ID,
-      client_secret: process.env.YOUTUBE_CLIENT_SECRET,
-      redirect_uri: process.env.YOUTUBE_REDIRECT_URI,
+      client_id: credentials.clientId,
+      client_secret: credentials.clientSecret,
+      redirect_uri: credentials.redirectUri,
       grant_type: 'authorization_code',
     });
 
@@ -133,19 +204,32 @@ router.get('/youtube/callback', async (req, res) => {
  */
 
 // Step 1: Initiate Facebook OAuth
-router.get('/facebook/authorize', authenticate, (req, res) => {
-  const userId = req.user!.userId;
-  const state = Buffer.from(JSON.stringify({ userId, platform: 'facebook' })).toString('base64');
+router.get('/facebook/authorize', authenticate, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const state = Buffer.from(JSON.stringify({ userId, platform: 'facebook' })).toString('base64');
 
-  const params = new URLSearchParams({
-    client_id: process.env.FACEBOOK_APP_ID || '',
-    redirect_uri: process.env.FACEBOOK_REDIRECT_URI || '',
-    state,
-    scope: FACEBOOK_SCOPES,
-  });
+    const credentials = await getOAuthCredentials('facebook');
 
-  const authUrl = `${FACEBOOK_AUTH_URL}?${params.toString()}`;
-  res.json({ url: authUrl });
+    if (!credentials.clientId || !credentials.redirectUri) {
+      return res.status(400).json({
+        error: 'Facebook OAuth not configured. Please configure in Admin Settings.'
+      });
+    }
+
+    const params = new URLSearchParams({
+      client_id: credentials.clientId,
+      redirect_uri: credentials.redirectUri,
+      state,
+      scope: FACEBOOK_SCOPES,
+    });
+
+    const authUrl = `${FACEBOOK_AUTH_URL}?${params.toString()}`;
+    res.json({ url: authUrl });
+  } catch (error) {
+    logger.error('Facebook authorize error:', error);
+    res.status(500).json({ error: 'Failed to initialize Facebook OAuth' });
+  }
 });
 
 // Step 2: Facebook OAuth Callback
@@ -159,12 +243,14 @@ router.get('/facebook/callback', async (req, res) => {
 
     const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
 
+    const credentials = await getOAuthCredentials('facebook');
+
     // Step 1: Exchange code for short-lived token
     const tokenResponse = await axios.get(FACEBOOK_TOKEN_URL, {
       params: {
-        client_id: process.env.FACEBOOK_APP_ID,
-        client_secret: process.env.FACEBOOK_APP_SECRET,
-        redirect_uri: process.env.FACEBOOK_REDIRECT_URI,
+        client_id: credentials.clientId,
+        client_secret: credentials.clientSecret,
+        redirect_uri: credentials.redirectUri,
         code,
       },
     });
@@ -175,8 +261,8 @@ router.get('/facebook/callback', async (req, res) => {
     const longLivedResponse = await axios.get('https://graph.facebook.com/v24.0/oauth/access_token', {
       params: {
         grant_type: 'fb_exchange_token',
-        client_id: process.env.FACEBOOK_APP_ID,
-        client_secret: process.env.FACEBOOK_APP_SECRET,
+        client_id: credentials.clientId,
+        client_secret: credentials.clientSecret,
         fb_exchange_token: shortLivedToken,
       },
     });
@@ -203,8 +289,8 @@ router.get('/facebook/callback', async (req, res) => {
     const pageLongLivedResponse = await axios.get('https://graph.facebook.com/v24.0/oauth/access_token', {
       params: {
         grant_type: 'fb_exchange_token',
-        client_id: process.env.FACEBOOK_APP_ID,
-        client_secret: process.env.FACEBOOK_APP_SECRET,
+        client_id: credentials.clientId,
+        client_secret: credentials.clientSecret,
         fb_exchange_token: pageShortToken,
       },
     });
@@ -242,20 +328,33 @@ router.get('/facebook/callback', async (req, res) => {
  */
 
 // Step 1: Initiate Twitch OAuth
-router.get('/twitch/authorize', authenticate, (req, res) => {
-  const userId = req.user!.userId;
-  const state = Buffer.from(JSON.stringify({ userId, platform: 'twitch' })).toString('base64');
+router.get('/twitch/authorize', authenticate, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const state = Buffer.from(JSON.stringify({ userId, platform: 'twitch' })).toString('base64');
 
-  const params = new URLSearchParams({
-    client_id: process.env.TWITCH_CLIENT_ID || '',
-    redirect_uri: process.env.TWITCH_REDIRECT_URI || '',
-    response_type: 'code',
-    scope: TWITCH_SCOPES,
-    state,
-  });
+    const credentials = await getOAuthCredentials('twitch');
 
-  const authUrl = `${TWITCH_AUTH_URL}?${params.toString()}`;
-  res.json({ url: authUrl });
+    if (!credentials.clientId || !credentials.redirectUri) {
+      return res.status(400).json({
+        error: 'Twitch OAuth not configured. Please configure in Admin Settings.'
+      });
+    }
+
+    const params = new URLSearchParams({
+      client_id: credentials.clientId,
+      redirect_uri: credentials.redirectUri,
+      response_type: 'code',
+      scope: TWITCH_SCOPES,
+      state,
+    });
+
+    const authUrl = `${TWITCH_AUTH_URL}?${params.toString()}`;
+    res.json({ url: authUrl });
+  } catch (error) {
+    logger.error('Twitch authorize error:', error);
+    res.status(500).json({ error: 'Failed to initialize Twitch OAuth' });
+  }
 });
 
 // Step 2: Twitch OAuth Callback
@@ -269,13 +368,15 @@ router.get('/twitch/callback', async (req, res) => {
 
     const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
 
+    const credentials = await getOAuthCredentials('twitch');
+
     // Exchange code for token
     const tokenResponse = await axios.post(TWITCH_TOKEN_URL, {
-      client_id: process.env.TWITCH_CLIENT_ID,
-      client_secret: process.env.TWITCH_CLIENT_SECRET,
+      client_id: credentials.clientId,
+      client_secret: credentials.clientSecret,
       code,
       grant_type: 'authorization_code',
-      redirect_uri: process.env.TWITCH_REDIRECT_URI,
+      redirect_uri: credentials.redirectUri,
     });
 
     const { access_token, refresh_token } = tokenResponse.data;
@@ -284,7 +385,7 @@ router.get('/twitch/callback', async (req, res) => {
     const userResponse = await axios.get('https://api.twitch.tv/helix/users', {
       headers: {
         Authorization: `Bearer ${access_token}`,
-        'Client-Id': process.env.TWITCH_CLIENT_ID || '',
+        'Client-Id': credentials.clientId,
       },
     });
 
@@ -299,7 +400,7 @@ router.get('/twitch/callback', async (req, res) => {
       {
         headers: {
           Authorization: `Bearer ${access_token}`,
-          'Client-Id': process.env.TWITCH_CLIENT_ID || '',
+          'Client-Id': credentials.clientId,
         },
       }
     );
@@ -332,29 +433,42 @@ router.get('/twitch/callback', async (req, res) => {
  */
 
 // Step 1: Initiate X OAuth
-router.get('/x/authorize', authenticate, (req, res) => {
-  const userId = req.user!.userId;
-  const state = Buffer.from(JSON.stringify({ userId, platform: 'x' })).toString('base64');
+router.get('/x/authorize', authenticate, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const state = Buffer.from(JSON.stringify({ userId, platform: 'x' })).toString('base64');
 
-  // Generate PKCE code verifier and challenge
-  const codeVerifier = Buffer.from(Math.random().toString()).toString('base64').substring(0, 128);
-  const codeChallenge = Buffer.from(codeVerifier).toString('base64url');
+    const credentials = await getOAuthCredentials('x');
 
-  // Store code verifier in session/cache (in production, use Redis)
-  // For now, we'll include it in state (not secure for production)
+    if (!credentials.clientId || !credentials.redirectUri) {
+      return res.status(400).json({
+        error: 'X/Twitter OAuth not configured. Please configure in Admin Settings.'
+      });
+    }
 
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: process.env.X_CLIENT_ID || '',
-    redirect_uri: process.env.X_REDIRECT_URI || '',
-    scope: X_SCOPES,
-    state,
-    code_challenge: codeChallenge,
-    code_challenge_method: 'S256',
-  });
+    // Generate PKCE code verifier and challenge
+    const codeVerifier = Buffer.from(Math.random().toString()).toString('base64').substring(0, 128);
+    const codeChallenge = Buffer.from(codeVerifier).toString('base64url');
 
-  const authUrl = `${X_AUTH_URL}?${params.toString()}`;
-  res.json({ url: authUrl });
+    // Store code verifier in session/cache (in production, use Redis)
+    // For now, we'll include it in state (not secure for production)
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: credentials.clientId,
+      redirect_uri: credentials.redirectUri,
+      scope: X_SCOPES,
+      state,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
+    });
+
+    const authUrl = `${X_AUTH_URL}?${params.toString()}`;
+    res.json({ url: authUrl });
+  } catch (error) {
+    logger.error('X authorize error:', error);
+    res.status(500).json({ error: 'Failed to initialize X OAuth' });
+  }
 });
 
 // Step 2: X OAuth Callback
@@ -368,14 +482,16 @@ router.get('/x/callback', async (req, res) => {
 
     const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
 
+    const credentials = await getOAuthCredentials('x');
+
     // Exchange code for token (with PKCE)
     const tokenResponse = await axios.post(
       X_TOKEN_URL,
       {
         code,
         grant_type: 'authorization_code',
-        client_id: process.env.X_CLIENT_ID,
-        redirect_uri: process.env.X_REDIRECT_URI,
+        client_id: credentials.clientId,
+        redirect_uri: credentials.redirectUri,
         code_verifier: 'STORED_CODE_VERIFIER', // Should retrieve from cache
       },
       {
@@ -488,20 +604,33 @@ router.post('/rumble/setup', authenticate, async (req, res) => {
  */
 
 // Step 1: Initiate LinkedIn OAuth
-router.get('/linkedin/authorize', authenticate, (req, res) => {
-  const userId = req.user!.userId;
-  const state = Buffer.from(JSON.stringify({ userId, platform: 'linkedin' })).toString('base64');
+router.get('/linkedin/authorize', authenticate, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const state = Buffer.from(JSON.stringify({ userId, platform: 'linkedin' })).toString('base64');
 
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: process.env.LINKEDIN_CLIENT_ID || '',
-    redirect_uri: process.env.LINKEDIN_REDIRECT_URI || '',
-    state,
-    scope: LINKEDIN_SCOPES,
-  });
+    const credentials = await getOAuthCredentials('linkedin');
 
-  const authUrl = `${LINKEDIN_AUTH_URL}?${params.toString()}`;
-  res.json({ url: authUrl });
+    if (!credentials.clientId || !credentials.redirectUri) {
+      return res.status(400).json({
+        error: 'LinkedIn OAuth not configured. Please configure in Admin Settings.'
+      });
+    }
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: credentials.clientId,
+      redirect_uri: credentials.redirectUri,
+      state,
+      scope: LINKEDIN_SCOPES,
+    });
+
+    const authUrl = `${LINKEDIN_AUTH_URL}?${params.toString()}`;
+    res.json({ url: authUrl });
+  } catch (error) {
+    logger.error('LinkedIn authorize error:', error);
+    res.status(500).json({ error: 'Failed to initialize LinkedIn OAuth' });
+  }
 });
 
 // Step 2: LinkedIn OAuth Callback
@@ -515,15 +644,17 @@ router.get('/linkedin/callback', async (req, res) => {
 
     const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
 
+    const credentials = await getOAuthCredentials('linkedin');
+
     // Exchange code for token
     const tokenResponse = await axios.post(
       LINKEDIN_TOKEN_URL,
       new URLSearchParams({
         grant_type: 'authorization_code',
         code: code as string,
-        client_id: process.env.LINKEDIN_CLIENT_ID || '',
-        client_secret: process.env.LINKEDIN_CLIENT_SECRET || '',
-        redirect_uri: process.env.LINKEDIN_REDIRECT_URI || '',
+        client_id: credentials.clientId,
+        client_secret: credentials.clientSecret,
+        redirect_uri: credentials.redirectUri,
       }),
       {
         headers: {
