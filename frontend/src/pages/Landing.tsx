@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useBranding } from '../context/BrandingContext';
 import { Button } from '../components/Button';
+import { API_URL } from '../services/api';
 
 export function Landing() {
   const navigate = useNavigate();
@@ -13,7 +14,7 @@ export function Landing() {
         <nav className="flex items-center justify-between">
           {branding?.logoUrl ? (
             <img
-              src={branding.logoUrl.startsWith('http') ? branding.logoUrl : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${branding.logoUrl}`}
+              src={branding.logoUrl.startsWith('http') ? branding.logoUrl : `${API_URL}${branding.logoUrl}`}
               alt={branding.config?.platformName || 'Logo'}
               className="h-10 object-contain cursor-pointer"
               onClick={() => navigate('/')}
@@ -35,7 +36,7 @@ export function Landing() {
           className="container mx-auto px-4 py-20 text-center relative rounded-2xl overflow-hidden"
           style={{
             backgroundImage: branding?.heroUrl
-              ? `linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url(${branding.heroUrl.startsWith('http') ? branding.heroUrl : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${branding.heroUrl}`})`
+              ? `linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url(${branding.heroUrl.startsWith('http') ? branding.heroUrl : `${API_URL}${branding.heroUrl}`})`
               : undefined,
             backgroundSize: 'cover',
             backgroundPosition: 'center',

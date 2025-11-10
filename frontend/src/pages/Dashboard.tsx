@@ -5,6 +5,7 @@ import { useAuthStore } from '../store/authStore';
 import { useBranding } from '../context/BrandingContext';
 import { Broadcast } from '../types';
 import { Button } from '../components/Button';
+import { API_URL } from '../services/api';
 import toast from 'react-hot-toast';
 
 export function Dashboard() {
@@ -49,7 +50,7 @@ export function Dashboard() {
           <div className="flex justify-between items-center">
             {branding?.logoUrl ? (
               <img
-                src={branding.logoUrl.startsWith('http') ? branding.logoUrl : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${branding.logoUrl}`}
+                src={branding.logoUrl.startsWith('http') ? branding.logoUrl : `${API_URL}${branding.logoUrl}`}
                 alt={branding.config?.platformName || 'Logo'}
                 className="h-10 object-contain cursor-pointer"
                 onClick={() => navigate('/dashboard')}
