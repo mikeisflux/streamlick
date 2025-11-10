@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { multiTrackRecordingService, RecordedTrack } from '../services/multitrack-recording.service';
 import toast from 'react-hot-toast';
 
@@ -55,6 +55,15 @@ export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeP
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [recordedTracks, setRecordedTracks] = useState<RecordedTrack[]>([]);
   const [separateAudioVideo, setSeparateAudioVideo] = useState(true);
+
+  // Draggable and resizable state (reduced size by 20% from max-w-7xl ~1280px to ~1024px)
+  const [position, setPosition] = useState({ x: 100, y: 50 });
+  const [size, setSize] = useState({ width: 1024, height: 720 }); // 20% smaller than 7xl
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const modalRef = useRef<HTMLDivElement>(null);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
 
   const toggleParticipantRole = (participantId: string) => {
     setParticipants(
@@ -171,11 +180,109 @@ export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeP
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
+  // Drag and resize handlers
+  const handleDragStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    dragOffsetRef.current = {
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    };
+  };
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+    setDragStart({ x: e.clientX, y: e.clientY });
+  };
+
+  // Mouse move and up handlers
+  useEffect(() => {
+    let animationFrameId: number;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDragging) {
+        // Use requestAnimationFrame and direct DOM manipulation to avoid re-renders
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId);
+        }
+        animationFrameId = requestAnimationFrame(() => {
+          const newX = e.clientX - dragOffsetRef.current.x;
+          const newY = e.clientY - dragOffsetRef.current.y;
+
+          if (modalRef.current) {
+            modalRef.current.style.transform = `translate(${newX}px, ${newY}px)`;
+          }
+        });
+      } else if (isResizing) {
+        const deltaX = e.clientX - dragStart.x;
+        const deltaY = e.clientY - dragStart.y;
+        setSize((prev) => ({
+          width: Math.max(800, prev.width + deltaX),
+          height: Math.max(600, prev.height + deltaY),
+        }));
+        setDragStart({ x: e.clientX, y: e.clientY });
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (isDragging && modalRef.current) {
+        // Save the final position to state when dragging ends
+        const transform = modalRef.current.style.transform;
+        const match = transform.match(/translate\((-?\d+)px,\s*(-?\d+)px\)/);
+        if (match) {
+          setPosition({
+            x: parseInt(match[1]),
+            y: parseInt(match[2]),
+          });
+        }
+        // Reset transform
+        modalRef.current.style.transform = '';
+      }
+
+      setIsDragging(false);
+      setIsResizing(false);
+
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+
+    if (isDragging || isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [isDragging, isResizing, dragStart, position]);
+
   return (
-    <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-lg shadow-2xl w-full max-w-7xl max-h-[95vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-700 flex items-center justify-between bg-gray-800">
+    <div className="fixed inset-0 bg-black/50 z-50 pointer-events-none">
+      <div
+        ref={modalRef}
+        className="bg-gray-900 rounded-lg shadow-2xl overflow-hidden flex flex-col pointer-events-auto relative"
+        style={{
+          position: 'absolute',
+          left: `${position.x}px`,
+          top: `${position.y}px`,
+          width: `${size.width}px`,
+          height: `${size.height}px`,
+          maxHeight: '90vh',
+          willChange: isDragging ? 'transform' : 'auto',
+        }}
+      >
+        {/* Header - Draggable */}
+        <div
+          className="px-6 py-4 border-b border-gray-700 flex items-center justify-between bg-gray-800 cursor-move"
+          onMouseDown={handleDragStart}
+        >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
               <svg
@@ -538,6 +645,19 @@ export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeP
           >
             Exit Producer Mode
           </button>
+        </div>
+
+        {/* Resize Handle */}
+        <div
+          onMouseDown={handleResizeStart}
+          className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize group"
+          style={{
+            background: 'linear-gradient(135deg, transparent 50%, rgba(147, 51, 234, 0.5) 50%)',
+          }}
+        >
+          <div className="absolute bottom-1 right-1 w-1 h-1 bg-purple-400 rounded-full group-hover:bg-purple-300" />
+          <div className="absolute bottom-1 right-2.5 w-1 h-1 bg-purple-400 rounded-full group-hover:bg-purple-300" />
+          <div className="absolute bottom-2.5 right-1 w-1 h-1 bg-purple-400 rounded-full group-hover:bg-purple-300" />
         </div>
       </div>
     </div>
