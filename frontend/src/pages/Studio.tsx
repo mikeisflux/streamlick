@@ -186,6 +186,7 @@ export function Studio() {
     edgeSoftness: 0.3,
   });
   const [processedStream, setProcessedStream] = useState<MediaStream | null>(null);
+  const [showBackgroundSettings, setShowBackgroundSettings] = useState(false);
 
   // Vertical Simulcast state
   const [verticalSimulcastEnabled, setVerticalSimulcastEnabled] = useState(false);
@@ -2227,17 +2228,31 @@ export function Studio() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
             </button>
-            <button
-              onClick={() => setBackgroundRemovalEnabled(!backgroundRemovalEnabled)}
-              className={`p-2 rounded ${
-                backgroundRemovalEnabled ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-700 hover:bg-gray-600'
-              } text-white transition-colors`}
-              title={backgroundRemovalEnabled ? 'Disable Background Removal' : 'Enable Smart Background Removal'}
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </button>
+            {/* Smart Background Removal with settings dropdown */}
+            <div className="relative flex items-center">
+              <button
+                onClick={() => setBackgroundRemovalEnabled(!backgroundRemovalEnabled)}
+                className={`p-2 rounded-l ${
+                  backgroundRemovalEnabled ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-700 hover:bg-gray-600'
+                } text-white transition-colors`}
+                title={backgroundRemovalEnabled ? 'Disable Background Removal' : 'Enable Smart Background Removal'}
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setShowBackgroundSettings(!showBackgroundSettings)}
+                className={`p-2 pr-3 rounded-r border-l border-gray-600 ${
+                  backgroundRemovalEnabled ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-700 hover:bg-gray-600'
+                } text-white transition-colors`}
+                title="Background Removal Settings"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
             <button
               onClick={() => setVerticalSimulcastEnabled(!verticalSimulcastEnabled)}
               className={`p-2 rounded ${
@@ -3028,6 +3043,160 @@ export function Studio() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Background Removal Settings Dropdown */}
+      {showBackgroundSettings && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setShowBackgroundSettings(false)}
+          />
+          <div
+            className="fixed bottom-24 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-2xl z-50"
+            style={{ width: '380px', maxHeight: '500px' }}
+          >
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-900">Background Removal Settings</h3>
+              <p className="text-xs text-gray-500 mt-1">Customize your virtual background effect</p>
+            </div>
+            <div className="overflow-y-auto max-h-96 p-4">
+              <div className="space-y-4">
+                {/* Background Type */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-900 mb-2">
+                    Effect Type
+                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                      <input
+                        type="radio"
+                        name="backgroundType"
+                        checked={backgroundRemovalOptions.type === 'blur'}
+                        onChange={() => setBackgroundRemovalOptions({ ...backgroundRemovalOptions, type: 'blur' })}
+                        className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                      />
+                      <div className="ml-3 flex-1">
+                        <p className="text-sm font-medium text-gray-900">Blur Background</p>
+                        <p className="text-xs text-gray-500">Blur everything behind you</p>
+                      </div>
+                    </label>
+                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                      <input
+                        type="radio"
+                        name="backgroundType"
+                        checked={backgroundRemovalOptions.type === 'color'}
+                        onChange={() => setBackgroundRemovalOptions({ ...backgroundRemovalOptions, type: 'color' })}
+                        className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                      />
+                      <div className="ml-3 flex-1">
+                        <p className="text-sm font-medium text-gray-900">Solid Color</p>
+                        <p className="text-xs text-gray-500">Replace with a solid color</p>
+                      </div>
+                    </label>
+                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors opacity-50">
+                      <input
+                        type="radio"
+                        name="backgroundType"
+                        checked={backgroundRemovalOptions.type === 'image'}
+                        onChange={() => setBackgroundRemovalOptions({ ...backgroundRemovalOptions, type: 'image' })}
+                        className="w-4 h-4 text-purple-600 focus:ring-purple-500"
+                        disabled
+                      />
+                      <div className="ml-3 flex-1">
+                        <p className="text-sm font-medium text-gray-900">Custom Image</p>
+                        <p className="text-xs text-gray-500">Coming soon</p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Blur Amount */}
+                {backgroundRemovalOptions.type === 'blur' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-900 mb-2">
+                      Blur Intensity: {backgroundRemovalOptions.blurAmount}px
+                    </label>
+                    <input
+                      type="range"
+                      min="5"
+                      max="50"
+                      step="1"
+                      value={backgroundRemovalOptions.blurAmount || 15}
+                      onChange={(e) => setBackgroundRemovalOptions({ ...backgroundRemovalOptions, blurAmount: parseInt(e.target.value) })}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-purple"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>Subtle (5px)</span>
+                      <span>Extreme (50px)</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Color Picker */}
+                {backgroundRemovalOptions.type === 'color' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-900 mb-2">
+                      Background Color
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={backgroundRemovalOptions.color || '#1a1a1a'}
+                        onChange={(e) => setBackgroundRemovalOptions({ ...backgroundRemovalOptions, color: e.target.value })}
+                        className="w-16 h-16 rounded-lg border-2 border-gray-300 cursor-pointer"
+                      />
+                      <div className="flex-1">
+                        <input
+                          type="text"
+                          value={backgroundRemovalOptions.color || '#1a1a1a'}
+                          onChange={(e) => setBackgroundRemovalOptions({ ...backgroundRemovalOptions, color: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm font-mono"
+                          placeholder="#1a1a1a"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Hex color code</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Edge Softness */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-900 mb-2">
+                    Edge Smoothing: {Math.round((backgroundRemovalOptions.edgeSoftness || 0.3) * 100)}%
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={backgroundRemovalOptions.edgeSoftness || 0.3}
+                    onChange={(e) => setBackgroundRemovalOptions({ ...backgroundRemovalOptions, edgeSoftness: parseFloat(e.target.value) })}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-purple"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>Sharp</span>
+                    <span>Soft</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">Higher values create smoother edges around your silhouette</p>
+                </div>
+
+                {/* Info Box */}
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <svg className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <p className="text-xs font-semibold text-purple-900">Performance Tip</p>
+                      <p className="text-xs text-purple-700 mt-1">Background removal uses AI and may impact performance on slower devices. Toggle off if experiencing lag.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </>
