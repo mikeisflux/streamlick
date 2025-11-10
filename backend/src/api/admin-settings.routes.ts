@@ -44,10 +44,21 @@ router.get('/settings', async (req, res) => {
     });
 
     // Decrypt sensitive values for admin viewing
-    const decryptedSettings = settings.map((setting: any) => ({
-      ...setting,
-      value: setting.isEncrypted ? decrypt(setting.value) : setting.value,
-    }));
+    const decryptedSettings = settings.map((setting: any) => {
+      let value = setting.value;
+      if (setting.isEncrypted) {
+        try {
+          value = decrypt(setting.value);
+        } catch (decryptError) {
+          logger.warn(`Failed to decrypt setting ${setting.key}:`, decryptError);
+          value = '';
+        }
+      }
+      return {
+        ...setting,
+        value,
+      };
+    });
 
     res.json(decryptedSettings);
   } catch (error) {
@@ -74,10 +85,21 @@ router.get('/settings/:category', async (req, res) => {
       },
     });
 
-    const decryptedSettings = settings.map((setting: any) => ({
-      ...setting,
-      value: setting.isEncrypted ? decrypt(setting.value) : setting.value,
-    }));
+    const decryptedSettings = settings.map((setting: any) => {
+      let value = setting.value;
+      if (setting.isEncrypted) {
+        try {
+          value = decrypt(setting.value);
+        } catch (decryptError) {
+          logger.warn(`Failed to decrypt setting ${setting.key}:`, decryptError);
+          value = '';
+        }
+      }
+      return {
+        ...setting,
+        value,
+      };
+    });
 
     res.json(decryptedSettings);
   } catch (error) {
@@ -170,12 +192,22 @@ router.get('/oauth-config', async (req, res) => {
       if (match) {
         const [, platform, field] = match;
         if (config[platform]) {
+          let value = setting.value;
+          if (setting.isEncrypted) {
+            try {
+              value = decrypt(setting.value);
+            } catch (decryptError) {
+              logger.warn(`Failed to decrypt OAuth setting ${setting.key}:`, decryptError);
+              value = '';
+            }
+          }
+
           if (field === 'client_id') {
-            config[platform].clientId = setting.isEncrypted ? decrypt(setting.value) : setting.value;
+            config[platform].clientId = value;
           } else if (field === 'client_secret') {
-            config[platform].clientSecret = setting.isEncrypted ? decrypt(setting.value) : setting.value;
+            config[platform].clientSecret = value;
           } else if (field === 'enabled') {
-            config[platform].enabled = setting.value === 'true';
+            config[platform].enabled = value === 'true';
           }
         }
       }
@@ -284,12 +316,23 @@ router.get('/webhooks', async (req, res) => {
       where: { category: 'webhook' },
     });
 
-    const config = webhooks.map((webhook: any) => ({
-      id: webhook.id,
-      key: webhook.key,
-      value: webhook.isEncrypted ? decrypt(webhook.value) : webhook.value,
-      description: webhook.description,
-    }));
+    const config = webhooks.map((webhook: any) => {
+      let value = webhook.value;
+      if (webhook.isEncrypted) {
+        try {
+          value = decrypt(webhook.value);
+        } catch (decryptError) {
+          logger.warn(`Failed to decrypt webhook ${webhook.key}:`, decryptError);
+          value = '';
+        }
+      }
+      return {
+        id: webhook.id,
+        key: webhook.key,
+        value,
+        description: webhook.description,
+      };
+    });
 
     res.json(config);
   } catch (error) {
@@ -308,7 +351,17 @@ router.get('/system-config', async (req, res) => {
     const config: any = {};
 
     systemConfig.forEach((setting: any) => {
-      config[setting.key] = setting.isEncrypted ? decrypt(setting.value) : setting.value;
+      if (setting.isEncrypted) {
+        try {
+          config[setting.key] = decrypt(setting.value);
+        } catch (decryptError) {
+          // If decryption fails (wrong key, corrupted data, etc), return empty string
+          logger.warn(`Failed to decrypt setting ${setting.key}:`, decryptError);
+          config[setting.key] = '';
+        }
+      } else {
+        config[setting.key] = setting.value;
+      }
     });
 
     res.json(config);
