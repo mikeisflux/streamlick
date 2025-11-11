@@ -3,12 +3,12 @@ import { toast } from 'react-hot-toast';
 import api, { API_URL } from '../services/api';
 
 interface OAuthConfig {
-  youtube: { clientId: string; clientSecret: string; enabled: boolean };
-  facebook: { clientId: string; clientSecret: string; enabled: boolean };
-  twitch: { clientId: string; clientSecret: string; enabled: boolean };
-  twitter: { clientId: string; clientSecret: string; enabled: boolean };
-  rumble: { clientId: string; clientSecret: string; enabled: boolean };
-  linkedin: { clientId: string; clientSecret: string; enabled: boolean };
+  youtube: { clientId: string; clientSecret: string; redirectUri: string; enabled: boolean };
+  facebook: { clientId: string; clientSecret: string; redirectUri: string; enabled: boolean };
+  twitch: { clientId: string; clientSecret: string; redirectUri: string; enabled: boolean };
+  twitter: { clientId: string; clientSecret: string; redirectUri: string; enabled: boolean };
+  rumble: { clientId: string; clientSecret: string; redirectUri: string; enabled: boolean };
+  linkedin: { clientId: string; clientSecret: string; redirectUri: string; enabled: boolean };
 }
 
 interface SystemConfig {
@@ -37,12 +37,12 @@ interface SystemConfig {
 export default function AdminSettings() {
   const [activeTab, setActiveTab] = useState<'oauth' | 'system' | 'webhooks' | 'rtmp' | 'branding'>('oauth');
   const [oauthConfig, setOAuthConfig] = useState<OAuthConfig>({
-    youtube: { clientId: '', clientSecret: '', enabled: false },
-    facebook: { clientId: '', clientSecret: '', enabled: false },
-    twitch: { clientId: '', clientSecret: '', enabled: false },
-    twitter: { clientId: '', clientSecret: '', enabled: false },
-    rumble: { clientId: '', clientSecret: '', enabled: false },
-    linkedin: { clientId: '', clientSecret: '', enabled: false },
+    youtube: { clientId: '', clientSecret: '', redirectUri: '', enabled: false },
+    facebook: { clientId: '', clientSecret: '', redirectUri: '', enabled: false },
+    twitch: { clientId: '', clientSecret: '', redirectUri: '', enabled: false },
+    twitter: { clientId: '', clientSecret: '', redirectUri: '', enabled: false },
+    rumble: { clientId: '', clientSecret: '', redirectUri: '', enabled: false },
+    linkedin: { clientId: '', clientSecret: '', redirectUri: '', enabled: false },
   });
   const [systemConfig, setSystemConfig] = useState<SystemConfig>({});
   const [loading, setLoading] = useState(false);
@@ -168,40 +168,60 @@ export default function AdminSettings() {
               </label>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Client ID
-                </label>
-                <input
-                  type="text"
-                  value={oauthConfig[key]?.clientId || ''}
-                  onChange={(e) => {
-                    setOAuthConfig(prev => ({
-                      ...prev,
-                      [key]: { ...prev[key], clientId: e.target.value }
-                    }));
-                  }}
-                  className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder={`${name} OAuth Client ID`}
-                />
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Client ID
+                  </label>
+                  <input
+                    type="text"
+                    value={oauthConfig[key]?.clientId || ''}
+                    onChange={(e) => {
+                      setOAuthConfig(prev => ({
+                        ...prev,
+                        [key]: { ...prev[key], clientId: e.target.value }
+                      }));
+                    }}
+                    className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder={`${name} OAuth Client ID`}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Client Secret
+                  </label>
+                  <input
+                    type="password"
+                    value={oauthConfig[key]?.clientSecret || ''}
+                    onChange={(e) => {
+                      setOAuthConfig(prev => ({
+                        ...prev,
+                        [key]: { ...prev[key], clientSecret: e.target.value }
+                      }));
+                    }}
+                    className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder={`${name} OAuth Client Secret`}
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Client Secret
+                  Redirect URI
                 </label>
                 <input
-                  type="password"
-                  value={oauthConfig[key]?.clientSecret || ''}
+                  type="text"
+                  value={oauthConfig[key]?.redirectUri || ''}
                   onChange={(e) => {
                     setOAuthConfig(prev => ({
                       ...prev,
-                      [key]: { ...prev[key], clientSecret: e.target.value }
+                      [key]: { ...prev[key], redirectUri: e.target.value }
                     }));
                   }}
                   className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder={`${name} OAuth Client Secret`}
+                  placeholder={`${name} OAuth Redirect URI (e.g., https://api.streamlick.com/api/oauth/${key}/callback)`}
                 />
               </div>
             </div>
