@@ -41,6 +41,7 @@ router.get('/users', async (req: Request, res: Response) => {
         email: true,
         name: true,
         role: true,
+        planType: true,
         emailVerified: true,
         createdAt: true,
       },
@@ -62,11 +63,77 @@ router.get('/users', async (req: Request, res: Response) => {
   }
 });
 
-// Update user (admin status, etc)
+// Create new user
+router.post('/users', async (req: Request, res: Response) => {
+  try {
+    const { email, name, password, planType } = req.body;
+
+    // Validate required fields
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ error: 'User with this email already exists' });
+    }
+
+    // Validate planType if provided
+    const validPlans = ['free', 'core', 'advanced', 'teams', 'business'];
+    const userPlanType = planType && validPlans.includes(planType) ? planType : 'free';
+
+    // Hash password
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user
+    const user = await prisma.user.create({
+      data: {
+        email,
+        name: name || null,
+        password: hashedPassword,
+        planType: userPlanType,
+        role: 'user',
+        emailVerified: false,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        planType: true,
+        emailVerified: true,
+        createdAt: true,
+      },
+    });
+
+    logger.info(`New user created by admin: ${user.email}`);
+
+    res.status(201).json({
+      ...user,
+      isAdmin: user.role === 'admin',
+    });
+  } catch (error) {
+    logger.error('Create user error:', error);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+// Update user (admin status, subscription plan, etc)
 router.patch('/users/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { isAdmin } = req.body;
+    const { isAdmin, planType } = req.body;
 
     // Prevent user from removing their own admin status
     const currentUserId = (req as any).user.userId;
@@ -74,16 +141,29 @@ router.patch('/users/:id', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Cannot remove your own admin status' });
     }
 
+    // Build update data object
+    const updateData: any = {};
+    if (isAdmin !== undefined) {
+      updateData.role = isAdmin ? 'admin' : 'user';
+    }
+    if (planType !== undefined) {
+      // Validate planType
+      const validPlans = ['free', 'core', 'advanced', 'teams', 'business'];
+      if (!validPlans.includes(planType)) {
+        return res.status(400).json({ error: 'Invalid plan type' });
+      }
+      updateData.planType = planType;
+    }
+
     const user = await prisma.user.update({
       where: { id },
-      data: {
-        role: isAdmin ? 'admin' : 'user',
-      },
+      data: updateData,
       select: {
         id: true,
         email: true,
         name: true,
         role: true,
+        planType: true,
         emailVerified: true,
         createdAt: true,
       },
