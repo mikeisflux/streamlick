@@ -254,9 +254,11 @@ router.get('/facebook/authorize', authenticate, async (req, res) => {
     const userId = req.user!.userId;
     const state = Buffer.from(JSON.stringify({ userId, platform: 'facebook' })).toString('base64');
 
+    logger.info(`[OAuth] Facebook authorize request from user ${userId}`);
     const credentials = await getOAuthCredentials('facebook');
 
     if (!credentials.clientId || !credentials.redirectUri) {
+      logger.error('[OAuth] Facebook OAuth not configured');
       return res.status(400).json({
         error: 'Facebook OAuth not configured. Please configure in Admin Settings.'
       });
@@ -270,6 +272,11 @@ router.get('/facebook/authorize', authenticate, async (req, res) => {
     });
 
     const authUrl = `${FACEBOOK_AUTH_URL}?${params.toString()}`;
+    logger.info('[OAuth] Facebook auth URL generated:', {
+      redirectUri: credentials.redirectUri,
+      scopes: FACEBOOK_SCOPES,
+      authUrlLength: authUrl.length
+    });
     res.json({ url: authUrl });
   } catch (error) {
     logger.error('Facebook authorize error:', error);
@@ -280,10 +287,20 @@ router.get('/facebook/authorize', authenticate, async (req, res) => {
 // Step 2: Facebook OAuth Callback
 router.get('/facebook/callback', async (req, res) => {
   try {
-    const { code, state } = req.query;
+    // Log all query parameters to debug
+    logger.info('[OAuth] Facebook callback received with query params:', req.query);
+
+    const { code, state, error, error_reason, error_description } = req.query;
+
+    // Check if Facebook returned an error
+    if (error) {
+      logger.error('[OAuth] Facebook returned error:', { error, error_reason, error_description });
+      return res.redirect(`${process.env.FRONTEND_URL}/settings?tab=destinations&error=facebook&reason=${error_reason || error}`);
+    }
 
     if (!code || !state) {
-      return res.status(400).json({ error: 'Missing code or state' });
+      logger.error('[OAuth] Missing code or state in callback. Query params:', req.query);
+      return res.status(400).json({ error: 'Missing code or state', receivedParams: Object.keys(req.query) });
     }
 
     const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
