@@ -44,6 +44,16 @@ tsconfig.*.json
 !tsconfig.json
 !tsconfig.node.json
 
+# Additional config file variants
+jest.config.local.*
+vitest.config.local.*
+tailwind.config.local.*
+postcss.config.local.*
+*.config.development.*
+*.config.production.*
+*.config.staging.*
+*.config.test.*
+
 # Logs
 logs/
 *.log
