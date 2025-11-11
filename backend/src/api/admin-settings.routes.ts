@@ -176,7 +176,7 @@ router.get('/oauth-config', async (req, res) => {
     });
 
     // Group by platform
-    const platforms = ['youtube', 'facebook', 'twitch', 'twitter', 'rumble', 'linkedin'];
+    const platforms = ['youtube', 'facebook', 'twitch', 'twitter', 'x', 'rumble', 'linkedin'];
     const config: any = {};
 
     platforms.forEach(platform => {

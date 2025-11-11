@@ -7,6 +7,7 @@ interface OAuthConfig {
   facebook: { clientId: string; clientSecret: string; redirectUri: string; enabled: boolean };
   twitch: { clientId: string; clientSecret: string; redirectUri: string; enabled: boolean };
   twitter: { clientId: string; clientSecret: string; redirectUri: string; enabled: boolean };
+  x: { clientId: string; clientSecret: string; redirectUri: string; enabled: boolean };
   rumble: { clientId: string; clientSecret: string; redirectUri: string; enabled: boolean };
   linkedin: { clientId: string; clientSecret: string; redirectUri: string; enabled: boolean };
 }
@@ -41,6 +42,7 @@ export default function AdminSettings() {
     facebook: { clientId: '', clientSecret: '', redirectUri: '', enabled: false },
     twitch: { clientId: '', clientSecret: '', redirectUri: '', enabled: false },
     twitter: { clientId: '', clientSecret: '', redirectUri: '', enabled: false },
+    x: { clientId: '', clientSecret: '', redirectUri: '', enabled: false },
     rumble: { clientId: '', clientSecret: '', redirectUri: '', enabled: false },
     linkedin: { clientId: '', clientSecret: '', redirectUri: '', enabled: false },
   });
@@ -131,7 +133,8 @@ export default function AdminSettings() {
       { key: 'youtube', name: 'YouTube', icon: '🎬' },
       { key: 'facebook', name: 'Facebook', icon: '👥' },
       { key: 'twitch', name: 'Twitch', icon: '🎮' },
-      { key: 'twitter', name: 'X (Twitter)', icon: '🐦' },
+      { key: 'twitter', name: 'X (Twitter - Legacy)', icon: '🐦' },
+      { key: 'x', name: 'X (Twitter)', icon: '✕' },
       { key: 'rumble', name: 'Rumble', icon: '📹' },
       { key: 'linkedin', name: 'LinkedIn', icon: '💼' },
     ];

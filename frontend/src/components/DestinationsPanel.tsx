@@ -39,6 +39,9 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
   const [showCustomRtmp, setShowCustomRtmp] = useState(false);
   const [customRtmpUrl, setCustomRtmpUrl] = useState('');
   const [customStreamKey, setCustomStreamKey] = useState('');
+  const [showRumbleModal, setShowRumbleModal] = useState(false);
+  const [rumbleApiKey, setRumbleApiKey] = useState('');
+  const [rumbleChannelUrl, setRumbleChannelUrl] = useState('');
 
   // Load user's connected destinations
   useEffect(() => {
@@ -195,8 +198,14 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
     const destination = destinations.find(d => d.id === id);
     if (!destination) return;
 
+    // Rumble uses API key authentication, not OAuth
+    if (destination.platform === 'rumble') {
+      setShowRumbleModal(true);
+      return;
+    }
+
     try {
-      // Call OAuth authorize endpoint
+      // Call OAuth authorize endpoint for other platforms
       const response = await api.get(`/oauth/${destination.platform}/authorize`);
 
       if (response.data.url) {
@@ -224,6 +233,33 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
     } catch (error) {
       console.error('OAuth error:', error);
       alert(`Failed to connect to ${destination.name}. Please try again.`);
+    }
+  };
+
+  const connectRumble = async () => {
+    if (!rumbleApiKey || !rumbleChannelUrl) {
+      alert('Please enter both API key and channel URL');
+      return;
+    }
+
+    try {
+      await api.post('/oauth/rumble/setup', {
+        apiKey: rumbleApiKey,
+        channelUrl: rumbleChannelUrl,
+      });
+
+      // Close modal and reset fields
+      setShowRumbleModal(false);
+      setRumbleApiKey('');
+      setRumbleChannelUrl('');
+
+      // Reload destinations
+      loadDestinations();
+      alert('Rumble connected successfully!');
+    } catch (error: any) {
+      console.error('Rumble setup error:', error);
+      const errorMessage = error.response?.data?.error || 'Failed to connect to Rumble. Please check your API key and try again.';
+      alert(errorMessage);
     }
   };
 
@@ -395,6 +431,70 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
           Free plan limited to 1 destination.
         </p>
       </div>
+
+      {/* Rumble API Key Modal */}
+      {showRumbleModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Connect to Rumble
+            </h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  API Key
+                </label>
+                <input
+                  type="text"
+                  value={rumbleApiKey}
+                  onChange={(e) => setRumbleApiKey(e.target.value)}
+                  placeholder="Enter your Rumble API key"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Get your API key from Rumble settings
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Channel URL
+                </label>
+                <input
+                  type="text"
+                  value={rumbleChannelUrl}
+                  onChange={(e) => setRumbleChannelUrl(e.target.value)}
+                  placeholder="https://rumble.com/c/yourchannel"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Your Rumble channel URL
+                </p>
+              </div>
+
+              <div className="flex space-x-3 mt-6">
+                <button
+                  onClick={connectRumble}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                >
+                  Connect
+                </button>
+                <button
+                  onClick={() => {
+                    setShowRumbleModal(false);
+                    setRumbleApiKey('');
+                    setRumbleChannelUrl('');
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
