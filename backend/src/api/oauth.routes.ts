@@ -113,14 +113,15 @@ const YOUTUBE_SCOPES = [
 
 const FACEBOOK_AUTH_URL = 'https://www.facebook.com/v24.0/dialog/oauth';
 const FACEBOOK_TOKEN_URL = 'https://graph.facebook.com/v24.0/oauth/access_token';
+// Facebook scopes - Using minimal auto-approved scopes
+// Additional scopes (publish_video, pages_manage_posts) require Facebook app review
 const FACEBOOK_SCOPES = [
-  'publish_video',                 // Required for creating live videos
-  'pages_read_engagement',         // Required for reading page data
-  'pages_show_list',               // Required for listing pages
-  'pages_messaging',               // For reading and sending messages/chat
-  'pages_read_user_content',       // For reading comments on live videos
-  'pages_manage_posts',            // For managing posts and comments (includes engagement management)
-  'read_insights',                 // For analytics, viewer stats, and metrics
+  'pages_show_list',               // Required for listing user's pages (auto-approved)
+  'pages_read_engagement',         // Required for reading page data (auto-approved)
+  'pages_read_user_content',       // For reading comments on live videos (usually auto-approved)
+  'publish_video',                 // Required for creating live videos (REQUIRES app review)
+  'pages_manage_posts',            // For managing posts and comments (REQUIRES app review)
+  'read_insights',                 // For analytics and viewer stats (may require app review)
 ].join(',');
 
 const TWITCH_AUTH_URL = 'https://id.twitch.tv/oauth2/authorize';

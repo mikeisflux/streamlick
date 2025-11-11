@@ -105,27 +105,35 @@ Your app needs specific permissions to create live videos. Here's how to add the
 1. From the left sidebar, click **"App Review"** → **"Permissions and Features"**
 2. Search for and request the following permissions:
 
-   #### Required Permissions:
-   - **`publish_video`** - To create live videos
-     - Click **"Request"** next to it
-     - You'll need to provide a description of how you'll use it (see section 7)
+   #### Required Permissions (Auto-Approved for Development):
+   - **`pages_show_list`** - To list user's pages
+     - Auto-approved, no review needed
 
    - **`pages_read_engagement`** - To read page data
-     - Usually auto-approved
-
-   - **`pages_show_list`** - To list user's pages
-     - Usually auto-approved
-
-   - **`pages_manage_posts`** - To manage posts and comments (includes engagement management)
-     - Click **"Request"**
+     - Auto-approved, no review needed
 
    - **`pages_read_user_content`** - To read comments on live videos
      - Usually auto-approved
 
-   - **`read_insights`** - For analytics and viewer stats
-     - Usually auto-approved
+   #### Required Permissions (Need App Review for Production):
+   - **`publish_video`** - To create live videos
+     - Click **"Request Advanced Access"**
+     - **REQUIRES App Review** (see section 7)
+     - Essential for live streaming functionality
 
-   Note: `pages_manage_engagement` has been deprecated and should NOT be requested
+   - **`pages_manage_posts`** - To manage posts and comments
+     - Click **"Request Advanced Access"**
+     - **REQUIRES App Review**
+     - Needed for advanced comment/post management
+
+   #### Optional Permissions:
+   - **`read_insights`** - For analytics and viewer stats
+     - May require app review for production
+     - Optional, only needed for detailed analytics
+
+   #### Deprecated/Invalid Scopes (DO NOT REQUEST):
+   - ❌ `pages_manage_engagement` - Deprecated and removed
+   - ❌ `pages_messaging` - Not supported for live streaming use case
 
 3. Some permissions are auto-approved; others require **App Review** (see Step 7)
 
@@ -240,6 +248,16 @@ FACEBOOK_REDIRECT_URI=https://api.yourdomain.com/api/oauth/facebook/callback
 ### "App Not Set Up: This app is still in development mode"
 
 - **Solution**: Add your test account as a developer/tester in **Roles**, or submit for app review to go live
+
+### "Invalid Scopes: pages_manage_engagement" or "Invalid Scopes: pages_messaging"
+
+- **Issue**: These scopes have been deprecated or are not applicable for live streaming
+- **Solution**:
+  - `pages_manage_engagement` was deprecated by Facebook and replaced by `pages_manage_posts`
+  - `pages_messaging` is not needed for live video streaming functionality
+  - Update your code to remove these scopes (already fixed in latest version)
+  - Pull the latest changes and rebuild your application
+- **Note**: If you see "This message is only shown to developers", it means Facebook will ignore these invalid scopes, but they should be removed from your OAuth configuration
 
 ### "Invalid OAuth Redirect URI"
 
