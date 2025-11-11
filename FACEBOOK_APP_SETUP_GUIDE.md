@@ -110,14 +110,22 @@ Your app needs specific permissions to create live videos. Here's how to add the
      - Click **"Request"** next to it
      - You'll need to provide a description of how you'll use it (see section 7)
 
-   - **`pages_manage_engagement`** - To manage live interactions
-     - Click **"Request"**
-
    - **`pages_read_engagement`** - To read page data
      - Usually auto-approved
 
    - **`pages_show_list`** - To list user's pages
      - Usually auto-approved
+
+   - **`pages_manage_posts`** - To manage posts and comments (includes engagement management)
+     - Click **"Request"**
+
+   - **`pages_read_user_content`** - To read comments on live videos
+     - Usually auto-approved
+
+   - **`read_insights`** - For analytics and viewer stats
+     - Usually auto-approved
+
+   Note: `pages_manage_engagement` has been deprecated and should NOT be requested
 
 3. Some permissions are auto-approved; others require **App Review** (see Step 7)
 
@@ -278,7 +286,7 @@ Before going live with your app:
 - [ ] Privacy policy URL added and accessible
 - [ ] Terms of service URL added
 - [ ] Data deletion instructions URL added
-- [ ] All permissions approved (`publish_video`, `pages_manage_engagement`)
+- [ ] All permissions approved (`publish_video`, `pages_manage_posts`, etc.)
 - [ ] Valid OAuth Redirect URIs set for production domain
 - [ ] App credentials added to production `.env`
 - [ ] HTTPS enabled on production backend
