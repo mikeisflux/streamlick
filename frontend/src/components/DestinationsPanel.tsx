@@ -11,7 +11,7 @@ import api from '../services/api';
 interface StreamDestination {
   id: string;
   name: string;
-  platform: 'youtube' | 'facebook' | 'linkedin' | 'twitch' | 'custom';
+  platform: 'youtube' | 'facebook' | 'linkedin' | 'twitch' | 'x' | 'rumble' | 'custom';
   enabled: boolean;
   connected: boolean;
   viewerCount: number;
@@ -29,6 +29,8 @@ const AVAILABLE_PLATFORMS = [
   { platform: 'facebook', name: 'Facebook Live' },
   { platform: 'linkedin', name: 'LinkedIn Live' },
   { platform: 'twitch', name: 'Twitch' },
+  { platform: 'x', name: 'X (Twitter)' },
+  { platform: 'rumble', name: 'Rumble' },
 ];
 
 export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
@@ -178,6 +180,10 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
         return <VideoCameraIcon className={`${iconClass} text-blue-700`} />;
       case 'twitch':
         return <VideoCameraIcon className={`${iconClass} text-purple-600`} />;
+      case 'x':
+        return <VideoCameraIcon className={`${iconClass} text-black`} />;
+      case 'rumble':
+        return <VideoCameraIcon className={`${iconClass} text-green-600`} />;
       case 'custom':
         return <VideoCameraIcon className={`${iconClass} text-gray-600`} />;
       default:
