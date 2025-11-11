@@ -31,9 +31,18 @@ async function getOAuthCredentials(platform: string): Promise<{
       },
     });
 
+    logger.info(`[OAuth] Retrieved ${settings.length} settings for ${platform}:`,
+      settings.map(s => ({ key: s.key, hasValue: !!s.value, isEncrypted: s.isEncrypted })));
+
     const dbClientId = settings.find(s => s.key === `${platform}_client_id`)?.value;
     const dbClientSecret = settings.find(s => s.key === `${platform}_client_secret`)?.value;
     const dbRedirectUri = settings.find(s => s.key === `${platform}_redirect_uri`)?.value;
+
+    logger.info(`[OAuth] Raw database values for ${platform}:`, {
+      clientId: dbClientId ? `${dbClientId.substring(0, 10)}...` : 'missing',
+      clientSecret: dbClientSecret ? 'present' : 'missing',
+      redirectUri: dbRedirectUri ? dbRedirectUri.substring(0, 30) : 'missing'
+    });
 
     // Decrypt all encrypted values
     let clientId = dbClientId;
@@ -43,34 +52,45 @@ async function getOAuthCredentials(platform: string): Promise<{
     if (clientId) {
       try {
         clientId = decrypt(clientId);
-      } catch {
-        // If decryption fails, assume it's plain text
+        logger.info(`[OAuth] Successfully decrypted clientId for ${platform}`);
+      } catch (err) {
+        logger.warn(`[OAuth] Failed to decrypt clientId for ${platform}, using as-is:`, err);
       }
     }
 
     if (clientSecret) {
       try {
         clientSecret = decrypt(clientSecret);
-      } catch {
-        // If decryption fails, assume it's plain text
+        logger.info(`[OAuth] Successfully decrypted clientSecret for ${platform}`);
+      } catch (err) {
+        logger.warn(`[OAuth] Failed to decrypt clientSecret for ${platform}, using as-is:`, err);
       }
     }
 
     if (redirectUri) {
       try {
         redirectUri = decrypt(redirectUri);
-      } catch {
-        // If decryption fails, assume it's plain text
+        logger.info(`[OAuth] Successfully decrypted redirectUri for ${platform}: ${redirectUri}`);
+      } catch (err) {
+        logger.warn(`[OAuth] Failed to decrypt redirectUri for ${platform}, using as-is:`, err);
       }
     }
 
     // Use database values if available, otherwise fall back to environment variables
     const envPrefix = platform.toUpperCase();
-    return {
+    const finalCreds = {
       clientId: clientId || process.env[`${envPrefix}_CLIENT_ID`] || '',
       clientSecret: clientSecret || process.env[`${envPrefix}_CLIENT_SECRET`] || '',
       redirectUri: redirectUri || process.env[`${envPrefix}_REDIRECT_URI`] || '',
     };
+
+    logger.info(`[OAuth] Final credentials for ${platform}:`, {
+      clientId: finalCreds.clientId ? `${finalCreds.clientId.substring(0, 10)}...` : 'MISSING',
+      clientSecret: finalCreds.clientSecret ? 'present' : 'MISSING',
+      redirectUri: finalCreds.redirectUri || 'MISSING'
+    });
+
+    return finalCreds;
   } catch (error) {
     logger.error(`Error getting OAuth credentials for ${platform}:`, error);
     // Fall back to environment variables
@@ -126,13 +146,19 @@ router.get('/youtube/authorize', authenticate, async (req, res) => {
     const userId = req.user!.userId;
     const state = Buffer.from(JSON.stringify({ userId, platform: 'youtube' })).toString('base64');
 
+    logger.info(`[OAuth] YouTube authorize request from user ${userId}`);
     const credentials = await getOAuthCredentials('youtube');
 
+    logger.info(`[OAuth] Checking YouTube credentials - clientId: ${!!credentials.clientId}, redirectUri: ${!!credentials.redirectUri}`);
+
     if (!credentials.clientId || !credentials.redirectUri) {
+      logger.error(`[OAuth] YouTube OAuth validation failed - clientId: ${credentials.clientId ? 'present' : 'MISSING'}, redirectUri: ${credentials.redirectUri || 'MISSING'}`);
       return res.status(400).json({
         error: 'YouTube OAuth not configured. Please configure in Admin Settings.'
       });
     }
+
+    logger.info(`[OAuth] YouTube credentials validated successfully`);
 
     const params = new URLSearchParams({
       client_id: credentials.clientId,
