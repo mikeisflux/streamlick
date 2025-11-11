@@ -96,7 +96,7 @@ router.post('/users', async (req: Request, res: Response) => {
     const bcrypt = require('bcryptjs');
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Create user (admin-created users are automatically verified)
     const user = await prisma.user.create({
       data: {
         email,
@@ -104,7 +104,7 @@ router.post('/users', async (req: Request, res: Response) => {
         password: hashedPassword,
         planType: userPlanType,
         role: 'user',
-        emailVerified: false,
+        emailVerified: true, // Admin-created users are automatically verified
       },
       select: {
         id: true,
