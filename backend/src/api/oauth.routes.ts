@@ -114,10 +114,14 @@ const YOUTUBE_SCOPES = [
 const FACEBOOK_AUTH_URL = 'https://www.facebook.com/v24.0/dialog/oauth';
 const FACEBOOK_TOKEN_URL = 'https://graph.facebook.com/v24.0/oauth/access_token';
 const FACEBOOK_SCOPES = [
-  'publish_video',              // Required for creating live videos
-  'pages_manage_engagement',    // Required for managing live interactions
-  'pages_read_engagement',      // Required for reading page data
-  'pages_show_list',            // Required for listing pages
+  'publish_video',                 // Required for creating live videos
+  'pages_manage_engagement',       // Required for managing live interactions
+  'pages_read_engagement',         // Required for reading page data
+  'pages_show_list',               // Required for listing pages
+  'pages_messaging',               // For reading and sending messages/chat
+  'pages_read_user_content',       // For reading comments on live videos
+  'pages_manage_posts',            // For managing posts and comments
+  'read_insights',                 // For analytics, viewer stats, and metrics
 ].join(',');
 
 const TWITCH_AUTH_URL = 'https://id.twitch.tv/oauth2/authorize';
