@@ -1695,20 +1695,11 @@ export function Studio() {
   }
 
   return (
-    <div className="h-screen w-screen overflow-hidden grid" style={{
-      gridTemplateRows: '60px 1fr',
-      gridTemplateColumns: leftSidebarOpen && rightSidebarOpen
-        ? '280px 1fr 320px'
-        : leftSidebarOpen
-        ? '280px 1fr 0px'
-        : rightSidebarOpen
-        ? '0px 1fr 320px'
-        : '0px 1fr 0px',
+    <div className="h-screen w-screen overflow-hidden flex flex-col" style={{
       backgroundColor: '#1a1a1a'
     }}>
       {/* Top Bar - 60px fixed height */}
       <header style={{
-        gridColumn: '1 / -1',
         height: '60px',
         backgroundColor: '#2d2d2d',
         borderBottom: '1px solid #404040',
@@ -1716,7 +1707,8 @@ export function Studio() {
         alignItems: 'center',
         paddingLeft: '24px',
         paddingRight: '24px',
-        zIndex: 1000
+        zIndex: 1000,
+        flexShrink: 0
       }}>
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-4">
@@ -1772,74 +1764,75 @@ export function Studio() {
       </header>
 
 
-      {/* Left Sidebar - Scenes (280px width) */}
-      {leftSidebarOpen && (
+      {/* Body Container - Contains main content + right sidebar, with left sidebar overlaying */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Left Sidebar - Scenes (280px width) - Always rendered, slides in/out with transform, overlays content */}
         <aside
-          className="flex flex-col overflow-hidden border-r transition-all duration-300"
+          className="flex flex-col overflow-hidden border-r transition-all duration-300 absolute left-0 top-0 bottom-0 z-[850]"
           style={{
             width: '280px',
             backgroundColor: '#f5f5f5',
-            borderColor: '#e0e0e0'
+            borderColor: '#e0e0e0',
+            transform: leftSidebarOpen ? 'translateX(0)' : 'translateX(-280px)'
           }}
         >
-          <div
-            className="sticky top-0 flex items-center justify-between px-4 border-b bg-white"
-            style={{ height: '56px', borderColor: '#e0e0e0' }}
+        <div
+          className="sticky top-0 flex items-center justify-between px-4 border-b bg-white"
+          style={{ height: '56px', borderColor: '#e0e0e0' }}
+        >
+          <h3 className="text-sm font-semibold text-gray-800">Scenes</h3>
+          <button
+            onClick={handleLeftSidebarToggle}
+            className="text-gray-600 hover:text-gray-900"
           >
-            <h3 className="text-sm font-semibold text-gray-800">Scenes</h3>
-            <button
-              onClick={handleLeftSidebarToggle}
-              className="text-gray-600 hover:text-gray-900"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-3">
-            {/* Scene Manager Component Would Go Here */}
-            {showSceneManager && (
-              <SceneManager
-                scenes={scenes}
-                currentSceneId={currentSceneId}
-                onSceneChange={handleSceneChange}
-                onSceneCreate={handleSceneCreate}
-                onSceneUpdate={handleSceneUpdate}
-                onSceneDelete={handleSceneDelete}
-                onSceneDuplicate={handleSceneDuplicate}
-              />
-            )}
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-3 space-y-3">
+          {/* Scene Manager Component Would Go Here */}
+          {showSceneManager && (
+            <SceneManager
+              scenes={scenes}
+              currentSceneId={currentSceneId}
+              onSceneChange={handleSceneChange}
+              onSceneCreate={handleSceneCreate}
+              onSceneUpdate={handleSceneUpdate}
+              onSceneDelete={handleSceneDelete}
+              onSceneDuplicate={handleSceneDuplicate}
+            />
+          )}
 
-            {/* Default scene card */}
-            <div
-              className="bg-white rounded shadow hover:shadow-md transition-shadow cursor-pointer border"
-              style={{ height: '180px', borderColor: '#e0e0e0' }}
-            >
-              <div className="h-full flex flex-col p-3">
-                <div className="flex-1 bg-black rounded mb-2 relative overflow-hidden">
-                  {localStream && videoEnabled && (
-                    <video
-                      ref={sidebarVideoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover"
-                      style={{ willChange: 'auto' }}
-                    />
-                  )}
-                </div>
-                <p className="text-xs text-gray-700 font-medium">Default Scene</p>
+          {/* Default scene card */}
+          <div
+            className="bg-white rounded shadow hover:shadow-md transition-shadow cursor-pointer border"
+            style={{ height: '180px', borderColor: '#e0e0e0' }}
+          >
+            <div className="h-full flex flex-col p-3">
+              <div className="flex-1 bg-black rounded mb-2 relative overflow-hidden">
+                {localStream && videoEnabled && (
+                  <video
+                    ref={sidebarVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                    style={{ willChange: 'auto' }}
+                  />
+                )}
               </div>
+              <p className="text-xs text-gray-700 font-medium">Default Scene</p>
             </div>
           </div>
-        </aside>
-      )}
+        </div>
+      </aside>
 
-      {/* Main Canvas Area */}
-      <main
-        className="flex flex-col overflow-hidden"
-        style={{ backgroundColor: '#1a1a1a' }}
-      >
+        {/* Main Canvas Area */}
+        <main
+          className="flex-1 flex flex-col overflow-hidden"
+          style={{ backgroundColor: '#1a1a1a' }}
+        >
         {/* Canvas Container - 16:9 aspect ratio, max-width 1920px */}
         <div className="flex-1 flex items-center justify-center p-6">
           <div
@@ -2384,18 +2377,18 @@ export function Studio() {
           <div className="flex items-center gap-3">
           </div>
         </div>
-      </main>
+        </main>
 
-      {/* Right Sidebar - Persistent Buttons (64px) + Expandable Panel (384px total when open) */}
-      <aside
-        className="flex overflow-hidden border-l transition-all duration-300"
-        style={{
-          width: rightSidebarOpen ? '384px' : '64px',
-          backgroundColor: '#ffffff',
-          borderColor: '#e0e0e0',
-          zIndex: 800
-        }}
-      >
+        {/* Right Sidebar - Persistent Buttons (64px) + Expandable Panel (384px total when open) - Always rendered */}
+        <aside
+          className="flex overflow-hidden border-l transition-all duration-300 flex-shrink-0"
+          style={{
+            width: rightSidebarOpen ? '384px' : '64px',
+            backgroundColor: '#ffffff',
+            borderColor: '#e0e0e0',
+            zIndex: 800
+          }}
+        >
         {/* Persistent Button Bar - Always Visible */}
         <div
           className="flex flex-col border-r"
@@ -2586,7 +2579,9 @@ export function Studio() {
             </div>
           </div>
         )}
-      </aside>
+        </aside>
+      </div>
+      {/* End Body Container */}
 
       {/* Toggle Button for Left Sidebar (when collapsed) */}
       {!leftSidebarOpen && (
