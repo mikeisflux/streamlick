@@ -258,7 +258,7 @@ export default function AdminSettings() {
       {
         category: 'Email & Payment',
         fields: [
-          { key: 'sendgrid_api_key', label: 'SendGrid API Key', type: 'password', description: 'For sending magic link emails' },
+          { key: 'sendgrid_api_key', label: 'SendGrid API Key', type: 'password', description: 'For sending verification emails' },
           { key: 'stripe_secret_key', label: 'Stripe Secret Key', type: 'password', description: 'For processing payments' },
         ],
       },

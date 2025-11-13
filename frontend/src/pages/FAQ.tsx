@@ -17,7 +17,7 @@ const faqData: FAQItem[] = [
   {
     category: 'Getting Started',
     question: 'How do I create an account?',
-    answer: 'Simply click "Get Started" on the homepage and enter your email address. We\'ll send you a magic link to verify your email and create your account. No password required!',
+    answer: 'Click "Get Started" on the homepage, enter your email address and create a password. You\'ll receive a verification email to confirm your account. Once verified, you can log in and start streaming!',
   },
   {
     category: 'Getting Started',

@@ -5,11 +5,6 @@ export interface JwtPayload {
   id?: string; // Alias for userId for compatibility
 }
 
-export interface MagicLinkToken {
-  email: string;
-  exp: number;
-}
-
 export interface BroadcastStatus {
   id: string;
   status: 'scheduled' | 'live' | 'ended' | 'recording';
