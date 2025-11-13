@@ -12,9 +12,9 @@ import logger from '../utils/logger';
 
 const router = Router();
 
-// Create upload directory for branding images in frontend public folder
-// This makes them directly accessible at /images/ without backend routing
-const uploadDir = path.join(__dirname, '../../../frontend/public/images');
+// Create upload directory for branding images
+// Served by backend at /images/ route (see index.ts)
+const uploadDir = path.join(__dirname, '../../uploads/site-images');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true, mode: 0o755 });
 }
