@@ -12,9 +12,9 @@ import logger from '../utils/logger';
 
 const router = Router();
 
-// Create upload directory for branding images
-// Store in backend uploads folder so they persist and can be served with CORS headers
-const uploadDir = path.join(__dirname, '../../uploads/site-images');
+// Create upload directory for branding images in frontend public folder
+// This makes them directly accessible at /images/ without backend routing
+const uploadDir = path.join(__dirname, '../../../frontend/public/images');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true, mode: 0o755 });
 }
@@ -193,15 +193,15 @@ router.post(
       };
 
       if (files?.logo?.[0]) {
-        response.logoUrl = `/uploads/site-images/${files.logo[0].filename}`;
+        response.logoUrl = `/images/${files.logo[0].filename}`;
       }
 
       if (files?.favicon?.[0]) {
-        response.faviconUrl = `/uploads/site-images/${files.favicon[0].filename}`;
+        response.faviconUrl = `/images/${files.favicon[0].filename}`;
       }
 
       if (files?.hero?.[0]) {
-        response.heroUrl = `/uploads/site-images/${files.hero[0].filename}`;
+        response.heroUrl = `/images/${files.hero[0].filename}`;
       }
 
       res.json(response);
@@ -232,9 +232,9 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
 
     res.json({
       config,
-      logoUrl: logo ? `/uploads/site-images/${logo}` : null,
-      faviconUrl: favicon ? `/uploads/site-images/${favicon}` : null,
-      heroUrl: hero ? `/uploads/site-images/${hero}` : null,
+      logoUrl: logo ? `/images/${logo}` : null,
+      faviconUrl: favicon ? `/images/${favicon}` : null,
+      heroUrl: hero ? `/images/${hero}` : null,
     });
   } catch (error: any) {
     logger.error('Failed to get branding settings:', error);
@@ -265,9 +265,9 @@ publicBrandingRouter.get('/', async (req, res) => {
 
     res.json({
       config,
-      logoUrl: logo ? `/uploads/site-images/${logo}` : null,
-      faviconUrl: favicon ? `/uploads/site-images/${favicon}` : null,
-      heroUrl: hero ? `/uploads/site-images/${hero}` : null,
+      logoUrl: logo ? `/images/${logo}` : null,
+      faviconUrl: favicon ? `/images/${favicon}` : null,
+      heroUrl: hero ? `/images/${hero}` : null,
     });
   } catch (error: any) {
     logger.error('Failed to get branding settings:', error);
