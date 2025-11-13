@@ -151,9 +151,12 @@ export function Studio() {
   const [showRecordingDrawer, setShowRecordingDrawer] = useState(false);
 
   // Sidebar and panel state for new layout
-  const [leftSidebarOpen, setLeftSidebarOpen] = useState(false);
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
-  const [activeRightTab, setActiveRightTab] = useState<'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording' | null>(null);
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(() => localStorage.getItem('scenesPanelOpen') === 'true');
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(() => localStorage.getItem('tabbedPanelsOpen') === 'true');
+  const [activeRightTab, setActiveRightTab] = useState<'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording' | null>(() => {
+    const saved = localStorage.getItem('activeRightTab');
+    return saved as 'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording' | null;
+  });
 
   // Mutual exclusivity: only one sidebar can be open at a time
   const handleLeftSidebarToggle = () => {
@@ -187,8 +190,12 @@ export function Studio() {
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>('');
   const [selectedVideoDevice, setSelectedVideoDevice] = useState<string>('');
+  const [selectedSpeakerDevice, setSelectedSpeakerDevice] = useState<string>('');
+  const [speakerDevices, setSpeakerDevices] = useState<MediaDeviceInfo[]>([]);
+  const [speakerMuted, setSpeakerMuted] = useState(false);
   const [showMicSelector, setShowMicSelector] = useState(false);
   const [showCameraSelector, setShowCameraSelector] = useState(false);
+  const [showSpeakerSelector, setShowSpeakerSelector] = useState(false);
 
   // Killer features state
   const [showClipManager, setShowClipManager] = useState(false);
@@ -241,6 +248,11 @@ export function Studio() {
   const chatDragOffsetRef = useRef({ x: 0, y: 0 });
   const mainVideoRef = useRef<HTMLVideoElement>(null);
   const sidebarVideoRef = useRef<HTMLVideoElement>(null);
+  const leftSidebarRef = useRef<HTMLElement>(null);
+  const rightSidebarRef = useRef<HTMLElement>(null);
+  const micButtonRef = useRef<HTMLDivElement>(null);
+  const cameraButtonRef = useRef<HTMLDivElement>(null);
+  const speakerButtonRef = useRef<HTMLDivElement>(null);
 
   // Drawer state consolidation
   const [activeDrawer, setActiveDrawer] = useState<'destinations' | 'invite' | 'banners' | 'brand' | null>(null);
@@ -494,6 +506,50 @@ export function Studio() {
       });
     };
   }, []);
+
+  // Save sidebar state to localStorage
+  useEffect(() => {
+    localStorage.setItem('scenesPanelOpen', leftSidebarOpen.toString());
+  }, [leftSidebarOpen]);
+
+  useEffect(() => {
+    localStorage.setItem('tabbedPanelsOpen', rightSidebarOpen.toString());
+  }, [rightSidebarOpen]);
+
+  useEffect(() => {
+    if (activeRightTab) {
+      localStorage.setItem('activeRightTab', activeRightTab);
+    } else {
+      localStorage.removeItem('activeRightTab');
+    }
+  }, [activeRightTab]);
+
+  // Click outside to close sidebars
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+
+      // Check if clicking outside left sidebar
+      if (leftSidebarOpen && leftSidebarRef.current && !leftSidebarRef.current.contains(target)) {
+        // Also check if not clicking the toggle button
+        const toggleButton = document.querySelector('[aria-label="Open Scenes Panel"]');
+        if (!toggleButton || !toggleButton.contains(target)) {
+          setLeftSidebarOpen(false);
+        }
+      }
+
+      // Check if clicking outside right sidebar
+      if (rightSidebarOpen && rightSidebarRef.current && !rightSidebarRef.current.contains(target)) {
+        setRightSidebarOpen(false);
+        setActiveRightTab(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [leftSidebarOpen, rightSidebarOpen]);
 
   const getClipIcon = (type: string): string => {
     switch (type) {
@@ -1047,9 +1103,11 @@ export function Studio() {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const audioInputs = devices.filter((d) => d.kind === 'audioinput');
       const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+      const audioOutputs = devices.filter((d) => d.kind === 'audiooutput');
 
       setAudioDevices(audioInputs);
       setVideoDevices(videoInputs);
+      setSpeakerDevices(audioOutputs);
 
       // Set default devices if not already set
       if (!selectedAudioDevice && audioInputs.length > 0) {
@@ -1057,6 +1115,9 @@ export function Studio() {
       }
       if (!selectedVideoDevice && videoInputs.length > 0) {
         setSelectedVideoDevice(videoInputs[0].deviceId);
+      }
+      if (!selectedSpeakerDevice && audioOutputs.length > 0) {
+        setSelectedSpeakerDevice(audioOutputs[0].deviceId);
       }
     } catch (error) {
       console.error('Failed to enumerate devices:', error);
@@ -1132,6 +1193,33 @@ export function Studio() {
       console.error('Failed to change video device:', error);
       toast.error('Failed to change camera. Make sure it\'s not being used by another application.');
     }
+  };
+
+  const handleSpeakerDeviceChange = async (deviceId: string) => {
+    try {
+      setSelectedSpeakerDevice(deviceId);
+
+      // Set the audio output device for all audio/video elements
+      const audioElements = document.querySelectorAll('audio, video');
+      for (const element of audioElements) {
+        if (typeof (element as any).setSinkId !== 'undefined') {
+          await (element as any).setSinkId(deviceId);
+        }
+      }
+
+      toast.success('Speaker changed successfully');
+    } catch (error) {
+      console.error('Failed to change speaker device:', error);
+      toast.error('Failed to change speaker');
+    }
+  };
+
+  const toggleSpeaker = () => {
+    setSpeakerMuted(!speakerMuted);
+    const audioElements = document.querySelectorAll('audio, video');
+    audioElements.forEach((element: any) => {
+      element.muted = !speakerMuted;
+    });
   };
 
   // Chat Overlay Drag/Resize Handlers
@@ -1768,13 +1856,18 @@ export function Studio() {
       <div className="flex-1 flex overflow-hidden relative">
         {/* Left Sidebar - Scenes (280px width) - Always rendered, slides in/out with transform, overlays content */}
         <aside
-          className="flex flex-col overflow-hidden border-r transition-all duration-300 absolute left-0 top-0 bottom-0 z-[850]"
+          ref={leftSidebarRef}
+          className="flex flex-col overflow-hidden border-r absolute left-0 top-0 bottom-0 z-[850]"
           style={{
             width: '280px',
             backgroundColor: '#f5f5f5',
             borderColor: '#e0e0e0',
-            transform: leftSidebarOpen ? 'translateX(0)' : 'translateX(-280px)'
+            transform: leftSidebarOpen ? 'translateX(0)' : 'translateX(-280px)',
+            transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+            boxShadow: leftSidebarOpen ? '4px 0 12px rgba(0, 0, 0, 0.1)' : 'none'
           }}
+          aria-expanded={leftSidebarOpen}
+          aria-label="Scenes Panel"
         >
         <div
           className="sticky top-0 flex items-center justify-between px-4 border-b bg-white"
@@ -1784,8 +1877,18 @@ export function Studio() {
           <button
             onClick={handleLeftSidebarToggle}
             className="text-gray-600 hover:text-gray-900"
+            aria-label="Close Scenes Panel"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              style={{
+                transform: leftSidebarOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)'
+              }}
+            >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -2303,7 +2406,7 @@ export function Studio() {
           {/* Center Section - Media Controls */}
           <div className="flex items-center gap-3">
             {/* Microphone with device selector */}
-            <div className="relative flex items-center">
+            <div ref={micButtonRef} className="relative flex items-center">
               <button
                 onClick={toggleAudio}
                 className={`p-3 rounded-l-full ${
@@ -2316,7 +2419,11 @@ export function Studio() {
                 </svg>
               </button>
               <button
-                onClick={() => setShowMicSelector(!showMicSelector)}
+                onClick={() => {
+                  setShowMicSelector(!showMicSelector);
+                  setShowCameraSelector(false);
+                  setShowSpeakerSelector(false);
+                }}
                 className={`p-3 pr-4 rounded-r-full border-l border-gray-600 ${
                   audioEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'
                 } text-white transition-colors`}
@@ -2327,20 +2434,45 @@ export function Studio() {
                 </svg>
               </button>
             </div>
-            <button
-              className="p-3 rounded-full bg-gray-700 hover:bg-gray-600 text-white transition-colors"
-              title="Speaker"
-            >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-              </svg>
-            </button>
+            {/* Speaker with device selector */}
+            <div ref={speakerButtonRef} className="relative flex items-center">
+              <button
+                onClick={toggleSpeaker}
+                className={`p-3 rounded-l-full ${
+                  speakerMuted ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-600'
+                } text-white transition-colors`}
+                title={speakerMuted ? 'Unmute Speaker' : 'Mute Speaker'}
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  {speakerMuted ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  )}
+                </svg>
+              </button>
+              <button
+                onClick={() => {
+                  setShowSpeakerSelector(!showSpeakerSelector);
+                  setShowMicSelector(false);
+                  setShowCameraSelector(false);
+                }}
+                className={`p-3 pr-4 rounded-r-full border-l border-gray-600 ${
+                  speakerMuted ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-600'
+                } text-white transition-colors`}
+                title="Select Speaker"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
             {/* Camera with device selector */}
-            <div className="relative flex items-center">
+            <div ref={cameraButtonRef} className="relative flex items-center">
               <button
                 onClick={toggleVideo}
                 className={`p-3 rounded-l-full ${
-                  videoEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'
+                  videoEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
                 } text-white transition-colors`}
                 title={videoEnabled ? 'Stop Camera' : 'Start Camera'}
               >
@@ -2349,9 +2481,13 @@ export function Studio() {
                 </svg>
               </button>
               <button
-                onClick={() => setShowCameraSelector(!showCameraSelector)}
+                onClick={() => {
+                  setShowCameraSelector(!showCameraSelector);
+                  setShowMicSelector(false);
+                  setShowSpeakerSelector(false);
+                }}
                 className={`p-3 pr-4 rounded-r-full border-l border-gray-600 ${
-                  videoEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'
+                  videoEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
                 } text-white transition-colors`}
                 title="Select Camera"
               >
@@ -2379,34 +2515,44 @@ export function Studio() {
         </div>
         </main>
 
-        {/* Right Sidebar - Persistent Buttons (64px) + Expandable Panel (384px total when open) - Always rendered */}
+        {/* Right Sidebar - Persistent Buttons (64px) + Expandable Panel (320px total when open) - Always rendered */}
         <aside
-          className="flex overflow-hidden border-l transition-all duration-300 flex-shrink-0"
+          ref={rightSidebarRef}
+          className="flex overflow-hidden border-l flex-shrink-0"
           style={{
-            width: rightSidebarOpen ? '384px' : '64px',
-            backgroundColor: '#ffffff',
+            width: rightSidebarOpen ? '320px' : '64px',
+            backgroundColor: '#f8f8f8',
             borderColor: '#e0e0e0',
-            zIndex: 800
+            zIndex: 800,
+            transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1)'
           }}
+          aria-expanded={rightSidebarOpen}
+          aria-label="Tabbed Panels"
         >
         {/* Persistent Button Bar - Always Visible */}
         <div
           className="flex flex-col border-r"
           style={{
             width: '64px',
-            backgroundColor: '#f5f5f5',
+            backgroundColor: '#f8f8f8',
             borderColor: '#e0e0e0'
           }}
         >
           <button
             onClick={() => handleRightSidebarToggle('comments')}
-            className={`flex flex-col items-center justify-center py-4 border-b transition-colors ${
-              activeRightTab === 'comments'
-                ? 'bg-blue-50 text-blue-600 border-l-4 border-l-blue-600'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-            title="Comments"
-            style={{ borderBottomColor: '#e0e0e0' }}
+            className="flex flex-col items-center justify-center py-4 border-b transition-colors hover:bg-gray-100"
+            aria-label="Comments Panel"
+            aria-expanded={activeRightTab === 'comments'}
+            style={{
+              borderBottomColor: '#e0e0e0',
+              ...(activeRightTab === 'comments' ? {
+                backgroundColor: '#e6f2ff',
+                color: '#0066ff',
+                borderLeft: '4px solid #0066ff'
+              } : {
+                color: '#666666'
+              })
+            }}
           >
             <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
@@ -2416,13 +2562,19 @@ export function Studio() {
 
           <button
             onClick={() => handleRightSidebarToggle('banners')}
-            className={`flex flex-col items-center justify-center py-4 border-b transition-colors ${
-              activeRightTab === 'banners'
-                ? 'bg-blue-50 text-blue-600 border-l-4 border-l-blue-600'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-            title="Banners"
-            style={{ borderBottomColor: '#e0e0e0' }}
+            className="flex flex-col items-center justify-center py-4 border-b transition-colors hover:bg-gray-100"
+            aria-label="Banners Panel"
+            aria-expanded={activeRightTab === 'banners'}
+            style={{
+              borderBottomColor: '#e0e0e0',
+              ...(activeRightTab === 'banners' ? {
+                backgroundColor: '#e6f2ff',
+                color: '#0066ff',
+                borderLeft: '4px solid #0066ff'
+              } : {
+                color: '#666666'
+              })
+            }}
           >
             <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -2432,13 +2584,19 @@ export function Studio() {
 
           <button
             onClick={() => handleRightSidebarToggle('media')}
-            className={`flex flex-col items-center justify-center py-4 border-b transition-colors ${
-              activeRightTab === 'media'
-                ? 'bg-blue-50 text-blue-600 border-l-4 border-l-blue-600'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-            title="Media"
-            style={{ borderBottomColor: '#e0e0e0' }}
+            className="flex flex-col items-center justify-center py-4 border-b transition-colors hover:bg-gray-100"
+            aria-label="Media Panel"
+            aria-expanded={activeRightTab === 'media'}
+            style={{
+              borderBottomColor: '#e0e0e0',
+              ...(activeRightTab === 'media' ? {
+                backgroundColor: '#e6f2ff',
+                color: '#0066ff',
+                borderLeft: '4px solid #0066ff'
+              } : {
+                color: '#666666'
+              })
+            }}
           >
             <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -2448,13 +2606,19 @@ export function Studio() {
 
           <button
             onClick={() => handleRightSidebarToggle('style')}
-            className={`flex flex-col items-center justify-center py-4 border-b transition-colors ${
-              activeRightTab === 'style'
-                ? 'bg-blue-50 text-blue-600 border-l-4 border-l-blue-600'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-            title="Style"
-            style={{ borderBottomColor: '#e0e0e0' }}
+            className="flex flex-col items-center justify-center py-4 border-b transition-colors hover:bg-gray-100"
+            aria-label="Style Panel"
+            aria-expanded={activeRightTab === 'style'}
+            style={{
+              borderBottomColor: '#e0e0e0',
+              ...(activeRightTab === 'style' ? {
+                backgroundColor: '#e6f2ff',
+                color: '#0066ff',
+                borderLeft: '4px solid #0066ff'
+              } : {
+                color: '#666666'
+              })
+            }}
           >
             <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
@@ -2464,13 +2628,19 @@ export function Studio() {
 
           <button
             onClick={() => handleRightSidebarToggle('notes')}
-            className={`flex flex-col items-center justify-center py-4 border-b transition-colors ${
-              activeRightTab === 'notes'
-                ? 'bg-blue-50 text-blue-600 border-l-4 border-l-blue-600'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-            title="Notes"
-            style={{ borderBottomColor: '#e0e0e0' }}
+            className="flex flex-col items-center justify-center py-4 border-b transition-colors hover:bg-gray-100"
+            aria-label="Notes Panel"
+            aria-expanded={activeRightTab === 'notes'}
+            style={{
+              borderBottomColor: '#e0e0e0',
+              ...(activeRightTab === 'notes' ? {
+                backgroundColor: '#e6f2ff',
+                color: '#0066ff',
+                borderLeft: '4px solid #0066ff'
+              } : {
+                color: '#666666'
+              })
+            }}
           >
             <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -2480,13 +2650,19 @@ export function Studio() {
 
           <button
             onClick={() => handleRightSidebarToggle('people')}
-            className={`flex flex-col items-center justify-center py-4 border-b transition-colors ${
-              activeRightTab === 'people'
-                ? 'bg-blue-50 text-blue-600 border-l-4 border-l-blue-600'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-            title="People"
-            style={{ borderBottomColor: '#e0e0e0' }}
+            className="flex flex-col items-center justify-center py-4 border-b transition-colors hover:bg-gray-100"
+            aria-label="People Panel"
+            aria-expanded={activeRightTab === 'people'}
+            style={{
+              borderBottomColor: '#e0e0e0',
+              ...(activeRightTab === 'people' ? {
+                backgroundColor: '#e6f2ff',
+                color: '#0066ff',
+                borderLeft: '4px solid #0066ff'
+              } : {
+                color: '#666666'
+              })
+            }}
           >
             <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -2496,13 +2672,19 @@ export function Studio() {
 
           <button
             onClick={() => handleRightSidebarToggle('chat')}
-            className={`flex flex-col items-center justify-center py-4 border-b transition-colors ${
-              activeRightTab === 'chat'
-                ? 'bg-blue-50 text-blue-600 border-l-4 border-l-blue-600'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-            title="Private Chat"
-            style={{ borderBottomColor: '#e0e0e0' }}
+            className="flex flex-col items-center justify-center py-4 border-b transition-colors hover:bg-gray-100"
+            aria-label="Private Chat Panel"
+            aria-expanded={activeRightTab === 'chat'}
+            style={{
+              borderBottomColor: '#e0e0e0',
+              ...(activeRightTab === 'chat' ? {
+                backgroundColor: '#e6f2ff',
+                color: '#0066ff',
+                borderLeft: '4px solid #0066ff'
+              } : {
+                color: '#666666'
+              })
+            }}
           >
             <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
@@ -2512,13 +2694,19 @@ export function Studio() {
 
           <button
             onClick={() => handleRightSidebarToggle('recording')}
-            className={`flex flex-col items-center justify-center py-4 border-b transition-colors ${
-              activeRightTab === 'recording'
-                ? 'bg-blue-50 text-blue-600 border-l-4 border-l-blue-600'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-            title="Recording"
-            style={{ borderBottomColor: '#e0e0e0' }}
+            className="flex flex-col items-center justify-center py-4 border-b transition-colors hover:bg-gray-100"
+            aria-label="Recording Panel"
+            aria-expanded={activeRightTab === 'recording'}
+            style={{
+              borderBottomColor: '#e0e0e0',
+              ...(activeRightTab === 'recording' ? {
+                backgroundColor: '#e6f2ff',
+                color: '#0066ff',
+                borderLeft: '4px solid #0066ff'
+              } : {
+                color: '#666666'
+              })
+            }}
           >
             <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -2587,12 +2775,27 @@ export function Studio() {
       {!leftSidebarOpen && (
         <button
           onClick={handleLeftSidebarToggle}
-          className="fixed left-2 top-1/2 transform -translate-y-1/2 p-2 rounded-r bg-gray-700 hover:bg-gray-600 text-white shadow-lg z-50 transition-all duration-300"
-          style={{ zIndex: 900 }}
-          title="Open Scenes Panel"
+          className="fixed top-1/2 transform -translate-y-1/2 rounded-r bg-gray-700 hover:bg-gray-600 text-white shadow-lg flex items-center justify-center"
+          style={{
+            left: 0,
+            width: '32px',
+            height: '80px',
+            zIndex: 900,
+            transition: 'background-color 300ms cubic-bezier(0.4, 0, 0.2, 1)'
+          }}
+          aria-label="Open Scenes Panel"
+          aria-expanded="false"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            style={{
+              transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)'
+            }}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
         </button>
       )}
@@ -2998,8 +3201,16 @@ export function Studio() {
             onClick={() => setShowMicSelector(false)}
           />
           <div
-            className="fixed bottom-24 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-2xl z-50"
-            style={{ width: '320px', maxHeight: '400px' }}
+            className="fixed bg-white rounded-lg shadow-2xl z-50 transition-all duration-250 ease-out"
+            style={{
+              width: '320px',
+              maxHeight: '400px',
+              bottom: '6rem',
+              left: micButtonRef.current
+                ? `${micButtonRef.current.getBoundingClientRect().left + micButtonRef.current.getBoundingClientRect().width / 2 - 160}px`
+                : '50%',
+              transform: !micButtonRef.current ? 'translateX(-50%)' : 'none',
+            }}
           >
             <div className="p-4 border-b border-gray-200">
               <h3 className="text-sm font-semibold text-gray-900">Select Microphone</h3>
@@ -3062,8 +3273,16 @@ export function Studio() {
             onClick={() => setShowCameraSelector(false)}
           />
           <div
-            className="fixed bottom-24 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-2xl z-50"
-            style={{ width: '320px', maxHeight: '400px' }}
+            className="fixed bg-white rounded-lg shadow-2xl z-50 transition-all duration-250 ease-out"
+            style={{
+              width: '320px',
+              maxHeight: '400px',
+              bottom: '6rem',
+              left: cameraButtonRef.current
+                ? `${cameraButtonRef.current.getBoundingClientRect().left + cameraButtonRef.current.getBoundingClientRect().width / 2 - 160}px`
+                : '50%',
+              transform: !cameraButtonRef.current ? 'translateX(-50%)' : 'none',
+            }}
           >
             <div className="p-4 border-b border-gray-200">
               <h3 className="text-sm font-semibold text-gray-900">Select Camera</h3>
@@ -3107,6 +3326,78 @@ export function Studio() {
                             {device.label || `Camera ${device.deviceId.substring(0, 8)}`}
                           </p>
                           <p className="text-xs text-gray-500">Video Input</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Speaker Device Selector Popup */}
+      {showSpeakerSelector && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setShowSpeakerSelector(false)}
+          />
+          <div
+            className="fixed bg-white rounded-lg shadow-2xl z-50 transition-all duration-250 ease-out"
+            style={{
+              width: '320px',
+              maxHeight: '400px',
+              bottom: '6rem',
+              left: speakerButtonRef.current
+                ? `${speakerButtonRef.current.getBoundingClientRect().left + speakerButtonRef.current.getBoundingClientRect().width / 2 - 160}px`
+                : '50%',
+              transform: !speakerButtonRef.current ? 'translateX(-50%)' : 'none',
+            }}
+          >
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-900">Select Speaker</h3>
+              <p className="text-xs text-gray-500 mt-1">Choose your audio output device</p>
+            </div>
+            <div className="overflow-y-auto max-h-80">
+              {speakerDevices.length === 0 ? (
+                <div className="p-6 text-center">
+                  <svg className="w-12 h-12 text-gray-400 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  </svg>
+                  <p className="text-sm text-gray-600">No speakers found</p>
+                  <button
+                    onClick={loadDevices}
+                    className="mt-3 text-xs text-blue-600 hover:text-blue-700"
+                  >
+                    Refresh Devices
+                  </button>
+                </div>
+              ) : (
+                <div className="py-2">
+                  {speakerDevices.map((device) => (
+                    <button
+                      key={device.deviceId}
+                      onClick={() => {
+                        handleSpeakerDeviceChange(device.deviceId);
+                        setShowSpeakerSelector(false);
+                      }}
+                      className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
+                        selectedSpeakerDevice === device.deviceId ? 'bg-blue-50' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {selectedSpeakerDevice === device.deviceId && (
+                          <svg className="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {device.label || `Speaker ${device.deviceId.substring(0, 8)}`}
+                          </p>
+                          <p className="text-xs text-gray-500">Audio Output</p>
                         </div>
                       </div>
                     </button>
