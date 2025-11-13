@@ -151,9 +151,34 @@ export function Studio() {
   const [showRecordingDrawer, setShowRecordingDrawer] = useState(false);
 
   // Sidebar and panel state for new layout
-  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
-  const [activeRightTab, setActiveRightTab] = useState<'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording'>('chat');
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(false);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
+  const [activeRightTab, setActiveRightTab] = useState<'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording' | null>(null);
+
+  // Mutual exclusivity: only one sidebar can be open at a time
+  const handleLeftSidebarToggle = () => {
+    if (!leftSidebarOpen && rightSidebarOpen) {
+      setRightSidebarOpen(false);
+      setActiveRightTab(null);
+    }
+    setLeftSidebarOpen(!leftSidebarOpen);
+  };
+
+  const handleRightSidebarToggle = (tab: 'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording') => {
+    if (leftSidebarOpen) {
+      setLeftSidebarOpen(false);
+    }
+
+    // If clicking the same tab, close the sidebar
+    if (activeRightTab === tab && rightSidebarOpen) {
+      setRightSidebarOpen(false);
+      setActiveRightTab(null);
+    } else {
+      // Otherwise, open sidebar and switch to the clicked tab
+      setRightSidebarOpen(true);
+      setActiveRightTab(tab);
+    }
+  };
   const [selectedLayout, setSelectedLayout] = useState<number>(9);
 
   // Settings modal state
@@ -1750,7 +1775,7 @@ export function Studio() {
       {/* Left Sidebar - Scenes (280px width) */}
       {leftSidebarOpen && (
         <aside
-          className="flex flex-col overflow-hidden border-r"
+          className="flex flex-col overflow-hidden border-r transition-all duration-300"
           style={{
             width: '280px',
             backgroundColor: '#f5f5f5',
@@ -1763,7 +1788,7 @@ export function Studio() {
           >
             <h3 className="text-sm font-semibold text-gray-800">Scenes</h3>
             <button
-              onClick={() => setLeftSidebarOpen(false)}
+              onClick={handleLeftSidebarToggle}
               className="text-gray-600 hover:text-gray-900"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2361,168 +2386,218 @@ export function Studio() {
         </div>
       </main>
 
-      {/* Right Sidebar - Tabbed Panels (320px width) */}
-      {rightSidebarOpen && (
-        <aside
-          className="flex flex-col overflow-hidden border-l"
+      {/* Right Sidebar - Persistent Buttons (64px) + Expandable Panel (384px total when open) */}
+      <aside
+        className="flex overflow-hidden border-l transition-all duration-300"
+        style={{
+          width: rightSidebarOpen ? '384px' : '64px',
+          backgroundColor: '#ffffff',
+          borderColor: '#e0e0e0',
+          zIndex: 800
+        }}
+      >
+        {/* Persistent Button Bar - Always Visible */}
+        <div
+          className="flex flex-col border-r"
           style={{
-            width: '320px',
-            backgroundColor: '#ffffff',
-            borderColor: '#e0e0e0',
-            zIndex: 800
+            width: '64px',
+            backgroundColor: '#f5f5f5',
+            borderColor: '#e0e0e0'
           }}
         >
-          {/* Tab Headers */}
-          <div className="border-b flex overflow-x-auto flex-shrink-0" style={{ borderColor: '#e0e0e0' }}>
-            <button
-              onClick={() => setActiveRightTab('comments')}
-              className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
-                activeRightTab === 'comments'
-                  ? 'text-gray-900 border-b-2'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
-              style={activeRightTab === 'comments' ? { borderColor: '#0066ff' } : {}}
-            >
-              Comments
-            </button>
-            <button
-              onClick={() => setActiveRightTab('banners')}
-              className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
-                activeRightTab === 'banners'
-                  ? 'text-gray-900 border-b-2'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
-              style={activeRightTab === 'banners' ? { borderColor: '#0066ff' } : {}}
-            >
-              Banners
-            </button>
-            <button
-              onClick={() => setActiveRightTab('media')}
-              className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
-                activeRightTab === 'media'
-                  ? 'text-gray-900 border-b-2'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
-              style={activeRightTab === 'media' ? { borderColor: '#0066ff' } : {}}
-            >
-              Media
-            </button>
-            <button
-              onClick={() => setActiveRightTab('style')}
-              className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
-                activeRightTab === 'style'
-                  ? 'text-gray-900 border-b-2'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
-              style={activeRightTab === 'style' ? { borderColor: '#0066ff' } : {}}
-            >
-              Style
-            </button>
-            <button
-              onClick={() => setActiveRightTab('notes')}
-              className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
-                activeRightTab === 'notes'
-                  ? 'text-gray-900 border-b-2'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
-              style={activeRightTab === 'notes' ? { borderColor: '#0066ff' } : {}}
-            >
-              Notes
-            </button>
-            <button
-              onClick={() => setActiveRightTab('people')}
-              className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
-                activeRightTab === 'people'
-                  ? 'text-gray-900 border-b-2'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
-              style={activeRightTab === 'people' ? { borderColor: '#0066ff' } : {}}
-            >
-              People
-            </button>
-            <button
-              onClick={() => setActiveRightTab('chat')}
-              className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
-                activeRightTab === 'chat'
-                  ? 'text-gray-900 border-b-2'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
-              style={activeRightTab === 'chat' ? { borderColor: '#0066ff' } : {}}
-            >
-              Chat
-            </button>
-            <button
-              onClick={() => setActiveRightTab('recording')}
-              className={`px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors ${
-                activeRightTab === 'recording'
-                  ? 'text-gray-900 border-b-2'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
-              style={activeRightTab === 'recording' ? { borderColor: '#0066ff' } : {}}
-            >
-              Recording
-            </button>
-            <button
-              onClick={() => setRightSidebarOpen(false)}
-              className="ml-auto p-3 text-gray-500 hover:text-gray-900"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+          <button
+            onClick={() => handleRightSidebarToggle('comments')}
+            className={`flex flex-col items-center justify-center py-4 border-b transition-colors ${
+              activeRightTab === 'comments'
+                ? 'bg-blue-50 text-blue-600 border-l-4 border-l-blue-600'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            title="Comments"
+            style={{ borderBottomColor: '#e0e0e0' }}
+          >
+            <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+            </svg>
+            <span className="text-xs font-medium">Chat</span>
+          </button>
 
-          {/* Tab Content */}
-          <div className="flex-1 overflow-y-auto">
-            {activeRightTab === 'comments' && <CommentsPanel broadcastId={broadcastId} />}
-            {activeRightTab === 'banners' && (
-              <div className="p-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Banners</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Manage your stream banners and overlays. Click the "Banners" button in the control bar for full editor.
-                </p>
-                <button
-                  onClick={() => setShowBannerDrawer(true)}
-                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-                >
-                  Open Banner Editor
-                </button>
-              </div>
-            )}
-            {activeRightTab === 'media' && <MediaAssetsPanel broadcastId={broadcastId} />}
-            {activeRightTab === 'style' && <StylePanel broadcastId={broadcastId} />}
-            {activeRightTab === 'notes' && <NotesPanel broadcastId={broadcastId} />}
-            {activeRightTab === 'people' && <ParticipantsPanel />}
-            {activeRightTab === 'chat' && <PrivateChatPanel broadcastId={broadcastId} currentUserId={broadcast?.userId} />}
-            {activeRightTab === 'recording' && (
-              <RecordingControls
-                broadcastId={broadcastId}
-              />
-            )}
-          </div>
-        </aside>
-      )}
+          <button
+            onClick={() => handleRightSidebarToggle('banners')}
+            className={`flex flex-col items-center justify-center py-4 border-b transition-colors ${
+              activeRightTab === 'banners'
+                ? 'bg-blue-50 text-blue-600 border-l-4 border-l-blue-600'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            title="Banners"
+            style={{ borderBottomColor: '#e0e0e0' }}
+          >
+            <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+            <span className="text-xs font-medium">Banner</span>
+          </button>
 
-      {/* Toggle Buttons (when sidebars are collapsed) */}
+          <button
+            onClick={() => handleRightSidebarToggle('media')}
+            className={`flex flex-col items-center justify-center py-4 border-b transition-colors ${
+              activeRightTab === 'media'
+                ? 'bg-blue-50 text-blue-600 border-l-4 border-l-blue-600'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            title="Media"
+            style={{ borderBottomColor: '#e0e0e0' }}
+          >
+            <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span className="text-xs font-medium">Media</span>
+          </button>
+
+          <button
+            onClick={() => handleRightSidebarToggle('style')}
+            className={`flex flex-col items-center justify-center py-4 border-b transition-colors ${
+              activeRightTab === 'style'
+                ? 'bg-blue-50 text-blue-600 border-l-4 border-l-blue-600'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            title="Style"
+            style={{ borderBottomColor: '#e0e0e0' }}
+          >
+            <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+            </svg>
+            <span className="text-xs font-medium">Style</span>
+          </button>
+
+          <button
+            onClick={() => handleRightSidebarToggle('notes')}
+            className={`flex flex-col items-center justify-center py-4 border-b transition-colors ${
+              activeRightTab === 'notes'
+                ? 'bg-blue-50 text-blue-600 border-l-4 border-l-blue-600'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            title="Notes"
+            style={{ borderBottomColor: '#e0e0e0' }}
+          >
+            <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            <span className="text-xs font-medium">Notes</span>
+          </button>
+
+          <button
+            onClick={() => handleRightSidebarToggle('people')}
+            className={`flex flex-col items-center justify-center py-4 border-b transition-colors ${
+              activeRightTab === 'people'
+                ? 'bg-blue-50 text-blue-600 border-l-4 border-l-blue-600'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            title="People"
+            style={{ borderBottomColor: '#e0e0e0' }}
+          >
+            <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+            <span className="text-xs font-medium">People</span>
+          </button>
+
+          <button
+            onClick={() => handleRightSidebarToggle('chat')}
+            className={`flex flex-col items-center justify-center py-4 border-b transition-colors ${
+              activeRightTab === 'chat'
+                ? 'bg-blue-50 text-blue-600 border-l-4 border-l-blue-600'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            title="Private Chat"
+            style={{ borderBottomColor: '#e0e0e0' }}
+          >
+            <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+            <span className="text-xs font-medium">Private</span>
+          </button>
+
+          <button
+            onClick={() => handleRightSidebarToggle('recording')}
+            className={`flex flex-col items-center justify-center py-4 border-b transition-colors ${
+              activeRightTab === 'recording'
+                ? 'bg-blue-50 text-blue-600 border-l-4 border-l-blue-600'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            title="Recording"
+            style={{ borderBottomColor: '#e0e0e0' }}
+          >
+            <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            <span className="text-xs font-medium">Record</span>
+          </button>
+        </div>
+
+        {/* Expandable Content Panel - Shows when rightSidebarOpen is true */}
+        {rightSidebarOpen && activeRightTab && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Panel Header */}
+            <div
+              className="flex items-center justify-between px-4 border-b bg-white"
+              style={{ height: '56px', borderColor: '#e0e0e0' }}
+            >
+              <h3 className="text-sm font-semibold text-gray-800 capitalize">{activeRightTab}</h3>
+              <button
+                onClick={() => {
+                  setRightSidebarOpen(false);
+                  setActiveRightTab(null);
+                }}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Panel Content */}
+            <div className="flex-1 overflow-y-auto">
+              {activeRightTab === 'comments' && <CommentsPanel broadcastId={broadcastId} />}
+              {activeRightTab === 'banners' && (
+                <div className="p-4">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Banners</h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Manage your stream banners and overlays. Click the button below for the full banner editor.
+                  </p>
+                  <button
+                    onClick={() => setShowBannerDrawer(true)}
+                    className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                  >
+                    Open Banner Editor
+                  </button>
+                </div>
+              )}
+              {activeRightTab === 'media' && <MediaAssetsPanel broadcastId={broadcastId} />}
+              {activeRightTab === 'style' && <StylePanel broadcastId={broadcastId} />}
+              {activeRightTab === 'notes' && <NotesPanel broadcastId={broadcastId} />}
+              {activeRightTab === 'people' && <ParticipantsPanel />}
+              {activeRightTab === 'chat' && <PrivateChatPanel broadcastId={broadcastId} currentUserId={broadcast?.userId} />}
+              {activeRightTab === 'recording' && (
+                <RecordingControls
+                  broadcastId={broadcastId}
+                />
+              )}
+            </div>
+          </div>
+        )}
+      </aside>
+
+      {/* Toggle Button for Left Sidebar (when collapsed) */}
       {!leftSidebarOpen && (
         <button
-          onClick={() => setLeftSidebarOpen(true)}
-          className="fixed left-2 top-1/2 transform -translate-y-1/2 p-2 rounded-r bg-gray-700 hover:bg-gray-600 text-white shadow-lg z-50"
+          onClick={handleLeftSidebarToggle}
+          className="fixed left-2 top-1/2 transform -translate-y-1/2 p-2 rounded-r bg-gray-700 hover:bg-gray-600 text-white shadow-lg z-50 transition-all duration-300"
           style={{ zIndex: 900 }}
+          title="Open Scenes Panel"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-      )}
-      {!rightSidebarOpen && (
-        <button
-          onClick={() => setRightSidebarOpen(true)}
-          className="fixed right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-l bg-gray-700 hover:bg-gray-600 text-white shadow-lg z-50"
-          style={{ zIndex: 900 }}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
           </svg>
         </button>
       )}
