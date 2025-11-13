@@ -82,7 +82,7 @@ app.use('/uploads', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   next();
-}, express.static('uploads'));
+}, express.static(path.join(__dirname, '../uploads')));
 
 // Health check
 app.get('/health', (req, res) => {
