@@ -27,26 +27,17 @@ export function RightSidebar({
   rightSidebarRef,
 }: RightSidebarProps) {
   return (
-    <aside
-      ref={rightSidebarRef}
-      className="flex overflow-hidden border-l flex-shrink-0"
-      style={{
-        width: rightSidebarOpen ? '384px' : '64px',
-        backgroundColor: '#f8f8f8',
-        borderColor: '#e0e0e0',
-        zIndex: 800,
-        transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1)'
-      }}
-      aria-expanded={rightSidebarOpen}
-      aria-label="Tabbed Panels"
-    >
-      {/* Persistent Button Bar - Always Visible */}
+    <>
+      {/* Persistent Button Bar - Always Visible (64px, fixed on right edge) */}
       <div
-        className="flex flex-col border-r"
+        className="flex flex-col border-l fixed bottom-0"
         style={{
+          top: '60px',
+          right: 0,
           width: '64px',
           backgroundColor: '#f8f8f8',
-          borderColor: '#e0e0e0'
+          borderColor: '#e0e0e0',
+          zIndex: 800
         }}
       >
         <button
@@ -226,55 +217,72 @@ export function RightSidebar({
         </button>
       </div>
 
-      {/* Expandable Content Panel - Shows when rightSidebarOpen is true */}
-      {rightSidebarOpen && activeRightTab && (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Panel Header */}
-          <div
-            className="flex items-center justify-between px-4 border-b bg-white"
-            style={{ height: '56px', borderColor: '#e0e0e0' }}
-          >
-            <h3 className="text-sm font-semibold text-gray-800 capitalize">{activeRightTab}</h3>
-            <button
-              onClick={() => onTabToggle(activeRightTab)}
-              className="text-gray-600 hover:text-gray-900"
+      {/* Expandable Content Panel - Slides out from right (320px, absolute positioned) */}
+      <aside
+        ref={rightSidebarRef}
+        className="fixed bottom-0 flex flex-col overflow-hidden border-l"
+        style={{
+          top: '60px',
+          right: '64px',
+          width: '320px',
+          backgroundColor: '#ffffff',
+          borderColor: '#e0e0e0',
+          zIndex: 800,
+          transform: rightSidebarOpen ? 'translateX(0)' : 'translateX(320px)',
+          transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)'
+        }}
+        aria-expanded={rightSidebarOpen}
+        aria-label="Tabbed Panels Content"
+      >
+        {activeRightTab && (
+          <>
+            {/* Panel Header */}
+            <div
+              className="flex items-center justify-between px-4 border-b bg-white"
+              style={{ height: '56px', borderColor: '#e0e0e0' }}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+              <h3 className="text-sm font-semibold text-gray-800 capitalize">{activeRightTab}</h3>
+              <button
+                onClick={() => onTabToggle(activeRightTab)}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
 
-          {/* Panel Content */}
-          <div className="flex-1 overflow-y-auto">
-            {activeRightTab === 'comments' && <CommentsPanel broadcastId={broadcastId} />}
-            {activeRightTab === 'banners' && (
-              <div className="p-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Banners</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Manage your stream banners and overlays. Click the button below for the full banner editor.
-                </p>
-                <button
-                  onClick={onShowBannerDrawer}
-                  className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-                >
-                  Open Banner Editor
-                </button>
-              </div>
-            )}
-            {activeRightTab === 'media' && <MediaAssetsPanel broadcastId={broadcastId} />}
-            {activeRightTab === 'style' && <StylePanel broadcastId={broadcastId} />}
-            {activeRightTab === 'notes' && <NotesPanel broadcastId={broadcastId} />}
-            {activeRightTab === 'people' && <ParticipantsPanel />}
-            {activeRightTab === 'chat' && <PrivateChatPanel broadcastId={broadcastId} currentUserId={currentUserId} />}
-            {activeRightTab === 'recording' && (
-              <RecordingControls
-                broadcastId={broadcastId}
-              />
-            )}
-          </div>
-        </div>
-      )}
-    </aside>
+            {/* Panel Content */}
+            <div className="flex-1 overflow-y-auto">
+              {activeRightTab === 'comments' && <CommentsPanel broadcastId={broadcastId} />}
+              {activeRightTab === 'banners' && (
+                <div className="p-4">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Banners</h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Manage your stream banners and overlays. Click the button below for the full banner editor.
+                  </p>
+                  <button
+                    onClick={onShowBannerDrawer}
+                    className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                  >
+                    Open Banner Editor
+                  </button>
+                </div>
+              )}
+              {activeRightTab === 'media' && <MediaAssetsPanel broadcastId={broadcastId} />}
+              {activeRightTab === 'style' && <StylePanel broadcastId={broadcastId} />}
+              {activeRightTab === 'notes' && <NotesPanel broadcastId={broadcastId} />}
+              {activeRightTab === 'people' && <ParticipantsPanel />}
+              {activeRightTab === 'chat' && <PrivateChatPanel broadcastId={broadcastId} currentUserId={currentUserId} />}
+              {activeRightTab === 'recording' && (
+                <RecordingControls
+                  broadcastId={broadcastId}
+                />
+              )}
+            </div>
+          </>
+        )}
+      </aside>
+    </>
   );
 }
