@@ -70,6 +70,14 @@ export default function AdminSettings() {
     loadConfig();
   }, [activeTab]);
 
+  // Debug: Log API_URL on mount
+  useEffect(() => {
+    console.log('[Branding Debug] API_URL:', API_URL);
+    console.log('[Branding Debug] Current logo URL:', currentLogoUrl);
+    console.log('[Branding Debug] Current favicon URL:', currentFaviconUrl);
+    console.log('[Branding Debug] Current hero URL:', currentHeroUrl);
+  }, [currentLogoUrl, currentFaviconUrl, currentHeroUrl]);
+
   const loadConfig = async () => {
     setLoading(true);
     try {
@@ -526,7 +534,10 @@ export default function AdminSettings() {
       setFaviconPreview('');
       setHeroPreview('');
 
-      console.log('Branding saved:', response.data);
+      console.log('[Branding Debug] Saved response:', response.data);
+      console.log('[Branding Debug] Logo URL from server:', response.data.logoUrl);
+      console.log('[Branding Debug] Favicon URL from server:', response.data.faviconUrl);
+      console.log('[Branding Debug] Hero URL from server:', response.data.heroUrl);
 
       // Reload branding to get updated URLs
       await loadConfig();
@@ -591,7 +602,15 @@ export default function AdminSettings() {
                 <div className="mt-3">
                   <p className="text-xs text-gray-400 mb-2">Current Logo:</p>
                   <div className="flex items-center gap-2">
-                    <img src={currentLogoUrl.startsWith('http') ? currentLogoUrl : `${API_URL}${currentLogoUrl}`} alt="Current logo" className="max-h-20 bg-white p-2 rounded" />
+                    <img
+                      src={currentLogoUrl.startsWith('http') ? currentLogoUrl : `${API_URL}${currentLogoUrl}`}
+                      alt="Current logo"
+                      className="max-h-20 bg-white p-2 rounded"
+                      onError={(e) => {
+                        console.error('Failed to load logo:', currentLogoUrl);
+                        e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><text x="10" y="25" fill="gray">Logo Error</text></svg>';
+                      }}
+                    />
                     <button
                       onClick={() => deleteBrandingImage('logo')}
                       className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
@@ -622,7 +641,15 @@ export default function AdminSettings() {
                 <div className="mt-3">
                   <p className="text-xs text-gray-400 mb-2">Current Favicon:</p>
                   <div className="flex items-center gap-2">
-                    <img src={currentFaviconUrl.startsWith('http') ? currentFaviconUrl : `${API_URL}${currentFaviconUrl}`} alt="Current favicon" className="max-h-8 bg-white p-1 rounded" />
+                    <img
+                      src={currentFaviconUrl.startsWith('http') ? currentFaviconUrl : `${API_URL}${currentFaviconUrl}`}
+                      alt="Current favicon"
+                      className="max-h-8 bg-white p-1 rounded"
+                      onError={(e) => {
+                        console.error('Failed to load favicon:', currentFaviconUrl);
+                        e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><text x="2" y="20" fill="gray" font-size="12">Error</text></svg>';
+                      }}
+                    />
                     <button
                       onClick={() => deleteBrandingImage('favicon')}
                       className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
@@ -653,7 +680,15 @@ export default function AdminSettings() {
                 <div className="mt-3">
                   <p className="text-xs text-gray-400 mb-2">Current Hero:</p>
                   <div className="flex flex-col gap-2">
-                    <img src={currentHeroUrl.startsWith('http') ? currentHeroUrl : `${API_URL}${currentHeroUrl}`} alt="Current hero" className="max-h-32 w-full object-cover rounded" />
+                    <img
+                      src={currentHeroUrl.startsWith('http') ? currentHeroUrl : `${API_URL}${currentHeroUrl}`}
+                      alt="Current hero"
+                      className="max-h-32 w-full object-cover rounded"
+                      onError={(e) => {
+                        console.error('Failed to load hero image:', currentHeroUrl);
+                        e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><text x="150" y="100" fill="gray">Hero Image Error</text></svg>';
+                      }}
+                    />
                     <button
                       onClick={() => deleteBrandingImage('hero')}
                       className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded self-start"
