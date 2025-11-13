@@ -121,12 +121,13 @@ export function LeftSidebar({
           style={{
             left: 0,
             width: '32px',
-            height: '64px',
+            height: '80px',
             zIndex: 840,
             transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)'
           }}
           title="Open Scenes Panel"
           aria-label="Open Scenes Panel"
+          aria-expanded="false"
         >
           <svg
             className="w-5 h-5"
