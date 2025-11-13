@@ -86,3 +86,22 @@ temp/
 
 # Docker
 docker-compose.override.yml
+
+# Uploads and user-generated content
+uploads/
+backend/uploads/
+frontend/public/images/
+public/images/
+branding-config.json
+backend/uploads/branding-config.json
+
+# PM2 and process management
+ecosystem.config.js
+pm2.config.js
+*.pm2.json
+
+# Nginx and server configs
+*.nginx.conf
+nginx.conf
+sites-available/
+sites-enabled/
