@@ -105,3 +105,103 @@ pm2.config.js
 nginx.conf
 sites-available/
 sites-enabled/
+
+# Secrets and credentials
+*secret*
+*secrets*
+*.pem
+*.key
+*.cert
+*.crt
+*.csr
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials.json
+credentials.*.json
+service-account*.json
+client_secret*.json
+
+# API keys and tokens
+.api-keys
+api-keys.json
+tokens.json
+*.token
+.token
+
+# Cloud provider credentials
+.aws/
+.azure/
+.gcloud/
+gcloud-credentials.json
+aws-credentials.json
+azure-credentials.json
+
+# SSH keys
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+*.ppk
+
+# Database credentials and configs
+database.json
+database.*.json
+db-config.json
+db-config.*.json
+prisma/.env
+prisma/.env.*
+.pgpass
+.my.cnf
+
+# OAuth and auth configs
+oauth-config.json
+oauth-config.*.json
+auth-config.json
+auth-config.*.json
+jwt-secret.txt
+.jwt
+
+# Email service configs
+email-config.json
+sendgrid.json
+mailgun.json
+ses-config.json
+
+# Payment provider credentials
+stripe-config.json
+stripe-*.json
+paypal-config.json
+
+# Hetzner and infrastructure credentials
+hetzner-token.txt
+hetzner-config.json
+.hcloud
+infrastructure-secrets.json
+
+# Backup files
+*.backup
+*.bak
+*.old
+*.orig
+backup/
+backups/
+
+# Local environment overrides
+.env.override
+.env.*.local
+local.env
+env.local
+
+# Configuration overrides
+config.local.json
+config.override.json
+settings.local.json
+settings.override.json
+
+# Testing configs with sensitive data
+.env.testing
+.env.e2e
+cypress.env.json
+playwright.env.json
