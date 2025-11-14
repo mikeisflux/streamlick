@@ -38,6 +38,11 @@ interface StudioCanvasProps {
   captionsEnabled: boolean;
   currentCaption: Caption | null;
   editMode?: boolean;
+  backgroundColor?: string;
+  showResolutionBadge?: boolean;
+  showPositionNumbers?: boolean;
+  showConnectionQuality?: boolean;
+  showLowerThirds?: boolean;
 }
 
 export function StudioCanvas({
@@ -60,9 +65,27 @@ export function StudioCanvas({
   captionsEnabled,
   currentCaption,
   editMode = false,
+  backgroundColor = '#0F1419',
+  showResolutionBadge = true,
+  showPositionNumbers = true,
+  showConnectionQuality = true,
+  showLowerThirds = true,
 }: StudioCanvasProps) {
   const mainVideoRef = useRef<HTMLVideoElement>(null);
   const screenShareVideoRef = useRef<HTMLVideoElement>(null);
+
+  // Calculate total participants (local + remote on-stage)
+  const onStageParticipants = Array.from(remoteParticipants.values()).filter(
+    (p) => p.role !== 'backstage' && p.id !== 'screen-share'
+  );
+  const totalParticipants = 1 + onStageParticipants.length; // 1 for local user
+
+  // Dynamic grid calculation using the formula: cols = Math.ceil(Math.sqrt(count))
+  const calculateDynamicGrid = (participantCount: number) => {
+    const cols = Math.ceil(Math.sqrt(participantCount));
+    const rows = Math.ceil(participantCount / cols);
+    return { cols, rows };
+  };
 
   // Get layout styles based on selected layout
   const getLayoutStyles = (layoutId: number | 'screenshare') => {
@@ -77,11 +100,16 @@ export function StudioCanvas({
       };
     }
 
+    // Calculate dynamic grid for grid-based layouts
+    const { cols, rows } = calculateDynamicGrid(totalParticipants);
+
     switch (layoutId) {
-      case 1: // Grid 2x2
+      case 1: // Dynamic Grid (auto-arranges based on participant count)
         return {
-          container: 'grid grid-cols-2 grid-rows-2 gap-2 p-2',
+          container: 'grid gap-2 p-2',
           mainVideo: 'col-span-1 row-span-1',
+          gridCols: cols,
+          gridRows: rows,
         };
       case 2: // Spotlight (one large, thumbnails on right)
         return {
@@ -111,15 +139,19 @@ export function StudioCanvas({
           container: 'flex flex-col gap-2 p-2',
           mainVideo: 'flex-1',
         };
-      case 7: // Grid 3x3
+      case 7: // Dynamic Grid 3x3 (auto-arranges, prefers 3 cols for larger groups)
         return {
-          container: 'grid grid-cols-3 grid-rows-3 gap-2 p-2',
+          container: 'grid gap-2 p-2',
           mainVideo: 'col-span-1 row-span-1',
+          gridCols: Math.max(3, cols), // Minimum 3 columns for layout 7
+          gridRows: Math.ceil(totalParticipants / Math.max(3, cols)),
         };
-      case 8: // Grid 2x2 (larger)
+      case 8: // Dynamic Grid (larger gaps)
         return {
-          container: 'grid grid-cols-2 grid-rows-2 gap-4 p-4',
+          container: 'grid gap-4 p-4',
           mainVideo: 'col-span-1 row-span-1',
+          gridCols: cols,
+          gridRows: rows,
         };
       case 9: // Full screen (single)
       default:
@@ -145,7 +177,7 @@ export function StudioCanvas({
         width: '100%',
         maxWidth: '1920px',
         aspectRatio: '16 / 9',
-        backgroundColor: '#0F1419',
+        backgroundColor,
         border: editMode ? '4px solid #8B5CF6' : 'none',
         boxSizing: 'border-box',
       }}
@@ -155,7 +187,13 @@ export function StudioCanvas({
         className={`absolute inset-0 overflow-hidden ${
           getLayoutStyles(isSharingScreen || screenShareStream ? 'screenshare' : selectedLayout).container
         }`}
-        style={{ backgroundColor: '#0F1419' }}
+        style={{
+          backgroundColor,
+          ...(getLayoutStyles(selectedLayout).gridCols && {
+            gridTemplateColumns: `repeat(${getLayoutStyles(selectedLayout).gridCols}, 1fr)`,
+            gridTemplateRows: `repeat(${getLayoutStyles(selectedLayout).gridRows}, 1fr)`,
+          }),
+        }}
       >
         {/* Screen Share Layout - Active when screen sharing */}
         {isSharingScreen || screenShareStream ? (
@@ -238,80 +276,89 @@ export function StudioCanvas({
         ) : (
           <>
             {/* Normal Layout - When not screen sharing */}
-            {/* Main Video */}
-            <div className={`${getLayoutStyles(selectedLayout).mainVideo}`}>
-              <ParticipantBox
-                stream={localStream}
-                videoEnabled={videoEnabled}
-                audioEnabled={audioEnabled}
-                name="You"
-                positionNumber={1}
-                isHost={true}
-                videoRef={mainVideoRef}
-                size="large"
-              />
-            </div>
 
-            {/* Additional video slots for grid layouts */}
-            {(selectedLayout === 1 || selectedLayout === 8) && (
+            {/* Grid Layouts with Dynamic Participant Rendering (1, 7, 8) */}
+            {(selectedLayout === 1 || selectedLayout === 7 || selectedLayout === 8) && (
               <>
-                {[1, 2, 3].map((slot) => (
-                  <div
-                    key={slot}
-                    className={`relative bg-gray-900 rounded overflow-hidden ${getLayoutStyles(selectedLayout).mainVideo}`}
-                  >
-                    <div className="w-full h-full flex items-center justify-center">
-                      <div className="text-center">
-                        <svg
-                          className="w-12 h-12 text-gray-700 mx-auto mb-1"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                          />
-                        </svg>
-                        <p className="text-gray-600 text-xs">Empty Slot</p>
-                      </div>
-                    </div>
+                {/* Render local user first */}
+                <div className={`${getLayoutStyles(selectedLayout).mainVideo}`}>
+                  <ParticipantBox
+                    stream={localStream}
+                    videoEnabled={videoEnabled}
+                    audioEnabled={audioEnabled}
+                    name="You"
+                    positionNumber={1}
+                    isHost={true}
+                    videoRef={mainVideoRef}
+                    size="medium"
+                    connectionQuality="excellent"
+                  />
+                </div>
+
+                {/* Render remote participants */}
+                {onStageParticipants.map((participant, index) => (
+                  <div key={participant.id} className={`${getLayoutStyles(selectedLayout).mainVideo}`}>
+                    <ParticipantBox
+                      stream={participant.stream}
+                      videoEnabled={participant.videoEnabled}
+                      audioEnabled={participant.audioEnabled}
+                      name={participant.name}
+                      positionNumber={index + 2}
+                      isHost={participant.role === 'host'}
+                      size="medium"
+                      connectionQuality="excellent"
+                    />
                   </div>
                 ))}
+
+                {/* Fill empty slots if needed (for aesthetic purposes) */}
+                {totalParticipants < getLayoutStyles(selectedLayout).gridCols! * getLayoutStyles(selectedLayout).gridRows! &&
+                  Array.from({
+                    length:
+                      getLayoutStyles(selectedLayout).gridCols! * getLayoutStyles(selectedLayout).gridRows! -
+                      totalParticipants,
+                  }).map((_, index) => (
+                    <div
+                      key={`empty-${index}`}
+                      className={`relative bg-gray-900 rounded overflow-hidden ${getLayoutStyles(selectedLayout).mainVideo}`}
+                    >
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-center">
+                          <svg
+                            className="w-12 h-12 text-gray-700 mx-auto mb-1"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                            />
+                          </svg>
+                          <p className="text-gray-600 text-xs">Empty Slot</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
               </>
             )}
 
-            {/* 3x3 Grid Layout */}
-            {selectedLayout === 7 && (
-              <>
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((slot) => (
-                  <div
-                    key={slot}
-                    className={`relative bg-gray-900 rounded overflow-hidden ${getLayoutStyles(selectedLayout).mainVideo}`}
-                  >
-                    <div className="w-full h-full flex items-center justify-center">
-                      <div className="text-center">
-                        <svg
-                          className="w-8 h-8 text-gray-700 mx-auto mb-1"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                          />
-                        </svg>
-                        <p className="text-gray-600 text-xs">Empty</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </>
+            {/* Non-grid layouts - Original rendering */}
+            {selectedLayout !== 1 && selectedLayout !== 7 && selectedLayout !== 8 && (
+              <div className={`${getLayoutStyles(selectedLayout).mainVideo}`}>
+                <ParticipantBox
+                  stream={localStream}
+                  videoEnabled={videoEnabled}
+                  audioEnabled={audioEnabled}
+                  name="You"
+                  positionNumber={1}
+                  isHost={true}
+                  videoRef={mainVideoRef}
+                  size="large"
+                />
+              </div>
             )}
 
             {/* Sidebar layout with thumbnails (2) */}
@@ -418,8 +465,8 @@ export function StudioCanvas({
           </>
         )}
 
-        {/* Resolution Badge - Top Left (only show when not screen sharing) */}
-        {!isSharingScreen && !screenShareStream && (
+        {/* Resolution Badge - Top Left (only show when not screen sharing and when enabled) */}
+        {showResolutionBadge && !isSharingScreen && !screenShareStream && (
           <div
             className="absolute text-sm font-semibold text-white flex items-center justify-center"
             style={{

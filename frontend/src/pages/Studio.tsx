@@ -203,6 +203,14 @@ export function Studio() {
   const [editMode, setEditMode] = useState(false);
   const [showCanvasSettings, setShowCanvasSettings] = useState(false);
 
+  // Canvas Settings State
+  const [canvasResolution, setCanvasResolution] = useState<'720p' | '1080p' | '4k'>('1080p');
+  const [canvasBackgroundColor, setCanvasBackgroundColor] = useState('#0F1419');
+  const [showResolutionBadge, setShowResolutionBadge] = useState(true);
+  const [showPositionNumbers, setShowPositionNumbers] = useState(true);
+  const [showConnectionQuality, setShowConnectionQuality] = useState(true);
+  const [showLowerThirds, setShowLowerThirds] = useState(true);
+
   const handleEditModeToggle = () => setEditMode(!editMode);
   const handleAddParticipant = () => {
     // TODO: Implement add participant logic
@@ -344,6 +352,11 @@ export function Studio() {
               captionsEnabled={captionsEnabled}
               currentCaption={currentCaption}
               editMode={editMode}
+              backgroundColor={canvasBackgroundColor}
+              showResolutionBadge={showResolutionBadge}
+              showPositionNumbers={showPositionNumbers}
+              showConnectionQuality={showConnectionQuality}
+              showLowerThirds={showLowerThirds}
             />
           </div>
 
@@ -493,7 +506,22 @@ export function Studio() {
       )}
 
       {/* Canvas Settings Modal */}
-      <CanvasSettingsModal isOpen={showCanvasSettings} onClose={() => setShowCanvasSettings(false)} />
+      <CanvasSettingsModal
+        isOpen={showCanvasSettings}
+        onClose={() => setShowCanvasSettings(false)}
+        canvasResolution={canvasResolution}
+        onResolutionChange={setCanvasResolution}
+        canvasBackgroundColor={canvasBackgroundColor}
+        onBackgroundColorChange={setCanvasBackgroundColor}
+        showResolutionBadge={showResolutionBadge}
+        onShowResolutionBadgeChange={setShowResolutionBadge}
+        showPositionNumbers={showPositionNumbers}
+        onShowPositionNumbersChange={setShowPositionNumbers}
+        showConnectionQuality={showConnectionQuality}
+        onShowConnectionQualityChange={setShowConnectionQuality}
+        showLowerThirds={showLowerThirds}
+        onShowLowerThirdsChange={setShowLowerThirds}
+      />
 
       <DeviceSelectors
         showMicSelector={showMicSelector}
