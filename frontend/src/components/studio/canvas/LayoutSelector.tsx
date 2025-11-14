@@ -101,11 +101,12 @@ export function LayoutSelector({
 
   return (
     <div
-      className="flex items-center justify-center gap-2 border-t px-4 overflow-x-auto"
+      className="flex items-center justify-center gap-2 px-4 overflow-x-auto"
       style={{
-        height: '72px',
-        backgroundColor: '#2d2d2d',
-        borderColor: '#404040'
+        height: '56px',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        borderRadius: '8px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
       }}
     >
       {/* 9 Layout Buttons */}
@@ -113,11 +114,12 @@ export function LayoutSelector({
         <button
           key={layoutId}
           onClick={() => onLayoutChange(layoutId)}
-          className="rounded hover:bg-gray-600 transition-all flex items-center justify-center flex-shrink-0 text-white"
+          className="rounded hover:bg-gray-200 transition-all flex items-center justify-center flex-shrink-0"
           style={{
-            width: '56px',
-            height: '56px',
-            backgroundColor: selectedLayout === layoutId ? '#0066ff' : '#3d3d3d'
+            width: '44px',
+            height: '44px',
+            backgroundColor: selectedLayout === layoutId ? '#0066ff' : 'transparent',
+            color: selectedLayout === layoutId ? '#ffffff' : '#374151',
           }}
           title={`Layout ${layoutId}`}
         >
@@ -126,21 +128,22 @@ export function LayoutSelector({
       ))}
 
       {/* Divider */}
-      <div className="h-12 w-px bg-gray-600 mx-1" />
+      <div className="h-10 w-px bg-gray-300 mx-1" />
 
       {/* Edit Mode Button */}
       {onEditModeToggle && (
         <button
           onClick={onEditModeToggle}
-          className="rounded hover:bg-gray-600 transition-all flex items-center justify-center flex-shrink-0 text-white"
+          className="rounded hover:bg-gray-200 transition-all flex items-center justify-center flex-shrink-0"
           style={{
-            width: '56px',
-            height: '56px',
-            backgroundColor: editMode ? '#8B5CF6' : '#3d3d3d'
+            width: '44px',
+            height: '44px',
+            backgroundColor: editMode ? '#8B5CF6' : 'transparent',
+            color: editMode ? '#ffffff' : '#374151',
           }}
           title="Edit Mode"
         >
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -155,15 +158,16 @@ export function LayoutSelector({
       {onAddParticipant && (
         <button
           onClick={onAddParticipant}
-          className="rounded hover:bg-gray-600 transition-all flex items-center justify-center flex-shrink-0 text-white"
+          className="rounded hover:bg-gray-200 transition-all flex items-center justify-center flex-shrink-0"
           style={{
-            width: '56px',
-            height: '56px',
-            backgroundColor: '#3d3d3d'
+            width: '44px',
+            height: '44px',
+            backgroundColor: 'transparent',
+            color: '#374151',
           }}
           title="Add Participant"
         >
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -178,15 +182,16 @@ export function LayoutSelector({
       {onSettingsClick && (
         <button
           onClick={onSettingsClick}
-          className="rounded hover:bg-gray-600 transition-all flex items-center justify-center flex-shrink-0 text-white"
+          className="rounded hover:bg-gray-200 transition-all flex items-center justify-center flex-shrink-0"
           style={{
-            width: '56px',
-            height: '56px',
-            backgroundColor: '#3d3d3d'
+            width: '44px',
+            height: '44px',
+            backgroundColor: 'transparent',
+            color: '#374151',
           }}
           title="Canvas Settings"
         >
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"

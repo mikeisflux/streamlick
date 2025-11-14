@@ -1,13 +1,100 @@
 import { useState } from 'react';
 
+interface MediaDevice {
+  deviceId: string;
+  label: string;
+}
+
 interface CanvasSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  // General settings
+  canvasResolution?: '720p' | '1080p' | '4k';
+  onResolutionChange?: (resolution: '720p' | '1080p' | '4k') => void;
+  canvasBackgroundColor?: string;
+  onBackgroundColorChange?: (color: string) => void;
+  showResolutionBadge?: boolean;
+  onShowResolutionBadgeChange?: (show: boolean) => void;
+  showPositionNumbers?: boolean;
+  onShowPositionNumbersChange?: (show: boolean) => void;
+  showConnectionQuality?: boolean;
+  onShowConnectionQualityChange?: (show: boolean) => void;
+  showLowerThirds?: boolean;
+  onShowLowerThirdsChange?: (show: boolean) => void;
+  // Camera settings
+  videoDevices?: MediaDevice[];
+  selectedVideoDevice?: string;
+  onVideoDeviceChange?: (deviceId: string) => void;
+  videoQuality?: '480p' | '720p' | '1080p';
+  onVideoQualityChange?: (quality: '480p' | '720p' | '1080p') => void;
+  mirrorVideo?: boolean;
+  onMirrorVideoChange?: (mirror: boolean) => void;
+  autoAdjustBrightness?: boolean;
+  onAutoAdjustBrightnessChange?: (adjust: boolean) => void;
+  hdMode?: boolean;
+  onHdModeChange?: (hd: boolean) => void;
+  // Audio settings
+  audioDevices?: MediaDevice[];
+  selectedAudioDevice?: string;
+  onAudioDeviceChange?: (deviceId: string) => void;
+  inputVolume?: number;
+  onInputVolumeChange?: (volume: number) => void;
+  echoCancellation?: boolean;
+  onEchoCancellationChange?: (enabled: boolean) => void;
+  noiseSuppression?: boolean;
+  onNoiseSuppressionChange?: (enabled: boolean) => void;
+  autoAdjustMicrophone?: boolean;
+  onAutoAdjustMicrophoneChange?: (adjust: boolean) => void;
+  // Visual effects settings
+  backgroundBlur?: boolean;
+  onBackgroundBlurChange?: (enabled: boolean) => void;
+  virtualBackground?: boolean;
+  onVirtualBackgroundChange?: (enabled: boolean) => void;
+  backgroundRemoval?: boolean;
+  onBackgroundRemovalChange?: (enabled: boolean) => void;
+  autoEnhanceLighting?: boolean;
+  onAutoEnhanceLightingChange?: (enabled: boolean) => void;
+  colorCorrection?: boolean;
+  onColorCorrectionChange?: (enabled: boolean) => void;
+  // Recording settings
+  recordingQuality?: '720p' | '1080p' | '4k';
+  onRecordingQualityChange?: (quality: '720p' | '1080p' | '4k') => void;
+  recordLocalCopies?: boolean;
+  onRecordLocalCopiesChange?: (enabled: boolean) => void;
+  separateAudioTracks?: boolean;
+  onSeparateAudioTracksChange?: (enabled: boolean) => void;
+  autoSaveRecordings?: boolean;
+  onAutoSaveRecordingsChange?: (enabled: boolean) => void;
+  // Layout settings
+  autoArrangeParticipants?: boolean;
+  onAutoArrangeParticipantsChange?: (enabled: boolean) => void;
+  rememberLayoutPreferences?: boolean;
+  onRememberLayoutPreferencesChange?: (enabled: boolean) => void;
+  showLayoutGridLines?: boolean;
+  onShowLayoutGridLinesChange?: (enabled: boolean) => void;
+  defaultLayout?: number;
+  onDefaultLayoutChange?: (layoutId: number) => void;
+  // Guest settings
+  guestsCanEnableCamera?: boolean;
+  onGuestsCanEnableCameraChange?: (enabled: boolean) => void;
+  guestsCanEnableMicrophone?: boolean;
+  onGuestsCanEnableMicrophoneChange?: (enabled: boolean) => void;
+  guestsCanShareScreen?: boolean;
+  onGuestsCanShareScreenChange?: (enabled: boolean) => void;
+  requireApprovalToJoin?: boolean;
+  onRequireApprovalToJoinChange?: (enabled: boolean) => void;
+  muteGuestsOnEntry?: boolean;
+  onMuteGuestsOnEntryChange?: (enabled: boolean) => void;
+  disableGuestCameraOnEntry?: boolean;
+  onDisableGuestCameraOnEntryChange?: (enabled: boolean) => void;
+  showGuestsInBackstageFirst?: boolean;
+  onShowGuestsInBackstageFirstChange?: (enabled: boolean) => void;
 }
 
 type SettingsTab = 'general' | 'camera' | 'audio' | 'visual-effects' | 'recording' | 'hotkeys' | 'layouts' | 'guests';
 
-export function CanvasSettingsModal({ isOpen, onClose }: CanvasSettingsModalProps) {
+export function CanvasSettingsModal(props: CanvasSettingsModalProps) {
+  const { isOpen, onClose } = props;
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
 
   if (!isOpen) return null;
@@ -108,14 +195,14 @@ export function CanvasSettingsModal({ isOpen, onClose }: CanvasSettingsModalProp
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
-            {activeTab === 'general' && <GeneralSettings />}
-            {activeTab === 'camera' && <CameraSettings />}
-            {activeTab === 'audio' && <AudioSettings />}
-            {activeTab === 'visual-effects' && <VisualEffectsSettings />}
-            {activeTab === 'recording' && <RecordingSettings />}
+            {activeTab === 'general' && <GeneralSettings props={props} />}
+            {activeTab === 'camera' && <CameraSettings props={props} />}
+            {activeTab === 'audio' && <AudioSettings props={props} />}
+            {activeTab === 'visual-effects' && <VisualEffectsSettings props={props} />}
+            {activeTab === 'recording' && <RecordingSettings props={props} />}
             {activeTab === 'hotkeys' && <HotkeysSettings />}
-            {activeTab === 'layouts' && <LayoutsSettings />}
-            {activeTab === 'guests' && <GuestsSettings />}
+            {activeTab === 'layouts' && <LayoutsSettings props={props} />}
+            {activeTab === 'guests' && <GuestsSettings props={props} />}
           </div>
         </div>
       </div>
@@ -124,7 +211,7 @@ export function CanvasSettingsModal({ isOpen, onClose }: CanvasSettingsModalProp
 }
 
 // General Settings Tab
-function GeneralSettings() {
+function GeneralSettings({ props }: { props: CanvasSettingsModalProps }) {
   return (
     <div className="space-y-6">
       <div>
@@ -144,9 +231,11 @@ function GeneralSettings() {
             color: '#ffffff',
             border: '1px solid #404040',
           }}
+          value={props.canvasResolution ?? '1080p'}
+          onChange={(e) => props.onResolutionChange?.(e.target.value as '720p' | '1080p' | '4k')}
         >
           <option value="720p">720p (HD)</option>
-          <option value="1080p" selected>1080p (Full HD)</option>
+          <option value="1080p">1080p (Full HD)</option>
           <option value="4k">4K (Ultra HD)</option>
         </select>
         <p className="text-xs text-gray-500 mt-2">Higher resolutions require more bandwidth</p>
@@ -158,12 +247,14 @@ function GeneralSettings() {
         <div className="flex items-center gap-3">
           <input
             type="color"
-            defaultValue="#0F1419"
+            value={props.canvasBackgroundColor ?? '#0F1419'}
+            onChange={(e) => props.onBackgroundColorChange?.(e.target.value)}
             className="h-10 w-20 rounded cursor-pointer"
           />
           <input
             type="text"
-            defaultValue="#0F1419"
+            value={props.canvasBackgroundColor ?? '#0F1419'}
+            onChange={(e) => props.onBackgroundColorChange?.(e.target.value)}
             className="flex-1 px-3 py-2 rounded text-sm font-mono"
             style={{
               backgroundColor: '#2d2d2d',
@@ -178,10 +269,26 @@ function GeneralSettings() {
       <div>
         <label className="block text-sm font-medium text-gray-300 mb-3">Display Options</label>
         <div className="space-y-3">
-          <ToggleOption label="Show resolution badge" defaultChecked={true} />
-          <ToggleOption label="Show position numbers" defaultChecked={true} />
-          <ToggleOption label="Show connection quality indicators" defaultChecked={true} />
-          <ToggleOption label="Show participant names (lower thirds)" defaultChecked={true} />
+          <ToggleOption
+            label="Show resolution badge"
+            checked={props.showResolutionBadge ?? true}
+            onChange={props.onShowResolutionBadgeChange}
+          />
+          <ToggleOption
+            label="Show position numbers"
+            checked={props.showPositionNumbers ?? true}
+            onChange={props.onShowPositionNumbersChange}
+          />
+          <ToggleOption
+            label="Show connection quality indicators"
+            checked={props.showConnectionQuality ?? true}
+            onChange={props.onShowConnectionQualityChange}
+          />
+          <ToggleOption
+            label="Show participant names (lower thirds)"
+            checked={props.showLowerThirds ?? true}
+            onChange={props.onShowLowerThirdsChange}
+          />
         </div>
       </div>
     </div>
@@ -189,7 +296,7 @@ function GeneralSettings() {
 }
 
 // Camera Settings Tab
-function CameraSettings() {
+function CameraSettings({ props }: { props: CanvasSettingsModalProps }) {
   return (
     <div className="space-y-6">
       <div>
@@ -242,7 +349,7 @@ function CameraSettings() {
 }
 
 // Audio Settings Tab
-function AudioSettings() {
+function AudioSettings({ props }: { props: CanvasSettingsModalProps }) {
   return (
     <div className="space-y-6">
       <div>
@@ -296,7 +403,7 @@ function AudioSettings() {
 }
 
 // Visual Effects Settings Tab
-function VisualEffectsSettings() {
+function VisualEffectsSettings({ props }: { props: CanvasSettingsModalProps }) {
   return (
     <div className="space-y-6">
       <div>
@@ -325,7 +432,7 @@ function VisualEffectsSettings() {
 }
 
 // Recording Settings Tab
-function RecordingSettings() {
+function RecordingSettings({ props }: { props: CanvasSettingsModalProps }) {
   return (
     <div className="space-y-6">
       <div>
@@ -401,7 +508,7 @@ function HotkeysSettings() {
 }
 
 // Layouts Settings Tab
-function LayoutsSettings() {
+function LayoutsSettings({ props }: { props: CanvasSettingsModalProps }) {
   return (
     <div className="space-y-6">
       <div>
@@ -439,7 +546,7 @@ function LayoutsSettings() {
 }
 
 // Guests Settings Tab
-function GuestsSettings() {
+function GuestsSettings({ props }: { props: CanvasSettingsModalProps }) {
   return (
     <div className="space-y-6">
       <div>
@@ -470,8 +577,30 @@ function GuestsSettings() {
 }
 
 // Reusable Toggle Option Component
-function ToggleOption({ label, defaultChecked }: { label: string; defaultChecked: boolean }) {
-  const [checked, setChecked] = useState(defaultChecked);
+function ToggleOption({
+  label,
+  defaultChecked,
+  checked: controlledChecked,
+  onChange
+}: {
+  label: string;
+  defaultChecked?: boolean;
+  checked?: boolean;
+  onChange?: (checked: boolean) => void;
+}) {
+  const [internalChecked, setInternalChecked] = useState(defaultChecked ?? false);
+
+  // Use controlled value if provided, otherwise use internal state
+  const checked = controlledChecked !== undefined ? controlledChecked : internalChecked;
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newChecked = e.target.checked;
+    if (onChange) {
+      onChange(newChecked);
+    } else {
+      setInternalChecked(newChecked);
+    }
+  };
 
   return (
     <label className="flex items-center justify-between cursor-pointer">
@@ -480,7 +609,7 @@ function ToggleOption({ label, defaultChecked }: { label: string; defaultChecked
         <input
           type="checkbox"
           checked={checked}
-          onChange={(e) => setChecked(e.target.checked)}
+          onChange={handleChange}
           className="sr-only peer"
         />
         <div
