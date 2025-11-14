@@ -357,7 +357,7 @@ export function Studio() {
           </div>
 
           {/* Layout Selector - Always visible below canvas */}
-          <div className="flex justify-center pb-4 px-6" style={{ flexShrink: 0 }}>
+          <div className="flex justify-center px-6" style={{ flexShrink: 0 }}>
             <LayoutSelector
               selectedLayout={selectedLayout}
               onLayoutChange={setSelectedLayout}
