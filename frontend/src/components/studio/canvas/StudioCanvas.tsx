@@ -22,6 +22,7 @@ interface StudioCanvasProps {
   localStream: MediaStream | null;
   videoEnabled: boolean;
   audioEnabled: boolean;
+  isLocalUserOnStage: boolean;
   remoteParticipants: Map<string, RemoteParticipant>;
   isSharingScreen: boolean;
   screenShareStream: MediaStream | null;
@@ -50,6 +51,7 @@ export function StudioCanvas({
   localStream,
   videoEnabled,
   audioEnabled,
+  isLocalUserOnStage,
   remoteParticipants,
   isSharingScreen,
   screenShareStream,
@@ -76,11 +78,11 @@ export function StudioCanvas({
   const mainVideoRef = useRef<HTMLVideoElement>(null);
   const screenShareVideoRef = useRef<HTMLVideoElement>(null);
 
-  // Calculate total participants (local + remote on-stage)
+  // Calculate total participants (local user if on stage + remote on-stage)
   const onStageParticipants = Array.from(remoteParticipants.values()).filter(
     (p) => p.role !== 'backstage' && p.id !== 'screen-share'
   );
-  const totalParticipants = 1 + onStageParticipants.length; // 1 for local user
+  const totalParticipants = (isLocalUserOnStage ? 1 : 0) + onStageParticipants.length;
 
   // Dynamic grid calculation using the formula: cols = Math.ceil(Math.sqrt(count))
   const calculateDynamicGrid = (participantCount: number) => {
@@ -206,22 +208,26 @@ export function StudioCanvas({
                 getLayoutStyles('screenshare').sidebarWidth
               } gap-2`}
             >
-              {/* Host Video */}
-              <div className="flex-1">
-                <ParticipantBox
-                  stream={localStream}
-                  videoEnabled={videoEnabled}
-                  audioEnabled={audioEnabled}
-                  name="You"
-                  positionNumber={1}
-                  isHost={true}
-                  videoRef={mainVideoRef}
-                  size="small"
-                  showPositionNumber={showPositionNumbers}
-                  showConnectionQuality={showConnectionQuality}
-                  showLowerThird={showLowerThirds}
-                />
-              </div>
+              {/* Host Video - only shown when local user is on stage */}
+              {isLocalUserOnStage && (
+                <div className="flex-1">
+                  <ParticipantBox
+                    stream={localStream}
+                    videoEnabled={videoEnabled}
+                    audioEnabled={audioEnabled}
+                    name="You"
+                    positionNumber={1}
+                    isHost={true}
+                    videoRef={mainVideoRef}
+                    size="small"
+                    showPositionNumber={showPositionNumbers}
+                    showConnectionQuality={showConnectionQuality}
+                    showLowerThird={showLowerThirds}
+                    participantId="local-user"
+                    onRemoveFromStage={onRemoveFromStage}
+                  />
+                </div>
+              )}
 
               {/* Remote Participants - Up to 4 slots */}
               {Array.from(remoteParticipants.values())
@@ -290,23 +296,27 @@ export function StudioCanvas({
             {/* Grid Layouts with Dynamic Participant Rendering (1, 7, 8) */}
             {(selectedLayout === 1 || selectedLayout === 7 || selectedLayout === 8) && (
               <>
-                {/* Render local user first */}
-                <div className={`${getLayoutStyles(selectedLayout).mainVideo}`}>
-                  <ParticipantBox
-                    stream={localStream}
-                    videoEnabled={videoEnabled}
-                    audioEnabled={audioEnabled}
-                    name="You"
-                    positionNumber={1}
-                    isHost={true}
-                    videoRef={mainVideoRef}
-                    size="medium"
-                    connectionQuality="excellent"
-                    showPositionNumber={showPositionNumbers}
-                    showConnectionQuality={showConnectionQuality}
-                    showLowerThird={showLowerThirds}
-                  />
-                </div>
+                {/* Render local user first - only when on stage */}
+                {isLocalUserOnStage && (
+                  <div className={`${getLayoutStyles(selectedLayout).mainVideo}`}>
+                    <ParticipantBox
+                      stream={localStream}
+                      videoEnabled={videoEnabled}
+                      audioEnabled={audioEnabled}
+                      name="You"
+                      positionNumber={1}
+                      isHost={true}
+                      videoRef={mainVideoRef}
+                      size="medium"
+                      connectionQuality="excellent"
+                      showPositionNumber={showPositionNumbers}
+                      showConnectionQuality={showConnectionQuality}
+                      showLowerThird={showLowerThirds}
+                      participantId="local-user"
+                      onRemoveFromStage={onRemoveFromStage}
+                    />
+                  </div>
+                )}
 
                 {/* Render remote participants */}
                 {onStageParticipants.map((participant, index) => (
@@ -363,8 +373,8 @@ export function StudioCanvas({
               </>
             )}
 
-            {/* Non-grid layouts - Original rendering */}
-            {selectedLayout !== 1 && selectedLayout !== 7 && selectedLayout !== 8 && (
+            {/* Non-grid layouts - Original rendering - only when local user on stage */}
+            {selectedLayout !== 1 && selectedLayout !== 7 && selectedLayout !== 8 && isLocalUserOnStage && (
               <div className={`${getLayoutStyles(selectedLayout).mainVideo}`}>
                 <ParticipantBox
                   stream={localStream}
@@ -378,6 +388,8 @@ export function StudioCanvas({
                   showPositionNumber={showPositionNumbers}
                   showConnectionQuality={showConnectionQuality}
                   showLowerThird={showLowerThirds}
+                  participantId="local-user"
+                  onRemoveFromStage={onRemoveFromStage}
                 />
               </div>
             )}

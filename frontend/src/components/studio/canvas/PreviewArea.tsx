@@ -13,6 +13,7 @@ interface PreviewAreaProps {
   localStream: MediaStream | null;
   videoEnabled: boolean;
   audioEnabled: boolean;
+  isLocalUserOnStage: boolean;
   backstageParticipants: RemoteParticipant[];
   screenShareStream: MediaStream | null;
   onAddToStage?: (participantId: string) => void;
@@ -23,6 +24,7 @@ export function PreviewArea({
   localStream,
   videoEnabled,
   audioEnabled,
+  isLocalUserOnStage,
   backstageParticipants,
   screenShareStream,
   onAddToStage,
@@ -64,7 +66,7 @@ export function PreviewArea({
       <div className="flex items-center gap-3 pb-2">
         {/* Your Preview */}
         <div className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
-          <div className="relative bg-black rounded overflow-hidden h-full border-2 border-blue-500">
+          <div className={`relative bg-black rounded overflow-hidden h-full border-2 ${isLocalUserOnStage ? 'border-blue-500' : 'border-yellow-500 group'}`}>
             {localStream && videoEnabled ? (
               <video
                 ref={localVideoRef}
@@ -77,7 +79,7 @@ export function PreviewArea({
               <div className="w-full h-full flex items-center justify-center bg-gray-900">
                 {selectedAvatar ? (
                   <div className="w-full h-full flex items-center justify-center p-4">
-                    <div className="w-full h-full rounded-full overflow-hidden">
+                    <div className="w-3/4 aspect-square rounded-full overflow-hidden">
                       <img
                         src={selectedAvatar}
                         alt="Your avatar"
@@ -98,8 +100,24 @@ export function PreviewArea({
                 )}
               </div>
             )}
-            <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1">
-              <span className="text-white text-xs font-medium">You (Preview)</span>
+
+            {/* Hover Overlay with Add to Stage Button - only shown when backstage */}
+            {!isLocalUserOnStage && onAddToStage && (
+              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-50 pointer-events-auto">
+                <button
+                  onClick={() => onAddToStage('local-user')}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded shadow-lg pointer-events-auto"
+                  title="Add to Stage"
+                >
+                  Add to Stage
+                </button>
+              </div>
+            )}
+
+            <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 z-0">
+              <span className="text-white text-xs font-medium">
+                {isLocalUserOnStage ? 'You (Preview)' : 'You (Backstage)'}
+              </span>
             </div>
           </div>
         </div>

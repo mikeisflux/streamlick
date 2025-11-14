@@ -123,7 +123,7 @@ export function ParticipantBox({
         <div className="w-full h-full flex items-center justify-center bg-gray-900">
           {selectedAvatar ? (
             <div className="w-full h-full flex items-center justify-center p-8">
-              <div className="w-full h-full rounded-full overflow-hidden">
+              <div className="w-1/4 aspect-square rounded-full overflow-hidden">
                 <img
                   src={selectedAvatar}
                   alt={name}

@@ -203,6 +203,9 @@ export function Studio() {
   const [editMode, setEditMode] = useState(false);
   const [showCanvasSettings, setShowCanvasSettings] = useState(false);
 
+  // Local user stage status - starts backstage by default
+  const [isLocalUserOnStage, setIsLocalUserOnStage] = useState(false);
+
   // Canvas Settings (persisted to localStorage)
   const canvasSettings = useCanvasSettings();
 
@@ -216,11 +219,19 @@ export function Studio() {
   // Handle adding/removing participants from stage
   // Use existing handlers from useParticipants hook
   const handleAddToStage = (participantId: string) => {
-    handlePromoteToLive(participantId);
+    if (participantId === 'local-user') {
+      setIsLocalUserOnStage(true);
+    } else {
+      handlePromoteToLive(participantId);
+    }
   };
 
   const handleRemoveFromStage = (participantId: string) => {
-    handleDemoteToBackstage(participantId);
+    if (participantId === 'local-user') {
+      setIsLocalUserOnStage(false);
+    } else {
+      handleDemoteToBackstage(participantId);
+    }
   };
 
   if (isLoading) {
@@ -342,6 +353,7 @@ export function Studio() {
               localStream={localStream}
               videoEnabled={videoEnabled}
               audioEnabled={audioEnabled}
+              isLocalUserOnStage={isLocalUserOnStage}
               remoteParticipants={remoteParticipants}
               isSharingScreen={isSharingScreen}
               screenShareStream={screenShareStream}
@@ -388,6 +400,7 @@ export function Studio() {
               localStream={localStream}
               videoEnabled={videoEnabled}
               audioEnabled={audioEnabled}
+              isLocalUserOnStage={isLocalUserOnStage}
               backstageParticipants={Array.from(remoteParticipants.values()).filter((p) => p.role === 'backstage')}
               screenShareStream={screenShareStream}
               onAddToStage={handleAddToStage}
