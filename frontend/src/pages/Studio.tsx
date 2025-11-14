@@ -505,6 +505,7 @@ export function Studio() {
       <CanvasSettingsModal
         isOpen={showCanvasSettings}
         onClose={() => setShowCanvasSettings(false)}
+        cameraStream={videoEnabled ? localStream : null}
         // General settings
         canvasResolution={canvasSettings.canvasResolution}
         onResolutionChange={canvasSettings.setCanvasResolution}
@@ -555,12 +556,20 @@ export function Studio() {
         autoAdjustMicrophone={canvasSettings.autoAdjustMicrophone}
         onAutoAdjustMicrophoneChange={canvasSettings.setAutoAdjustMicrophone}
         // Visual effects
+        selectedBackground={canvasSettings.selectedBackground}
+        onBackgroundSelect={canvasSettings.setSelectedBackground}
         backgroundBlur={canvasSettings.backgroundBlur}
         onBackgroundBlurChange={canvasSettings.setBackgroundBlur}
+        backgroundBlurStrength={canvasSettings.backgroundBlurStrength}
+        onBackgroundBlurStrengthChange={canvasSettings.setBackgroundBlurStrength}
         virtualBackground={canvasSettings.virtualBackground}
         onVirtualBackgroundChange={canvasSettings.setVirtualBackground}
+        virtualBackgroundStrength={canvasSettings.virtualBackgroundStrength}
+        onVirtualBackgroundStrengthChange={canvasSettings.setVirtualBackgroundStrength}
         backgroundRemoval={canvasSettings.backgroundRemoval}
         onBackgroundRemovalChange={canvasSettings.setBackgroundRemoval}
+        backgroundRemovalStrength={canvasSettings.backgroundRemovalStrength}
+        onBackgroundRemovalStrengthChange={canvasSettings.setBackgroundRemovalStrength}
         autoEnhanceLighting={canvasSettings.autoEnhanceLighting}
         onAutoEnhanceLightingChange={canvasSettings.setAutoEnhanceLighting}
         colorCorrection={canvasSettings.colorCorrection}

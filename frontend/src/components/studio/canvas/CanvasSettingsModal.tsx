@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface MediaDevice {
   deviceId: string;
@@ -8,6 +8,11 @@ interface MediaDevice {
 interface CanvasSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  // Camera preview
+  cameraStream?: MediaStream | null;
+  // Virtual backgrounds
+  selectedBackground?: string;
+  onBackgroundSelect?: (backgroundId: string) => void;
   // General settings
   canvasResolution?: '720p' | '1080p' | '4k';
   onResolutionChange?: (resolution: '720p' | '1080p' | '4k') => void;
@@ -60,10 +65,16 @@ interface CanvasSettingsModalProps {
   // Visual effects settings
   backgroundBlur?: boolean;
   onBackgroundBlurChange?: (enabled: boolean) => void;
+  backgroundBlurStrength?: number;
+  onBackgroundBlurStrengthChange?: (strength: number) => void;
   virtualBackground?: boolean;
   onVirtualBackgroundChange?: (enabled: boolean) => void;
+  virtualBackgroundStrength?: number;
+  onVirtualBackgroundStrengthChange?: (strength: number) => void;
   backgroundRemoval?: boolean;
   onBackgroundRemovalChange?: (enabled: boolean) => void;
+  backgroundRemovalStrength?: number;
+  onBackgroundRemovalStrengthChange?: (strength: number) => void;
   autoEnhanceLighting?: boolean;
   onAutoEnhanceLightingChange?: (enabled: boolean) => void;
   colorCorrection?: boolean;
@@ -398,11 +409,65 @@ function GeneralSettings({ props }: { props: CanvasSettingsModalProps }) {
 
 // Camera Settings Tab
 function CameraSettings({ props }: { props: CanvasSettingsModalProps }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Update video srcObject when stream changes
+  useEffect(() => {
+    if (videoRef.current && props.cameraStream) {
+      videoRef.current.srcObject = props.cameraStream;
+    }
+  }, [props.cameraStream]);
+
   return (
     <div className="space-y-6">
       <div>
         <h3 className="text-xl font-semibold text-white mb-4">Camera Settings</h3>
         <p className="text-sm text-gray-400 mb-6">Configure camera and video input settings</p>
+      </div>
+
+      {/* Camera Preview */}
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-2">Camera Preview</label>
+        <div
+          className="relative rounded overflow-hidden"
+          style={{
+            width: '100%',
+            maxWidth: '500px',
+            aspectRatio: '16 / 9',
+            backgroundColor: '#1a1a1a',
+          }}
+        >
+          {props.cameraStream ? (
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+              style={{ transform: props.mirrorVideo ? 'scaleX(-1)' : 'none' }}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="text-center">
+                <svg
+                  className="w-16 h-16 text-gray-600 mx-auto mb-2"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                  <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" strokeWidth={2} />
+                </svg>
+                <p className="text-gray-500 text-sm">Camera Off</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div>
@@ -550,6 +615,16 @@ function AudioSettings({ props }: { props: CanvasSettingsModalProps }) {
 
 // Visual Effects Settings Tab
 function VisualEffectsSettings({ props }: { props: CanvasSettingsModalProps }) {
+  const backgrounds = [
+    { id: 'none', name: 'None', icon: '✕' },
+    { id: 'blur', name: 'Blur', icon: '◎' },
+    { id: 'brick', name: 'Brick Wall', icon: '🧱' },
+    { id: 'office', name: 'Office', icon: '🏢' },
+    { id: 'sunset', name: 'Sunset Cityscape', icon: '🌆' },
+    { id: 'forest', name: 'Forest Night', icon: '🌲' },
+    { id: 'branded', name: 'Branded Logo', icon: '⭕' },
+  ];
+
   return (
     <div className="space-y-6">
       <div>
@@ -557,20 +632,149 @@ function VisualEffectsSettings({ props }: { props: CanvasSettingsModalProps }) {
         <p className="text-sm text-gray-400 mb-6">Configure visual effects and filters</p>
       </div>
 
+      {/* Virtual Backgrounds Grid */}
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-3">
+          Virtual Backgrounds
+          <span className="ml-2 text-xs text-gray-500">ℹ️ Select a background for your camera</span>
+        </label>
+        <div className="grid grid-cols-4 gap-3">
+          {backgrounds.map((bg) => (
+            <button
+              key={bg.id}
+              onClick={() => props.onBackgroundSelect?.(bg.id)}
+              className="relative rounded overflow-hidden transition-all hover:ring-2 hover:ring-blue-500"
+              style={{
+                aspectRatio: '16 / 9',
+                backgroundColor: '#2d2d2d',
+                border: (props.selectedBackground ?? 'none') === bg.id ? '2px solid #0066ff' : '2px solid #404040',
+              }}
+            >
+              <div className="w-full h-full flex flex-col items-center justify-center">
+                <div className="text-2xl mb-1">{bg.icon}</div>
+                <div className="text-xs text-gray-300">{bg.name}</div>
+              </div>
+              {(props.selectedBackground ?? 'none') === bg.id && (
+                <div className="absolute top-1 right-1 w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
+                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+              )}
+            </button>
+          ))}
+          {/* Add Custom Background Button */}
+          <button
+            onClick={() => {
+              // TODO: Implement file picker for custom background
+              console.log('Add custom background clicked');
+            }}
+            className="relative rounded overflow-hidden transition-all hover:ring-2 hover:ring-blue-500"
+            style={{
+              aspectRatio: '16 / 9',
+              backgroundColor: '#2d2d2d',
+              border: '2px dashed #404040',
+            }}
+          >
+            <div className="w-full h-full flex flex-col items-center justify-center">
+              <div className="text-3xl text-gray-500 mb-1">+</div>
+              <div className="text-xs text-gray-500">Add Custom</div>
+            </div>
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 mt-2">
+          See our <a href="#" className="text-blue-500 hover:underline">virtual background guide</a> for tips
+        </p>
+      </div>
+
       <div>
         <label className="block text-sm font-medium text-gray-300 mb-3">Background Effects</label>
-        <div className="space-y-3">
-          <ToggleOption label="Background blur" defaultChecked={false} />
-          <ToggleOption label="Virtual background" defaultChecked={false} />
-          <ToggleOption label="Background removal" defaultChecked={false} />
+        <div className="space-y-4">
+          <div>
+            <ToggleOption
+              label="Background blur"
+              checked={props.backgroundBlur ?? false}
+              onChange={props.onBackgroundBlurChange}
+            />
+            {props.backgroundBlur && (
+              <div className="mt-3 ml-6">
+                <label className="block text-xs font-medium text-gray-400 mb-2">
+                  Blur Strength: {props.backgroundBlurStrength ?? 50}%
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={props.backgroundBlurStrength ?? 50}
+                  onChange={(e) => props.onBackgroundBlurStrengthChange?.(Number(e.target.value))}
+                  className="w-full"
+                  style={{ accentColor: '#0066ff' }}
+                />
+              </div>
+            )}
+          </div>
+          <div>
+            <ToggleOption
+              label="Virtual background"
+              checked={props.virtualBackground ?? false}
+              onChange={props.onVirtualBackgroundChange}
+            />
+            {props.virtualBackground && (
+              <div className="mt-3 ml-6">
+                <label className="block text-xs font-medium text-gray-400 mb-2">
+                  Background Opacity: {props.virtualBackgroundStrength ?? 75}%
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={props.virtualBackgroundStrength ?? 75}
+                  onChange={(e) => props.onVirtualBackgroundStrengthChange?.(Number(e.target.value))}
+                  className="w-full"
+                  style={{ accentColor: '#0066ff' }}
+                />
+              </div>
+            )}
+          </div>
+          <div>
+            <ToggleOption
+              label="Background removal"
+              checked={props.backgroundRemoval ?? false}
+              onChange={props.onBackgroundRemovalChange}
+            />
+            {props.backgroundRemoval && (
+              <div className="mt-3 ml-6">
+                <label className="block text-xs font-medium text-gray-400 mb-2">
+                  Edge Refinement: {props.backgroundRemovalStrength ?? 80}%
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={props.backgroundRemovalStrength ?? 80}
+                  onChange={(e) => props.onBackgroundRemovalStrengthChange?.(Number(e.target.value))}
+                  className="w-full"
+                  style={{ accentColor: '#0066ff' }}
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-300 mb-3">Video Filters</label>
         <div className="space-y-3">
-          <ToggleOption label="Auto-enhance lighting" defaultChecked={true} />
-          <ToggleOption label="Color correction" defaultChecked={false} />
+          <ToggleOption
+            label="Auto-enhance lighting"
+            checked={props.autoEnhanceLighting ?? false}
+            onChange={props.onAutoEnhanceLightingChange}
+          />
+          <ToggleOption
+            label="Color correction"
+            checked={props.colorCorrection ?? false}
+            onChange={props.onColorCorrectionChange}
+          />
         </div>
       </div>
     </div>

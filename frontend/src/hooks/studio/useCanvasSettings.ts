@@ -25,9 +25,13 @@ interface CanvasSettings {
   noiseSuppression: boolean;
   autoAdjustMicrophone: boolean;
   // Visual Effects
+  selectedBackground: string;
   backgroundBlur: boolean;
+  backgroundBlurStrength: number;
   virtualBackground: boolean;
+  virtualBackgroundStrength: number;
   backgroundRemoval: boolean;
+  backgroundRemovalStrength: number;
   autoEnhanceLighting: boolean;
   colorCorrection: boolean;
   // Recording
@@ -75,9 +79,13 @@ const DEFAULT_SETTINGS: CanvasSettings = {
   noiseSuppression: true,
   autoAdjustMicrophone: false,
   // Visual Effects
+  selectedBackground: 'none',
   backgroundBlur: false,
+  backgroundBlurStrength: 50,
   virtualBackground: false,
+  virtualBackgroundStrength: 75,
   backgroundRemoval: false,
+  backgroundRemovalStrength: 80,
   autoEnhanceLighting: false,
   colorCorrection: false,
   // Recording
@@ -178,12 +186,20 @@ export function useCanvasSettings() {
     autoAdjustMicrophone: settings.autoAdjustMicrophone,
     setAutoAdjustMicrophone: (value: boolean) => updateSetting('autoAdjustMicrophone', value),
     // Visual Effects
+    selectedBackground: settings.selectedBackground,
+    setSelectedBackground: (value: string) => updateSetting('selectedBackground', value),
     backgroundBlur: settings.backgroundBlur,
     setBackgroundBlur: (value: boolean) => updateSetting('backgroundBlur', value),
+    backgroundBlurStrength: settings.backgroundBlurStrength,
+    setBackgroundBlurStrength: (value: number) => updateSetting('backgroundBlurStrength', value),
     virtualBackground: settings.virtualBackground,
     setVirtualBackground: (value: boolean) => updateSetting('virtualBackground', value),
+    virtualBackgroundStrength: settings.virtualBackgroundStrength,
+    setVirtualBackgroundStrength: (value: number) => updateSetting('virtualBackgroundStrength', value),
     backgroundRemoval: settings.backgroundRemoval,
     setBackgroundRemoval: (value: boolean) => updateSetting('backgroundRemoval', value),
+    backgroundRemovalStrength: settings.backgroundRemovalStrength,
+    setBackgroundRemovalStrength: (value: number) => updateSetting('backgroundRemovalStrength', value),
     autoEnhanceLighting: settings.autoEnhanceLighting,
     setAutoEnhanceLighting: (value: boolean) => updateSetting('autoEnhanceLighting', value),
     colorCorrection: settings.colorCorrection,
