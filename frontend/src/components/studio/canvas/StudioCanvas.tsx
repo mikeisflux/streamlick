@@ -298,6 +298,9 @@ export function StudioCanvas({
                     videoRef={mainVideoRef}
                     size="medium"
                     connectionQuality="excellent"
+                    showPositionNumber={showPositionNumbers}
+                    showConnectionQuality={showConnectionQuality}
+                    showLowerThird={showLowerThirds}
                   />
                 </div>
 
@@ -313,6 +316,9 @@ export function StudioCanvas({
                       isHost={participant.role === 'host'}
                       size="medium"
                       connectionQuality="excellent"
+                      showPositionNumber={showPositionNumbers}
+                      showConnectionQuality={showConnectionQuality}
+                      showLowerThird={showLowerThirds}
                     />
                   </div>
                 ))}
@@ -363,6 +369,9 @@ export function StudioCanvas({
                   isHost={true}
                   videoRef={mainVideoRef}
                   size="large"
+                  showPositionNumber={showPositionNumbers}
+                  showConnectionQuality={showConnectionQuality}
+                  showLowerThird={showLowerThirds}
                 />
               </div>
             )}

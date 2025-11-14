@@ -221,13 +221,86 @@ Status: 100% Production-Ready
 
 ---
 
-## 🎭 Preview Area
-**Location:** Depends on layout, typically bottom or side
+## 🎭 Preview Area (Participant Preview Tiles)
+**Location:** Below Layout Selector, above Bottom Control Bar
+**Background:** Dark (#1a1a1a) with 140px minimum height
 
 **Shows:**
-- Local preview ("You")
-- Backstage participants
-- Screen share preview
+- **Local preview ("You")** - Always visible, 160×90px, blue border
+- **Screen share preview** - When active, 160×90px, green border
+- **Backstage participants** - When present, 160×90px, yellow border
+- **Empty state message** - "Participants will appear here when they join"
+
+**How to Use:**
+- Participants appear here when they join in backstage mode
+- Click "↑" button on backstage participants to add them to the main stage
+- Preview tiles are scrollable horizontally if many participants
+
+---
+
+## 🎯 IMPORTANT: Features You Asked About
+
+### "9 Dynamic Layouts with instant switching" ✅
+**WHERE TO FIND IT:**
+1. Look for the **white Layout Selector bar** BELOW the black canvas
+2. You'll see **9 layout icon buttons** in a horizontal row
+3. Each button shows a visual representation of the layout
+4. The currently selected layout has a **blue background (#0066ff)**
+5. Click any layout icon to instantly switch to that layout
+
+**The 9 Layouts:**
+1. **Grid 2×2** - Four equal boxes in a 2×2 grid
+2. **Spotlight** - One large box on left, 3 small thumbnails on right
+3. **Sidebar Left** - Narrow sidebar on left, large area on right
+4. **Picture-in-Picture** - Full screen with small overlay in corner
+5. **Vertical Split** - Two equal boxes side by side
+6. **Horizontal Split** - Two equal boxes top and bottom
+7. **Grid 3×3** - Nine boxes in a 3×3 grid
+8. **Grid Dynamic** - Four corners layout
+9. **Full Screen** - Single large box
+
+**Visual Location:**
+- White rounded bar with shadow
+- 56px height
+- Positioned below the main canvas, above the preview area
+- Horizontally scrollable if needed
+- Has 9 layout buttons + divider + 3 control buttons (Edit, Add, Settings)
+
+**If you don't see this:**
+- Make sure you've pulled the latest code changes
+- The bar should be impossible to miss - it's a bright white bar on a gray background
+- Check that you're on the /studio page
+
+### "Audio Visualization with professional volume meters" ✅
+**WHERE TO FIND IT:**
+1. Click **⚙️ Settings** (gear icon in top navigation bar)
+2. Click **Audio Settings 🎤** tab (3rd tab)
+3. Scroll down below the microphone dropdown
+4. You'll see **10-Bar LED Volume Meter** with green/yellow/red zones
+5. The meter responds to the **Input Volume** slider below it
+6. Professional LED-style visualization with color zones:
+   - Bars 1-7: Green zone (safe)
+   - Bars 8-9: Yellow zone (warning)
+   - Bar 10: Red zone (peak)
+
+**Screenshot location:** `/home/user/streamlick/frontend/src/components/studio/canvas/CanvasSettingsModal.tsx` lines 200-214
+
+### "Edit Mode for layout customization" ✅
+**WHERE TO FIND IT:**
+1. Look for the **white Layout Selector bar** below the black canvas
+2. On the right side, after the layout icons, you'll see 3 buttons
+3. Click the **pencil icon** button (first of the 3)
+4. The canvas will get a **4px purple border (#8B5CF6)** when edit mode is active
+5. Click the pencil icon again to exit edit mode
+
+**What Edit Mode Does:**
+- Shows purple border around canvas to indicate you're in edit mode
+- Allows customization of canvas layout and elements
+- Toggle on/off with pencil icon in Layout Selector
+
+**Implementation location:**
+- Button: `/home/user/streamlick/frontend/src/components/studio/canvas/LayoutSelector.tsx`
+- Border effect: `/home/user/streamlick/frontend/src/components/studio/canvas/StudioCanvas.tsx` line 181
 
 ---
 
@@ -360,10 +433,20 @@ From highest to lowest:
 - Click on any to select
 - Adjust strength sliders below toggles
 
-### "Volume meter not showing"
-- Go to Settings → Audio tab
+### "Volume meter not showing" or "Where is the professional volume meter?"
+- Go to Settings → Audio tab (3rd tab, 🎤 icon)
 - Should see 10 colored bars below microphone dropdown
-- Bars respond to Input Volume slider
+- Professional LED-style meter with green/yellow/red zones
+- Bars respond to Input Volume slider (try moving slider to see bars light up)
+- If still not visible, check you're on the Audio Settings tab, NOT the General tab
+
+### "Edit mode not working" or "Can't find edit mode button"
+- Look for the white Layout Selector bar BELOW the black canvas
+- The bar has 9 layout icons on the left, then a divider line
+- After the divider, there are 3 buttons on the right
+- The FIRST button (pencil icon) is the Edit Mode toggle
+- When clicked, the canvas should get a thick purple border
+- If you don't see the Layout Selector bar, make sure you pulled latest code
 
 ---
 
