@@ -10,6 +10,7 @@ interface ParticipantBoxProps {
   isHost?: boolean;
   videoRef?: RefObject<HTMLVideoElement>;
   size?: 'small' | 'medium' | 'large';
+  connectionQuality?: 'excellent' | 'good' | 'poor' | 'disconnected';
 }
 
 export function ParticipantBox({
@@ -22,9 +23,18 @@ export function ParticipantBox({
   isHost = false,
   videoRef,
   size = 'large',
+  connectionQuality = 'excellent',
 }: ParticipantBoxProps) {
   const iconSize = size === 'small' ? 'w-6 h-6' : size === 'medium' ? 'w-10 h-10' : 'w-16 h-16';
   const textSize = size === 'small' ? 'text-xs' : 'text-sm';
+
+  // Connection quality color mapping
+  const qualityColors = {
+    excellent: '#10b981', // green
+    good: '#f59e0b', // yellow
+    poor: '#ef4444', // red
+    disconnected: '#6b7280', // gray
+  };
 
   return (
     <div className="relative bg-black rounded overflow-hidden h-full w-full">
@@ -42,6 +52,26 @@ export function ParticipantBox({
           {positionNumber}
         </div>
       )}
+
+      {/* Connection Quality Indicator - Top Right */}
+      <div
+        className="absolute top-2 right-2 flex items-center justify-center rounded-full z-10"
+        style={{
+          width: '24px',
+          height: '24px',
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        }}
+        title={`Connection: ${connectionQuality}`}
+      >
+        <div
+          className="rounded-full"
+          style={{
+            width: '12px',
+            height: '12px',
+            backgroundColor: qualityColors[connectionQuality],
+          }}
+        />
+      </div>
 
       {/* Video or Camera Off Placeholder */}
       {stream && videoEnabled ? (
@@ -75,9 +105,18 @@ export function ParticipantBox({
         </div>
       )}
 
-      {/* Audio Muted Indicator */}
+      {/* Mute Indicator - Bottom Right (40px from bottom) */}
       {!audioEnabled && (
-        <div className="absolute top-2 right-2 bg-red-600 rounded-full p-1.5 z-10">
+        <div
+          className="absolute right-3 flex items-center justify-center rounded-full z-10"
+          style={{
+            bottom: '52px', // 40px from bottom of lower third (40 + 12)
+            width: '32px',
+            height: '32px',
+            backgroundColor: 'rgba(220, 38, 38, 0.9)', // Red
+          }}
+          title="Microphone muted"
+        >
           <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
               strokeLinecap="round"
@@ -89,9 +128,19 @@ export function ParticipantBox({
         </div>
       )}
 
-      {/* Name and Title Label - Bottom */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent px-3 py-2">
-        <div className="text-white">
+      {/* Lower Third Name Display - 40px from bottom */}
+      <div
+        className="absolute left-0 right-0 flex items-center px-3"
+        style={{
+          bottom: '40px',
+          height: '40px',
+          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+          borderRadius: '20px',
+          marginLeft: '16px',
+          marginRight: '16px',
+        }}
+      >
+        <div className="text-white flex-1">
           <div className={`font-semibold truncate ${textSize}`}>
             {name}
             {isHost && <span className="ml-1 text-blue-400">(Host)</span>}
