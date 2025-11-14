@@ -51,10 +51,14 @@ export function useSidebarPersistence() {
         }
       }
 
-      // Check if clicking outside right sidebar
+      // Check if clicking outside right sidebar (but not on the button bar)
       if (rightSidebarOpen && rightSidebarRef.current && !rightSidebarRef.current.contains(target)) {
-        setRightSidebarOpen(false);
-        setActiveRightTab(null);
+        // Don't close if clicking on a right sidebar button (they have their own toggle logic)
+        const clickedButton = (target as HTMLElement).closest('button[aria-label$="Panel"]');
+        if (!clickedButton) {
+          setRightSidebarOpen(false);
+          setActiveRightTab(null);
+        }
       }
     };
 
