@@ -30,14 +30,14 @@ export function RightSidebar({
     <>
       {/* Persistent Button Bar - Always Visible (64px, fixed on right edge) */}
       <div
-        className="flex flex-col border-l fixed bottom-0"
+        className="flex flex-col border-l fixed bottom-0 justify-start gap-0"
         style={{
           top: '60px',
           right: 0,
           width: '64px',
           backgroundColor: '#f8f8f8',
           borderColor: '#e0e0e0',
-          zIndex: 800
+          zIndex: 900
         }}
       >
         <button
