@@ -138,11 +138,12 @@ export function StudioCanvas({
 
   return (
     <div
-      className="relative bg-black"
+      className="relative"
       style={{
         width: '100%',
         maxWidth: '1920px',
         aspectRatio: '16 / 9',
+        backgroundColor: '#0F1419',
       }}
     >
       {/* Main Video Preview with Dynamic Layout */}
@@ -150,7 +151,7 @@ export function StudioCanvas({
         className={`absolute inset-0 overflow-hidden ${
           getLayoutStyles(isSharingScreen || screenShareStream ? 'screenshare' : selectedLayout).container
         }`}
-        style={{ backgroundColor: '#000000' }}
+        style={{ backgroundColor: '#0F1419' }}
       >
         {/* Screen Share Layout - Active when screen sharing */}
         {isSharingScreen || screenShareStream ? (
@@ -413,16 +414,20 @@ export function StudioCanvas({
           </>
         )}
 
-        {/* Resolution Badge - Centered Top (only show when not screen sharing) */}
+        {/* Resolution Badge - Top Left (only show when not screen sharing) */}
         {!isSharingScreen && !screenShareStream && (
           <div
-            className="absolute top-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-full text-sm font-semibold text-white"
+            className="absolute text-sm font-semibold text-white flex items-center justify-center"
             style={{
-              backgroundColor: 'rgba(0, 0, 0, 0.6)',
-              backdropFilter: 'blur(8px)',
+              top: '16px',
+              left: '16px',
+              width: '60px',
+              height: '32px',
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              borderRadius: '4px',
             }}
           >
-            1080p HD
+            1080p
           </div>
         )}
 
