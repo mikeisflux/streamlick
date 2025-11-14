@@ -26,6 +26,7 @@ export function PreviewArea({
   backstageParticipants,
   screenShareStream,
   onAddToStage,
+  onInviteGuests,
 }: PreviewAreaProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
 
