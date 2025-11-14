@@ -200,47 +200,33 @@ export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeP
   // Mouse move and up handlers
   useEffect(() => {
     let animationFrameId: number;
+    let isAnimating = false;
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (isDragging) {
-        // Use requestAnimationFrame and direct DOM manipulation to avoid re-renders
-        if (animationFrameId) {
-          cancelAnimationFrame(animationFrameId);
-        }
+      if (isDragging && !isAnimating) {
+        isAnimating = true;
         animationFrameId = requestAnimationFrame(() => {
           const newX = e.clientX - dragOffsetRef.current.x;
           const newY = e.clientY - dragOffsetRef.current.y;
-
-          if (modalRef.current) {
-            modalRef.current.style.transform = `translate(${newX}px, ${newY}px)`;
-          }
+          setPosition({ x: newX, y: newY });
+          isAnimating = false;
         });
-      } else if (isResizing) {
-        const deltaX = e.clientX - dragStart.x;
-        const deltaY = e.clientY - dragStart.y;
-        setSize((prev) => ({
-          width: Math.max(800, prev.width + deltaX),
-          height: Math.max(600, prev.height + deltaY),
-        }));
-        setDragStart({ x: e.clientX, y: e.clientY });
+      } else if (isResizing && !isAnimating) {
+        isAnimating = true;
+        animationFrameId = requestAnimationFrame(() => {
+          const deltaX = e.clientX - dragStart.x;
+          const deltaY = e.clientY - dragStart.y;
+          setSize((prev) => ({
+            width: Math.max(800, prev.width + deltaX),
+            height: Math.max(600, prev.height + deltaY),
+          }));
+          setDragStart({ x: e.clientX, y: e.clientY });
+          isAnimating = false;
+        });
       }
     };
 
     const handleMouseUp = () => {
-      if (isDragging && modalRef.current) {
-        // Save the final position to state when dragging ends
-        const transform = modalRef.current.style.transform;
-        const match = transform.match(/translate\((-?\d+)px,\s*(-?\d+)px\)/);
-        if (match) {
-          setPosition({
-            x: parseInt(match[1]),
-            y: parseInt(match[2]),
-          });
-        }
-        // Reset transform
-        modalRef.current.style.transform = '';
-      }
-
       setIsDragging(false);
       setIsResizing(false);
 
@@ -261,7 +247,7 @@ export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeP
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [isDragging, isResizing, dragStart, position]);
+  }, [isDragging, isResizing, dragStart]);
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 pointer-events-none">
@@ -275,7 +261,7 @@ export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeP
           width: `${size.width}px`,
           height: `${size.height}px`,
           maxHeight: '90vh',
-          willChange: isDragging ? 'transform' : 'auto',
+          cursor: isDragging ? 'grabbing' : 'default',
         }}
       >
         {/* Header - Draggable */}

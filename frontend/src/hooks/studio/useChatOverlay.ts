@@ -32,47 +32,33 @@ export function useChatOverlay() {
   // Mouse move handler for dragging and resizing
   useEffect(() => {
     let animationFrameId: number;
+    let isAnimating = false;
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (isDraggingChat) {
-        // Use requestAnimationFrame and direct DOM manipulation to avoid re-renders
-        if (animationFrameId) {
-          cancelAnimationFrame(animationFrameId);
-        }
+      if (isDraggingChat && !isAnimating) {
+        isAnimating = true;
         animationFrameId = requestAnimationFrame(() => {
           const newX = e.clientX - chatDragOffsetRef.current.x;
           const newY = e.clientY - chatDragOffsetRef.current.y;
-
-          if (chatOverlayRef.current) {
-            chatOverlayRef.current.style.transform = `translate(${newX}px, ${newY}px)`;
-          }
+          setChatOverlayPosition({ x: newX, y: newY });
+          isAnimating = false;
         });
-      } else if (isResizingChat) {
-        const deltaX = e.clientX - dragStartPos.x;
-        const deltaY = e.clientY - dragStartPos.y;
-        setChatOverlaySize((prev) => ({
-          width: Math.max(200, prev.width + deltaX),
-          height: Math.max(150, prev.height + deltaY),
-        }));
-        setDragStartPos({ x: e.clientX, y: e.clientY });
+      } else if (isResizingChat && !isAnimating) {
+        isAnimating = true;
+        animationFrameId = requestAnimationFrame(() => {
+          const deltaX = e.clientX - dragStartPos.x;
+          const deltaY = e.clientY - dragStartPos.y;
+          setChatOverlaySize((prev) => ({
+            width: Math.max(200, prev.width + deltaX),
+            height: Math.max(150, prev.height + deltaY),
+          }));
+          setDragStartPos({ x: e.clientX, y: e.clientY });
+          isAnimating = false;
+        });
       }
     };
 
     const handleMouseUp = () => {
-      if (isDraggingChat && chatOverlayRef.current) {
-        // Save the final position to state when dragging ends
-        const transform = chatOverlayRef.current.style.transform;
-        const match = transform.match(/translate\((-?\d+)px,\s*(-?\d+)px\)/);
-        if (match) {
-          setChatOverlayPosition({
-            x: parseInt(match[1]),
-            y: parseInt(match[2]),
-          });
-        }
-        // Reset transform
-        chatOverlayRef.current.style.transform = '';
-      }
-
       setIsDraggingChat(false);
       setIsResizingChat(false);
 
@@ -93,7 +79,7 @@ export function useChatOverlay() {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [isDraggingChat, isResizingChat, dragStartPos, chatOverlayPosition]);
+  }, [isDraggingChat, isResizingChat, dragStartPos]);
 
   return {
     showChatOnStream,

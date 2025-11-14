@@ -522,14 +522,15 @@ export function StudioCanvas({
             ref={chatOverlayRef}
             className="absolute bg-black/80 backdrop-blur-sm rounded-lg overflow-hidden"
             style={{
-              left: chatOverlayPosition.x ? `${chatOverlayPosition.x}px` : 'auto',
-              top: chatOverlayPosition.y ? `${chatOverlayPosition.y}px` : 'auto',
-              right: chatOverlayPosition.x ? 'auto' : '16px',
-              bottom: chatOverlayPosition.y ? 'auto' : '80px',
+              left: chatOverlayPosition.x !== 0 ? `${chatOverlayPosition.x}px` : 'auto',
+              top: chatOverlayPosition.y !== 0 ? `${chatOverlayPosition.y}px` : 'auto',
+              right: chatOverlayPosition.x === 0 ? '16px' : 'auto',
+              bottom: chatOverlayPosition.y === 0 ? '80px' : 'auto',
               width: `${chatOverlaySize.width}px`,
               height: `${chatOverlaySize.height}px`,
               cursor: isDraggingChat ? 'grabbing' : 'default',
-              willChange: isDraggingChat ? 'transform' : 'auto',
+              zIndex: 10,
+              transition: isDraggingChat ? 'none' : 'none',
             }}
           >
             {/* Drag Handle */}
