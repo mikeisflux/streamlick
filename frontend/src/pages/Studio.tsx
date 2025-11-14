@@ -414,6 +414,7 @@ export function Studio() {
               backstageParticipants={Array.from(remoteParticipants.values()).filter((p) => p.role === 'backstage')}
               screenShareStream={screenShareStream}
               onAddToStage={handleAddToStage}
+              onRemoveFromStage={handleRemoveFromStage}
               onInviteGuests={() => setShowInviteDrawer(true)}
             />
           </div>

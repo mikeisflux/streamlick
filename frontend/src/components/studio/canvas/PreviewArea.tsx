@@ -17,6 +17,7 @@ interface PreviewAreaProps {
   backstageParticipants: RemoteParticipant[];
   screenShareStream: MediaStream | null;
   onAddToStage?: (participantId: string) => void;
+  onRemoveFromStage?: (participantId: string) => void;
   onInviteGuests?: () => void;
 }
 
@@ -28,6 +29,7 @@ export function PreviewArea({
   backstageParticipants,
   screenShareStream,
   onAddToStage,
+  onRemoveFromStage,
   onInviteGuests,
 }: PreviewAreaProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -66,7 +68,7 @@ export function PreviewArea({
       <div className="flex items-center gap-3 pb-2">
         {/* Your Preview */}
         <div className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
-          <div className={`relative bg-black rounded overflow-hidden h-full border-2 ${isLocalUserOnStage ? 'border-blue-500' : 'border-yellow-500 group'}`}>
+          <div className={`relative bg-black rounded overflow-hidden h-full border-2 group ${isLocalUserOnStage ? 'border-blue-500' : 'border-yellow-500'}`}>
             {localStream && videoEnabled ? (
               <video
                 ref={localVideoRef}
@@ -110,6 +112,19 @@ export function PreviewArea({
                   title="Add to Stage"
                 >
                   Add to Stage
+                </button>
+              </div>
+            )}
+
+            {/* Hover Overlay with Remove from Stage Button - only shown when on stage */}
+            {isLocalUserOnStage && onRemoveFromStage && (
+              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-50 pointer-events-auto">
+                <button
+                  onClick={() => onRemoveFromStage('local-user')}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded shadow-lg pointer-events-auto"
+                  title="Remove from Stage"
+                >
+                  Remove from Stage
                 </button>
               </div>
             )}

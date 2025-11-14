@@ -54,6 +54,14 @@ postcss.config.local.*
 *.config.staging.*
 *.config.test.*
 
+# All config.json files (except examples)
+config.json
+config.*.json
+*/config.json
+**/config.json
+!config.example.json
+!*.config.example.json
+
 # Logs
 logs/
 *.log

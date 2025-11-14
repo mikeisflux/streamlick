@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { CaptionOverlay } from './CanvasOverlay';
 import { ParticipantBox } from './ParticipantBox';
 import { TeleprompterOverlay } from './TeleprompterOverlay';
@@ -180,12 +180,17 @@ export function StudioCanvas({
   };
 
   // Update video srcObject when localStream changes
-  if (mainVideoRef.current && localStream) {
-    mainVideoRef.current.srcObject = localStream;
-  }
-  if (screenShareVideoRef.current && screenShareStream) {
-    screenShareVideoRef.current.srcObject = screenShareStream;
-  }
+  useEffect(() => {
+    if (mainVideoRef.current && localStream) {
+      mainVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
+
+  useEffect(() => {
+    if (screenShareVideoRef.current && screenShareStream) {
+      screenShareVideoRef.current.srcObject = screenShareStream;
+    }
+  }, [screenShareStream]);
 
   return (
     <div

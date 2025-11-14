@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import {
   PlusIcon,
   TrashIcon,
@@ -94,13 +95,23 @@ export function BannerEditorPanel() {
   };
 
   const saveBanner = () => {
-    if (!editingBanner) return;
+    if (!editingBanner) {
+      toast.error('No banner to save');
+      return;
+    }
+
+    if (!editingBanner.title.trim()) {
+      toast.error('Banner title is required');
+      return;
+    }
 
     setBanners((prev) => {
       const exists = prev.find((b) => b.id === editingBanner.id);
       if (exists) {
+        toast.success('Banner updated successfully');
         return prev.map((b) => (b.id === editingBanner.id ? editingBanner : b));
       }
+      toast.success('Banner created successfully');
       return [...prev, editingBanner];
     });
 
@@ -110,6 +121,7 @@ export function BannerEditorPanel() {
 
   const deleteBanner = (id: string) => {
     setBanners((prev) => prev.filter((b) => b.id !== id));
+    toast.success('Banner deleted successfully');
   };
 
   const toggleBannerVisibility = (id: string) => {

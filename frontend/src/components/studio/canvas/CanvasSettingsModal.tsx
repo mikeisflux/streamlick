@@ -147,8 +147,8 @@ export function CanvasSettingsModal(props: CanvasSettingsModalProps) {
         className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-lg shadow-xl z-50 flex"
         style={{
           backgroundColor: '#1a1a1a',
-          width: '900px',
-          height: '640px',
+          width: '720px',
+          height: '512px',
           border: '1px solid #404040',
         }}
       >
