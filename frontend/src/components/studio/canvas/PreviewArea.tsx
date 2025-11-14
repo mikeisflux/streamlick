@@ -126,8 +126,8 @@ export function PreviewArea({
 
         {/* Backstage Participants */}
         {backstageParticipants.map((participant) => (
-          <div key={participant.id} className="flex-shrink-0 group" style={{ width: '160px', height: '90px' }}>
-            <div className="relative bg-black rounded overflow-hidden h-full border-2 border-yellow-500">
+          <div key={participant.id} className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
+            <div className="relative bg-black rounded overflow-hidden h-full border-2 border-yellow-500 group">
               {participant.stream && participant.videoEnabled ? (
                 <video
                   autoPlay
@@ -153,10 +153,10 @@ export function PreviewArea({
 
               {/* Hover Overlay with Add to Stage Button */}
               {onAddToStage && (
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-50 pointer-events-auto">
                   <button
                     onClick={() => onAddToStage(participant.id)}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded shadow-lg"
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded shadow-lg pointer-events-auto"
                     title="Add to Stage"
                   >
                     Add to Stage
