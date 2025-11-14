@@ -22,10 +22,11 @@ export function useStudioInitialization({
   const [isLoading, setIsLoading] = useState(true);
   const [destinations, setDestinations] = useState<any[]>([]);
   const [selectedDestinations, setSelectedDestinations] = useState<string[]>([]);
+  const [isInitialized, setIsInitialized] = useState(false);
   const { setBroadcast } = useStudioStore();
 
   useEffect(() => {
-    if (!broadcastId) return;
+    if (!broadcastId || isInitialized) return;
 
     const init = async () => {
       try {
@@ -51,6 +52,7 @@ export function useStudioInitialization({
         }
 
         setIsLoading(false);
+        setIsInitialized(true);
       } catch (error) {
         toast.error('Failed to initialize studio');
         setIsLoading(false);
@@ -64,7 +66,7 @@ export function useStudioInitialization({
       socketService.leaveStudio();
       webrtcService.close();
     };
-  }, [broadcastId, startCamera, stopCamera, loadDevices, setBroadcast]);
+  }, [broadcastId]);
 
   return {
     isLoading,
