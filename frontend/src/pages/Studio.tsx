@@ -251,6 +251,13 @@ export function Studio() {
               Producer Mode
             </button>
             <button
+              onClick={() => setShowDestinationsDrawer(true)}
+              className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
+              title="Destinations"
+            >
+              Destinations
+            </button>
+            <button
               onClick={() => setShowInviteDrawer(true)}
               className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white font-semibold transition-colors"
             >
@@ -331,9 +338,6 @@ export function Studio() {
           <LayoutSelector selectedLayout={selectedLayout} onLayoutChange={setSelectedLayout} />
 
           <BottomControlBar
-            onShowDestinationsDrawer={() => setShowDestinationsDrawer(true)}
-            onShowBannerDrawer={() => setShowBannerDrawer(true)}
-            onShowBrandDrawer={() => setShowBrandDrawer(true)}
             captionsEnabled={captionsEnabled}
             setCaptionsEnabled={setCaptionsEnabled}
             showLanguageSelector={showLanguageSelector}

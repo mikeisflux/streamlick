@@ -1,11 +1,6 @@
 import { RefObject } from 'react';
 
 interface BottomControlBarProps {
-  // Drawer handlers
-  onShowDestinationsDrawer: () => void;
-  onShowBannerDrawer: () => void;
-  onShowBrandDrawer: () => void;
-
   // Killer features state and handlers
   captionsEnabled: boolean;
   setCaptionsEnabled: (enabled: boolean) => void;
@@ -51,9 +46,6 @@ interface BottomControlBarProps {
 }
 
 export function BottomControlBar({
-  onShowDestinationsDrawer,
-  onShowBannerDrawer,
-  onShowBrandDrawer,
   captionsEnabled,
   setCaptionsEnabled,
   showLanguageSelector,
@@ -92,7 +84,7 @@ export function BottomControlBar({
 }: BottomControlBarProps) {
   return (
     <div
-      className="flex items-center justify-between px-6 border-t fixed bottom-0 left-0"
+      className="flex items-center justify-center px-6 border-t fixed bottom-0 left-0"
       style={{
         height: '80px',
         backgroundColor: '#2d2d2d',
@@ -101,29 +93,8 @@ export function BottomControlBar({
         zIndex: 700
       }}
     >
-      {/* Left Section */}
+      {/* Centered Section - Killer Features and Media Controls */}
       <div className="flex items-center gap-3">
-        <button
-          onClick={onShowDestinationsDrawer}
-          className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm transition-colors"
-        >
-          Destinations
-        </button>
-        <button
-          onClick={onShowBannerDrawer}
-          className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm transition-colors"
-        >
-          Banners
-        </button>
-        <button
-          onClick={onShowBrandDrawer}
-          className="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm transition-colors"
-        >
-          Brand
-        </button>
-
-        {/* Killer Features */}
-        <div className="h-8 w-px bg-gray-600" />
         {/* AI Captions with language selector */}
         <div className="relative flex items-center">
           <button
@@ -230,10 +201,11 @@ export function BottomControlBar({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
           </svg>
         </button>
-      </div>
 
-      {/* Center Section - Media Controls */}
-      <div className="flex items-center gap-3">
+        {/* Divider */}
+        <div className="h-8 w-px bg-gray-600" />
+
+        {/* Media Controls */}
         {/* Microphone with device selector */}
         <div ref={micButtonRef} className="relative flex items-center">
           <button
@@ -336,10 +308,6 @@ export function BottomControlBar({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
           </svg>
         </button>
-      </div>
-
-      {/* Right Section - Removed buttons moved to header */}
-      <div className="flex items-center gap-3">
       </div>
     </div>
   );
