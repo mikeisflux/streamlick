@@ -35,12 +35,13 @@ export function RightSidebar({
       <div
         className="flex flex-col border-l fixed bottom-0 justify-start gap-0"
         style={{
+          position: 'fixed',
           top: '60px',
           right: 0,
           width: '64px',
           backgroundColor: '#f8f8f8',
           borderColor: '#e0e0e0',
-          zIndex: 80, // Layer 80: Right sidebar (vertical icon tabs)
+          zIndex: 96, // Layer 96: Right sidebar buttons (above content panel)
         }}
       >
         <button
