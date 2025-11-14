@@ -19,7 +19,6 @@ import { DeviceSelectors } from '../components/studio/DeviceSelectors';
 import { StudioCanvas, LayoutSelector, PreviewArea, CanvasSettingsModal } from '../components/studio/canvas';
 import {
   AnalyticsDashboard,
-  SettingsModal,
   MediaLibraryModal,
   ClipManagerModal,
   ProducerModeModal,
@@ -196,7 +195,7 @@ export function Studio() {
   const { mediaClips, showMediaLibrary, setShowMediaLibrary, handlePlayClip } = useMediaClips();
   const { showAnalyticsDashboard, setShowAnalyticsDashboard, analyticsDashboardPosition, analyticsDashboardSize, handleAnalyticsDashboardDragStart, handleAnalyticsDashboardResizeStart } = useAnalyticsDashboard();
   const { showDestinationsDrawer, setShowDestinationsDrawer, showInviteDrawer, setShowInviteDrawer, showBannerDrawer, setShowBannerDrawer, showBrandDrawer, setShowBrandDrawer, showRecordingDrawer, setShowRecordingDrawer } = useDrawers();
-  const { showSettings, setShowSettings, showClipManager, setShowClipManager, showProducerMode, setShowProducerMode, showClipDurationSelector, setShowClipDurationSelector, showLanguageSelector, setShowLanguageSelector, showBackgroundSettings, setShowBackgroundSettings, showSceneManager, setShowSceneManager } = useModals();
+  const { showClipManager, setShowClipManager, showProducerMode, setShowProducerMode, showClipDurationSelector, setShowClipDurationSelector, showLanguageSelector, setShowLanguageSelector, showBackgroundSettings, setShowBackgroundSettings, showSceneManager, setShowSceneManager } = useModals();
   const { showHotkeyReference } = useStudioHotkeys({ audioEnabled, videoEnabled, isLive, isRecording, isSharingScreen, toggleAudio, toggleVideo, handleGoLive, handleEndBroadcast, handleStartRecording, handleStopRecording, handleToggleScreenShare, handleLayoutChange, setShowChatOnStream });
   const { handleCreateClip } = useClipRecording(clipRecordingEnabled, localStream, () => compositorService.getOutputStream());
 
@@ -279,7 +278,7 @@ export function Studio() {
               Invite Guests
             </button>
             <button
-              onClick={() => setShowSettings(true)}
+              onClick={() => setShowCanvasSettings(true)}
               className="text-gray-300 hover:text-white"
               title="Settings"
             >
@@ -638,35 +637,6 @@ export function Studio() {
         options={backgroundRemovalOptions}
         setOptions={setBackgroundRemovalOptions}
       />
-
-      {/* Settings Modal */}
-      {showSettings && (
-        <SettingsModal
-          isOpen={showSettings}
-          onClose={() => setShowSettings(false)}
-          audioDevices={audioDevices}
-          videoDevices={videoDevices}
-          selectedAudioDevice={selectedAudioDevice}
-          selectedVideoDevice={selectedVideoDevice}
-          handleAudioDeviceChange={handleAudioDeviceChange}
-          handleVideoDeviceChange={handleVideoDeviceChange}
-          localStream={localStream}
-          videoEnabled={videoEnabled}
-          backgroundRemovalEnabled={backgroundRemovalEnabled}
-          setBackgroundRemovalEnabled={setBackgroundRemovalEnabled}
-          backgroundRemovalOptions={backgroundRemovalOptions}
-          setBackgroundRemovalOptions={setBackgroundRemovalOptions}
-          verticalSimulcastEnabled={verticalSimulcastEnabled}
-          setVerticalSimulcastEnabled={setVerticalSimulcastEnabled}
-          verticalResolution={verticalResolution}
-          setVerticalResolution={setVerticalResolution}
-          analyticsEnabled={analyticsEnabled}
-          setAnalyticsEnabled={setAnalyticsEnabled}
-          analyticsMetrics={analyticsMetrics}
-          setShowAnalyticsDashboard={setShowAnalyticsDashboard}
-          loadDevices={loadDevices}
-        />
-      )}
 
       {/* Clip Duration Selector Popup */}
       {showClipDurationSelector && (
