@@ -37,6 +37,7 @@ interface StudioCanvasProps {
   onChatOverlayResizeStart: (e: React.MouseEvent) => void;
   captionsEnabled: boolean;
   currentCaption: Caption | null;
+  editMode?: boolean;
 }
 
 export function StudioCanvas({
@@ -58,6 +59,7 @@ export function StudioCanvas({
   onChatOverlayResizeStart,
   captionsEnabled,
   currentCaption,
+  editMode = false,
 }: StudioCanvasProps) {
   const mainVideoRef = useRef<HTMLVideoElement>(null);
   const screenShareVideoRef = useRef<HTMLVideoElement>(null);
@@ -144,6 +146,8 @@ export function StudioCanvas({
         maxWidth: '1920px',
         aspectRatio: '16 / 9',
         backgroundColor: '#0F1419',
+        border: editMode ? '4px solid #8B5CF6' : 'none',
+        boxSizing: 'border-box',
       }}
     >
       {/* Main Video Preview with Dynamic Layout */}

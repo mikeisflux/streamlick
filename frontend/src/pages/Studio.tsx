@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { compositorService } from '../services/compositor.service';
 import { useMedia } from '../hooks/useMedia';
@@ -16,7 +16,7 @@ import { LeftSidebar } from '../components/studio/LeftSidebar';
 import { RightSidebar } from '../components/studio/RightSidebar';
 import { BottomControlBar } from '../components/studio/BottomControlBar';
 import { DeviceSelectors } from '../components/studio/DeviceSelectors';
-import { StudioCanvas, LayoutSelector, PreviewArea } from '../components/studio/canvas';
+import { StudioCanvas, LayoutSelector, PreviewArea, CanvasSettingsModal } from '../components/studio/canvas';
 import {
   AnalyticsDashboard,
   SettingsModal,
@@ -199,6 +199,17 @@ export function Studio() {
   const { showHotkeyReference } = useStudioHotkeys({ audioEnabled, videoEnabled, isLive, isRecording, isSharingScreen, toggleAudio, toggleVideo, handleGoLive, handleEndBroadcast, handleStartRecording, handleStopRecording, handleToggleScreenShare, handleLayoutChange, setShowChatOnStream });
   const { handleCreateClip } = useClipRecording(clipRecordingEnabled, localStream, () => compositorService.getOutputStream());
 
+  // Canvas edit mode and settings
+  const [editMode, setEditMode] = useState(false);
+  const [showCanvasSettings, setShowCanvasSettings] = useState(false);
+
+  const handleEditModeToggle = () => setEditMode(!editMode);
+  const handleAddParticipant = () => {
+    // TODO: Implement add participant logic
+    console.log('Add participant clicked');
+  };
+  const handleCanvasSettingsClick = () => setShowCanvasSettings(true);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -332,10 +343,18 @@ export function Studio() {
               onChatOverlayResizeStart={handleChatOverlayResizeStart}
               captionsEnabled={captionsEnabled}
               currentCaption={currentCaption}
+              editMode={editMode}
             />
           </div>
 
-          <LayoutSelector selectedLayout={selectedLayout} onLayoutChange={setSelectedLayout} />
+          <LayoutSelector
+            selectedLayout={selectedLayout}
+            onLayoutChange={setSelectedLayout}
+            editMode={editMode}
+            onEditModeToggle={handleEditModeToggle}
+            onAddParticipant={handleAddParticipant}
+            onSettingsClick={handleCanvasSettingsClick}
+          />
 
           <PreviewArea
             localStream={localStream}
@@ -472,6 +491,9 @@ export function Studio() {
           onResizeStart={handleAnalyticsDashboardResizeStart}
         />
       )}
+
+      {/* Canvas Settings Modal */}
+      <CanvasSettingsModal isOpen={showCanvasSettings} onClose={() => setShowCanvasSettings(false)} />
 
       <DeviceSelectors
         showMicSelector={showMicSelector}
