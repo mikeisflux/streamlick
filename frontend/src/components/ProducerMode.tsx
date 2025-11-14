@@ -19,32 +19,51 @@ interface Participant {
 }
 
 export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeProps) {
-  const [participants, setParticipants] = useState<Participant[]>([
-    {
-      id: '1',
-      name: 'Host (You)',
-      role: 'host',
-      audioEnabled: true,
-      videoEnabled: true,
-      status: 'connected',
-    },
-    {
-      id: '2',
-      name: 'Sarah',
-      role: 'guest',
-      audioEnabled: true,
-      videoEnabled: true,
-      status: 'connected',
-    },
-    {
-      id: '3',
-      name: 'Mike',
-      role: 'backstage',
-      audioEnabled: false,
-      videoEnabled: false,
-      status: 'connected',
-    },
-  ]);
+  // Load participants from localStorage or use defaults
+  const [participants, setParticipants] = useState<Participant[]>(() => {
+    const storageKey = `producer_participants_${broadcastId || 'default'}`;
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved participants:', e);
+      }
+    }
+    // Default participants
+    return [
+      {
+        id: '1',
+        name: 'Host (You)',
+        role: 'host',
+        audioEnabled: true,
+        videoEnabled: true,
+        status: 'connected',
+      },
+      {
+        id: '2',
+        name: 'Sarah',
+        role: 'guest',
+        audioEnabled: true,
+        videoEnabled: true,
+        status: 'connected',
+      },
+      {
+        id: '3',
+        name: 'Mike',
+        role: 'backstage',
+        audioEnabled: false,
+        videoEnabled: false,
+        status: 'connected',
+      },
+    ];
+  });
+
+  // Persist participants to localStorage whenever they change
+  useEffect(() => {
+    const storageKey = `producer_participants_${broadcastId || 'default'}`;
+    localStorage.setItem(storageKey, JSON.stringify(participants));
+  }, [participants, broadcastId]);
 
   const [selectedLayout, setSelectedLayout] = useState(1);
   const [mainAudioVolume, setMainAudioVolume] = useState(100);

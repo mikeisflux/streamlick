@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, memo } from 'react';
 
 interface TeleprompterOverlayProps {
   notes: string;
@@ -8,7 +8,7 @@ interface TeleprompterOverlayProps {
   scrollPosition: number;
 }
 
-export function TeleprompterOverlay({
+export const TeleprompterOverlay = memo(function TeleprompterOverlay({
   notes,
   fontSize,
   isScrolling,
@@ -17,12 +17,14 @@ export function TeleprompterOverlay({
 }: TeleprompterOverlayProps) {
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Apply scroll position
+  // Apply scroll position directly to DOM to avoid re-renders
   useEffect(() => {
     if (contentRef.current) {
+      // Use transform instead of triggering layout
       contentRef.current.style.transform = `translateY(-${scrollPosition}px)`;
+      contentRef.current.style.willChange = isScrolling ? 'transform' : 'auto';
     }
-  }, [scrollPosition]);
+  }, [scrollPosition, isScrolling]);
 
   if (!notes) {
     return null;
@@ -95,4 +97,4 @@ export function TeleprompterOverlay({
       )}
     </div>
   );
-}
+});

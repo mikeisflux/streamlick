@@ -1,9 +1,78 @@
+import { useState } from 'react';
 import { useTeleprompter } from '../hooks/studio/useTeleprompter';
+import toast from 'react-hot-toast';
 
 interface NotesPanelProps {
   broadcastId?: string;
   teleprompterState: ReturnType<typeof useTeleprompter>;
 }
+
+const TEMPLATES = [
+  {
+    id: 'welcome',
+    name: 'Welcome & Intro',
+    content: `Welcome everyone! Thanks for joining today's stream.
+
+Today we'll be covering:
+- Introduction
+- Main topic discussion
+- Q&A session
+
+Let's get started!`,
+  },
+  {
+    id: 'interview',
+    name: 'Interview Format',
+    content: `Today's Guest: [Name]
+
+Questions:
+1. Tell us about your background
+2. What inspired you to [topic]?
+3. What challenges did you face?
+4. What advice would you give?
+5. What's next for you?
+
+Closing: Thank the guest and audience`,
+  },
+  {
+    id: 'tutorial',
+    name: 'Tutorial/Workshop',
+    content: `Workshop Title: [Title]
+
+Overview:
+- What we'll build today
+- Prerequisites
+- Key learning objectives
+
+Steps:
+1. Setup and preparation
+2. Core implementation
+3. Testing and refinement
+4. Next steps
+
+Resources: [Links]`,
+  },
+  {
+    id: 'podcast',
+    name: 'Podcast Episode',
+    content: `Episode #[Number]: [Title]
+
+Opening:
+- Welcome and intro music
+- Today's topic overview
+- Guest introduction (if applicable)
+
+Main Discussion:
+- Key points
+- Stories and examples
+- Audience questions
+
+Closing:
+- Summary
+- Next episode preview
+- Call to action`,
+  },
+];
 
 export function NotesPanel({ broadcastId, teleprompterState }: NotesPanelProps) {
   const {
@@ -20,6 +89,19 @@ export function NotesPanel({ broadcastId, teleprompterState }: NotesPanelProps) 
     showOnCanvas,
     toggleShowOnCanvas,
   } = teleprompterState;
+
+  const [showTemplates, setShowTemplates] = useState(false);
+
+  const handleSaveNotes = () => {
+    localStorage.setItem('teleprompter_notes', notes);
+    toast.success('Notes saved successfully');
+  };
+
+  const handleLoadTemplate = (template: typeof TEMPLATES[0]) => {
+    setNotes(template.content);
+    setShowTemplates(false);
+    toast.success(`Loaded template: ${template.name}`);
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -45,13 +127,54 @@ export function NotesPanel({ broadcastId, teleprompterState }: NotesPanelProps) 
           />
 
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <button className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm transition-colors">
+            <button
+              onClick={handleSaveNotes}
+              className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm transition-colors"
+            >
               💾 Save
             </button>
-            <button className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm transition-colors">
+            <button
+              onClick={() => setShowTemplates(true)}
+              className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm transition-colors"
+            >
               📋 Templates
             </button>
           </div>
+
+          {/* Templates Modal */}
+          {showTemplates && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowTemplates(false)}>
+              <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Choose a Template</h3>
+                  <button
+                    onClick={() => setShowTemplates(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-6">
+                  <div className="grid grid-cols-1 gap-4">
+                    {TEMPLATES.map((template) => (
+                      <div
+                        key={template.id}
+                        className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 cursor-pointer transition-colors"
+                        onClick={() => handleLoadTemplate(template)}
+                      >
+                        <h4 className="font-semibold text-gray-900 mb-2">{template.name}</h4>
+                        <pre className="text-xs text-gray-600 whitespace-pre-wrap font-mono bg-gray-50 p-3 rounded max-h-32 overflow-hidden">
+                          {template.content}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="mt-4 p-3 bg-blue-50 rounded-lg">
             <p className="text-xs text-blue-900 mb-2">

@@ -99,9 +99,31 @@ export function RecordingControls({ broadcastId }: RecordingControlsProps) {
   };
 
   const downloadRecording = (recordingId: string) => {
-    // TODO: Implement actual download
-    toast.success('Download started');
-    console.log('Downloading recording:', recordingId);
+    const recording = recordings.find((r) => r.id === recordingId);
+    if (!recording) {
+      toast.error('Recording not found');
+      return;
+    }
+
+    // Create a dummy video file blob for demonstration
+    // In production, this would fetch the actual recording from your backend
+    const dummyContent = `Recording: ${recording.name}\nDuration: ${recording.duration}\nDate: ${recording.date}`;
+    const blob = new Blob([dummyContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+
+    // Create download link and trigger download
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${recording.name.replace(/\s+/g, '_')}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Clean up the URL object
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+
+    toast.success('Download started - check your downloads folder');
+    console.log('Downloaded recording:', recordingId);
   };
 
   const deleteRecording = (recordingId: string) => {
