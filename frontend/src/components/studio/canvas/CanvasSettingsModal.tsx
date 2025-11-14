@@ -21,6 +21,18 @@ interface CanvasSettingsModalProps {
   onShowConnectionQualityChange?: (show: boolean) => void;
   showLowerThirds?: boolean;
   onShowLowerThirdsChange?: (show: boolean) => void;
+  orientation?: 'landscape' | 'portrait';
+  onOrientationChange?: (orientation: 'landscape' | 'portrait') => void;
+  appearance?: 'auto' | 'light' | 'dark';
+  onAppearanceChange?: (appearance: 'auto' | 'light' | 'dark') => void;
+  displayInfoMessages?: boolean;
+  onDisplayInfoMessagesChange?: (display: boolean) => void;
+  shiftVideosForBanners?: boolean;
+  onShiftVideosForBannersChange?: (shift: boolean) => void;
+  audioAvatars?: boolean;
+  onAudioAvatarsChange?: (enabled: boolean) => void;
+  autoAddPresentedMedia?: boolean;
+  onAutoAddPresentedMediaChange?: (enabled: boolean) => void;
   // Camera settings
   videoDevices?: MediaDevice[];
   selectedVideoDevice?: string;
@@ -265,6 +277,75 @@ function GeneralSettings({ props }: { props: CanvasSettingsModalProps }) {
         </div>
       </div>
 
+      {/* Orientation */}
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-3">Orientation</label>
+        <div className="flex gap-3">
+          <button
+            onClick={() => props.onOrientationChange?.('landscape')}
+            className="flex-1 px-4 py-2 rounded text-sm font-medium transition-colors"
+            style={{
+              backgroundColor: (props.orientation ?? 'landscape') === 'landscape' ? '#0066ff' : '#2d2d2d',
+              color: '#ffffff',
+              border: '1px solid ' + ((props.orientation ?? 'landscape') === 'landscape' ? '#0066ff' : '#404040'),
+            }}
+          >
+            Landscape
+          </button>
+          <button
+            onClick={() => props.onOrientationChange?.('portrait')}
+            className="flex-1 px-4 py-2 rounded text-sm font-medium transition-colors"
+            style={{
+              backgroundColor: props.orientation === 'portrait' ? '#0066ff' : '#2d2d2d',
+              color: '#ffffff',
+              border: '1px solid ' + (props.orientation === 'portrait' ? '#0066ff' : '#404040'),
+            }}
+          >
+            Portrait
+          </button>
+        </div>
+      </div>
+
+      {/* Appearance */}
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-3">Appearance</label>
+        <div className="flex gap-3">
+          <button
+            onClick={() => props.onAppearanceChange?.('auto')}
+            className="flex-1 px-4 py-2 rounded text-sm font-medium transition-colors"
+            style={{
+              backgroundColor: (props.appearance ?? 'auto') === 'auto' ? '#0066ff' : '#2d2d2d',
+              color: '#ffffff',
+              border: '1px solid ' + ((props.appearance ?? 'auto') === 'auto' ? '#0066ff' : '#404040'),
+            }}
+          >
+            Auto
+          </button>
+          <button
+            onClick={() => props.onAppearanceChange?.('light')}
+            className="flex-1 px-4 py-2 rounded text-sm font-medium transition-colors"
+            style={{
+              backgroundColor: props.appearance === 'light' ? '#0066ff' : '#2d2d2d',
+              color: '#ffffff',
+              border: '1px solid ' + (props.appearance === 'light' ? '#0066ff' : '#404040'),
+            }}
+          >
+            Light
+          </button>
+          <button
+            onClick={() => props.onAppearanceChange?.('dark')}
+            className="flex-1 px-4 py-2 rounded text-sm font-medium transition-colors"
+            style={{
+              backgroundColor: props.appearance === 'dark' ? '#0066ff' : '#2d2d2d',
+              color: '#ffffff',
+              border: '1px solid ' + (props.appearance === 'dark' ? '#0066ff' : '#404040'),
+            }}
+          >
+            Dark
+          </button>
+        </div>
+      </div>
+
       {/* Display Options */}
       <div>
         <label className="block text-sm font-medium text-gray-300 mb-3">Display Options</label>
@@ -288,6 +369,26 @@ function GeneralSettings({ props }: { props: CanvasSettingsModalProps }) {
             label="Show participant names (lower thirds)"
             checked={props.showLowerThirds ?? true}
             onChange={props.onShowLowerThirdsChange}
+          />
+          <ToggleOption
+            label="Display informative messages on stage"
+            checked={props.displayInfoMessages ?? true}
+            onChange={props.onDisplayInfoMessagesChange}
+          />
+          <ToggleOption
+            label="Shift videos up for comments/banners"
+            checked={props.shiftVideosForBanners ?? false}
+            onChange={props.onShiftVideosForBannersChange}
+          />
+          <ToggleOption
+            label="Audio avatars"
+            checked={props.audioAvatars ?? false}
+            onChange={props.onAudioAvatarsChange}
+          />
+          <ToggleOption
+            label="Automatically add presented media to stage"
+            checked={props.autoAddPresentedMedia ?? false}
+            onChange={props.onAutoAddPresentedMediaChange}
           />
         </div>
       </div>
@@ -313,10 +414,18 @@ function CameraSettings({ props }: { props: CanvasSettingsModalProps }) {
             color: '#ffffff',
             border: '1px solid #404040',
           }}
+          value={props.selectedVideoDevice ?? ''}
+          onChange={(e) => props.onVideoDeviceChange?.(e.target.value)}
         >
-          <option>Default Camera</option>
-          <option>HD Webcam</option>
-          <option>External Camera</option>
+          {props.videoDevices && props.videoDevices.length > 0 ? (
+            props.videoDevices.map((device) => (
+              <option key={device.deviceId} value={device.deviceId}>
+                {device.label || `Camera ${device.deviceId.slice(0, 8)}`}
+              </option>
+            ))
+          ) : (
+            <option value="">No cameras found</option>
+          )}
         </select>
       </div>
 
@@ -329,19 +438,33 @@ function CameraSettings({ props }: { props: CanvasSettingsModalProps }) {
             color: '#ffffff',
             border: '1px solid #404040',
           }}
+          value={props.videoQuality ?? '720p'}
+          onChange={(e) => props.onVideoQualityChange?.(e.target.value as '480p' | '720p' | '1080p')}
         >
-          <option>480p</option>
-          <option selected>720p</option>
-          <option>1080p</option>
+          <option value="480p">480p (Standard Definition)</option>
+          <option value="720p">720p (High Definition)</option>
+          <option value="1080p">1080p (Full HD)</option>
         </select>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-300 mb-3">Camera Options</label>
         <div className="space-y-3">
-          <ToggleOption label="Mirror my video" defaultChecked={false} />
-          <ToggleOption label="Auto-adjust brightness" defaultChecked={true} />
-          <ToggleOption label="HD mode" defaultChecked={true} />
+          <ToggleOption
+            label="Mirror my video"
+            checked={props.mirrorVideo ?? false}
+            onChange={props.onMirrorVideoChange}
+          />
+          <ToggleOption
+            label="Auto-adjust brightness"
+            checked={props.autoAdjustBrightness ?? true}
+            onChange={props.onAutoAdjustBrightnessChange}
+          />
+          <ToggleOption
+            label="HD mode"
+            checked={props.hdMode ?? true}
+            onChange={props.onHdModeChange}
+          />
         </div>
       </div>
     </div>
@@ -366,26 +489,37 @@ function AudioSettings({ props }: { props: CanvasSettingsModalProps }) {
             color: '#ffffff',
             border: '1px solid #404040',
           }}
+          value={props.selectedAudioDevice ?? ''}
+          onChange={(e) => props.onAudioDeviceChange?.(e.target.value)}
         >
-          <option>Default Microphone</option>
-          <option>USB Microphone</option>
-          <option>Wireless Headset</option>
+          {props.audioDevices && props.audioDevices.length > 0 ? (
+            props.audioDevices.map((device) => (
+              <option key={device.deviceId} value={device.deviceId}>
+                {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
+              </option>
+            ))
+          ) : (
+            <option value="">No microphones found</option>
+          )}
         </select>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">Input Volume</label>
+        <label className="block text-sm font-medium text-gray-300 mb-2">
+          Input Volume: {props.inputVolume ?? 75}%
+        </label>
         <input
           type="range"
           min="0"
           max="100"
-          defaultValue="75"
+          value={props.inputVolume ?? 75}
+          onChange={(e) => props.onInputVolumeChange?.(Number(e.target.value))}
           className="w-full"
           style={{ accentColor: '#0066ff' }}
         />
         <div className="flex justify-between text-xs text-gray-500 mt-1">
           <span>0%</span>
-          <span>75%</span>
+          <span>50%</span>
           <span>100%</span>
         </div>
       </div>
@@ -393,9 +527,21 @@ function AudioSettings({ props }: { props: CanvasSettingsModalProps }) {
       <div>
         <label className="block text-sm font-medium text-gray-300 mb-3">Audio Options</label>
         <div className="space-y-3">
-          <ToggleOption label="Echo cancellation" defaultChecked={true} />
-          <ToggleOption label="Noise suppression" defaultChecked={true} />
-          <ToggleOption label="Auto-adjust microphone" defaultChecked={false} />
+          <ToggleOption
+            label="Echo cancellation"
+            checked={props.echoCancellation ?? true}
+            onChange={props.onEchoCancellationChange}
+          />
+          <ToggleOption
+            label="Noise suppression"
+            checked={props.noiseSuppression ?? true}
+            onChange={props.onNoiseSuppressionChange}
+          />
+          <ToggleOption
+            label="Auto-adjust microphone"
+            checked={props.autoAdjustMicrophone ?? false}
+            onChange={props.onAutoAdjustMicrophoneChange}
+          />
         </div>
       </div>
     </div>

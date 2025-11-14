@@ -50,6 +50,7 @@ import {
   useSidebarVideoSync,
   useFeatureToggles,
 } from '../hooks/studio';
+import { useCanvasSettings } from '../hooks/studio/useCanvasSettings';
 
 export function Studio() {
   const { broadcastId } = useParams<{ broadcastId: string }>();
@@ -203,13 +204,8 @@ export function Studio() {
   const [editMode, setEditMode] = useState(false);
   const [showCanvasSettings, setShowCanvasSettings] = useState(false);
 
-  // Canvas Settings State
-  const [canvasResolution, setCanvasResolution] = useState<'720p' | '1080p' | '4k'>('1080p');
-  const [canvasBackgroundColor, setCanvasBackgroundColor] = useState('#0F1419');
-  const [showResolutionBadge, setShowResolutionBadge] = useState(true);
-  const [showPositionNumbers, setShowPositionNumbers] = useState(true);
-  const [showConnectionQuality, setShowConnectionQuality] = useState(true);
-  const [showLowerThirds, setShowLowerThirds] = useState(true);
+  // Canvas Settings (persisted to localStorage)
+  const canvasSettings = useCanvasSettings();
 
   const handleEditModeToggle = () => setEditMode(!editMode);
   const handleAddParticipant = () => {
@@ -352,11 +348,11 @@ export function Studio() {
               captionsEnabled={captionsEnabled}
               currentCaption={currentCaption}
               editMode={editMode}
-              backgroundColor={canvasBackgroundColor}
-              showResolutionBadge={showResolutionBadge}
-              showPositionNumbers={showPositionNumbers}
-              showConnectionQuality={showConnectionQuality}
-              showLowerThirds={showLowerThirds}
+              backgroundColor={canvasSettings.canvasBackgroundColor}
+              showResolutionBadge={canvasSettings.showResolutionBadge}
+              showPositionNumbers={canvasSettings.showPositionNumbers}
+              showConnectionQuality={canvasSettings.showConnectionQuality}
+              showLowerThirds={canvasSettings.showLowerThirds}
             />
           </div>
 
@@ -509,18 +505,99 @@ export function Studio() {
       <CanvasSettingsModal
         isOpen={showCanvasSettings}
         onClose={() => setShowCanvasSettings(false)}
-        canvasResolution={canvasResolution}
-        onResolutionChange={setCanvasResolution}
-        canvasBackgroundColor={canvasBackgroundColor}
-        onBackgroundColorChange={setCanvasBackgroundColor}
-        showResolutionBadge={showResolutionBadge}
-        onShowResolutionBadgeChange={setShowResolutionBadge}
-        showPositionNumbers={showPositionNumbers}
-        onShowPositionNumbersChange={setShowPositionNumbers}
-        showConnectionQuality={showConnectionQuality}
-        onShowConnectionQualityChange={setShowConnectionQuality}
-        showLowerThirds={showLowerThirds}
-        onShowLowerThirdsChange={setShowLowerThirds}
+        // General settings
+        canvasResolution={canvasSettings.canvasResolution}
+        onResolutionChange={canvasSettings.setCanvasResolution}
+        canvasBackgroundColor={canvasSettings.canvasBackgroundColor}
+        onBackgroundColorChange={canvasSettings.setCanvasBackgroundColor}
+        showResolutionBadge={canvasSettings.showResolutionBadge}
+        onShowResolutionBadgeChange={canvasSettings.setShowResolutionBadge}
+        showPositionNumbers={canvasSettings.showPositionNumbers}
+        onShowPositionNumbersChange={canvasSettings.setShowPositionNumbers}
+        showConnectionQuality={canvasSettings.showConnectionQuality}
+        onShowConnectionQualityChange={canvasSettings.setShowConnectionQuality}
+        showLowerThirds={canvasSettings.showLowerThirds}
+        onShowLowerThirdsChange={canvasSettings.setShowLowerThirds}
+        orientation={canvasSettings.orientation}
+        onOrientationChange={canvasSettings.setOrientation}
+        appearance={canvasSettings.appearance}
+        onAppearanceChange={canvasSettings.setAppearance}
+        displayInfoMessages={canvasSettings.displayInfoMessages}
+        onDisplayInfoMessagesChange={canvasSettings.setDisplayInfoMessages}
+        shiftVideosForBanners={canvasSettings.shiftVideosForBanners}
+        onShiftVideosForBannersChange={canvasSettings.setShiftVideosForBanners}
+        audioAvatars={canvasSettings.audioAvatars}
+        onAudioAvatarsChange={canvasSettings.setAudioAvatars}
+        autoAddPresentedMedia={canvasSettings.autoAddPresentedMedia}
+        onAutoAddPresentedMediaChange={canvasSettings.setAutoAddPresentedMedia}
+        // Camera settings
+        videoDevices={videoDevices}
+        selectedVideoDevice={selectedVideoDevice}
+        onVideoDeviceChange={handleVideoDeviceChange}
+        videoQuality={canvasSettings.videoQuality}
+        onVideoQualityChange={canvasSettings.setVideoQuality}
+        mirrorVideo={canvasSettings.mirrorVideo}
+        onMirrorVideoChange={canvasSettings.setMirrorVideo}
+        autoAdjustBrightness={canvasSettings.autoAdjustBrightness}
+        onAutoAdjustBrightnessChange={canvasSettings.setAutoAdjustBrightness}
+        hdMode={canvasSettings.hdMode}
+        onHdModeChange={canvasSettings.setHdMode}
+        // Audio settings
+        audioDevices={audioDevices}
+        selectedAudioDevice={selectedAudioDevice}
+        onAudioDeviceChange={handleAudioDeviceChange}
+        inputVolume={canvasSettings.inputVolume}
+        onInputVolumeChange={canvasSettings.setInputVolume}
+        echoCancellation={canvasSettings.echoCancellation}
+        onEchoCancellationChange={canvasSettings.setEchoCancellation}
+        noiseSuppression={canvasSettings.noiseSuppression}
+        onNoiseSuppressionChange={canvasSettings.setNoiseSuppression}
+        autoAdjustMicrophone={canvasSettings.autoAdjustMicrophone}
+        onAutoAdjustMicrophoneChange={canvasSettings.setAutoAdjustMicrophone}
+        // Visual effects
+        backgroundBlur={canvasSettings.backgroundBlur}
+        onBackgroundBlurChange={canvasSettings.setBackgroundBlur}
+        virtualBackground={canvasSettings.virtualBackground}
+        onVirtualBackgroundChange={canvasSettings.setVirtualBackground}
+        backgroundRemoval={canvasSettings.backgroundRemoval}
+        onBackgroundRemovalChange={canvasSettings.setBackgroundRemoval}
+        autoEnhanceLighting={canvasSettings.autoEnhanceLighting}
+        onAutoEnhanceLightingChange={canvasSettings.setAutoEnhanceLighting}
+        colorCorrection={canvasSettings.colorCorrection}
+        onColorCorrectionChange={canvasSettings.setColorCorrection}
+        // Recording
+        recordingQuality={canvasSettings.recordingQuality}
+        onRecordingQualityChange={canvasSettings.setRecordingQuality}
+        recordLocalCopies={canvasSettings.recordLocalCopies}
+        onRecordLocalCopiesChange={canvasSettings.setRecordLocalCopies}
+        separateAudioTracks={canvasSettings.separateAudioTracks}
+        onSeparateAudioTracksChange={canvasSettings.setSeparateAudioTracks}
+        autoSaveRecordings={canvasSettings.autoSaveRecordings}
+        onAutoSaveRecordingsChange={canvasSettings.setAutoSaveRecordings}
+        // Layout
+        autoArrangeParticipants={canvasSettings.autoArrangeParticipants}
+        onAutoArrangeParticipantsChange={canvasSettings.setAutoArrangeParticipants}
+        rememberLayoutPreferences={canvasSettings.rememberLayoutPreferences}
+        onRememberLayoutPreferencesChange={canvasSettings.setRememberLayoutPreferences}
+        showLayoutGridLines={canvasSettings.showLayoutGridLines}
+        onShowLayoutGridLinesChange={canvasSettings.setShowLayoutGridLines}
+        defaultLayout={canvasSettings.defaultLayout}
+        onDefaultLayoutChange={canvasSettings.setDefaultLayout}
+        // Guest
+        guestsCanEnableCamera={canvasSettings.guestsCanEnableCamera}
+        onGuestsCanEnableCameraChange={canvasSettings.setGuestsCanEnableCamera}
+        guestsCanEnableMicrophone={canvasSettings.guestsCanEnableMicrophone}
+        onGuestsCanEnableMicrophoneChange={canvasSettings.setGuestsCanEnableMicrophone}
+        guestsCanShareScreen={canvasSettings.guestsCanShareScreen}
+        onGuestsCanShareScreenChange={canvasSettings.setGuestsCanShareScreen}
+        requireApprovalToJoin={canvasSettings.requireApprovalToJoin}
+        onRequireApprovalToJoinChange={canvasSettings.setRequireApprovalToJoin}
+        muteGuestsOnEntry={canvasSettings.muteGuestsOnEntry}
+        onMuteGuestsOnEntryChange={canvasSettings.setMuteGuestsOnEntry}
+        disableGuestCameraOnEntry={canvasSettings.disableGuestCameraOnEntry}
+        onDisableGuestCameraOnEntryChange={canvasSettings.setDisableGuestCameraOnEntry}
+        showGuestsInBackstageFirst={canvasSettings.showGuestsInBackstageFirst}
+        onShowGuestsInBackstageFirstChange={canvasSettings.setShowGuestsInBackstageFirst}
       />
 
       <DeviceSelectors
