@@ -376,6 +376,7 @@ export function Studio() {
               audioEnabled={audioEnabled}
               backstageParticipants={Array.from(remoteParticipants.values()).filter((p) => p.role === 'backstage')}
               screenShareStream={screenShareStream}
+              onInviteGuests={() => setShowInviteDrawer(true)}
             />
           </div>
 

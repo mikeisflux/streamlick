@@ -16,6 +16,7 @@ interface PreviewAreaProps {
   backstageParticipants: RemoteParticipant[];
   screenShareStream: MediaStream | null;
   onAddToStage?: (participantId: string) => void;
+  onInviteGuests?: () => void;
 }
 
 export function PreviewArea({
@@ -143,21 +144,27 @@ export function PreviewArea({
           </div>
         ))}
 
-        {/* Empty State */}
-        {backstageParticipants.length === 0 && !screenShareStream && (
-          <div className="flex-1 flex items-center justify-center text-gray-500 text-sm py-4">
-            <div className="text-center">
-              <svg className="w-12 h-12 mx-auto mb-2 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                />
-              </svg>
-              <p>Participants will appear here when they join</p>
-              <p className="text-xs text-gray-600 mt-1">Drag them to the main window to add them to the broadcast</p>
-            </div>
+        {/* Invite Tile - shows when no backstage participants */}
+        {backstageParticipants.length === 0 && !screenShareStream && onInviteGuests && (
+          <div className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
+            <button
+              onClick={onInviteGuests}
+              className="relative bg-gray-800 rounded overflow-hidden h-full w-full border-2 border-green-500 hover:border-green-400 transition-colors cursor-pointer"
+            >
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="text-center">
+                  <svg className="w-8 h-8 text-green-500 mx-auto mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                    />
+                  </svg>
+                  <p className="text-green-500 text-xs font-medium">Invite Guests</p>
+                </div>
+              </div>
+            </button>
           </div>
         )}
       </div>
