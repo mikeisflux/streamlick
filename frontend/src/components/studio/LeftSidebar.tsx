@@ -47,7 +47,7 @@ export function LeftSidebar({
           transform: leftSidebarOpen ? 'translateX(0)' : 'translateX(-280px)',
           transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
           boxShadow: leftSidebarOpen ? '4px 0 12px rgba(0, 0, 0, 0.1)' : 'none',
-          zIndex: 85, // Layer 85: Left sidebar (between right sidebar and bottom bar)
+          zIndex: 95, // Layer 95: Left sidebar (above bottom control bar, below top nav)
         }}
         aria-expanded={leftSidebarOpen}
         aria-label="Scenes Panel"
