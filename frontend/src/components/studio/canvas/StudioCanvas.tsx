@@ -1,8 +1,19 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { CaptionOverlay } from './CanvasOverlay';
 import { ParticipantBox } from './ParticipantBox';
 import { TeleprompterOverlay } from './TeleprompterOverlay';
 import { Caption } from '../../../services/caption.service';
+
+interface Banner {
+  id: string;
+  type: 'lower-third' | 'text-overlay' | 'cta' | 'countdown';
+  title: string;
+  subtitle?: string;
+  position: 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
+  backgroundColor: string;
+  textColor: string;
+  visible: boolean;
+}
 
 interface RemoteParticipant {
   id: string;
@@ -91,6 +102,34 @@ export function StudioCanvas({
   const mainVideoRef = useRef<HTMLVideoElement>(null);
   const screenShareVideoRef = useRef<HTMLVideoElement>(null);
 
+  // Load banners from localStorage
+  const [banners, setBanners] = useState<Banner[]>([]);
+
+  useEffect(() => {
+    const loadBanners = () => {
+      const saved = localStorage.getItem('banners');
+      if (saved) {
+        try {
+          setBanners(JSON.parse(saved));
+        } catch (e) {
+          console.error('Failed to load banners:', e);
+        }
+      }
+    };
+
+    loadBanners();
+
+    // Listen for storage changes to update banners in real-time
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'banners') {
+        loadBanners();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
   // Calculate total participants (local user if on stage + remote on-stage)
   const onStageParticipants = Array.from(remoteParticipants.values()).filter(
     (p) => p.role !== 'backstage' && p.id !== 'screen-share'
@@ -104,79 +143,29 @@ export function StudioCanvas({
     return { cols, rows };
   };
 
-  // Get layout styles based on selected layout
+  // Simplified auto-layout based on participants and screen share
   const getLayoutStyles = (layoutId: number | 'screenshare') => {
-    // Screen share layout overrides all other layouts
-    if (layoutId === 'screenshare') {
+    // When screen is being shared, move participants to left sidebar
+    if (layoutId === 'screenshare' || isSharingScreen) {
       return {
         container: 'flex gap-2 p-2',
         sidebar: 'flex flex-col gap-2',
-        sidebarWidth: 'w-[20%]',
+        sidebarWidth: 'w-[25%]',
         mainVideo: 'flex-1',
-        screenShare: 'flex-1 w-[80%]',
+        screenShare: 'flex-1 w-[75%]',
       };
     }
 
-    // Calculate dynamic grid for grid-based layouts
+    // Auto-arrange participants based on count
     const { cols, rows } = calculateDynamicGrid(totalParticipants);
 
-    switch (layoutId) {
-      case 1: // Dynamic Grid (auto-arranges based on participant count)
-        return {
-          container: 'grid gap-2 p-2',
-          mainVideo: 'col-span-1 row-span-1',
-          gridCols: cols,
-          gridRows: rows,
-        };
-      case 2: // Spotlight (one large, thumbnails on right)
-        return {
-          container: 'flex gap-2 p-2',
-          mainVideo: 'flex-1',
-          sidebar: 'flex flex-col gap-2 w-1/4',
-        };
-      case 3: // Sidebar left (narrow left, wide right)
-        return {
-          container: 'flex gap-2 p-2',
-          sidebar: 'flex flex-col gap-2 w-1/4',
-          mainVideo: 'flex-1',
-        };
-      case 4: // Picture-in-picture
-        return {
-          container: 'relative',
-          mainVideo: 'absolute inset-0',
-          pip: 'absolute bottom-4 right-4 w-1/4 h-1/4',
-        };
-      case 5: // Vertical split 50/50
-        return {
-          container: 'flex gap-2 p-2',
-          mainVideo: 'flex-1',
-        };
-      case 6: // Horizontal split 50/50
-        return {
-          container: 'flex flex-col gap-2 p-2',
-          mainVideo: 'flex-1',
-        };
-      case 7: // Dynamic Grid 3x3 (auto-arranges, prefers 3 cols for larger groups)
-        return {
-          container: 'grid gap-2 p-2',
-          mainVideo: 'col-span-1 row-span-1',
-          gridCols: Math.max(3, cols), // Minimum 3 columns for layout 7
-          gridRows: Math.ceil(totalParticipants / Math.max(3, cols)),
-        };
-      case 8: // Dynamic Grid (larger gaps)
-        return {
-          container: 'grid gap-4 p-4',
-          mainVideo: 'col-span-1 row-span-1',
-          gridCols: cols,
-          gridRows: rows,
-        };
-      case 9: // Full screen (single)
-      default:
-        return {
-          container: 'relative',
-          mainVideo: 'absolute inset-0',
-        };
-    }
+    // All layouts now use smart auto-grid
+    return {
+      container: 'grid gap-2 p-2',
+      mainVideo: 'col-span-1 row-span-1',
+      gridCols: cols,
+      gridRows: rows,
+    };
   };
 
   // Update video srcObject when localStream changes
@@ -191,6 +180,19 @@ export function StudioCanvas({
       screenShareVideoRef.current.srcObject = screenShareStream;
     }
   }, [screenShareStream]);
+
+  // Get position styles for banner overlay
+  const getBannerPositionStyles = (position: Banner['position']) => {
+    const positions = {
+      'top-left': { top: '20px', left: '20px' },
+      'top-center': { top: '20px', left: '50%', transform: 'translateX(-50%)' },
+      'top-right': { top: '20px', right: '20px' },
+      'bottom-left': { bottom: '20px', left: '20px' },
+      'bottom-center': { bottom: '20px', left: '50%', transform: 'translateX(-50%)' },
+      'bottom-right': { bottom: '20px', right: '20px' },
+    };
+    return positions[position];
+  };
 
   return (
     <div
@@ -309,36 +311,32 @@ export function StudioCanvas({
           </>
         ) : (
           <>
-            {/* Normal Layout - When not screen sharing */}
+            {/* Simplified Auto-Layout - All layouts now use smart grid */}
+            {/* Render local user first - only when on stage */}
+            {isLocalUserOnStage && (
+              <div className={`${getLayoutStyles(selectedLayout).mainVideo}`}>
+                <ParticipantBox
+                  stream={localStream}
+                  videoEnabled={videoEnabled}
+                  audioEnabled={audioEnabled}
+                  name="You"
+                  positionNumber={1}
+                  isHost={true}
+                  videoRef={mainVideoRef}
+                  size="medium"
+                  connectionQuality="excellent"
+                  showPositionNumber={showPositionNumbers}
+                  showConnectionQuality={showConnectionQuality}
+                  showLowerThird={showLowerThirds}
+                  participantId="local-user"
+                  onRemoveFromStage={onRemoveFromStage}
+                />
+              </div>
+            )}
 
-            {/* Grid Layouts with Dynamic Participant Rendering (1, 7, 8) */}
-            {(selectedLayout === 1 || selectedLayout === 7 || selectedLayout === 8) && (
-              <>
-                {/* Render local user first - only when on stage */}
-                {isLocalUserOnStage && (
-                  <div className={`${getLayoutStyles(selectedLayout).mainVideo}`}>
-                    <ParticipantBox
-                      stream={localStream}
-                      videoEnabled={videoEnabled}
-                      audioEnabled={audioEnabled}
-                      name="You"
-                      positionNumber={1}
-                      isHost={true}
-                      videoRef={mainVideoRef}
-                      size="medium"
-                      connectionQuality="excellent"
-                      showPositionNumber={showPositionNumbers}
-                      showConnectionQuality={showConnectionQuality}
-                      showLowerThird={showLowerThirds}
-                      participantId="local-user"
-                      onRemoveFromStage={onRemoveFromStage}
-                    />
-                  </div>
-                )}
-
-                {/* Render remote participants */}
-                {onStageParticipants.map((participant, index) => (
-                  <div key={participant.id} className={`${getLayoutStyles(selectedLayout).mainVideo}`}>
+            {/* Render remote participants */}
+            {onStageParticipants.map((participant, index) => (
+              <div key={participant.id} className={`${getLayoutStyles(selectedLayout).mainVideo}`}>
                     <ParticipantBox
                       stream={participant.stream}
                       videoEnabled={participant.videoEnabled}
@@ -356,163 +354,6 @@ export function StudioCanvas({
                     />
                   </div>
                 ))}
-
-                {/* Fill empty slots if needed (for aesthetic purposes) */}
-                {totalParticipants < getLayoutStyles(selectedLayout).gridCols! * getLayoutStyles(selectedLayout).gridRows! &&
-                  Array.from({
-                    length:
-                      getLayoutStyles(selectedLayout).gridCols! * getLayoutStyles(selectedLayout).gridRows! -
-                      totalParticipants,
-                  }).map((_, index) => (
-                    <div
-                      key={`empty-${index}`}
-                      className={`relative bg-gray-900 rounded overflow-hidden ${getLayoutStyles(selectedLayout).mainVideo}`}
-                    >
-                      <div className="w-full h-full flex items-center justify-center">
-                        <div className="text-center">
-                          <svg
-                            className="w-12 h-12 text-gray-700 mx-auto mb-1"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                            />
-                          </svg>
-                          <p className="text-gray-600 text-xs">Empty Slot</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-              </>
-            )}
-
-            {/* Non-grid layouts - Original rendering - only when local user on stage */}
-            {selectedLayout !== 1 && selectedLayout !== 7 && selectedLayout !== 8 && isLocalUserOnStage && (
-              <div className={`${getLayoutStyles(selectedLayout).mainVideo}`}>
-                <ParticipantBox
-                  stream={localStream}
-                  videoEnabled={videoEnabled}
-                  audioEnabled={audioEnabled}
-                  name="You"
-                  positionNumber={1}
-                  isHost={true}
-                  videoRef={mainVideoRef}
-                  size="large"
-                  showPositionNumber={showPositionNumbers}
-                  showConnectionQuality={showConnectionQuality}
-                  showLowerThird={showLowerThirds}
-                  participantId="local-user"
-                  onRemoveFromStage={onRemoveFromStage}
-                />
-              </div>
-            )}
-
-            {/* Sidebar layout with thumbnails (2) */}
-            {selectedLayout === 2 && (
-              <div className={getLayoutStyles(selectedLayout).sidebar}>
-                {[1, 2, 3].map((slot) => (
-                  <div key={slot} className="relative bg-gray-900 rounded overflow-hidden flex-1">
-                    <div className="w-full h-full flex items-center justify-center">
-                      <div className="text-center">
-                        <svg
-                          className="w-8 h-8 text-gray-700 mx-auto"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Vertical split 50/50 (5) */}
-            {selectedLayout === 5 && (
-              <div className="relative bg-gray-900 rounded overflow-hidden flex-1">
-                <div className="w-full h-full flex items-center justify-center">
-                  <div className="text-center">
-                    <svg
-                      className="w-12 h-12 text-gray-700 mx-auto mb-1"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                      />
-                    </svg>
-                    <p className="text-gray-600 text-xs">Empty Slot</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Sidebar left layout (3) */}
-            {selectedLayout === 3 && (
-              <div className={getLayoutStyles(selectedLayout).sidebar} style={{ order: -1 }}>
-                {[1, 2, 3].map((slot) => (
-                  <div key={slot} className="relative bg-gray-900 rounded overflow-hidden flex-1">
-                    <div className="w-full h-full flex items-center justify-center">
-                      <div className="text-center">
-                        <svg
-                          className="w-8 h-8 text-gray-700 mx-auto"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Horizontal split layout (6) */}
-            {selectedLayout === 6 && (
-              <div className="relative bg-gray-900 rounded overflow-hidden flex-1">
-                <div className="w-full h-full flex items-center justify-center">
-                  <div className="text-center">
-                    <svg
-                      className="w-12 h-12 text-gray-700 mx-auto mb-1"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                      />
-                    </svg>
-                    <p className="text-gray-600 text-xs">Empty Slot</p>
-                  </div>
-                </div>
-              </div>
-            )}
           </>
         )}
 
@@ -597,6 +438,26 @@ export function StudioCanvas({
             scrollPosition={teleprompterScrollPosition}
           />
         )}
+
+        {/* Banner Overlays */}
+        {banners
+          .filter((banner) => banner.visible)
+          .map((banner) => (
+            <div
+              key={banner.id}
+              className="absolute px-6 py-4 rounded-lg shadow-lg"
+              style={{
+                ...getBannerPositionStyles(banner.position),
+                backgroundColor: banner.backgroundColor,
+                color: banner.textColor,
+                zIndex: 15,
+                maxWidth: '90%',
+              }}
+            >
+              <div className="font-bold text-lg">{banner.title}</div>
+              {banner.subtitle && <div className="text-sm opacity-90 mt-1">{banner.subtitle}</div>}
+            </div>
+          ))}
       </div>
     </div>
   );

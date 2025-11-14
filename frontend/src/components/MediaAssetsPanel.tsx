@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import toast from 'react-hot-toast';
 
 interface MediaAssetsPanelProps {
   broadcastId?: string;
@@ -18,6 +19,7 @@ interface Asset {
 
 export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   const [activeTab, setActiveTab] = useState<AssetTab>('brand');
+  const brandPresetFileInputRef = useRef<HTMLInputElement>(null);
 
   // Load assets from localStorage or use defaults
   const [assets, setAssets] = useState<Asset[]>(() => {
@@ -86,11 +88,12 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
 
         // Add to assets array
         setAssets([...assets, newAsset]);
+        toast.success(`${file.name} uploaded successfully!`);
       };
 
       reader.onerror = (error) => {
         console.error('Error reading file:', error);
-        alert('Failed to upload file. Please try again.');
+        toast.error('Failed to upload file. Please try again.');
       };
 
       reader.readAsDataURL(file);
@@ -98,43 +101,80 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   };
 
   const handleCreateBrandPreset = () => {
-    const presetName = prompt('Enter a name for this brand preset:');
-    if (presetName) {
-      // Get current style settings from localStorage
-      const primaryColor = localStorage.getItem('style_primaryColor') || '#0066ff';
-      const secondaryColor = localStorage.getItem('style_secondaryColor') || '#6366f1';
-      const backgroundColor = localStorage.getItem('style_backgroundColor') || '#1a1a1a';
-      const textColor = localStorage.getItem('style_textColor') || '#ffffff';
+    toast.info('Please select a logo file for your brand preset');
+    brandPresetFileInputRef.current?.click();
+  };
 
-      // Create brand preset asset
-      const newPreset: Asset = {
-        id: Date.now().toString(),
-        type: 'brand',
-        name: presetName,
-        url: `preset-${Date.now()}`,
-        thumbnailUrl: primaryColor, // Use primary color as thumbnail identifier
+  const handleBrandPresetFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      const presetName = prompt('Enter a name for this brand preset:');
+
+      if (!presetName) {
+        toast.error('Brand preset name is required');
+        return;
+      }
+
+      const reader = new FileReader();
+
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+
+        // Get current style settings from localStorage
+        const primaryColor = localStorage.getItem('style_primaryColor') || '#0066ff';
+        const secondaryColor = localStorage.getItem('style_secondaryColor') || '#6366f1';
+        const backgroundColor = localStorage.getItem('style_backgroundColor') || '#1a1a1a';
+        const textColor = localStorage.getItem('style_textColor') || '#ffffff';
+
+        // Create brand preset asset with uploaded logo
+        const newPreset: Asset = {
+          id: Date.now().toString(),
+          type: 'brand',
+          name: presetName,
+          url: dataUrl,
+          thumbnailUrl: dataUrl,
+          fileSize: file.size,
+        };
+
+        // Save preset with style data
+        const presetData = {
+          ...newPreset,
+          presetData: {
+            primaryColor,
+            secondaryColor,
+            backgroundColor,
+            textColor,
+          },
+        };
+
+        setAssets([...assets, presetData]);
+        toast.success(`Brand preset "${presetName}" created successfully!`);
       };
 
-      // Save preset with style data
-      const presetData = {
-        ...newPreset,
-        presetData: {
-          primaryColor,
-          secondaryColor,
-          backgroundColor,
-          textColor,
-        },
+      reader.onerror = () => {
+        toast.error('Failed to read logo file. Please try again.');
       };
 
-      setAssets([...assets, presetData]);
-      alert(`Brand preset "${presetName}" created successfully!`);
+      reader.readAsDataURL(file);
+
+      // Reset input
+      e.target.value = '';
     }
   };
 
   const handleDeleteAsset = (assetId: string) => {
     if (confirm('Delete this asset?')) {
       setAssets(assets.filter((a) => a.id !== assetId));
+      toast.success('Asset deleted successfully');
     }
+  };
+
+  const handleUseAsset = (asset: Asset) => {
+    // Save asset as current logo/media for use in stream
+    localStorage.setItem('currentLogo', asset.url);
+    localStorage.setItem('currentLogoName', asset.name);
+    toast.success(`Now using "${asset.name}" in your stream`);
   };
 
   const renderAssetCard = (asset: Asset) => {
@@ -156,7 +196,13 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
             </div>
           )}
           <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-            <button className="px-3 py-1 bg-white text-gray-900 rounded text-sm font-medium">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleUseAsset(asset);
+              }}
+              className="px-3 py-1 bg-white text-gray-900 hover:bg-gray-100 rounded text-sm font-medium"
+            >
               Use Asset
             </button>
             <button
@@ -187,6 +233,15 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
 
   return (
     <div className="h-full flex flex-col">
+      {/* Hidden file input for brand preset creation */}
+      <input
+        ref={brandPresetFileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleBrandPresetFileUpload}
+        className="hidden"
+      />
+
       {/* Tabs */}
       <div className="border-b border-gray-200 px-4">
         <div className="flex gap-2 overflow-x-auto">

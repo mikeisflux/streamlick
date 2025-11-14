@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 
 interface StylePanelProps {
   broadcastId?: string;
@@ -65,12 +66,32 @@ export function StylePanel({ broadcastId }: StylePanelProps) {
   ];
 
   const handleThemeChange = (themeId: 'dark' | 'light' | 'custom') => {
+    // Save current custom colors before switching
+    if (theme === 'custom') {
+      localStorage.setItem('style_customPrimaryColor', primaryColor);
+      localStorage.setItem('style_customBackgroundColor', backgroundColor);
+      localStorage.setItem('style_customTextColor', textColor);
+    }
+
     setTheme(themeId);
     const selectedTheme = themes.find(t => t.id === themeId);
-    if (selectedTheme && themeId !== 'custom') {
+
+    if (themeId === 'custom') {
+      // Restore saved custom colors
+      const savedCustomPrimary = localStorage.getItem('style_customPrimaryColor');
+      const savedCustomBg = localStorage.getItem('style_customBackgroundColor');
+      const savedCustomText = localStorage.getItem('style_customTextColor');
+
+      if (savedCustomPrimary) setPrimaryColor(savedCustomPrimary);
+      if (savedCustomBg) setBackgroundColor(savedCustomBg);
+      if (savedCustomText) setTextColor(savedCustomText);
+
+      toast.success('Switched to custom theme');
+    } else if (selectedTheme) {
       setPrimaryColor(selectedTheme.colors.primary);
       setBackgroundColor(selectedTheme.colors.bg);
       setTextColor(selectedTheme.colors.text);
+      toast.success(`Switched to ${selectedTheme.name} theme`);
     }
   };
 
