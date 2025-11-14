@@ -368,10 +368,7 @@ export function Studio() {
             />
           </div>
 
-          {/* Spacer to push Preview Area to bottom */}
-          <div style={{ flex: 1, minHeight: 0 }} />
-
-          {/* Preview Area - fixed at bottom, touching BottomControlBar */}
+          {/* Preview Area - sits naturally below Layout Selector */}
           <div style={{ flexShrink: 0 }}>
             <PreviewArea
               localStream={localStream}
