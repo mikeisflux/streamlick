@@ -175,7 +175,7 @@ export function StudioCanvas({
       className="relative"
       style={{
         width: '100%',
-        maxWidth: '1178px',
+        maxWidth: '1001px',
         aspectRatio: '16 / 9',
         backgroundColor,
         border: editMode ? '4px solid #8B5CF6' : 'none',
