@@ -132,7 +132,7 @@ export function PreviewArea({
 
               {/* Hover Overlay with Add to Stage Button */}
               {onAddToStage && (
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
                   <button
                     onClick={() => onAddToStage(participant.id)}
                     className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded shadow-lg"
@@ -143,7 +143,7 @@ export function PreviewArea({
                 </div>
               )}
 
-              <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 flex items-center justify-between">
+              <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 flex items-center justify-between z-0">
                 <span className="text-white text-xs font-medium truncate flex-1">{participant.name}</span>
               </div>
             </div>
