@@ -84,7 +84,13 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
 
       // Add to compositor if chat display is enabled
       if (showChatOnStream) {
-        compositorService.addChatMessage(message);
+        compositorService.addChatMessage({
+          id: Date.now().toString(),
+          platform: 'youtube', // Default platform, can be enhanced later
+          author: message.author,
+          message: message.message,
+          timestamp: new Date(message.timestamp)
+        });
       }
     };
 

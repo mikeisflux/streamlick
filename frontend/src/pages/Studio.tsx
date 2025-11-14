@@ -100,16 +100,20 @@ export function Studio() {
     setShowSpeakerSelector,
     setSpeakerMuted,
     loadDevices,
-    handleAudioDeviceChange,
-    handleVideoDeviceChange,
+    handleAudioDeviceChange: handleAudioDeviceChangeRaw,
+    handleVideoDeviceChange: handleVideoDeviceChangeRaw,
     handleSpeakerDeviceChange,
     toggleSpeaker,
-  } = useMediaDevices(localStream);
+  } = useMediaDevices();
+
+  // Wrap device change handlers to include localStream
+  const handleAudioDeviceChange = (deviceId: string) => handleAudioDeviceChangeRaw(deviceId, localStream);
+  const handleVideoDeviceChange = (deviceId: string) => handleVideoDeviceChangeRaw(deviceId, localStream);
 
   // Initialization
   const { isLoading, destinations, selectedDestinations, setSelectedDestinations } = useStudioInitialization({
     broadcastId,
-    startCamera,
+    startCamera: async () => { await startCamera(); },
     stopCamera,
     loadDevices,
   });
@@ -193,7 +197,7 @@ export function Studio() {
   const { showDestinationsDrawer, setShowDestinationsDrawer, showInviteDrawer, setShowInviteDrawer, showBannerDrawer, setShowBannerDrawer, showBrandDrawer, setShowBrandDrawer, showRecordingDrawer, setShowRecordingDrawer } = useDrawers();
   const { showSettings, setShowSettings, showClipManager, setShowClipManager, showProducerMode, setShowProducerMode, showClipDurationSelector, setShowClipDurationSelector, showLanguageSelector, setShowLanguageSelector, showBackgroundSettings, setShowBackgroundSettings, showSceneManager, setShowSceneManager } = useModals();
   const { showHotkeyReference } = useStudioHotkeys({ audioEnabled, videoEnabled, isLive, isRecording, isSharingScreen, toggleAudio, toggleVideo, handleGoLive, handleEndBroadcast, handleStartRecording, handleStopRecording, handleToggleScreenShare, handleLayoutChange, setShowChatOnStream });
-  const { handleCreateClip } = useClipRecording(clipRecordingEnabled, localStream, compositorService.getOutputStream());
+  const { handleCreateClip } = useClipRecording(clipRecordingEnabled, localStream, () => compositorService.getOutputStream());
 
   if (isLoading) {
     return (

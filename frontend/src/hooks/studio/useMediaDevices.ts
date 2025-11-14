@@ -9,6 +9,9 @@ export function useMediaDevices() {
   const [selectedVideoDevice, setSelectedVideoDevice] = useState<string>('');
   const [selectedSpeakerDevice, setSelectedSpeakerDevice] = useState<string>('');
   const [speakerMuted, setSpeakerMuted] = useState(false);
+  const [showMicSelector, setShowMicSelector] = useState(false);
+  const [showCameraSelector, setShowCameraSelector] = useState(false);
+  const [showSpeakerSelector, setShowSpeakerSelector] = useState(false);
 
   const loadDevices = useCallback(async () => {
     try {
@@ -145,12 +148,19 @@ export function useMediaDevices() {
     selectedVideoDevice,
     selectedSpeakerDevice,
     speakerMuted,
+    showMicSelector,
+    showCameraSelector,
+    showSpeakerSelector,
     setAudioDevices,
     setVideoDevices,
     setSpeakerDevices,
     setSelectedAudioDevice,
     setSelectedVideoDevice,
     setSelectedSpeakerDevice,
+    setSpeakerMuted,
+    setShowMicSelector,
+    setShowCameraSelector,
+    setShowSpeakerSelector,
     loadDevices,
     handleAudioDeviceChange,
     handleVideoDeviceChange,
