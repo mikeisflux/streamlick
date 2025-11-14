@@ -326,7 +326,8 @@ export function Studio() {
 
         {/* Main Canvas Area */}
         <main className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#F5F5F5', paddingBottom: '80px' }}>
-          <div className="flex-1 flex items-center justify-center p-6">
+          {/* Canvas Container */}
+          <div className="flex-1 flex items-center justify-center p-6" style={{ minHeight: 0 }}>
             <StudioCanvas
               localStream={localStream}
               videoEnabled={videoEnabled}
@@ -355,14 +356,17 @@ export function Studio() {
             />
           </div>
 
-          <LayoutSelector
-            selectedLayout={selectedLayout}
-            onLayoutChange={setSelectedLayout}
-            editMode={editMode}
-            onEditModeToggle={handleEditModeToggle}
-            onAddParticipant={handleAddParticipant}
-            onSettingsClick={handleCanvasSettingsClick}
-          />
+          {/* Layout Selector - Always visible below canvas */}
+          <div className="flex justify-center pb-4 px-6">
+            <LayoutSelector
+              selectedLayout={selectedLayout}
+              onLayoutChange={setSelectedLayout}
+              editMode={editMode}
+              onEditModeToggle={handleEditModeToggle}
+              onAddParticipant={handleAddParticipant}
+              onSettingsClick={handleCanvasSettingsClick}
+            />
+          </div>
 
           <PreviewArea
             localStream={localStream}

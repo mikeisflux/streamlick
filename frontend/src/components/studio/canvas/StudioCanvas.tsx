@@ -215,6 +215,9 @@ export function StudioCanvas({
                   isHost={true}
                   videoRef={mainVideoRef}
                   size="small"
+                  showPositionNumber={showPositionNumbers}
+                  showConnectionQuality={showConnectionQuality}
+                  showLowerThird={showLowerThirds}
                 />
               </div>
 
@@ -231,6 +234,9 @@ export function StudioCanvas({
                       name={participant.name}
                       positionNumber={index + 2}
                       size="small"
+                      showPositionNumber={showPositionNumbers}
+                      showConnectionQuality={showConnectionQuality}
+                      showLowerThird={showLowerThirds}
                     />
                   </div>
                 ))}

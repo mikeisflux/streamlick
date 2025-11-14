@@ -11,6 +11,9 @@ interface ParticipantBoxProps {
   videoRef?: RefObject<HTMLVideoElement>;
   size?: 'small' | 'medium' | 'large';
   connectionQuality?: 'excellent' | 'good' | 'poor' | 'disconnected';
+  showPositionNumber?: boolean;
+  showConnectionQuality?: boolean;
+  showLowerThird?: boolean;
 }
 
 export function ParticipantBox({
@@ -24,6 +27,9 @@ export function ParticipantBox({
   videoRef,
   size = 'large',
   connectionQuality = 'excellent',
+  showPositionNumber = true,
+  showConnectionQuality = true,
+  showLowerThird = true,
 }: ParticipantBoxProps) {
   const iconSize = size === 'small' ? 'w-6 h-6' : size === 'medium' ? 'w-10 h-10' : 'w-16 h-16';
   const textSize = size === 'small' ? 'text-xs' : 'text-sm';
@@ -39,7 +45,7 @@ export function ParticipantBox({
   return (
     <div className="relative bg-black rounded overflow-hidden h-full w-full">
       {/* Position Number Badge - Top Left */}
-      {positionNumber !== undefined && (
+      {showPositionNumber && positionNumber !== undefined && (
         <div
           className="absolute top-2 left-2 flex items-center justify-center rounded-full font-bold text-white z-10"
           style={{
@@ -54,24 +60,26 @@ export function ParticipantBox({
       )}
 
       {/* Connection Quality Indicator - Top Right */}
-      <div
-        className="absolute top-2 right-2 flex items-center justify-center rounded-full z-10"
-        style={{
-          width: '24px',
-          height: '24px',
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-        }}
-        title={`Connection: ${connectionQuality}`}
-      >
+      {showConnectionQuality && (
         <div
-          className="rounded-full"
+          className="absolute top-2 right-2 flex items-center justify-center rounded-full z-10"
           style={{
-            width: '12px',
-            height: '12px',
-            backgroundColor: qualityColors[connectionQuality],
+            width: '24px',
+            height: '24px',
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
           }}
-        />
-      </div>
+          title={`Connection: ${connectionQuality}`}
+        >
+          <div
+            className="rounded-full"
+            style={{
+              width: '12px',
+              height: '12px',
+              backgroundColor: qualityColors[connectionQuality],
+            }}
+          />
+        </div>
+      )}
 
       {/* Video or Camera Off Placeholder */}
       {stream && videoEnabled ? (
@@ -129,25 +137,27 @@ export function ParticipantBox({
       )}
 
       {/* Lower Third Name Display - 40px from bottom */}
-      <div
-        className="absolute left-0 right-0 flex items-center px-3"
-        style={{
-          bottom: '40px',
-          height: '40px',
-          backgroundColor: 'rgba(0, 0, 0, 0.75)',
-          borderRadius: '20px',
-          marginLeft: '16px',
-          marginRight: '16px',
-        }}
-      >
-        <div className="text-white flex-1">
-          <div className={`font-semibold truncate ${textSize}`}>
-            {name}
-            {isHost && <span className="ml-1 text-blue-400">(Host)</span>}
+      {showLowerThird && (
+        <div
+          className="absolute left-0 right-0 flex items-center px-3"
+          style={{
+            bottom: '40px',
+            height: '40px',
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            borderRadius: '20px',
+            marginLeft: '16px',
+            marginRight: '16px',
+          }}
+        >
+          <div className="text-white flex-1">
+            <div className={`font-semibold truncate ${textSize}`}>
+              {name}
+              {isHost && <span className="ml-1 text-blue-400">(Host)</span>}
+            </div>
+            {title && <div className="text-xs text-gray-300 truncate">{title}</div>}
           </div>
-          {title && <div className="text-xs text-gray-300 truncate">{title}</div>}
         </div>
-      </div>
+      )}
     </div>
   );
 }
