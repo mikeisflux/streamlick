@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface MediaAssetsPanelProps {
   broadcastId?: string;
@@ -18,28 +18,122 @@ interface Asset {
 
 export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   const [activeTab, setActiveTab] = useState<AssetTab>('brand');
-  const [assets, setAssets] = useState<Asset[]>([
-    {
-      id: '1',
-      type: 'brand',
-      name: 'Company Logo',
-      url: '/assets/logo.png',
-      thumbnailUrl: '/assets/logo-thumb.png',
-    },
-    {
-      id: '2',
-      type: 'music',
-      name: 'Background Music 1',
-      url: '/assets/music1.mp3',
-      duration: 180,
-    },
-  ]);
+
+  // Load assets from localStorage or use defaults
+  const [assets, setAssets] = useState<Asset[]>(() => {
+    const storageKey = `media_assets_${broadcastId || 'default'}`;
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved assets:', e);
+      }
+    }
+    // Default demo assets
+    return [
+      {
+        id: '1',
+        type: 'brand',
+        name: 'Company Logo',
+        url: '/assets/logo.png',
+        thumbnailUrl: '/assets/logo-thumb.png',
+      },
+      {
+        id: '2',
+        type: 'music',
+        name: 'Background Music 1',
+        url: '/assets/music1.mp3',
+        duration: 180,
+      },
+    ];
+  });
+
+  // Persist assets to localStorage whenever they change
+  useEffect(() => {
+    const storageKey = `media_assets_${broadcastId || 'default'}`;
+    localStorage.setItem(storageKey, JSON.stringify(assets));
+  }, [assets, broadcastId]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      // Handle file upload
-      console.log('Uploading files:', files);
+      const file = files[0];
+      const reader = new FileReader();
+
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+
+        // Determine asset type based on file type
+        let assetType: 'brand' | 'music' | 'image' | 'video' = 'brand';
+        if (file.type.startsWith('audio/')) {
+          assetType = 'music';
+        } else if (file.type.startsWith('image/')) {
+          assetType = activeTab === 'brand' ? 'brand' : 'image';
+        } else if (file.type.startsWith('video/')) {
+          assetType = 'video';
+        }
+
+        // Create new asset
+        const newAsset: Asset = {
+          id: Date.now().toString(),
+          type: assetType,
+          name: file.name,
+          url: dataUrl,
+          thumbnailUrl: file.type.startsWith('image/') ? dataUrl : undefined,
+          fileSize: file.size,
+        };
+
+        // Add to assets array
+        setAssets([...assets, newAsset]);
+      };
+
+      reader.onerror = (error) => {
+        console.error('Error reading file:', error);
+        alert('Failed to upload file. Please try again.');
+      };
+
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCreateBrandPreset = () => {
+    const presetName = prompt('Enter a name for this brand preset:');
+    if (presetName) {
+      // Get current style settings from localStorage
+      const primaryColor = localStorage.getItem('style_primaryColor') || '#0066ff';
+      const secondaryColor = localStorage.getItem('style_secondaryColor') || '#6366f1';
+      const backgroundColor = localStorage.getItem('style_backgroundColor') || '#1a1a1a';
+      const textColor = localStorage.getItem('style_textColor') || '#ffffff';
+
+      // Create brand preset asset
+      const newPreset: Asset = {
+        id: Date.now().toString(),
+        type: 'brand',
+        name: presetName,
+        url: `preset-${Date.now()}`,
+        thumbnailUrl: primaryColor, // Use primary color as thumbnail identifier
+      };
+
+      // Save preset with style data
+      const presetData = {
+        ...newPreset,
+        presetData: {
+          primaryColor,
+          secondaryColor,
+          backgroundColor,
+          textColor,
+        },
+      };
+
+      setAssets([...assets, presetData]);
+      alert(`Brand preset "${presetName}" created successfully!`);
+    }
+  };
+
+  const handleDeleteAsset = (assetId: string) => {
+    if (confirm('Delete this asset?')) {
+      setAssets(assets.filter((a) => a.id !== assetId));
     }
   };
 
@@ -47,7 +141,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
     return (
       <div
         key={asset.id}
-        className="p-3 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow cursor-pointer group"
+        className="p-3 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow cursor-pointer group relative"
       >
         <div className="aspect-video bg-gray-100 rounded mb-2 overflow-hidden relative">
           {asset.thumbnailUrl ? (
@@ -61,9 +155,18 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               {asset.type === 'music' ? '🎵' : asset.type === 'image' ? '🖼️' : '🎬'}
             </div>
           )}
-          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
             <button className="px-3 py-1 bg-white text-gray-900 rounded text-sm font-medium">
               Use Asset
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteAsset(asset.id);
+              }}
+              className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium"
+            >
+              Delete
             </button>
           </div>
         </div>
@@ -71,6 +174,11 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
         {asset.duration && (
           <p className="text-xs text-gray-500">
             {Math.floor(asset.duration / 60)}:{String(asset.duration % 60).padStart(2, '0')}
+          </p>
+        )}
+        {asset.fileSize && (
+          <p className="text-xs text-gray-500">
+            {(asset.fileSize / 1024 / 1024).toFixed(2)} MB
           </p>
         )}
       </div>
@@ -112,7 +220,10 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               <p className="text-xs text-blue-700 mb-3">
                 Create and save brand presets with your logo, colors, and overlays for quick access.
               </p>
-              <button className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors">
+              <button
+                onClick={handleCreateBrandPreset}
+                className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
+              >
                 + Create Brand Preset
               </button>
             </div>

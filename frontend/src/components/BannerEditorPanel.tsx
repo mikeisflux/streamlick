@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   PlusIcon,
   TrashIcon,
@@ -19,21 +19,38 @@ interface Banner {
 }
 
 export function BannerEditorPanel() {
-  const [banners, setBanners] = useState<Banner[]>([
-    {
-      id: '1',
-      type: 'lower-third',
-      title: 'John Doe',
-      subtitle: 'CEO, Example Company',
-      position: 'bottom-left',
-      backgroundColor: '#3b82f6',
-      textColor: '#ffffff',
-      visible: false,
-    },
-  ]);
+  // Load banners from localStorage or use default
+  const [banners, setBanners] = useState<Banner[]>(() => {
+    const saved = localStorage.getItem('banners');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved banners:', e);
+      }
+    }
+    // Default demo banner
+    return [
+      {
+        id: '1',
+        type: 'lower-third',
+        title: 'John Doe',
+        subtitle: 'CEO, Example Company',
+        position: 'bottom-left',
+        backgroundColor: '#3b82f6',
+        textColor: '#ffffff',
+        visible: false,
+      },
+    ];
+  });
 
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
   const [showEditor, setShowEditor] = useState(false);
+
+  // Persist banners to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('banners', JSON.stringify(banners));
+  }, [banners]);
 
   const bannerTypes = [
     { value: 'lower-third', label: 'Lower Third' },
