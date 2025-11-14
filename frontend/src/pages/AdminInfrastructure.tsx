@@ -148,6 +148,24 @@ export function AdminInfrastructure() {
     return servers.filter((s) => s.labels?.role === role);
   };
 
+  // Get unlabeled servers (no role label set)
+  const getUnlabeledServers = () => {
+    return servers.filter((s) => !s.labels?.role);
+  };
+
+  // Assign role to server
+  const handleAssignRole = async (serverId: number, role: ServerRole) => {
+    try {
+      await api.post(`/infrastructure/servers/${serverId}/labels`, {
+        role: role,
+      });
+      toast.success(`Server role updated to ${role}`);
+      await loadServers();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to assign role');
+    }
+  };
+
   const tabs: { id: ServerRole; label: string; icon: any }[] = [
     { id: 'media-server', label: 'Media Servers', icon: Server },
     { id: 'database-server', label: 'Databases', icon: Database },
@@ -356,6 +374,112 @@ export function AdminInfrastructure() {
             )}
           </div>
         </div>
+
+        {/* Unlabeled Servers Section */}
+        {getUnlabeledServers().length > 0 && (
+          <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm">
+            <div className="px-6 py-4 border-b border-yellow-200">
+              <h3 className="text-lg font-semibold text-yellow-900 flex items-center gap-2">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                Unlabeled Servers - Assign Roles
+              </h3>
+              <p className="text-sm text-yellow-700 mt-1">
+                These servers don't have a role assigned. Click "Assign Role" to categorize them.
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-yellow-100 border-b border-yellow-200">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-yellow-900 uppercase tracking-wider">
+                      Server
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-yellow-900 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-yellow-900 uppercase tracking-wider">
+                      Type
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-yellow-900 uppercase tracking-wider">
+                      Resources
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-yellow-900 uppercase tracking-wider">
+                      IP Address
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-yellow-900 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-yellow-200 bg-white">
+                  {getUnlabeledServers().map((server) => (
+                    <tr key={server.id} className="hover:bg-yellow-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-3 h-3 rounded-full ${getStatusColor(server.status)}`} />
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{server.name}</div>
+                            <div className="text-xs text-gray-500">ID: {server.id}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            server.status === 'running'
+                              ? 'bg-green-100 text-green-800'
+                              : server.status === 'starting'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}
+                        >
+                          {server.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {server.server_type.name.toUpperCase()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {server.server_type.cores} vCPU, {server.server_type.memory} GB RAM
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <code className="text-sm bg-gray-100 px-2 py-1 rounded">
+                          {server.public_net.ipv4.ip}
+                        </code>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <select
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              handleAssignRole(server.id, e.target.value as ServerRole);
+                            }
+                          }}
+                          className="px-3 py-1 text-xs border border-yellow-300 rounded-lg bg-white hover:bg-yellow-50 focus:ring-2 focus:ring-yellow-500 focus:border-transparent mr-2"
+                        >
+                          <option value="">Assign Role...</option>
+                          <option value="media-server">Media Server</option>
+                          <option value="database-server">Database Server</option>
+                          <option value="load-balancer">Load Balancer</option>
+                          <option value="api-server">API Server</option>
+                          <option value="frontend-server">Frontend Server</option>
+                          <option value="redis-server">Redis Server</option>
+                        </select>
+                        <button
+                          onClick={() => handleDelete(server.id, server.name)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Deploy Modal */}
         {showDeployModal && (
