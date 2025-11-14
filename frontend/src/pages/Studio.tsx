@@ -327,7 +327,7 @@ export function Studio() {
         {/* Main Canvas Area */}
         <main className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#F5F5F5' }}>
           {/* Canvas Container - constrained to leave room for Layout Selector and Preview Area */}
-          <div className="flex items-center justify-center px-6 pb-20" style={{ minHeight: 0, maxHeight: 'calc(100% - 350px)', flexShrink: 1, paddingTop: '84px' }}>
+          <div className="flex items-center justify-center px-6 pb-20" style={{ minHeight: 0, maxHeight: 'calc(100% - 350px)', flexShrink: 1, paddingTop: '184px' }}>
             <StudioCanvas
               localStream={localStream}
               videoEnabled={videoEnabled}
