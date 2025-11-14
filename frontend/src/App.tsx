@@ -16,6 +16,7 @@ import { AdminLogs } from './pages/AdminLogs';
 import AdminSettings from './pages/AdminSettings';
 import AdminTesting from './pages/AdminTesting';
 import { AdminServers } from './pages/AdminServers';
+import { AdminInfrastructure } from './pages/AdminInfrastructure';
 import { Admin } from './pages/Admin';
 import AdminPageManager from './pages/AdminPageManager';
 import { AdminUsers } from './pages/AdminUsers';
@@ -154,6 +155,14 @@ function App() {
           element={
             <AdminRoute>
               <AdminServers />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/infrastructure"
+          element={
+            <AdminRoute>
+              <AdminInfrastructure />
             </AdminRoute>
           }
         />

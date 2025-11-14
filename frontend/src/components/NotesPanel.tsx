@@ -66,9 +66,9 @@ export function NotesPanel({ broadcastId, teleprompterState }: NotesPanelProps) 
         </div>
       ) : (
         // Teleprompter Mode
-        <div className="flex-1 flex flex-col bg-black">
+        <div className="flex-1 flex flex-col bg-black overflow-hidden">
           {/* Teleprompter Controls */}
-          <div className="bg-gray-900 p-3 border-b border-gray-700">
+          <div className="bg-gray-900 p-3 border-b border-gray-700 flex-shrink-0">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <button

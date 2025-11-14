@@ -69,14 +69,14 @@ export function Admin() {
   const adminSections = [
     {
       title: 'Infrastructure',
-      description: 'Deploy and scale servers with one click',
+      description: 'Deploy and scale all server types with one click',
       icon: Rocket,
-      path: '/admin/servers',
+      path: '/admin/infrastructure',
       color: 'bg-sky-500/10 text-sky-400 border-sky-500/20',
     },
     {
-      title: 'Servers',
-      description: 'Manage and monitor streaming servers',
+      title: 'Media Servers',
+      description: 'Manage and monitor media streaming servers',
       icon: Server,
       path: '/admin/servers',
       color: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
