@@ -356,20 +356,20 @@ export function Studio() {
             />
           </div>
 
-          {/* Spacer container with Layout Selector */}
-          <div style={{ flex: 0.4, minHeight: 0 }}>
-            {/* Layout Selector - Always visible below canvas */}
-            <div className="flex justify-center px-6" style={{ flexShrink: 0 }}>
-              <LayoutSelector
-                selectedLayout={selectedLayout}
-                onLayoutChange={setSelectedLayout}
-                editMode={editMode}
-                onEditModeToggle={handleEditModeToggle}
-                onAddParticipant={handleAddParticipant}
-                onSettingsClick={handleCanvasSettingsClick}
-              />
-            </div>
+          {/* Layout Selector - Always visible below canvas */}
+          <div className="flex justify-center px-6" style={{ flexShrink: 0 }}>
+            <LayoutSelector
+              selectedLayout={selectedLayout}
+              onLayoutChange={setSelectedLayout}
+              editMode={editMode}
+              onEditModeToggle={handleEditModeToggle}
+              onAddParticipant={handleAddParticipant}
+              onSettingsClick={handleCanvasSettingsClick}
+            />
           </div>
+
+          {/* Spacer to push Preview Area to bottom */}
+          <div style={{ flex: 1, minHeight: 0 }} />
 
           {/* Preview Area - positioned at bottom, above BottomControlBar */}
           <div style={{ flexShrink: 0, marginBottom: '80px' }}>
