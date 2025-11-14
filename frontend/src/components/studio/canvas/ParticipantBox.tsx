@@ -14,6 +14,8 @@ interface ParticipantBoxProps {
   showPositionNumber?: boolean;
   showConnectionQuality?: boolean;
   showLowerThird?: boolean;
+  participantId?: string;
+  onRemoveFromStage?: (participantId: string) => void;
 }
 
 export function ParticipantBox({
@@ -30,6 +32,8 @@ export function ParticipantBox({
   showPositionNumber = true,
   showConnectionQuality = true,
   showLowerThird = true,
+  participantId,
+  onRemoveFromStage,
 }: ParticipantBoxProps) {
   const iconSize = size === 'small' ? 'w-6 h-6' : size === 'medium' ? 'w-10 h-10' : 'w-16 h-16';
   const textSize = size === 'small' ? 'text-xs' : 'text-sm';
@@ -43,7 +47,20 @@ export function ParticipantBox({
   };
 
   return (
-    <div className="relative bg-black rounded overflow-hidden h-full w-full">
+    <div className="relative bg-black rounded overflow-hidden h-full w-full group">
+      {/* Hover Overlay with Remove from Stage Button */}
+      {onRemoveFromStage && participantId && !isHost && (
+        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20">
+          <button
+            onClick={() => onRemoveFromStage(participantId)}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded shadow-lg"
+            title="Remove from Stage"
+          >
+            Remove from Stage
+          </button>
+        </div>
+      )}
+
       {/* Position Number Badge - Top Left */}
       {showPositionNumber && positionNumber !== undefined && (
         <div

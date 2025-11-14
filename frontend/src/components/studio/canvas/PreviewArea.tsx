@@ -105,7 +105,7 @@ export function PreviewArea({
 
         {/* Backstage Participants */}
         {backstageParticipants.map((participant) => (
-          <div key={participant.id} className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
+          <div key={participant.id} className="flex-shrink-0 group" style={{ width: '160px', height: '90px' }}>
             <div className="relative bg-black rounded overflow-hidden h-full border-2 border-yellow-500">
               {participant.stream && participant.videoEnabled ? (
                 <video
@@ -129,17 +129,22 @@ export function PreviewArea({
                   </svg>
                 </div>
               )}
-              <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 flex items-center justify-between">
-                <span className="text-white text-xs font-medium truncate flex-1">{participant.name}</span>
-                {onAddToStage && (
+
+              {/* Hover Overlay with Add to Stage Button */}
+              {onAddToStage && (
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <button
                     onClick={() => onAddToStage(participant.id)}
-                    className="ml-2 px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white text-xs rounded"
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded shadow-lg"
                     title="Add to Stage"
                   >
-                    ↑
+                    Add to Stage
                   </button>
-                )}
+                </div>
+              )}
+
+              <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 flex items-center justify-between">
+                <span className="text-white text-xs font-medium truncate flex-1">{participant.name}</span>
               </div>
             </div>
           </div>

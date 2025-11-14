@@ -43,6 +43,7 @@ interface StudioCanvasProps {
   showPositionNumbers?: boolean;
   showConnectionQuality?: boolean;
   showLowerThirds?: boolean;
+  onRemoveFromStage?: (participantId: string) => void;
 }
 
 export function StudioCanvas({
@@ -70,6 +71,7 @@ export function StudioCanvas({
   showPositionNumbers = true,
   showConnectionQuality = true,
   showLowerThirds = true,
+  onRemoveFromStage,
 }: StudioCanvasProps) {
   const mainVideoRef = useRef<HTMLVideoElement>(null);
   const screenShareVideoRef = useRef<HTMLVideoElement>(null);
@@ -223,7 +225,7 @@ export function StudioCanvas({
 
               {/* Remote Participants - Up to 4 slots */}
               {Array.from(remoteParticipants.values())
-                .filter((p) => p.id !== 'screen-share')
+                .filter((p) => p.id !== 'screen-share' && p.role !== 'backstage')
                 .slice(0, 4)
                 .map((participant, index) => (
                   <div key={participant.id} className="flex-1">
@@ -237,6 +239,8 @@ export function StudioCanvas({
                       showPositionNumber={showPositionNumbers}
                       showConnectionQuality={showConnectionQuality}
                       showLowerThird={showLowerThirds}
+                      participantId={participant.id}
+                      onRemoveFromStage={onRemoveFromStage}
                     />
                   </div>
                 ))}
@@ -319,6 +323,8 @@ export function StudioCanvas({
                       showPositionNumber={showPositionNumbers}
                       showConnectionQuality={showConnectionQuality}
                       showLowerThird={showLowerThirds}
+                      participantId={participant.id}
+                      onRemoveFromStage={onRemoveFromStage}
                     />
                   </div>
                 ))}
