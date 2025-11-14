@@ -1,0 +1,166 @@
+import { useRef, useEffect } from 'react';
+
+interface RemoteParticipant {
+  id: string;
+  name: string;
+  stream: MediaStream | null;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
+  role: 'host' | 'guest' | 'backstage';
+}
+
+interface PreviewAreaProps {
+  localStream: MediaStream | null;
+  videoEnabled: boolean;
+  audioEnabled: boolean;
+  backstageParticipants: RemoteParticipant[];
+  screenShareStream: MediaStream | null;
+  onAddToStage?: (participantId: string) => void;
+}
+
+export function PreviewArea({
+  localStream,
+  videoEnabled,
+  audioEnabled,
+  backstageParticipants,
+  screenShareStream,
+  onAddToStage,
+}: PreviewAreaProps) {
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+
+  // Update local video
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
+
+  return (
+    <div
+      className="border-t px-4 py-3 overflow-x-auto"
+      style={{
+        backgroundColor: '#1a1a1a',
+        borderColor: '#404040',
+        minHeight: '140px',
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <div className="text-gray-400 text-xs font-semibold uppercase tracking-wide mb-2">
+          Preview / Backstage
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 pb-2">
+        {/* Your Preview */}
+        <div className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
+          <div className="relative bg-black rounded overflow-hidden h-full border-2 border-blue-500">
+            {localStream && videoEnabled ? (
+              <video
+                ref={localVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-gray-900">
+                <svg className="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                  <line x1="5" y1="5" x2="19" y2="19" stroke="currentColor" strokeWidth={2} />
+                </svg>
+              </div>
+            )}
+            <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1">
+              <span className="text-white text-xs font-medium">You (Preview)</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Screen Share Preview */}
+        {screenShareStream && (
+          <div className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
+            <div className="relative bg-black rounded overflow-hidden h-full border-2 border-green-500">
+              <video
+                autoPlay
+                playsInline
+                ref={(el) => {
+                  if (el && screenShareStream) el.srcObject = screenShareStream;
+                }}
+                className="w-full h-full object-contain"
+                style={{ backgroundColor: '#000' }}
+              />
+              <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1">
+                <span className="text-white text-xs font-medium">🖥️ Screen Share</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Backstage Participants */}
+        {backstageParticipants.map((participant) => (
+          <div key={participant.id} className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
+            <div className="relative bg-black rounded overflow-hidden h-full border-2 border-yellow-500">
+              {participant.stream && participant.videoEnabled ? (
+                <video
+                  autoPlay
+                  playsInline
+                  muted
+                  ref={(el) => {
+                    if (el && participant.stream) el.srcObject = participant.stream;
+                  }}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gray-900">
+                  <svg className="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                    />
+                  </svg>
+                </div>
+              )}
+              <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 flex items-center justify-between">
+                <span className="text-white text-xs font-medium truncate flex-1">{participant.name}</span>
+                {onAddToStage && (
+                  <button
+                    onClick={() => onAddToStage(participant.id)}
+                    className="ml-2 px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white text-xs rounded"
+                    title="Add to Stage"
+                  >
+                    ↑
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {/* Empty State */}
+        {backstageParticipants.length === 0 && !screenShareStream && (
+          <div className="flex-1 flex items-center justify-center text-gray-500 text-sm py-4">
+            <div className="text-center">
+              <svg className="w-12 h-12 mx-auto mb-2 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                />
+              </svg>
+              <p>Participants will appear here when they join</p>
+              <p className="text-xs text-gray-600 mt-1">Drag them to the main window to add them to the broadcast</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

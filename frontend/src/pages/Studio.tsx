@@ -16,7 +16,7 @@ import { LeftSidebar } from '../components/studio/LeftSidebar';
 import { RightSidebar } from '../components/studio/RightSidebar';
 import { BottomControlBar } from '../components/studio/BottomControlBar';
 import { DeviceSelectors } from '../components/studio/DeviceSelectors';
-import { StudioCanvas, LayoutSelector } from '../components/studio/canvas';
+import { StudioCanvas, LayoutSelector, PreviewArea } from '../components/studio/canvas';
 import {
   AnalyticsDashboard,
   SettingsModal,
@@ -336,6 +336,14 @@ export function Studio() {
           </div>
 
           <LayoutSelector selectedLayout={selectedLayout} onLayoutChange={setSelectedLayout} />
+
+          <PreviewArea
+            localStream={localStream}
+            videoEnabled={videoEnabled}
+            audioEnabled={audioEnabled}
+            backstageParticipants={Array.from(remoteParticipants.values()).filter((p) => p.role === 'backstage')}
+            screenShareStream={screenShareStream}
+          />
 
           <BottomControlBar
             captionsEnabled={captionsEnabled}

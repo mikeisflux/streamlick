@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { CaptionOverlay } from './CanvasOverlay';
+import { ParticipantBox } from './ParticipantBox';
 import { Caption } from '../../../services/caption.service';
 
 interface RemoteParticipant {
@@ -161,76 +162,33 @@ export function StudioCanvas({
               } gap-2`}
             >
               {/* Host Video */}
-              <div className="relative bg-black rounded overflow-hidden flex-1">
-                {localStream && videoEnabled ? (
-                  <video
-                    ref={mainVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover"
-                    style={{ willChange: 'auto' }}
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div className="text-center">
-                      <svg
-                        className="w-8 h-8 text-gray-600 mx-auto mb-1"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                        />
-                      </svg>
-                    </div>
-                  </div>
-                )}
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-1">
-                  <span className="text-white text-xs font-medium">You</span>
-                </div>
+              <div className="flex-1">
+                <ParticipantBox
+                  stream={localStream}
+                  videoEnabled={videoEnabled}
+                  audioEnabled={audioEnabled}
+                  name="You"
+                  positionNumber={1}
+                  isHost={true}
+                  videoRef={mainVideoRef}
+                  size="small"
+                />
               </div>
 
               {/* Remote Participants - Up to 4 slots */}
               {Array.from(remoteParticipants.values())
                 .filter((p) => p.id !== 'screen-share')
                 .slice(0, 4)
-                .map((participant) => (
-                  <div key={participant.id} className="relative bg-gray-900 rounded overflow-hidden flex-1">
-                    {participant.stream && participant.videoEnabled ? (
-                      <video
-                        autoPlay
-                        playsInline
-                        muted
-                        ref={(el) => {
-                          if (el && participant.stream) el.srcObject = participant.stream;
-                        }}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <svg
-                          className="w-8 h-8 text-gray-700"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                          />
-                        </svg>
-                      </div>
-                    )}
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-1">
-                      <span className="text-white text-xs font-medium truncate">{participant.name}</span>
-                    </div>
+                .map((participant, index) => (
+                  <div key={participant.id} className="flex-1">
+                    <ParticipantBox
+                      stream={participant.stream}
+                      videoEnabled={participant.videoEnabled}
+                      audioEnabled={participant.audioEnabled}
+                      name={participant.name}
+                      positionNumber={index + 2}
+                      size="small"
+                    />
                   </div>
                 ))}
             </div>
@@ -276,42 +234,17 @@ export function StudioCanvas({
           <>
             {/* Normal Layout - When not screen sharing */}
             {/* Main Video */}
-            <div className={`relative bg-black rounded overflow-hidden ${getLayoutStyles(selectedLayout).mainVideo}`}>
-              {localStream && videoEnabled ? (
-                <video
-                  ref={mainVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                  style={{ willChange: 'auto' }}
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <div className="text-center">
-                    <svg
-                      className="w-16 h-16 text-gray-600 mx-auto mb-2"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                      />
-                    </svg>
-                    <p className="text-gray-500 text-sm">Camera Off</p>
-                  </div>
-                </div>
-              )}
-              {/* Video Label */}
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-white text-xs font-medium">You (Host)</span>
-                </div>
-              </div>
+            <div className={`${getLayoutStyles(selectedLayout).mainVideo}`}>
+              <ParticipantBox
+                stream={localStream}
+                videoEnabled={videoEnabled}
+                audioEnabled={audioEnabled}
+                name="You"
+                positionNumber={1}
+                isHost={true}
+                videoRef={mainVideoRef}
+                size="large"
+              />
             </div>
 
             {/* Additional video slots for grid layouts */}
