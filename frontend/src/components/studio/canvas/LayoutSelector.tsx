@@ -107,6 +107,7 @@ export function LayoutSelector({
         backgroundColor: 'rgba(255, 255, 255, 0.95)',
         borderRadius: '8px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        zIndex: 50, // Layer 50: Layout selector bar (floating below canvas)
       }}
     >
       {/* 9 Layout Buttons */}

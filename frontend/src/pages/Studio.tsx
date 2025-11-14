@@ -239,7 +239,7 @@ export function Studio() {
           alignItems: 'center',
           paddingLeft: '24px',
           paddingRight: '24px',
-          zIndex: 1000,
+          zIndex: 100, // Layer 100: Top navigation bar (always on top)
           flexShrink: 0,
         }}
       >

@@ -567,6 +567,66 @@ function AudioSettings({ props }: { props: CanvasSettingsModalProps }) {
             <option value="">No microphones found</option>
           )}
         </select>
+        {/* Volume Meter Visualization */}
+        <div className="mt-3">
+          <div className="flex items-center gap-1">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div
+                key={i}
+                className="flex-1 h-4 rounded-sm"
+                style={{
+                  backgroundColor:
+                    i < Math.floor(((props.inputVolume ?? 75) / 100) * 10)
+                      ? i < 7
+                        ? '#10b981'
+                        : i < 9
+                        ? '#f59e0b'
+                        : '#ef4444'
+                      : '#2d2d2d',
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Speaker Device */}
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-2">Speaker Device</label>
+        <div className="flex gap-2">
+          <select
+            className="flex-1 px-3 py-2 rounded text-sm"
+            style={{
+              backgroundColor: '#2d2d2d',
+              color: '#ffffff',
+              border: '1px solid #404040',
+            }}
+          >
+            <option value="">Default - System Speaker</option>
+            <option value="speaker1">Built-in Speaker</option>
+            <option value="speaker2">External Speaker</option>
+          </select>
+          <button
+            className="px-4 py-2 rounded text-sm font-medium transition-colors"
+            style={{
+              backgroundColor: '#0066ff',
+              color: '#ffffff',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#0052cc';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#0066ff';
+            }}
+            onClick={() => {
+              // Play test sound
+              const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTcIGWi77eefTRAMUKfj8LZjHAY4ktfyzHksBSR3x/DdkEAKFF606+uoVRQKRp/g8r5sIQUrgc7y2Yk3CBlou+3nn00QDFCn4/C2YxwGOJLX8sx5LAUkd8fw3ZBAC');
+              audio.play();
+            }}
+          >
+            Test
+          </button>
+        </div>
       </div>
 
       <div>
@@ -820,38 +880,133 @@ function RecordingSettings({ props }: { props: CanvasSettingsModalProps }) {
 
 // Hotkeys Settings Tab
 function HotkeysSettings() {
-  const hotkeys = [
-    { action: 'Toggle Microphone', key: 'Ctrl+D' },
-    { action: 'Toggle Camera', key: 'Ctrl+E' },
-    { action: 'Start/Stop Recording', key: 'Ctrl+R' },
-    { action: 'Go Live', key: 'Ctrl+L' },
-    { action: 'Show/Hide Chat', key: 'Ctrl+H' },
-    { action: 'Toggle Screenshare', key: 'Ctrl+S' },
+  const hotkeyGroups = [
+    {
+      category: 'DEVICES',
+      hotkeys: [
+        { action: 'Mute/unmute mic', key: 'Ctrl+D' },
+        { action: 'Camera on/off', key: 'Ctrl+E' },
+      ],
+    },
+    {
+      category: 'SHARING',
+      hotkeys: [
+        { action: 'Share screen', key: 'Shift+S' },
+        { action: 'Share video', key: 'Shift+V' },
+        { action: 'Share image', key: 'Shift+I' },
+        { action: 'Play/pause shared video', key: 'Not set' },
+        { action: 'Share second camera', key: 'Not set' },
+      ],
+    },
+    {
+      category: 'SLIDES',
+      hotkeys: [
+        { action: 'Next slideshow slide', key: 'Right' },
+        { action: 'Previous slideshow slide', key: 'Left' },
+      ],
+    },
+    {
+      category: 'STREAMING AND RECORDING',
+      hotkeys: [
+        { action: 'Start stream/recording', key: 'Not set' },
+        { action: 'End stream/recording', key: 'Not set' },
+        { action: 'Pause/resume recording', key: 'Not set' },
+        { action: 'Cancel recording', key: 'Not set' },
+      ],
+    },
+    {
+      category: 'LAYOUTS',
+      hotkeys: [
+        { action: 'Solo layout', key: 'Shift+1' },
+        { action: 'Cropped layout', key: 'Shift+2' },
+        { action: 'Group layout', key: 'Shift+3' },
+        { action: 'Spotlight layout', key: 'Shift+4' },
+        { action: 'News layout', key: 'Shift+5' },
+        { action: 'Screen layout', key: 'Shift+6' },
+        { action: 'Picture-in-picture layout', key: 'Shift+7' },
+        { action: 'Cinema layout', key: 'Shift+8' },
+        { action: 'Mission Briefing', key: 'Not set' },
+        { action: 'Next layout', key: 'L' },
+        { action: 'Previous layout', key: 'Shift+L' },
+      ],
+    },
+    {
+      category: 'SCENES',
+      hotkeys: [
+        { action: 'Next scene', key: 'Not set' },
+        { action: 'Previous scene', key: 'Not set' },
+      ],
+    },
+    {
+      category: 'NAVIGATION',
+      hotkeys: [
+        { action: 'Open comments tab', key: 'Not set' },
+        { action: 'Open banners tab', key: 'Not set' },
+        { action: 'Open media assets tab', key: 'Not set' },
+        { action: 'Open style tab', key: 'Not set' },
+        { action: 'Open notes tab', key: 'Not set' },
+        { action: 'Open people tab', key: 'Not set' },
+        { action: 'Open private chat', key: 'Not set' },
+        { action: 'Open recording tab', key: 'Not set' },
+        { action: 'Open settings', key: 'Not set' },
+        { action: 'Next tab', key: 'T' },
+        { action: 'Previous tab', key: 'Shift+T' },
+      ],
+    },
+    {
+      category: 'OTHER',
+      hotkeys: [
+        { action: 'Enter/exit fullscreen', key: 'Shift+F' },
+        { action: 'Toggle display names', key: 'Not set' },
+        { action: 'Create marker', key: 'B' },
+      ],
+    },
   ];
 
   return (
     <div className="space-y-6">
       <div>
         <h3 className="text-xl font-semibold text-white mb-4">Hotkeys Settings</h3>
-        <p className="text-sm text-gray-400 mb-6">Configure keyboard shortcuts</p>
+        <p className="text-sm text-gray-400 mb-6">
+          Configure keyboard shortcuts for faster studio control
+        </p>
       </div>
 
-      <div className="space-y-3">
-        {hotkeys.map((hotkey) => (
-          <div
-            key={hotkey.action}
-            className="flex items-center justify-between px-4 py-3 rounded"
-            style={{ backgroundColor: '#2d2d2d' }}
-          >
-            <span className="text-sm text-gray-300">{hotkey.action}</span>
-            <code
-              className="px-3 py-1 rounded text-sm font-mono"
-              style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}
-            >
-              {hotkey.key}
-            </code>
+      <div className="space-y-6 max-h-[400px] overflow-y-auto pr-2">
+        {hotkeyGroups.map((group) => (
+          <div key={group.category}>
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+              {group.category}
+            </h4>
+            <div className="space-y-2">
+              {group.hotkeys.map((hotkey, index) => (
+                <div
+                  key={`${group.category}-${index}`}
+                  className="flex items-center justify-between px-4 py-2 rounded"
+                  style={{ backgroundColor: '#2d2d2d' }}
+                >
+                  <span className="text-sm text-gray-300">{hotkey.action}</span>
+                  <code
+                    className="px-3 py-1 rounded text-xs font-mono"
+                    style={{
+                      backgroundColor: hotkey.key === 'Not set' ? 'transparent' : '#1a1a1a',
+                      color: hotkey.key === 'Not set' ? '#666666' : '#ffffff',
+                      border: hotkey.key === 'Not set' ? '1px dashed #404040' : 'none',
+                    }}
+                  >
+                    {hotkey.key}
+                  </code>
+                </div>
+              ))}
+            </div>
           </div>
         ))}
+
+        <div className="mt-6 pt-6 border-t border-gray-700">
+          <p className="text-sm text-gray-500 italic">
+            Even more hotkey options are coming soon!
+          </p>
+        </div>
       </div>
     </div>
   );

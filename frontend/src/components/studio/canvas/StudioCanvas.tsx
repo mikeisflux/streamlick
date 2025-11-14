@@ -476,6 +476,7 @@ export function StudioCanvas({
               height: '32px',
               backgroundColor: 'rgba(0, 0, 0, 0.7)',
               borderRadius: '4px',
+              zIndex: 5, // Layer 5: Resolution badge (1080p indicator)
             }}
           >
             1080p

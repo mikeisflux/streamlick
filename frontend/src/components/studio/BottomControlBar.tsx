@@ -90,7 +90,7 @@ export function BottomControlBar({
         backgroundColor: '#2d2d2d',
         borderColor: '#404040',
         right: '64px',
-        zIndex: 700
+        zIndex: 90, // Layer 90: Bottom control bar (always visible)
       }}
     >
       {/* Centered Section - Killer Features and Media Controls */}

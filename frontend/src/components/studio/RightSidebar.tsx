@@ -37,7 +37,7 @@ export function RightSidebar({
           width: '64px',
           backgroundColor: '#f8f8f8',
           borderColor: '#e0e0e0',
-          zIndex: 900
+          zIndex: 80, // Layer 80: Right sidebar (vertical icon tabs)
         }}
       >
         <button
@@ -227,7 +227,7 @@ export function RightSidebar({
           width: '320px',
           backgroundColor: '#ffffff',
           borderColor: '#e0e0e0',
-          zIndex: 800,
+          zIndex: 75, // Content panel (below sidebar buttons)
           transform: rightSidebarOpen ? 'translateX(0)' : 'translateX(320px)',
           transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)'
         }}

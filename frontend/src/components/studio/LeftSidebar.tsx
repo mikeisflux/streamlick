@@ -39,14 +39,15 @@ export function LeftSidebar({
       {/* Left Sidebar - Scenes (280px width) - Always rendered, slides in/out with transform, overlays content */}
       <aside
         ref={leftSidebarRef}
-        className="flex flex-col overflow-hidden border-r absolute left-0 top-0 bottom-0 z-[850]"
+        className="flex flex-col overflow-hidden border-r absolute left-0 top-0 bottom-0"
         style={{
           width: '280px',
           backgroundColor: '#f5f5f5',
           borderColor: '#e0e0e0',
           transform: leftSidebarOpen ? 'translateX(0)' : 'translateX(-280px)',
           transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
-          boxShadow: leftSidebarOpen ? '4px 0 12px rgba(0, 0, 0, 0.1)' : 'none'
+          boxShadow: leftSidebarOpen ? '4px 0 12px rgba(0, 0, 0, 0.1)' : 'none',
+          zIndex: 85, // Layer 85: Left sidebar (between right sidebar and bottom bar)
         }}
         aria-expanded={leftSidebarOpen}
         aria-label="Scenes Panel"
@@ -122,7 +123,7 @@ export function LeftSidebar({
             left: 0,
             width: '32px',
             height: '80px',
-            zIndex: 840,
+            zIndex: 84, // Toggle button (slightly below sidebar)
             transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)'
           }}
           title="Open Scenes Panel"
