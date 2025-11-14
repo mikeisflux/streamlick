@@ -1,22 +1,25 @@
-import { useState } from 'react';
+import { useTeleprompter } from '../hooks/studio/useTeleprompter';
 
 interface NotesPanelProps {
   broadcastId?: string;
+  teleprompterState: ReturnType<typeof useTeleprompter>;
 }
 
-export function NotesPanel({ broadcastId }: NotesPanelProps) {
-  const [notes, setNotes] = useState('');
-  const [teleprompterMode, setTeleprompterMode] = useState(false);
-  const [fontSize, setFontSize] = useState(16);
-  const [scrollSpeed, setScrollSpeed] = useState(2);
-  const [isScrolling, setIsScrolling] = useState(false);
-
-  const handleTeleprompterToggle = () => {
-    setTeleprompterMode(!teleprompterMode);
-    if (teleprompterMode) {
-      setIsScrolling(false);
-    }
-  };
+export function NotesPanel({ broadcastId, teleprompterState }: NotesPanelProps) {
+  const {
+    notes,
+    setNotes,
+    teleprompterMode,
+    handleTeleprompterToggle,
+    fontSize,
+    setFontSize,
+    scrollSpeed,
+    setScrollSpeed,
+    isScrolling,
+    setIsScrolling,
+    showOnCanvas,
+    toggleShowOnCanvas,
+  } = teleprompterState;
 
   return (
     <div className="h-full flex flex-col">
@@ -65,23 +68,36 @@ export function NotesPanel({ broadcastId }: NotesPanelProps) {
         // Teleprompter Mode
         <div className="flex-1 flex flex-col bg-black">
           {/* Teleprompter Controls */}
-          <div className="bg-gray-900 p-3 flex items-center justify-between border-b border-gray-700">
-            <div className="flex items-center gap-2">
+          <div className="bg-gray-900 p-3 border-b border-gray-700">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleTeleprompterToggle}
+                  className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors"
+                >
+                  ← Exit
+                </button>
+                <button
+                  onClick={() => setIsScrolling(!isScrolling)}
+                  className={`px-3 py-1 text-xs rounded transition-colors ${
+                    isScrolling
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-green-600 hover:bg-green-700 text-white'
+                  }`}
+                  disabled={!showOnCanvas}
+                >
+                  {isScrolling ? '⏸ Pause' : '▶ Start'}
+                </button>
+              </div>
               <button
-                onClick={handleTeleprompterToggle}
-                className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors"
-              >
-                ← Exit
-              </button>
-              <button
-                onClick={() => setIsScrolling(!isScrolling)}
-                className={`px-3 py-1 text-xs rounded transition-colors ${
-                  isScrolling
-                    ? 'bg-red-600 hover:bg-red-700 text-white'
-                    : 'bg-green-600 hover:bg-green-700 text-white'
+                onClick={toggleShowOnCanvas}
+                className={`px-3 py-1 text-xs rounded transition-colors font-semibold ${
+                  showOnCanvas
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                    : 'bg-gray-700 hover:bg-gray-600 text-white'
                 }`}
               >
-                {isScrolling ? '⏸ Pause' : '▶ Start'}
+                {showOnCanvas ? '👁 Hide on Screen' : '👁 Show on Screen'}
               </button>
             </div>
 

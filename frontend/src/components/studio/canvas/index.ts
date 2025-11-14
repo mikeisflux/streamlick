@@ -4,3 +4,4 @@ export { StudioCanvas } from './StudioCanvas';
 export { ParticipantBox } from './ParticipantBox';
 export { PreviewArea } from './PreviewArea';
 export { CanvasSettingsModal } from './CanvasSettingsModal';
+export { TeleprompterOverlay } from './TeleprompterOverlay';

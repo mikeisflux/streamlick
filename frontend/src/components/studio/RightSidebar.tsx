@@ -6,6 +6,7 @@ import { NotesPanel } from '../NotesPanel';
 import { ParticipantsPanel } from '../ParticipantsPanel';
 import { PrivateChatPanel } from '../PrivateChatPanel';
 import { RecordingControls } from '../RecordingControls';
+import { TeleprompterSettings } from '../../hooks/studio/useTeleprompter';
 
 interface RightSidebarProps {
   rightSidebarOpen: boolean;
@@ -15,6 +16,7 @@ interface RightSidebarProps {
   currentUserId: string | undefined;
   onShowBannerDrawer: () => void;
   rightSidebarRef: RefObject<HTMLElement>;
+  teleprompterState: ReturnType<typeof import('../../hooks/studio/useTeleprompter').useTeleprompter>;
 }
 
 export function RightSidebar({
@@ -25,6 +27,7 @@ export function RightSidebar({
   currentUserId,
   onShowBannerDrawer,
   rightSidebarRef,
+  teleprompterState,
 }: RightSidebarProps) {
   return (
     <>
@@ -271,7 +274,7 @@ export function RightSidebar({
               )}
               {activeRightTab === 'media' && <MediaAssetsPanel broadcastId={broadcastId} />}
               {activeRightTab === 'style' && <StylePanel broadcastId={broadcastId} />}
-              {activeRightTab === 'notes' && <NotesPanel broadcastId={broadcastId} />}
+              {activeRightTab === 'notes' && <NotesPanel broadcastId={broadcastId} teleprompterState={teleprompterState} />}
               {activeRightTab === 'people' && <ParticipantsPanel />}
               {activeRightTab === 'chat' && <PrivateChatPanel broadcastId={broadcastId} currentUserId={currentUserId} />}
               {activeRightTab === 'recording' && (

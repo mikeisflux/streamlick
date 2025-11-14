@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { CaptionOverlay } from './CanvasOverlay';
 import { ParticipantBox } from './ParticipantBox';
+import { TeleprompterOverlay } from './TeleprompterOverlay';
 import { Caption } from '../../../services/caption.service';
 
 interface RemoteParticipant {
@@ -45,6 +46,12 @@ interface StudioCanvasProps {
   showConnectionQuality?: boolean;
   showLowerThirds?: boolean;
   onRemoveFromStage?: (participantId: string) => void;
+  teleprompterNotes?: string;
+  teleprompterFontSize?: number;
+  teleprompterIsScrolling?: boolean;
+  teleprompterScrollSpeed?: number;
+  teleprompterScrollPosition?: number;
+  showTeleprompterOnCanvas?: boolean;
 }
 
 export function StudioCanvas({
@@ -74,6 +81,12 @@ export function StudioCanvas({
   showConnectionQuality = true,
   showLowerThirds = true,
   onRemoveFromStage,
+  teleprompterNotes = '',
+  teleprompterFontSize = 24,
+  teleprompterIsScrolling = false,
+  teleprompterScrollSpeed = 2,
+  teleprompterScrollPosition = 0,
+  showTeleprompterOnCanvas = false,
 }: StudioCanvasProps) {
   const mainVideoRef = useRef<HTMLVideoElement>(null);
   const screenShareVideoRef = useRef<HTMLVideoElement>(null);
@@ -568,6 +581,17 @@ export function StudioCanvas({
 
         {/* AI Caption Overlay */}
         {captionsEnabled && <CaptionOverlay caption={currentCaption} />}
+
+        {/* Teleprompter Overlay */}
+        {showTeleprompterOnCanvas && (
+          <TeleprompterOverlay
+            notes={teleprompterNotes}
+            fontSize={teleprompterFontSize}
+            isScrolling={teleprompterIsScrolling}
+            scrollSpeed={teleprompterScrollSpeed}
+            scrollPosition={teleprompterScrollPosition}
+          />
+        )}
       </div>
     </div>
   );

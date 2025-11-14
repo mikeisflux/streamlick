@@ -16,3 +16,4 @@ export { useStudioInitialization } from './useStudioInitialization';
 export { useSidebarPersistence } from './useSidebarPersistence';
 export { useSidebarVideoSync } from './useSidebarVideoSync';
 export { useFeatureToggles } from './useFeatureToggles';
+export { useTeleprompter } from './useTeleprompter';

@@ -48,6 +48,7 @@ import {
   useSidebarPersistence,
   useSidebarVideoSync,
   useFeatureToggles,
+  useTeleprompter,
 } from '../hooks/studio';
 import { useCanvasSettings } from '../hooks/studio/useCanvasSettings';
 
@@ -196,6 +197,9 @@ export function Studio() {
   const { showAnalyticsDashboard, setShowAnalyticsDashboard, analyticsDashboardPosition, analyticsDashboardSize, handleAnalyticsDashboardDragStart, handleAnalyticsDashboardResizeStart } = useAnalyticsDashboard();
   const { showDestinationsDrawer, setShowDestinationsDrawer, showInviteDrawer, setShowInviteDrawer, showBannerDrawer, setShowBannerDrawer, showBrandDrawer, setShowBrandDrawer, showRecordingDrawer, setShowRecordingDrawer } = useDrawers();
   const { showClipManager, setShowClipManager, showProducerMode, setShowProducerMode, showClipDurationSelector, setShowClipDurationSelector, showLanguageSelector, setShowLanguageSelector, showBackgroundSettings, setShowBackgroundSettings, showSceneManager, setShowSceneManager } = useModals();
+
+  // Teleprompter
+  const teleprompterState = useTeleprompter();
   const { showHotkeyReference } = useStudioHotkeys({ audioEnabled, videoEnabled, isLive, isRecording, isSharingScreen, toggleAudio, toggleVideo, handleGoLive, handleEndBroadcast, handleStartRecording, handleStopRecording, handleToggleScreenShare, handleLayoutChange, setShowChatOnStream });
   const { handleCreateClip } = useClipRecording(clipRecordingEnabled, localStream, () => compositorService.getOutputStream());
 
@@ -376,6 +380,12 @@ export function Studio() {
               showConnectionQuality={canvasSettings.showConnectionQuality}
               showLowerThirds={canvasSettings.showLowerThirds}
               onRemoveFromStage={handleRemoveFromStage}
+              teleprompterNotes={teleprompterState.notes}
+              teleprompterFontSize={teleprompterState.fontSize}
+              teleprompterIsScrolling={teleprompterState.isScrolling}
+              teleprompterScrollSpeed={teleprompterState.scrollSpeed}
+              teleprompterScrollPosition={teleprompterState.scrollPosition}
+              showTeleprompterOnCanvas={teleprompterState.showOnCanvas}
             />
           </div>
 
@@ -455,6 +465,7 @@ export function Studio() {
           currentUserId={broadcast?.userId}
           onShowBannerDrawer={() => setShowBannerDrawer(true)}
           rightSidebarRef={rightSidebarRef}
+          teleprompterState={teleprompterState}
         />
       </div>
 
