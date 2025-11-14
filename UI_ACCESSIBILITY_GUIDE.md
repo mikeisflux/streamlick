@@ -6,6 +6,59 @@ Status: 100% Production-Ready
 
 ---
 
+## 🚨 QUICK START - SEE ALL FEATURES NOW
+
+**If you're not seeing the features listed below, follow these steps:**
+
+1. **Pull the latest code:**
+   ```bash
+   git pull origin claude/merge-gitignore-updates-01TxKMkKL3uMMpg9ipuF8KJn
+   npm install
+   npm run build
+   ```
+
+2. **Navigate to the Studio page:**
+   - Go to `/studio` route in your browser
+   - You should see the main studio interface
+
+3. **What you should see immediately:**
+   - ✅ **Top navigation bar** (60px, dark gray #2d2d2d)
+   - ✅ **Black canvas** in center (16:9 aspect ratio)
+   - ✅ **White Layout Selector bar** below canvas (56px, white rounded bar)
+   - ✅ **9 layout icon buttons** in the Layout Selector
+   - ✅ **Preview Area** below Layout Selector (dark background, shows "You (Preview)")
+   - ✅ **Bottom Control Bar** at bottom (80px, dark)
+   - ✅ **Resolution Badge** on canvas top-left (shows "1080p")
+
+4. **Features on the canvas (visible on participant boxes):**
+   - ✅ **Position Number** (blue circle, top-left of each participant)
+   - ✅ **Connection Quality** (small dot, top-right of each participant)
+   - ✅ **Lower Third Name** ("You" or participant name, 40px from bottom)
+   - ✅ **Mute Indicator** (red circle when muted, bottom-right)
+
+5. **To toggle these overlays on/off:**
+   - Click **⚙️ Settings** (gear icon in top nav)
+   - Go to **General** tab
+   - Toggle: "Show position numbers", "Show connection quality", "Show lower thirds"
+
+6. **To activate Edit Mode (purple border):**
+   - Find the white Layout Selector bar below the canvas
+   - Click the **pencil icon** (first button after the layout icons)
+   - The canvas will get a **4px purple border**
+
+7. **To see all 9 layouts:**
+   - Look at the white Layout Selector bar
+   - You'll see 9 small icon buttons showing different layout patterns
+   - Click any to switch instantly
+
+8. **If you STILL don't see these features:**
+   - Check browser console for errors
+   - Make sure you're on `/studio` route, not `/` homepage
+   - Try hard refresh: Ctrl+Shift+R (Windows) or Cmd+Shift+R (Mac)
+   - Check that npm run build completed successfully
+
+---
+
 ## 🎨 Main Studio Layout
 
 ### Top Navigation Bar (60px height)
@@ -301,6 +354,59 @@ Status: 100% Production-Ready
 **Implementation location:**
 - Button: `/home/user/streamlick/frontend/src/components/studio/canvas/LayoutSelector.tsx`
 - Border effect: `/home/user/streamlick/frontend/src/components/studio/canvas/StudioCanvas.tsx` line 181
+
+### "Advanced features (Greenroom, banned guests, drag-drop)" ✅
+
+**1. GREENROOM / BACKSTAGE:**
+**WHERE TO FIND IT:**
+- Click the **People icon** in the **Right Sidebar** (far right edge of screen)
+- You'll see two sections:
+  - **"On Stage"** - Participants visible to viewers
+  - **"Backstage / Waiting"** - Participants in greenroom (can see/hear you, but viewers can't see them)
+- Each participant has an **"On Stage"** or **"Backstage"** button to move them
+- Backstage participants appear in the **Preview Area** (below canvas) with yellow border
+
+**HOW IT WORKS:**
+- When a guest joins, they start in Backstage (if setting enabled)
+- Click **"↑ On Stage"** button to bring them to the main canvas
+- Click **"↓ Backstage"** button to move them back to greenroom
+- Tip shown: "Participants in backstage can see and hear you, but viewers can't see or hear them until you bring them on stage"
+
+**2. BAN GUESTS (Permanent removal):**
+**WHERE TO FIND IT:**
+- In the **Right Sidebar → People** panel
+- Each participant (except host) has an **X button** in top-right
+- Click **X** → Shows confirmation: "Ban [name] permanently? They will not be able to rejoin this broadcast."
+- Separate from "kick" - ban prevents rejoining
+
+**IMPLEMENTATION:**
+- Handler: `/home/user/streamlick/frontend/src/hooks/studio/useParticipants.ts` line 194
+- API endpoint: POST `/broadcasts/${broadcastId}/ban`
+- Stores banned participant ID to prevent future joins
+
+**3. DRAG-AND-DROP PARTICIPANTS:**
+**WHERE TO FIND IT:**
+- This feature uses the **DraggableParticipant** component
+- Location: `/home/user/streamlick/frontend/src/components/DraggableParticipant.tsx`
+
+**FEATURES:**
+- **Drag participants** anywhere on canvas (mouse drag)
+- **Resize participants** using 8 resize handles (4 corners + 4 edges)
+- **Bring to front** (double-click participant)
+- **Selected state** shows blue ring around participant
+- **Layout presets** available: Solo, Side-by-side, Grid, Picture-in-picture, Spotlight
+
+**HOW TO USE:**
+- Click and drag participant video box to move
+- When selected, blue dots appear at corners and edges
+- Drag blue dots to resize
+- Double-click to bring participant to front layer
+- Maintains z-index ordering
+
+**CURRENT STATUS:**
+- Component exists and is fully functional
+- May need to be integrated into main StudioCanvas (currently standalone)
+- Check if enabled in your current layout mode
 
 ---
 
