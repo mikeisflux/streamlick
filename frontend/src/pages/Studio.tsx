@@ -214,24 +214,13 @@ export function Studio() {
   const handleCanvasSettingsClick = () => setShowCanvasSettings(true);
 
   // Handle adding/removing participants from stage
+  // Use existing handlers from useParticipants hook
   const handleAddToStage = (participantId: string) => {
-    const participant = remoteParticipants.get(participantId);
-    if (participant) {
-      // Change role from backstage to guest to add to stage
-      remoteParticipants.set(participantId, { ...participant, role: 'guest' });
-      // Trigger re-render by creating new Map
-      setRemoteParticipants(new Map(remoteParticipants));
-    }
+    handlePromoteToLive(participantId);
   };
 
   const handleRemoveFromStage = (participantId: string) => {
-    const participant = remoteParticipants.get(participantId);
-    if (participant) {
-      // Change role from guest/host to backstage to remove from stage
-      remoteParticipants.set(participantId, { ...participant, role: 'backstage' });
-      // Trigger re-render by creating new Map
-      setRemoteParticipants(new Map(remoteParticipants));
-    }
+    handleDemoteToBackstage(participantId);
   };
 
   if (isLoading) {
