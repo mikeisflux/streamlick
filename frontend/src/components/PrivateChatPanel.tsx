@@ -15,35 +15,59 @@ interface PrivateChatPanelProps {
 }
 
 export function PrivateChatPanel({ broadcastId, currentUserId }: PrivateChatPanelProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      senderId: 'host-1',
-      senderName: 'Host',
-      message: 'Welcome to the show! Can everyone hear me okay?',
-      timestamp: new Date(Date.now() - 300000),
-      isHost: true,
-    },
-    {
-      id: '2',
-      senderId: 'guest-1',
-      senderName: 'Sarah',
-      message: 'Yes, audio is clear!',
-      timestamp: new Date(Date.now() - 240000),
-      isHost: false,
-    },
-    {
-      id: '3',
-      senderId: 'guest-2',
-      senderName: 'Mike',
-      message: 'All good here too 👍',
-      timestamp: new Date(Date.now() - 180000),
-      isHost: false,
-    },
-  ]);
+  // Load messages from localStorage or use default demo messages
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const storageKey = `private_chat_${broadcastId || 'default'}`;
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Convert timestamp strings back to Date objects
+        return parsed.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+        }));
+      } catch (e) {
+        console.error('Failed to parse saved messages:', e);
+      }
+    }
+    // Default demo messages if nothing saved
+    return [
+      {
+        id: '1',
+        senderId: 'host-1',
+        senderName: 'Host',
+        message: 'Welcome to the show! Can everyone hear me okay?',
+        timestamp: new Date(Date.now() - 300000),
+        isHost: true,
+      },
+      {
+        id: '2',
+        senderId: 'guest-1',
+        senderName: 'Sarah',
+        message: 'Yes, audio is clear!',
+        timestamp: new Date(Date.now() - 240000),
+        isHost: false,
+      },
+      {
+        id: '3',
+        senderId: 'guest-2',
+        senderName: 'Mike',
+        message: 'All good here too 👍',
+        timestamp: new Date(Date.now() - 180000),
+        isHost: false,
+      },
+    ];
+  });
   const [inputMessage, setInputMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Persist messages to localStorage whenever they change
+  useEffect(() => {
+    const storageKey = `private_chat_${broadcastId || 'default'}`;
+    localStorage.setItem(storageKey, JSON.stringify(messages));
+  }, [messages, broadcastId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

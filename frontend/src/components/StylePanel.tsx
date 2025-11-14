@@ -1,17 +1,62 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface StylePanelProps {
   broadcastId?: string;
 }
 
 export function StylePanel({ broadcastId }: StylePanelProps) {
-  const [primaryColor, setPrimaryColor] = useState('#0066ff');
-  const [secondaryColor, setSecondaryColor] = useState('#6366f1');
-  const [backgroundColor, setBackgroundColor] = useState('#1a1a1a');
-  const [textColor, setTextColor] = useState('#ffffff');
-  const [theme, setTheme] = useState<'dark' | 'light' | 'custom'>('dark');
-  const [cameraFrame, setCameraFrame] = useState<'none' | 'rounded' | 'circle' | 'square'>('rounded');
-  const [borderWidth, setBorderWidth] = useState(2);
+  // Load styles from localStorage
+  const [primaryColor, setPrimaryColor] = useState(() =>
+    localStorage.getItem('style_primaryColor') || '#0066ff'
+  );
+  const [secondaryColor, setSecondaryColor] = useState(() =>
+    localStorage.getItem('style_secondaryColor') || '#6366f1'
+  );
+  const [backgroundColor, setBackgroundColor] = useState(() =>
+    localStorage.getItem('style_backgroundColor') || '#1a1a1a'
+  );
+  const [textColor, setTextColor] = useState(() =>
+    localStorage.getItem('style_textColor') || '#ffffff'
+  );
+  const [theme, setTheme] = useState<'dark' | 'light' | 'custom'>(() =>
+    (localStorage.getItem('style_theme') as any) || 'dark'
+  );
+  const [cameraFrame, setCameraFrame] = useState<'none' | 'rounded' | 'circle' | 'square'>(() =>
+    (localStorage.getItem('style_cameraFrame') as any) || 'rounded'
+  );
+  const [borderWidth, setBorderWidth] = useState(() => {
+    const saved = localStorage.getItem('style_borderWidth');
+    return saved ? parseInt(saved) : 2;
+  });
+
+  // Persist all style changes to localStorage
+  useEffect(() => {
+    localStorage.setItem('style_primaryColor', primaryColor);
+  }, [primaryColor]);
+
+  useEffect(() => {
+    localStorage.setItem('style_secondaryColor', secondaryColor);
+  }, [secondaryColor]);
+
+  useEffect(() => {
+    localStorage.setItem('style_backgroundColor', backgroundColor);
+  }, [backgroundColor]);
+
+  useEffect(() => {
+    localStorage.setItem('style_textColor', textColor);
+  }, [textColor]);
+
+  useEffect(() => {
+    localStorage.setItem('style_theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem('style_cameraFrame', cameraFrame);
+  }, [cameraFrame]);
+
+  useEffect(() => {
+    localStorage.setItem('style_borderWidth', borderWidth.toString());
+  }, [borderWidth]);
 
   const themes = [
     { id: 'dark', name: 'Dark', colors: { primary: '#0066ff', bg: '#1a1a1a', text: '#ffffff' } },
