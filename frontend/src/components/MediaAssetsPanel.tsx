@@ -101,7 +101,9 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   };
 
   const handleCreateBrandPreset = () => {
-    toast.info('Please select a logo file for your brand preset');
+    toast('Please select a logo file for your brand preset', {
+      icon: 'ℹ️',
+    });
     brandPresetFileInputRef.current?.click();
   };
 
