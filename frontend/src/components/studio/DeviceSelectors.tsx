@@ -1,4 +1,4 @@
-import { RefObject } from 'react';
+import { RefObject, useState, useEffect } from 'react';
 
 interface DeviceSelectorsProps {
   // Microphone selector
@@ -48,6 +48,51 @@ export function DeviceSelectors({
   handleSpeakerDeviceChange,
   speakerButtonRef,
 }: DeviceSelectorsProps) {
+  // Avatar management
+  const [avatars, setAvatars] = useState<string[]>([]);
+  const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
+
+  // Load avatars from localStorage on mount
+  useEffect(() => {
+    const storedAvatars = localStorage.getItem('userAvatars');
+    const storedSelectedAvatar = localStorage.getItem('selectedAvatar');
+    if (storedAvatars) {
+      setAvatars(JSON.parse(storedAvatars));
+    }
+    if (storedSelectedAvatar) {
+      setSelectedAvatar(storedSelectedAvatar);
+    }
+  }, []);
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const avatarUrl = event.target?.result as string;
+        const newAvatars = [...avatars, avatarUrl];
+        setAvatars(newAvatars);
+        localStorage.setItem('userAvatars', JSON.stringify(newAvatars));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAvatarSelect = (avatarUrl: string) => {
+    setSelectedAvatar(avatarUrl);
+    localStorage.setItem('selectedAvatar', avatarUrl);
+  };
+
+  const handleAvatarDelete = (avatarUrl: string) => {
+    const newAvatars = avatars.filter(a => a !== avatarUrl);
+    setAvatars(newAvatars);
+    localStorage.setItem('userAvatars', JSON.stringify(newAvatars));
+    if (selectedAvatar === avatarUrl) {
+      setSelectedAvatar(null);
+      localStorage.removeItem('selectedAvatar');
+    }
+  };
+
   return (
     <>
       {/* Microphone Device Selector Popup */}
@@ -189,6 +234,67 @@ export function DeviceSelectors({
                   ))}
                 </div>
               )}
+
+              {/* Avatar Section */}
+              <div className="border-t border-gray-200">
+                <div className="p-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2">Avatar</h4>
+                  <p className="text-xs text-gray-500 mb-3">Upload and select an avatar for when your camera is off</p>
+
+                  {/* Upload Button */}
+                  <label className="block mb-3">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarUpload}
+                      className="hidden"
+                    />
+                    <div className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded cursor-pointer text-center transition-colors">
+                      + Upload Avatar
+                    </div>
+                  </label>
+
+                  {/* Avatar Grid */}
+                  {avatars.length > 0 && (
+                    <div className="grid grid-cols-5 gap-2">
+                      {avatars.map((avatarUrl, index) => (
+                        <div key={index} className="relative group">
+                          <button
+                            onClick={() => handleAvatarSelect(avatarUrl)}
+                            className={`w-full aspect-square rounded-full overflow-hidden border-2 transition-all ${
+                              selectedAvatar === avatarUrl
+                                ? 'border-blue-600 ring-2 ring-blue-200'
+                                : 'border-gray-300 hover:border-gray-400'
+                            }`}
+                          >
+                            <img
+                              src={avatarUrl}
+                              alt={`Avatar ${index + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+
+                          {/* Delete button on hover */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAvatarDelete(avatarUrl);
+                            }}
+                            className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs"
+                            title="Delete avatar"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {avatars.length === 0 && (
+                    <p className="text-xs text-gray-400 text-center py-4">No avatars uploaded yet</p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </>

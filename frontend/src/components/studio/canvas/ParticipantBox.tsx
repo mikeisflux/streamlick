@@ -1,4 +1,4 @@
-import { RefObject } from 'react';
+import { RefObject, useState, useEffect } from 'react';
 
 interface ParticipantBoxProps {
   stream: MediaStream | null;
@@ -37,6 +37,17 @@ export function ParticipantBox({
 }: ParticipantBoxProps) {
   const iconSize = size === 'small' ? 'w-6 h-6' : size === 'medium' ? 'w-10 h-10' : 'w-16 h-16';
   const textSize = size === 'small' ? 'text-xs' : 'text-sm';
+
+  // Avatar state
+  const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
+
+  // Load selected avatar from localStorage
+  useEffect(() => {
+    const storedAvatar = localStorage.getItem('selectedAvatar');
+    if (storedAvatar) {
+      setSelectedAvatar(storedAvatar);
+    }
+  }, []);
 
   // Connection quality color mapping
   const qualityColors = {
@@ -110,23 +121,35 @@ export function ParticipantBox({
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-gray-900">
-          <div className="text-center">
-            <svg
-              className={`${iconSize} text-gray-600 mx-auto mb-2`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-              />
-              <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" strokeWidth={2} />
-            </svg>
-            <p className={`text-gray-500 ${textSize}`}>Camera Off</p>
-          </div>
+          {selectedAvatar ? (
+            <div className="w-full h-full flex items-center justify-center p-8">
+              <div className="w-full h-full rounded-full overflow-hidden">
+                <img
+                  src={selectedAvatar}
+                  alt={name}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="text-center">
+              <svg
+                className={`${iconSize} text-gray-600 mx-auto mb-2`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
+                <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" strokeWidth={2} />
+              </svg>
+              <p className={`text-gray-500 ${textSize}`}>Camera Off</p>
+            </div>
+          )}
         </div>
       )}
 
