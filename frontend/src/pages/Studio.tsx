@@ -327,7 +327,7 @@ export function Studio() {
         {/* Main Canvas Area */}
         <main className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#F5F5F5', paddingBottom: '80px' }}>
           {/* Canvas Container - constrained to leave room for Layout Selector and Preview Area */}
-          <div className="flex items-center justify-center p-6" style={{ minHeight: 0, maxHeight: 'calc(100% - 260px)' }}>
+          <div className="flex items-center justify-center p-6" style={{ minHeight: 0, maxHeight: 'calc(100% - 350px)', flexShrink: 1 }}>
             <StudioCanvas
               localStream={localStream}
               videoEnabled={videoEnabled}
@@ -357,7 +357,7 @@ export function Studio() {
           </div>
 
           {/* Layout Selector - Always visible below canvas */}
-          <div className="flex justify-center pb-4 px-6">
+          <div className="flex justify-center pb-4 px-6" style={{ flexShrink: 0 }}>
             <LayoutSelector
               selectedLayout={selectedLayout}
               onLayoutChange={setSelectedLayout}
@@ -368,13 +368,16 @@ export function Studio() {
             />
           </div>
 
-          <PreviewArea
-            localStream={localStream}
-            videoEnabled={videoEnabled}
-            audioEnabled={audioEnabled}
-            backstageParticipants={Array.from(remoteParticipants.values()).filter((p) => p.role === 'backstage')}
-            screenShareStream={screenShareStream}
-          />
+          {/* Preview Area - fixed at bottom */}
+          <div style={{ flexShrink: 0 }}>
+            <PreviewArea
+              localStream={localStream}
+              videoEnabled={videoEnabled}
+              audioEnabled={audioEnabled}
+              backstageParticipants={Array.from(remoteParticipants.values()).filter((p) => p.role === 'backstage')}
+              screenShareStream={screenShareStream}
+            />
+          </div>
 
           <BottomControlBar
             captionsEnabled={captionsEnabled}
