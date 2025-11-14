@@ -227,7 +227,7 @@ export function RightSidebar({
           width: '320px',
           backgroundColor: '#ffffff',
           borderColor: '#e0e0e0',
-          zIndex: 75, // Content panel (below sidebar buttons)
+          zIndex: 95, // Content panel (above bottom control bar, below top nav)
           transform: rightSidebarOpen ? 'translateX(0)' : 'translateX(320px)',
           transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)'
         }}
