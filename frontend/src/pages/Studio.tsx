@@ -304,7 +304,7 @@ export function Studio() {
         />
 
         {/* Main Canvas Area */}
-        <main className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#1a1a1a' }}>
+        <main className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#1a1a1a', paddingBottom: '80px' }}>
           <div className="flex-1 flex items-center justify-center p-6">
             <StudioCanvas
               localStream={localStream}

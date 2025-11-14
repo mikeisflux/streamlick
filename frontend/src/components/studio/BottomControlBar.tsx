@@ -92,11 +92,13 @@ export function BottomControlBar({
 }: BottomControlBarProps) {
   return (
     <div
-      className="flex items-center justify-between px-6 border-t"
+      className="flex items-center justify-between px-6 border-t fixed bottom-0 left-0"
       style={{
         height: '80px',
         backgroundColor: '#2d2d2d',
-        borderColor: '#404040'
+        borderColor: '#404040',
+        right: '64px',
+        zIndex: 700
       }}
     >
       {/* Left Section */}
