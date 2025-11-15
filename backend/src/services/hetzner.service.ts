@@ -49,8 +49,14 @@ class HetznerService {
    */
   private getClient() {
     if (!this.apiKey) {
+      logger.error('Hetzner API key not configured. HETZNER_API_KEY environment variable is missing.');
       throw new Error('Hetzner API key not configured. Add HETZNER_API_KEY to Admin Settings.');
     }
+
+    logger.debug('Creating Hetzner API client', {
+      baseURL: this.baseURL,
+      keyPrefix: this.apiKey.substring(0, 20) + '...',
+    });
 
     return axios.create({
       baseURL: this.baseURL,
@@ -70,8 +76,22 @@ class HetznerService {
       const response = await client.get('/servers');
       return response.data.servers;
     } catch (error: any) {
-      logger.error('Failed to list Hetzner servers:', error);
-      throw new Error(`Hetzner API error: ${error.message}`);
+      logger.error('Failed to list Hetzner servers:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+      });
+
+      // Provide more specific error messages
+      if (error.response?.status === 401) {
+        throw new Error('Hetzner API authentication failed. Please check your API key.');
+      } else if (error.response?.status === 403) {
+        throw new Error('Hetzner API access forbidden. Your API key may not have the required permissions.');
+      } else if (error.response?.data?.error) {
+        throw new Error(`Hetzner API error: ${error.response.data.error.message || error.response.data.error}`);
+      }
+
+      throw new Error(`Failed to connect to Hetzner API: ${error.message}`);
     }
   }
 
