@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
+import { mediaStorageService } from '../services/media-storage.service';
 
 // Helper function to generate thumbnail from video
 const generateVideoThumbnail = (videoDataUrl: string): Promise<{ thumbnail: string; duration: number }> => {
@@ -52,17 +53,20 @@ interface Asset {
   id: string;
   type: 'logo' | 'overlay' | 'background' | 'videoBackground' | 'videoClip' | 'banner' | 'music';
   name: string;
-  url: string;
+  url: string; // Object URL or data URL
   thumbnailUrl?: string;
   duration?: number;
   fileSize?: number;
   isActive?: boolean;
+  storedInIndexedDB?: boolean; // Flag to indicate if file is in IndexedDB
 }
 
 export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   const [activeTab, setActiveTab] = useState<AssetTab>('logos');
   const logoInputRef = useRef<HTMLInputElement>(null);
   const overlayInputRef = useRef<HTMLInputElement>(null);
+  const [isLoadingAssets, setIsLoadingAssets] = useState(true);
+  const objectURLsRef = useRef<string[]>([]);
 
   // Track active background asset
   const [activeBackgroundUrl, setActiveBackgroundUrl] = useState<string | null>(() => {
@@ -74,33 +78,86 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
     return localStorage.getItem('streamLogo');
   });
 
-  // Load assets from localStorage or use defaults
-  const [assets, setAssets] = useState<Asset[]>(() => {
-    const storageKey = `media_assets_${broadcastId || 'default'}`;
-    const saved = localStorage.getItem(storageKey);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to parse saved assets:', e);
-      }
-    }
-    // Default demo assets
-    return [];
-  });
+  // Load assets from localStorage metadata only
+  const [assets, setAssets] = useState<Asset[]>([]);
 
-  // Persist assets to localStorage whenever they change
+  // Initialize IndexedDB and load assets on mount
   useEffect(() => {
+    const loadAssets = async () => {
+      try {
+        // Initialize IndexedDB
+        await mediaStorageService.initialize();
+
+        // Load metadata from localStorage
+        const storageKey = `media_assets_${broadcastId || 'default'}`;
+        const saved = localStorage.getItem(storageKey);
+
+        if (saved) {
+          const assetMetadata = JSON.parse(saved);
+
+          // Load actual files from IndexedDB for large files
+          const loadedAssets = await Promise.all(
+            assetMetadata.map(async (asset: Asset) => {
+              if (asset.storedInIndexedDB) {
+                try {
+                  const mediaData = await mediaStorageService.getMedia(asset.id);
+                  if (mediaData) {
+                    // Create object URL from blob
+                    const objectURL = URL.createObjectURL(mediaData.blob);
+                    objectURLsRef.current.push(objectURL);
+
+                    return {
+                      ...asset,
+                      url: objectURL,
+                    };
+                  }
+                } catch (error) {
+                  console.error(`Failed to load asset ${asset.id} from IndexedDB:`, error);
+                }
+              }
+              return asset;
+            })
+          );
+
+          setAssets(loadedAssets);
+        }
+      } catch (error) {
+        console.error('Failed to load assets:', error);
+      } finally {
+        setIsLoadingAssets(false);
+      }
+    };
+
+    loadAssets();
+
+    // Cleanup object URLs on unmount
+    return () => {
+      objectURLsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      objectURLsRef.current = [];
+    };
+  }, [broadcastId]);
+
+  // Save asset metadata to localStorage (without large data URLs)
+  useEffect(() => {
+    if (isLoadingAssets) return; // Don't save while loading
+
     const storageKey = `media_assets_${broadcastId || 'default'}`;
     try {
-      localStorage.setItem(storageKey, JSON.stringify(assets));
+      // Only save metadata, not object URLs
+      const metadata = assets.map((asset) => ({
+        ...asset,
+        url: asset.storedInIndexedDB ? '' : asset.url, // Clear object URLs for IndexedDB assets
+        thumbnailUrl: asset.thumbnailUrl, // Keep thumbnails (they're small)
+      }));
+
+      localStorage.setItem(storageKey, JSON.stringify(metadata));
     } catch (error: any) {
-      console.error('Failed to save assets to localStorage:', error);
+      console.error('Failed to save asset metadata:', error);
       if (error.name === 'QuotaExceededError') {
-        toast.error('Storage quota exceeded. Consider uploading smaller files or clearing old assets.');
+        toast.error('Storage quota exceeded. Please clear some assets.');
       }
     }
-  }, [assets, broadcastId]);
+  }, [assets, broadcastId, isLoadingAssets]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -128,80 +185,136 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
         return;
       }
 
-      // Warn about localStorage limitations for large files
-      if (file.size > 5 * 1024 * 1024) {
-        toast('Large files may not persist across sessions. Consider using smaller files or external hosting.', {
-          icon: '⚠️',
-          duration: 5000,
-        });
+      // Determine if file should be stored in IndexedDB (large files)
+      const shouldUseIndexedDB = file.size > 1 * 1024 * 1024; // 1MB threshold
+
+      // Determine asset type based on active tab and file type
+      let assetType: Asset['type'] = 'logo';
+      if (file.type.startsWith('audio/')) {
+        assetType = 'music';
+      } else if (file.type.startsWith('image/')) {
+        if (activeTab === 'logos') assetType = 'logo';
+        else if (activeTab === 'overlays') assetType = 'overlay';
+        else if (activeTab === 'backgrounds') assetType = 'background';
+        else if (activeTab === 'banners') assetType = 'banner';
+        else assetType = 'background';
+      } else if (file.type.startsWith('video/')) {
+        if (activeTab === 'videoBackgrounds') assetType = 'videoBackground';
+        else if (activeTab === 'videoClips') assetType = 'videoClip';
+        else assetType = 'videoClip';
       }
 
-      const reader = new FileReader();
+      const processFile = async () => {
+        try {
+          const assetId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          let fileURL: string;
+          let thumbnailUrl: string | undefined;
+          let duration: number | undefined;
 
-      reader.onload = async (event) => {
-        const dataUrl = event.target?.result as string;
+          if (shouldUseIndexedDB) {
+            // Store large file in IndexedDB
+            toast.loading('Processing large file...');
 
-        // Determine asset type based on active tab and file type
-        let assetType: Asset['type'] = 'logo';
-        if (file.type.startsWith('audio/')) {
-          assetType = 'music';
-        } else if (file.type.startsWith('image/')) {
-          if (activeTab === 'logos') assetType = 'logo';
-          else if (activeTab === 'overlays') assetType = 'overlay';
-          else if (activeTab === 'backgrounds') assetType = 'background';
-          else if (activeTab === 'banners') assetType = 'banner';
-          else assetType = 'background';
-        } else if (file.type.startsWith('video/')) {
-          if (activeTab === 'videoBackgrounds') assetType = 'videoBackground';
-          else if (activeTab === 'videoClips') assetType = 'videoClip';
-          else assetType = 'videoClip';
-        }
+            // Create object URL directly from file
+            fileURL = URL.createObjectURL(file);
+            objectURLsRef.current.push(fileURL);
 
-        // Generate thumbnail for video files
-        let thumbnailUrl: string | undefined;
-        let duration: number | undefined;
+            // Generate thumbnail from object URL
+            if (file.type.startsWith('video/')) {
+              try {
+                const videoResult = await generateVideoThumbnail(fileURL);
+                thumbnailUrl = videoResult.thumbnail;
+                duration = videoResult.duration;
+              } catch (error) {
+                console.error('Failed to generate video thumbnail:', error);
+              }
+            } else if (file.type.startsWith('image/')) {
+              thumbnailUrl = fileURL;
+            }
 
-        if (file.type.startsWith('video/')) {
-          try {
-            const videoResult = await generateVideoThumbnail(dataUrl);
-            thumbnailUrl = videoResult.thumbnail;
-            duration = videoResult.duration;
-          } catch (error) {
-            console.error('Failed to generate video thumbnail:', error);
-            thumbnailUrl = undefined;
+            // Store blob in IndexedDB
+            await mediaStorageService.saveMedia(assetId, file, {
+              name: file.name,
+              type: assetType,
+              fileSize: file.size,
+              duration,
+            });
+
+            toast.dismiss();
+            toast.success(`${file.name} uploaded successfully!`);
+          } else {
+            // Store small file as data URL
+            const reader = new FileReader();
+            const dataUrl = await new Promise<string>((resolve, reject) => {
+              reader.onload = (e) => resolve(e.target?.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(file);
+            });
+
+            fileURL = dataUrl;
+
+            // Generate thumbnail
+            if (file.type.startsWith('video/')) {
+              try {
+                const videoResult = await generateVideoThumbnail(dataUrl);
+                thumbnailUrl = videoResult.thumbnail;
+                duration = videoResult.duration;
+              } catch (error) {
+                console.error('Failed to generate video thumbnail:', error);
+              }
+            } else if (file.type.startsWith('image/')) {
+              thumbnailUrl = dataUrl;
+            }
+
+            toast.success(`${file.name} uploaded successfully!`);
           }
-        } else if (file.type.startsWith('image/')) {
-          thumbnailUrl = dataUrl;
+
+          // Create new asset
+          const newAsset: Asset = {
+            id: assetId,
+            type: assetType,
+            name: file.name,
+            url: fileURL,
+            thumbnailUrl,
+            duration,
+            fileSize: file.size,
+            storedInIndexedDB: shouldUseIndexedDB,
+          };
+
+          // Add to assets array
+          setAssets([...assets, newAsset]);
+        } catch (error) {
+          console.error('Error processing file:', error);
+          toast.error('Failed to upload file. Please try again.');
         }
-
-        // Create new asset
-        const newAsset: Asset = {
-          id: Date.now().toString(),
-          type: assetType,
-          name: file.name,
-          url: dataUrl,
-          thumbnailUrl,
-          duration,
-          fileSize: file.size,
-        };
-
-        // Add to assets array
-        setAssets([...assets, newAsset]);
-        toast.success(`${file.name} uploaded successfully!`);
       };
 
-      reader.onerror = (error) => {
-        console.error('Error reading file:', error);
-        toast.error('Failed to upload file. Please try again.');
-      };
-
-      reader.readAsDataURL(file);
+      processFile();
     }
   };
 
 
-  const handleDeleteAsset = (assetId: string) => {
+  const handleDeleteAsset = async (assetId: string) => {
     if (confirm('Delete this asset?')) {
+      const asset = assets.find((a) => a.id === assetId);
+
+      if (asset) {
+        // Delete from IndexedDB if stored there
+        if (asset.storedInIndexedDB) {
+          try {
+            await mediaStorageService.deleteMedia(assetId);
+
+            // Revoke object URL
+            if (asset.url.startsWith('blob:')) {
+              URL.revokeObjectURL(asset.url);
+              objectURLsRef.current = objectURLsRef.current.filter((url) => url !== asset.url);
+            }
+          } catch (error) {
+            console.error('Failed to delete from IndexedDB:', error);
+          }
+        }
+      }
+
       setAssets(assets.filter((a) => a.id !== assetId));
       toast.success('Asset deleted successfully');
     }
