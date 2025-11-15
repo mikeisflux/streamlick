@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import api from '../services/api';
+import toast from 'react-hot-toast';
 
 interface Comment {
   id: string;
@@ -18,6 +20,9 @@ interface CommentsPanelProps {
 
 export function CommentsPanel({ broadcastId, onCommentClick }: CommentsPanelProps) {
   const [filter, setFilter] = useState<'all' | 'youtube' | 'facebook' | 'twitch' | 'linkedin' | 'x' | 'rumble'>('all');
+  const [inputMessage, setInputMessage] = useState('');
+  const [isPosting, setIsPosting] = useState(false);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['youtube', 'facebook', 'twitch', 'linkedin', 'rumble']);
   const [comments, setComments] = useState<Comment[]>([
     {
       id: '1',
@@ -95,6 +100,59 @@ export function CommentsPanel({ broadcastId, onCommentClick }: CommentsPanelProp
     if (minutes < 60) return `${minutes}m ago`;
     const hours = Math.floor(minutes / 60);
     return `${hours}h ago`;
+  };
+
+  const handlePostComment = async () => {
+    if (!inputMessage.trim()) {
+      toast.error('Please enter a message');
+      return;
+    }
+
+    if (selectedPlatforms.length === 0) {
+      toast.error('Please select at least one platform');
+      return;
+    }
+
+    setIsPosting(true);
+
+    try {
+      const response = await api.post('/comments/post', {
+        message: inputMessage.trim(),
+        platforms: selectedPlatforms,
+      });
+
+      // Show results
+      const results = response.data.results;
+      const successPlatforms = results.filter((r: any) => r.success).map((r: any) => r.platform);
+      const failedPlatforms = results.filter((r: any) => !r.success);
+
+      if (successPlatforms.length > 0) {
+        toast.success(`Posted to: ${successPlatforms.join(', ')}`);
+        setInputMessage('');
+      }
+
+      if (failedPlatforms.length > 0) {
+        failedPlatforms.forEach((r: any) => {
+          toast.error(`${r.platform}: ${r.error}`);
+        });
+      }
+    } catch (error: any) {
+      console.error('Post comment error:', error);
+      toast.error(error.response?.data?.error || 'Failed to post comment');
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
+  const togglePlatform = (platform: string) => {
+    // Don't allow toggling X as it's not supported for posting
+    if (platform === 'x') return;
+
+    if (selectedPlatforms.includes(platform)) {
+      setSelectedPlatforms(selectedPlatforms.filter(p => p !== platform));
+    } else {
+      setSelectedPlatforms([...selectedPlatforms, platform]);
+    }
   };
 
   return (
@@ -226,6 +284,51 @@ export function CommentsPanel({ broadcastId, onCommentClick }: CommentsPanelProp
           <span>
             {comments.filter((c) => c.isModerated).length} moderated
           </span>
+        </div>
+      </div>
+
+      {/* Post Comment Input */}
+      <div className="border-t border-gray-200 p-3 bg-gray-50">
+        <div className="mb-2">
+          <label className="block text-xs font-medium text-gray-700 mb-2">Post to platforms:</label>
+          <div className="flex flex-wrap gap-1">
+            {(['youtube', 'facebook', 'twitch', 'linkedin', 'rumble'] as const).map((platform) => (
+              <button
+                key={platform}
+                onClick={() => togglePlatform(platform)}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  selectedPlatforms.includes(platform)
+                    ? platformColors[platform]
+                    : 'bg-gray-200 text-gray-500'
+                }`}
+                disabled={isPosting}
+              >
+                {platformIcons[platform]} {platform.charAt(0).toUpperCase() + platform.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter' && !isPosting) {
+                handlePostComment();
+              }
+            }}
+            placeholder="Type your message..."
+            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={isPosting}
+          />
+          <button
+            onClick={handlePostComment}
+            disabled={isPosting || !inputMessage.trim()}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          >
+            {isPosting ? '...' : 'Post'}
+          </button>
         </div>
       </div>
 
