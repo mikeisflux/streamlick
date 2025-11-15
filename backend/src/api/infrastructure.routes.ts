@@ -25,7 +25,7 @@ router.get('/status', async (req, res) => {
       configured,
       message: configured
         ? 'Hetzner API is configured'
-        : 'Add HETZNER_API_KEY in Admin Settings → System Config'
+        : 'Add hetzner_api_key in Admin Settings → System Config'
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

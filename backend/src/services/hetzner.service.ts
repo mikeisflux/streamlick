@@ -44,7 +44,7 @@ class HetznerService {
         where: {
           category_key: {
             category: 'system',
-            key: 'HETZNER_API_KEY',
+            key: 'hetzner_api_key',
           },
         },
       });
@@ -66,7 +66,7 @@ class HetznerService {
       return process.env.HETZNER_API_KEY;
     }
 
-    throw new Error('Hetzner API key not configured. Add HETZNER_API_KEY to Admin Settings.');
+    throw new Error('Hetzner API key not configured. Add hetzner_api_key in Admin Settings → System Config.');
   }
 
   /**
