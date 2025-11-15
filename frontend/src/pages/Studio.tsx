@@ -438,7 +438,7 @@ export function Studio() {
           captureCurrentState={captureCurrentState}
           updateCurrentSceneWithState={updateCurrentSceneWithState}
           videoRef={sidebarVideoRef}
-          localStream={localStream}
+          localStream={processedStream || localStream}
           videoEnabled={videoEnabled}
           showSceneManager={showSceneManager}
           leftSidebarRef={leftSidebarRef}
@@ -449,7 +449,7 @@ export function Studio() {
           {/* Canvas Container - constrained to leave room for Layout Selector and Preview Area */}
           <div className="flex items-center justify-center px-6 pb-20" style={{ minHeight: 0, maxHeight: 'calc(100% - 350px)', flexShrink: 1, paddingTop: '144px' }}>
             <StudioCanvas
-              localStream={localStream}
+              localStream={processedStream || localStream}
               videoEnabled={videoEnabled}
               audioEnabled={audioEnabled}
               isLocalUserOnStage={isLocalUserOnStage}
@@ -504,7 +504,7 @@ export function Studio() {
           {/* Preview Area - positioned at bottom, above BottomControlBar */}
           <div style={{ flexShrink: 0, marginBottom: '80px' }}>
             <PreviewArea
-              localStream={localStream}
+              localStream={processedStream || localStream}
               videoEnabled={videoEnabled}
               audioEnabled={audioEnabled}
               isLocalUserOnStage={isLocalUserOnStage}
