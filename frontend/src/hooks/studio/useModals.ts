@@ -7,7 +7,7 @@ export function useModals() {
   const [showClipDurationSelector, setShowClipDurationSelector] = useState(false);
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
   const [showBackgroundSettings, setShowBackgroundSettings] = useState(false);
-  const [showSceneManager, setShowSceneManager] = useState(false);
+  const [showSceneManager, setShowSceneManager] = useState(true);
 
   return {
     showSettings,

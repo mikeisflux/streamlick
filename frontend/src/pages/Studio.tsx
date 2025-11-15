@@ -191,7 +191,7 @@ export function Studio() {
   const { processedStream } = useBackgroundRemoval(backgroundRemovalEnabled, localStream, backgroundRemovalOptions);
   const { verticalStream } = useVerticalSimulcast(verticalSimulcastEnabled, localStream, processedStream, verticalResolution);
   const { analyticsMetrics, analyticsInsights } = useAnalytics(analyticsEnabled);
-  const { scenes, currentSceneId, handleSceneChange, handleSceneCreate, handleSceneUpdate, handleSceneDelete, handleSceneDuplicate } = useSceneManagement();
+  const { scenes, currentSceneId, handleSceneChange, handleSceneCreate, handleSceneUpdate, handleSceneDelete, handleSceneDuplicate, getCurrentScene, captureCurrentState, updateCurrentSceneWithState } = useSceneManagement();
   const { isSharingScreen, screenShareStream, handleToggleScreenShare } = useScreenShare();
   const { mediaClips, showMediaLibrary, setShowMediaLibrary, handlePlayClip } = useMediaClips();
   const { showAnalyticsDashboard, setShowAnalyticsDashboard, analyticsDashboardPosition, analyticsDashboardSize, handleAnalyticsDashboardDragStart, handleAnalyticsDashboardResizeStart } = useAnalyticsDashboard();
@@ -247,6 +247,46 @@ export function Studio() {
       handleDemoteToBackstage(participantId);
     }
   };
+
+  // Listen for scene changes and apply scene settings
+  useEffect(() => {
+    const handleSceneChanged = (e: CustomEvent) => {
+      const { scene } = e.detail;
+      if (!scene) return;
+
+      // Apply scene layout
+      if (scene.selectedLayout !== undefined) {
+        handleLayoutChange(scene.selectedLayout);
+      }
+
+      // Apply scene background
+      if (scene.background) {
+        if (scene.background.url) {
+          localStorage.setItem('streamBackground', scene.background.url);
+          window.dispatchEvent(new CustomEvent('backgroundUpdated', {
+            detail: { url: scene.background.url }
+          }));
+        }
+      } else {
+        // Remove background if scene doesn't have one
+        localStorage.removeItem('streamBackground');
+        window.dispatchEvent(new CustomEvent('backgroundUpdated', {
+          detail: { url: null }
+        }));
+      }
+
+      // Apply scene banners
+      if (scene.banners) {
+        localStorage.setItem('banners', JSON.stringify(scene.banners));
+        window.dispatchEvent(new CustomEvent('bannersUpdated', {
+          detail: scene.banners
+        }));
+      }
+    };
+
+    window.addEventListener('sceneChanged', handleSceneChanged as EventListener);
+    return () => window.removeEventListener('sceneChanged', handleSceneChanged as EventListener);
+  }, [handleLayoutChange]);
 
   if (isLoading) {
     return (
@@ -347,6 +387,8 @@ export function Studio() {
           onSceneUpdate={handleSceneUpdate}
           onSceneDelete={handleSceneDelete}
           onSceneDuplicate={handleSceneDuplicate}
+          captureCurrentState={captureCurrentState}
+          updateCurrentSceneWithState={updateCurrentSceneWithState}
           videoRef={sidebarVideoRef}
           localStream={localStream}
           videoEnabled={videoEnabled}

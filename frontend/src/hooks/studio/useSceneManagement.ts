@@ -1,23 +1,69 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Scene } from '../../components/SceneManager';
 import toast from 'react-hot-toast';
 
 export function useSceneManagement() {
-  const [scenes, setScenes] = useState<Scene[]>([
-    {
-      id: 'default',
-      name: 'Main Scene',
-      layout: 'grid',
-      participants: [],
-      overlays: [],
-    },
-  ]);
-  const [currentSceneId, setCurrentSceneId] = useState('default');
+  // Load scenes from localStorage
+  const [scenes, setScenes] = useState<Scene[]>(() => {
+    const saved = localStorage.getItem('studio_scenes');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to load scenes:', e);
+      }
+    }
+    return [
+      {
+        id: 'default',
+        name: 'Main Scene',
+        layout: 1,
+        selectedLayout: 1,
+        participants: [],
+        overlays: [],
+        banners: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    ];
+  });
+
+  const [currentSceneId, setCurrentSceneId] = useState(() => {
+    return localStorage.getItem('studio_currentSceneId') || 'default';
+  });
+
+  // Persist scenes to localStorage
+  useEffect(() => {
+    localStorage.setItem('studio_scenes', JSON.stringify(scenes));
+  }, [scenes]);
+
+  // Persist current scene ID
+  useEffect(() => {
+    localStorage.setItem('studio_currentSceneId', currentSceneId);
+  }, [currentSceneId]);
 
   const handleSceneChange = useCallback((sceneId: string, transition?: any) => {
-    setCurrentSceneId(sceneId);
     const scene = scenes.find(s => s.id === sceneId);
-    toast.success(`Switched to scene: ${scene?.name || sceneId}`);
+    if (!scene) {
+      toast.error('Scene not found');
+      return;
+    }
+
+    setCurrentSceneId(sceneId);
+
+    // Dispatch event to notify Studio to apply scene settings
+    window.dispatchEvent(new CustomEvent('sceneChanged', {
+      detail: {
+        sceneId,
+        scene,
+        transition
+      }
+    }));
+
+    toast.success(`Switched to scene: ${scene.name}`, {
+      icon: '🎬',
+      duration: 2000,
+    });
   }, [scenes]);
 
   const handleSceneCreate = useCallback((scene: Scene) => {
@@ -52,10 +98,47 @@ export function useSceneManagement() {
       ...scene,
       id: `${scene.id}-copy-${Date.now()}`,
       name: `${scene.name} (Copy)`,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
     };
     setScenes(prev => [...prev, newScene]);
     toast.success(`Duplicated scene: ${scene.name}`);
   }, [scenes]);
+
+  // Get current scene
+  const getCurrentScene = useCallback(() => {
+    return scenes.find(s => s.id === currentSceneId);
+  }, [scenes, currentSceneId]);
+
+  // Capture current broadcast state into a scene
+  const captureCurrentState = useCallback((overrides?: Partial<Scene>) => {
+    // Get current state from localStorage
+    const banners = JSON.parse(localStorage.getItem('banners') || '[]');
+    const streamBackground = localStorage.getItem('streamBackground');
+    const selectedLayout = parseInt(localStorage.getItem('selectedLayout') || '1');
+
+    const capturedState: Partial<Scene> = {
+      selectedLayout,
+      layout: selectedLayout,
+      banners,
+      background: streamBackground ? {
+        type: 'image',
+        value: streamBackground,
+        url: streamBackground,
+      } : undefined,
+      updatedAt: Date.now(),
+      ...overrides,
+    };
+
+    return capturedState;
+  }, []);
+
+  // Update current scene with current broadcast state
+  const updateCurrentSceneWithState = useCallback(() => {
+    const capturedState = captureCurrentState();
+    handleSceneUpdate(currentSceneId, capturedState);
+    toast.success('Scene updated with current settings');
+  }, [currentSceneId, captureCurrentState, handleSceneUpdate]);
 
   return {
     scenes,
@@ -66,5 +149,8 @@ export function useSceneManagement() {
     handleSceneUpdate,
     handleSceneDelete,
     handleSceneDuplicate,
+    getCurrentScene,
+    captureCurrentState,
+    updateCurrentSceneWithState,
   };
 }

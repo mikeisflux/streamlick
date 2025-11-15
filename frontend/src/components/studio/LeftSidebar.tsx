@@ -11,6 +11,8 @@ interface LeftSidebarProps {
   onSceneUpdate: (sceneId: string, updates: Partial<Scene>) => void;
   onSceneDelete: (sceneId: string) => void;
   onSceneDuplicate: (sceneId: string) => void;
+  captureCurrentState?: () => Partial<Scene>;
+  updateCurrentSceneWithState?: () => void;
   videoRef: RefObject<HTMLVideoElement>;
   localStream: MediaStream | null;
   videoEnabled: boolean;
@@ -28,6 +30,8 @@ export function LeftSidebar({
   onSceneUpdate,
   onSceneDelete,
   onSceneDuplicate,
+  captureCurrentState,
+  updateCurrentSceneWithState,
   videoRef,
   localStream,
   videoEnabled,
@@ -77,7 +81,7 @@ export function LeftSidebar({
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {/* Scene Manager Component Would Go Here */}
+          {/* Scene Manager Component */}
           {showSceneManager && (
             <SceneManager
               scenes={scenes}
@@ -87,6 +91,8 @@ export function LeftSidebar({
               onSceneUpdate={onSceneUpdate}
               onSceneDelete={onSceneDelete}
               onSceneDuplicate={onSceneDuplicate}
+              captureCurrentState={captureCurrentState}
+              updateCurrentSceneWithState={updateCurrentSceneWithState}
             />
           )}
 
