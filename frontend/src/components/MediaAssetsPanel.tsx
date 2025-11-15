@@ -375,6 +375,9 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
+              {assets
+                .filter((a) => a.type === 'image')
+                .map((asset) => renderAssetCard(asset))}
               <label className="aspect-video bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-colors">
                 <div className="text-3xl mb-2">🖼️</div>
                 <div className="text-xs text-gray-600">Upload Image</div>
@@ -399,6 +402,9 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
+              {assets
+                .filter((a) => a.type === 'video')
+                .map((asset) => renderAssetCard(asset))}
               <label className="aspect-video bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-colors">
                 <div className="text-3xl mb-2">🎬</div>
                 <div className="text-xs text-gray-600">Upload Video</div>
