@@ -21,6 +21,10 @@ interface ParticipantBoxProps {
   borderWidth?: number;
   borderColor?: string;
   mirrorVideo?: boolean;
+  // Edit mode
+  editMode?: boolean;
+  position?: { x: number; y: number; width: number; height: number };
+  onPositionChange?: (position: { x: number; y: number; width: number; height: number }) => void;
 }
 
 export function ParticipantBox({
@@ -43,6 +47,9 @@ export function ParticipantBox({
   borderWidth = 0,
   borderColor = '#0066ff',
   mirrorVideo = false,
+  editMode = false,
+  position,
+  onPositionChange,
 }: ParticipantBoxProps) {
   const iconSize = size === 'small' ? 'w-6 h-6' : size === 'medium' ? 'w-10 h-10' : 'w-16 h-16';
   const textSize = size === 'small' ? 'text-xs' : 'text-sm';
@@ -84,6 +91,109 @@ export function ParticipantBox({
     }
   }, [stream, videoEnabled, activeVideoRef]);
 
+  // Drag and resize state
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [resizeHandle, setResizeHandle] = useState<'se' | 'sw' | 'ne' | 'nw' | null>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  // Handle drag start
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!editMode || !onPositionChange || !position) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
+  };
+
+  // Handle resize start
+  const handleResizeMouseDown = (e: React.MouseEvent, handle: 'se' | 'sw' | 'ne' | 'nw') => {
+    if (!editMode || !onPositionChange || !position) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    setIsResizing(true);
+    setResizeHandle(handle);
+    setDragStart({ x: e.clientX, y: e.clientY });
+  };
+
+  // Handle mouse move for dragging and resizing
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!editMode || !onPositionChange || !position) return;
+
+      if (isDragging) {
+        const newX = e.clientX - dragStart.x;
+        const newY = e.clientY - dragStart.y;
+
+        // Constrain to parent container (assuming 1920x1080 canvas)
+        const constrainedX = Math.max(0, Math.min(1920 - position.width, newX));
+        const constrainedY = Math.max(0, Math.min(1080 - position.height, newY));
+
+        onPositionChange({
+          ...position,
+          x: constrainedX,
+          y: constrainedY,
+        });
+      } else if (isResizing && resizeHandle) {
+        const deltaX = e.clientX - dragStart.x;
+        const deltaY = e.clientY - dragStart.y;
+
+        let newX = position.x;
+        let newY = position.y;
+        let newWidth = position.width;
+        let newHeight = position.height;
+
+        // Handle different resize handles
+        if (resizeHandle.includes('e')) {
+          newWidth = Math.max(100, position.width + deltaX);
+        }
+        if (resizeHandle.includes('w')) {
+          newWidth = Math.max(100, position.width - deltaX);
+          newX = position.x + deltaX;
+        }
+        if (resizeHandle.includes('s')) {
+          newHeight = Math.max(75, position.height + deltaY);
+        }
+        if (resizeHandle.includes('n')) {
+          newHeight = Math.max(75, position.height - deltaY);
+          newY = position.y + deltaY;
+        }
+
+        // Constrain to canvas
+        newX = Math.max(0, Math.min(1920 - newWidth, newX));
+        newY = Math.max(0, Math.min(1080 - newHeight, newY));
+
+        onPositionChange({
+          x: newX,
+          y: newY,
+          width: newWidth,
+          height: newHeight,
+        });
+
+        setDragStart({ x: e.clientX, y: e.clientY });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      setIsResizing(false);
+      setResizeHandle(null);
+    };
+
+    if (isDragging || isResizing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+
+      return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging, isResizing, dragStart, position, editMode, onPositionChange, resizeHandle]);
+
   // Connection quality color mapping
   const qualityColors = {
     excellent: '#10b981', // green
@@ -93,7 +203,16 @@ export function ParticipantBox({
   };
 
   return (
-    <div className="relative bg-black rounded overflow-hidden h-full w-full group">
+    <div
+      ref={boxRef}
+      className="relative bg-black rounded overflow-hidden h-full w-full group"
+      style={{
+        cursor: editMode ? (isDragging ? 'grabbing' : 'grab') : 'default',
+        outline: editMode ? '2px dashed #8B5CF6' : 'none',
+        outlineOffset: '2px',
+      }}
+      onMouseDown={editMode ? handleMouseDown : undefined}
+    >
       {/* Hover Overlay with Remove from Stage Button */}
       {onRemoveFromStage && participantId && !isHost && (
         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20">
@@ -237,6 +356,36 @@ export function ParticipantBox({
             {title && <div className="text-xs text-gray-300 truncate">{title}</div>}
           </div>
         </div>
+      )}
+
+      {/* Resize Handles - Only visible in edit mode */}
+      {editMode && onPositionChange && (
+        <>
+          {/* Southeast handle */}
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, 'se')}
+            className="absolute bottom-0 right-0 w-4 h-4 bg-purple-600 cursor-se-resize z-30 hover:bg-purple-700"
+            style={{ borderRadius: '0 0 4px 0' }}
+          />
+          {/* Southwest handle */}
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, 'sw')}
+            className="absolute bottom-0 left-0 w-4 h-4 bg-purple-600 cursor-sw-resize z-30 hover:bg-purple-700"
+            style={{ borderRadius: '0 0 0 4px' }}
+          />
+          {/* Northeast handle */}
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, 'ne')}
+            className="absolute top-0 right-0 w-4 h-4 bg-purple-600 cursor-ne-resize z-30 hover:bg-purple-700"
+            style={{ borderRadius: '0 4px 0 0' }}
+          />
+          {/* Northwest handle */}
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, 'nw')}
+            className="absolute top-0 left-0 w-4 h-4 bg-purple-600 cursor-nw-resize z-30 hover:bg-purple-700"
+            style={{ borderRadius: '4px 0 0 0' }}
+          />
+        </>
       )}
     </div>
   );
