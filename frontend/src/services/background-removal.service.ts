@@ -75,16 +75,45 @@ class BackgroundRemovalService {
     this.videoElement.srcObject = stream;
     this.videoElement.autoplay = true;
     this.videoElement.playsInline = true;
+    this.videoElement.muted = true;
 
-    // Wait for video to be ready
-    await new Promise((resolve) => {
-      this.videoElement!.onloadedmetadata = resolve;
+    // Wait for video to be ready and have valid dimensions
+    await new Promise((resolve, reject) => {
+      let attempts = 0;
+      const checkDimensions = () => {
+        if (this.videoElement!.videoWidth > 0 && this.videoElement!.videoHeight > 0) {
+          resolve(true);
+        } else if (attempts < 100) {
+          attempts++;
+          setTimeout(checkDimensions, 50);
+        } else {
+          reject(new Error('Video dimensions not available'));
+        }
+      };
+
+      this.videoElement!.onloadedmetadata = () => {
+        // Give it a moment to ensure dimensions are set
+        setTimeout(checkDimensions, 100);
+      };
+
+      // Start playing to trigger metadata load
+      this.videoElement!.play().catch(console.error);
     });
+
+    // Validate video dimensions
+    const width = this.videoElement.videoWidth;
+    const height = this.videoElement.videoHeight;
+
+    if (width === 0 || height === 0) {
+      throw new Error(`Invalid video dimensions: ${width}x${height}`);
+    }
+
+    console.log(`Initializing background removal with dimensions: ${width}x${height}`);
 
     // Create canvas for output
     this.canvasElement = document.createElement('canvas');
-    this.canvasElement.width = this.videoElement.videoWidth;
-    this.canvasElement.height = this.videoElement.videoHeight;
+    this.canvasElement.width = width;
+    this.canvasElement.height = height;
 
     // Start processing
     this.isProcessing = true;
@@ -135,7 +164,21 @@ class BackgroundRemovalService {
       return;
     }
 
+    // Validate video element has valid dimensions
+    if (this.videoElement.videoWidth === 0 || this.videoElement.videoHeight === 0) {
+      console.warn('Video element has invalid dimensions, skipping frame');
+      this.animationFrame = requestAnimationFrame(() => this.processFrame());
+      return;
+    }
+
     try {
+      // Get canvas context
+      const ctx = this.canvasElement.getContext('2d');
+      if (!ctx) {
+        console.error('Failed to get canvas context');
+        return;
+      }
+
       // Segment the person from the background
       const segmentation = await this.model.segmentPerson(this.videoElement, {
         flipHorizontal: false,
@@ -143,7 +186,10 @@ class BackgroundRemovalService {
         segmentationThreshold: 0.7,
       });
 
-      const ctx = this.canvasElement.getContext('2d')!;
+      // Double-check canvas still exists after async operation
+      if (!this.canvasElement || !this.isProcessing) {
+        return;
+      }
 
       // Draw based on background type
       switch (this.backgroundOptions.type) {
@@ -159,15 +205,19 @@ class BackgroundRemovalService {
         case 'none':
         default:
           // Just draw the original video
-          ctx.drawImage(this.videoElement, 0, 0);
+          if (this.videoElement) {
+            ctx.drawImage(this.videoElement, 0, 0);
+          }
           break;
       }
     } catch (error) {
       console.error('Frame processing error:', error);
     }
 
-    // Schedule next frame
-    this.animationFrame = requestAnimationFrame(() => this.processFrame());
+    // Schedule next frame only if still processing
+    if (this.isProcessing) {
+      this.animationFrame = requestAnimationFrame(() => this.processFrame());
+    }
   }
 
   /**
@@ -177,11 +227,13 @@ class BackgroundRemovalService {
     ctx: CanvasRenderingContext2D,
     segmentation: any
   ): Promise<void> {
-    const { width, height } = this.canvasElement!;
+    if (!this.canvasElement || !this.videoElement) return;
+
+    const { width, height } = this.canvasElement;
 
     // Draw blurred background
     ctx.filter = `blur(${this.backgroundOptions.blurAmount}px)`;
-    ctx.drawImage(this.videoElement!, 0, 0, width, height);
+    ctx.drawImage(this.videoElement, 0, 0, width, height);
     ctx.filter = 'none';
 
     // Draw person on top
@@ -195,7 +247,9 @@ class BackgroundRemovalService {
     ctx: CanvasRenderingContext2D,
     segmentation: any
   ): Promise<void> {
-    const { width, height } = this.canvasElement!;
+    if (!this.canvasElement || !this.videoElement) return;
+
+    const { width, height } = this.canvasElement;
 
     // Draw background image (would need to load image first)
     if (this.backgroundOptions.imageUrl) {
@@ -215,7 +269,9 @@ class BackgroundRemovalService {
     ctx: CanvasRenderingContext2D,
     segmentation: any
   ): Promise<void> {
-    const { width, height } = this.canvasElement!;
+    if (!this.canvasElement || !this.videoElement) return;
+
+    const { width, height } = this.canvasElement;
 
     // Draw solid color background
     ctx.fillStyle = this.backgroundOptions.color || '#1a1a1a';
@@ -232,16 +288,29 @@ class BackgroundRemovalService {
     ctx: CanvasRenderingContext2D,
     segmentation: any
   ): Promise<void> {
-    const { width, height } = this.canvasElement!;
+    if (!this.canvasElement || !this.videoElement) return;
+
+    const { width, height } = this.canvasElement;
+
+    // Validate segmentation data
+    if (!segmentation || !segmentation.data) {
+      console.warn('Invalid segmentation data');
+      return;
+    }
 
     // Create temporary canvas for person
     const personCanvas = document.createElement('canvas');
     personCanvas.width = width;
     personCanvas.height = height;
-    const personCtx = personCanvas.getContext('2d')!;
+    const personCtx = personCanvas.getContext('2d');
+
+    if (!personCtx) {
+      console.error('Failed to get person canvas context');
+      return;
+    }
 
     // Draw original video
-    personCtx.drawImage(this.videoElement!, 0, 0, width, height);
+    personCtx.drawImage(this.videoElement, 0, 0, width, height);
 
     // Get image data
     const imageData = personCtx.getImageData(0, 0, width, height);
