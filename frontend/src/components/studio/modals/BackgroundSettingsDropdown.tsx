@@ -1,4 +1,7 @@
+import { useState, useRef, useEffect } from 'react';
 import { BackgroundOptions } from '../../../services/background-removal.service';
+import api from '../../../services/api';
+import toast from 'react-hot-toast';
 
 interface BackgroundSettingsDropdownProps {
   isOpen: boolean;
@@ -7,37 +10,37 @@ interface BackgroundSettingsDropdownProps {
   setOptions: (options: BackgroundOptions) => void;
 }
 
-// Sample virtual backgrounds
-const SAMPLE_BACKGROUNDS = [
+// Default virtual backgrounds (bundled with the app)
+const DEFAULT_BACKGROUNDS = [
+  {
+    id: 'blue-gradient',
+    name: 'Blue Gradient',
+    url: '/backgrounds/blue-gradient.svg',
+    thumbnail: '/backgrounds/blue-gradient.svg',
+  },
+  {
+    id: 'purple-gradient',
+    name: 'Purple Gradient',
+    url: '/backgrounds/purple-gradient.svg',
+    thumbnail: '/backgrounds/purple-gradient.svg',
+  },
   {
     id: 'office',
     name: 'Modern Office',
-    url: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1920&h=1080&fit=crop',
-    thumbnail: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=320&h=180&fit=crop',
-  },
-  {
-    id: 'library',
-    name: 'Cozy Library',
-    url: 'https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=1920&h=1080&fit=crop',
-    thumbnail: 'https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=320&h=180&fit=crop',
+    url: '/backgrounds/office.svg',
+    thumbnail: '/backgrounds/office.svg',
   },
   {
     id: 'nature',
     name: 'Nature View',
-    url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&h=1080&fit=crop',
-    thumbnail: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=320&h=180&fit=crop',
+    url: '/backgrounds/nature.svg',
+    thumbnail: '/backgrounds/nature.svg',
   },
   {
-    id: 'city',
-    name: 'City Skyline',
-    url: 'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=1920&h=1080&fit=crop',
-    thumbnail: 'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=320&h=180&fit=crop',
-  },
-  {
-    id: 'gradient',
-    name: 'Blue Gradient',
-    url: 'https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1920&h=1080&fit=crop',
-    thumbnail: 'https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=320&h=180&fit=crop',
+    id: 'bokeh',
+    name: 'Bokeh Blur',
+    url: '/backgrounds/bokeh.svg',
+    thumbnail: '/backgrounds/bokeh.svg',
   },
 ];
 
@@ -47,6 +50,75 @@ export function BackgroundSettingsDropdown({
   options,
   setOptions,
 }: BackgroundSettingsDropdownProps) {
+  const [customBackgrounds, setCustomBackgrounds] = useState<any[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load custom backgrounds on mount
+  useEffect(() => {
+    if (isOpen) {
+      loadCustomBackgrounds();
+    }
+  }, [isOpen]);
+
+  const loadCustomBackgrounds = async () => {
+    try {
+      const response = await api.get('/backgrounds/custom');
+      setCustomBackgrounds(response.data.backgrounds || []);
+    } catch (error) {
+      console.error('Failed to load custom backgrounds:', error);
+    }
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File size must be less than 10MB');
+      return;
+    }
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('name', file.name);
+
+    try {
+      toast.loading('Uploading background...', { id: 'upload-bg' });
+      const response = await api.post('/backgrounds/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const newBackground = response.data.background;
+      setCustomBackgrounds([newBackground, ...customBackgrounds]);
+      toast.success('Background uploaded successfully', { id: 'upload-bg' });
+
+      // Auto-select the uploaded background
+      setOptions({ ...options, type: 'image', imageUrl: newBackground.fileUrl });
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      toast.error(error.response?.data?.error || 'Failed to upload background', { id: 'upload-bg' });
+    } finally {
+      setIsUploading(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -111,9 +183,29 @@ export function BackgroundSettingsDropdown({
             {/* Virtual Background Selector */}
             {options.type === 'image' && (
               <div>
-                <label className="block text-xs font-semibold text-gray-900 mb-2">Choose Background</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-semibold text-gray-900">Choose Background</label>
+                  <button
+                    onClick={handleUploadClick}
+                    disabled={isUploading}
+                    className="flex items-center gap-1 px-3 py-1 text-xs font-medium text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    {isUploading ? 'Uploading...' : 'Upload Custom'}
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-2">
-                  {SAMPLE_BACKGROUNDS.map((bg) => (
+                  {/* Default backgrounds */}
+                  {DEFAULT_BACKGROUNDS.map((bg) => (
                     <button
                       key={bg.id}
                       onClick={() => setOptions({ ...options, imageUrl: bg.url })}
@@ -137,6 +229,34 @@ export function BackgroundSettingsDropdown({
                       )}
                       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2">
                         <p className="text-xs font-medium text-white">{bg.name}</p>
+                      </div>
+                    </button>
+                  ))}
+                  {/* Custom uploaded backgrounds */}
+                  {customBackgrounds.map((bg) => (
+                    <button
+                      key={bg.id}
+                      onClick={() => setOptions({ ...options, imageUrl: bg.fileUrl })}
+                      className={`relative aspect-video rounded-lg overflow-hidden border-2 transition-all ${
+                        options.imageUrl === bg.fileUrl
+                          ? 'border-purple-600 ring-2 ring-purple-200'
+                          : 'border-gray-200 hover:border-gray-400'
+                      }`}
+                    >
+                      <img
+                        src={bg.fileUrl}
+                        alt={bg.name}
+                        className="w-full h-full object-cover"
+                      />
+                      {options.imageUrl === bg.fileUrl && (
+                        <div className="absolute top-1 right-1 bg-purple-600 text-white rounded-full p-1">
+                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      )}
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2">
+                        <p className="text-xs font-medium text-white truncate">{bg.name}</p>
                       </div>
                     </button>
                   ))}
