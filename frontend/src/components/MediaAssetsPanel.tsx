@@ -1,6 +1,47 @@
 import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 
+// Helper function to generate thumbnail from video
+const generateVideoThumbnail = (videoDataUrl: string): Promise<{ thumbnail: string; duration: number }> => {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+
+    video.onloadedmetadata = () => {
+      // Seek to 1 second or 10% of video duration, whichever is earlier
+      const seekTime = Math.min(1, video.duration * 0.1);
+      video.currentTime = seekTime;
+    };
+
+    video.onseeked = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 320;
+        canvas.height = 180;
+        const ctx = canvas.getContext('2d');
+
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const thumbnail = canvas.toDataURL('image/jpeg', 0.7);
+          resolve({ thumbnail, duration: video.duration });
+        } else {
+          reject(new Error('Failed to get canvas context'));
+        }
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    video.onerror = () => {
+      reject(new Error('Failed to load video'));
+    };
+
+    video.src = videoDataUrl;
+  });
+};
+
 interface MediaAssetsPanelProps {
   broadcastId?: string;
 }
@@ -66,16 +107,38 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
     if (files && files.length > 0) {
       const file = files[0];
 
-      // Check file size (warn if > 2MB for localStorage compatibility)
-      const maxSize = 2 * 1024 * 1024; // 2MB
+      // Different file size limits based on type
+      let maxSize: number;
+      let maxSizeLabel: string;
+
+      if (file.type.startsWith('video/')) {
+        maxSize = 200 * 1024 * 1024; // 200MB for videos
+        maxSizeLabel = '200MB';
+      } else if (file.type.startsWith('audio/')) {
+        maxSize = 50 * 1024 * 1024; // 50MB for audio
+        maxSizeLabel = '50MB';
+      } else {
+        maxSize = 10 * 1024 * 1024; // 10MB for images
+        maxSizeLabel = '10MB';
+      }
+
+      // Check file size
       if (file.size > maxSize) {
-        toast.error(`File too large (${(file.size / 1024 / 1024).toFixed(2)}MB). Please upload files smaller than 2MB for best performance.`);
+        toast.error(`File too large (${(file.size / 1024 / 1024).toFixed(2)}MB). Maximum allowed: ${maxSizeLabel}`);
         return;
+      }
+
+      // Warn about localStorage limitations for large files
+      if (file.size > 5 * 1024 * 1024) {
+        toast('Large files may not persist across sessions. Consider using smaller files or external hosting.', {
+          icon: '⚠️',
+          duration: 5000,
+        });
       }
 
       const reader = new FileReader();
 
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         const dataUrl = event.target?.result as string;
 
         // Determine asset type based on active tab and file type
@@ -94,13 +157,31 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
           else assetType = 'videoClip';
         }
 
+        // Generate thumbnail for video files
+        let thumbnailUrl: string | undefined;
+        let duration: number | undefined;
+
+        if (file.type.startsWith('video/')) {
+          try {
+            const videoResult = await generateVideoThumbnail(dataUrl);
+            thumbnailUrl = videoResult.thumbnail;
+            duration = videoResult.duration;
+          } catch (error) {
+            console.error('Failed to generate video thumbnail:', error);
+            thumbnailUrl = undefined;
+          }
+        } else if (file.type.startsWith('image/')) {
+          thumbnailUrl = dataUrl;
+        }
+
         // Create new asset
         const newAsset: Asset = {
           id: Date.now().toString(),
           type: assetType,
           name: file.name,
           url: dataUrl,
-          thumbnailUrl: file.type.startsWith('image/') ? dataUrl : undefined,
+          thumbnailUrl,
+          duration,
           fileSize: file.size,
         };
 
@@ -208,11 +289,21 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
       >
         <div className="aspect-video bg-gray-100 rounded mb-2 overflow-hidden relative">
           {asset.thumbnailUrl ? (
-            <img
-              src={asset.thumbnailUrl}
-              alt={asset.name}
-              className="w-full h-full object-cover"
-            />
+            <>
+              <img
+                src={asset.thumbnailUrl}
+                alt={asset.name}
+                className="w-full h-full object-cover"
+              />
+              {/* Video play icon indicator */}
+              {(asset.type === 'videoBackground' || asset.type === 'videoClip') && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="w-12 h-12 bg-black bg-opacity-60 rounded-full flex items-center justify-center">
+                    <div className="w-0 h-0 border-l-[16px] border-l-white border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent ml-1"></div>
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-400">
               {asset.type === 'music' ? '🎵' : (asset.type === 'logo' || asset.type === 'overlay' || asset.type === 'banner') ? '🖼️' : '🎬'}
@@ -252,7 +343,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
         <p className="text-xs font-medium text-gray-900 truncate">{asset.name}</p>
         {asset.duration && (
           <p className="text-xs text-gray-500">
-            {Math.floor(asset.duration / 60)}:{String(asset.duration % 60).padStart(2, '0')}
+            {Math.floor(asset.duration / 60)}:{String(Math.floor(asset.duration % 60)).padStart(2, '0')}
           </p>
         )}
         {asset.fileSize && (
