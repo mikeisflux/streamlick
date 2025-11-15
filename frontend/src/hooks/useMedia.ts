@@ -23,8 +23,6 @@ export function useMedia() {
           sampleRate: { ideal: 48000 },
           sampleSize: { ideal: 16 },
           channelCount: { ideal: 2 },
-          // Reduce latency for live streaming
-          latency: { ideal: 0.01 },
         },
       });
       setLocalStream(stream);

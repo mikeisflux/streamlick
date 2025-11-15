@@ -28,7 +28,7 @@ export const mediasoupConfig = {
           maxaveragebitrate: 128000,  // 128 kbps for high-quality stereo audio
           maxplaybackrate: 48000,     // Maximum playback rate
           stereo: 1,                   // Enable stereo
-          sprop-stereo: 1,            // Signal stereo support
+          'sprop-stereo': 1,          // Signal stereo support
           cbr: 1,                      // Constant bitrate for consistent quality
         },
       },
