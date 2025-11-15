@@ -149,6 +149,21 @@ class MediaStorageService {
       request.onerror = () => reject(request.error);
     });
   }
+
+  async clearAllMedia(): Promise<void> {
+    if (!this.db) {
+      await this.initialize();
+    }
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['media'], 'readwrite');
+      const store = transaction.objectStore('media');
+      const request = store.clear();
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
 }
 
 export const mediaStorageService = new MediaStorageService();

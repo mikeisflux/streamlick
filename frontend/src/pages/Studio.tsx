@@ -1,6 +1,8 @@
 import { useRef, useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { compositorService } from '../services/compositor.service';
+import { mediaStorageService } from '../services/media-storage.service';
 import { useMedia } from '../hooks/useMedia';
 import { useStudioStore } from '../store/studioStore';
 import { HotkeyReference } from '../components/HotkeyReference';
@@ -206,6 +208,7 @@ export function Studio() {
   // Canvas edit mode and settings
   const [editMode, setEditMode] = useState(false);
   const [showCanvasSettings, setShowCanvasSettings] = useState(false);
+  const [showResetConfirmation, setShowResetConfirmation] = useState(false);
 
   // Local user stage status - starts backstage by default
   const [isLocalUserOnStage, setIsLocalUserOnStage] = useState(false);
@@ -229,6 +232,44 @@ export function Studio() {
     console.log('Add participant clicked');
   };
   const handleCanvasSettingsClick = () => setShowCanvasSettings(true);
+  const handleResetStack = async () => {
+    try {
+      // Clear all media from IndexedDB
+      await mediaStorageService.clearAllMedia();
+
+      // Clear all localStorage keys related to media assets
+      const keysToRemove = [
+        'streamLogo',
+        'streamLogoName',
+        'streamLogoAssetId',
+        'streamOverlay',
+        'streamOverlayName',
+        'streamOverlayAssetId',
+        'streamBackground',
+        'streamBackgroundName',
+        'streamBackgroundAssetId',
+        'backgroundMusic',
+        'backgroundMusicName',
+        `media_assets_${broadcastId || 'default'}`,
+      ];
+
+      keysToRemove.forEach((key) => localStorage.removeItem(key));
+
+      // Dispatch events to update UI
+      window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { url: null, name: null } }));
+      window.dispatchEvent(new CustomEvent('overlayUpdated', { detail: { url: null, name: null } }));
+      window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: null, name: null } }));
+
+      toast.success('Stack reset successfully! All linked files cleared.');
+      setShowResetConfirmation(false);
+
+      // Reload the page to ensure clean state
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (error) {
+      console.error('Failed to reset stack:', error);
+      toast.error('Failed to reset stack. Please try again.');
+    }
+  };
 
   // Handle adding/removing participants from stage
   // Use existing handlers from useParticipants hook
@@ -333,6 +374,13 @@ export function Studio() {
               title="Producer Mode"
             >
               Producer Mode
+            </button>
+            <button
+              onClick={() => setShowResetConfirmation(true)}
+              className="px-4 py-2 rounded bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold transition-colors"
+              title="Reset Stack"
+            >
+              Reset Stack
             </button>
             <button
               onClick={() => setShowDestinationsDrawer(true)}
@@ -601,6 +649,32 @@ export function Studio() {
             }
           }}
         />
+      )}
+
+      {/* Reset Stack Confirmation Modal */}
+      {showResetConfirmation && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-60">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Reset Stack</h2>
+            <p className="text-gray-700 mb-6">
+              This will clear all linked files and allow you to start fresh.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowResetConfirmation(false)}
+                className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium transition-colors"
+              >
+                No
+              </button>
+              <button
+                onClick={handleResetStack}
+                className="px-4 py-2 rounded bg-orange-600 hover:bg-orange-700 text-white font-medium transition-colors"
+              >
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showAnalyticsDashboard && analyticsEnabled && (
