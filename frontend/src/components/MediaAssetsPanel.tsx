@@ -26,6 +26,11 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
     return localStorage.getItem('streamBackground');
   });
 
+  // Track active logo asset
+  const [activeLogoUrl, setActiveLogoUrl] = useState<string | null>(() => {
+    return localStorage.getItem('streamLogo');
+  });
+
   // Load assets from localStorage or use defaults
   const [assets, setAssets] = useState<Asset[]>(() => {
     const storageKey = `media_assets_${broadcastId || 'default'}`;
@@ -202,21 +207,36 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
 
   const handleUseAsset = (asset: Asset) => {
     // Check if this asset is already active
-    const isActive = (asset.type === 'brand' || asset.type === 'image') && activeBackgroundUrl === asset.url;
+    const isActiveLogo = asset.type === 'brand' && activeLogoUrl === asset.url;
+    const isActiveBackground = asset.type === 'image' && activeBackgroundUrl === asset.url;
 
-    if (isActive) {
-      // Remove the asset
-      if (asset.type === 'brand' || asset.type === 'image') {
-        localStorage.removeItem('streamBackground');
-        localStorage.removeItem('streamBackgroundName');
-        setActiveBackgroundUrl(null);
-        // Dispatch event to notify StudioCanvas
-        window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: null, name: null } }));
-        toast.success('Background removed');
-      }
+    if (isActiveLogo) {
+      // Remove the logo
+      localStorage.removeItem('streamLogo');
+      localStorage.removeItem('streamLogoName');
+      setActiveLogoUrl(null);
+      // Dispatch event to notify StudioCanvas
+      window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { url: null, name: null } }));
+      toast.success('Logo removed');
+    } else if (isActiveBackground) {
+      // Remove the background
+      localStorage.removeItem('streamBackground');
+      localStorage.removeItem('streamBackgroundName');
+      setActiveBackgroundUrl(null);
+      // Dispatch event to notify StudioCanvas
+      window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: null, name: null } }));
+      toast.success('Background removed');
     } else {
       // Save asset based on type
-      if (asset.type === 'brand' || asset.type === 'image') {
+      if (asset.type === 'brand') {
+        // Set as stream logo (overlay in corner)
+        localStorage.setItem('streamLogo', asset.url);
+        localStorage.setItem('streamLogoName', asset.name);
+        setActiveLogoUrl(asset.url);
+        // Dispatch event to notify StudioCanvas
+        window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { url: asset.url, name: asset.name } }));
+        toast.success(`Now using "${asset.name}" as stream logo`);
+      } else if (asset.type === 'image') {
         // Set as stream background
         localStorage.setItem('streamBackground', asset.url);
         localStorage.setItem('streamBackgroundName', asset.name);
@@ -238,7 +258,8 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
 
   const renderAssetCard = (asset: Asset) => {
     // Check if this asset is currently active
-    const isActive = (asset.type === 'brand' || asset.type === 'image') && activeBackgroundUrl === asset.url;
+    const isActive = (asset.type === 'brand' && activeLogoUrl === asset.url) ||
+                     (asset.type === 'image' && activeBackgroundUrl === asset.url);
 
     return (
       <div
@@ -345,9 +366,9 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
         {activeTab === 'brand' && (
           <div className="space-y-4">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <h4 className="text-sm font-semibold text-blue-900 mb-2">Brand Presets</h4>
+              <h4 className="text-sm font-semibold text-blue-900 mb-2">Brand Logos</h4>
               <p className="text-xs text-blue-700 mb-3">
-                Create and save brand presets with your logo, colors, and overlays for quick access.
+                Upload brand logos that will be overlaid in the top-left corner of your stream. Recommended size: 150×150 px. Brand assets are displayed as logos, not backgrounds.
               </p>
               <button
                 onClick={handleCreateBrandPreset}
@@ -440,9 +461,9 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
         {activeTab === 'images' && (
           <div className="space-y-4">
             <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-              <h4 className="text-sm font-semibold text-green-900 mb-2">🖼️ Image Assets</h4>
+              <h4 className="text-sm font-semibold text-green-900 mb-2">🖼️ Background Images</h4>
               <p className="text-xs text-green-700">
-                Upload images for overlays, backgrounds, and lower thirds.
+                Upload images to use as full-screen backgrounds. Recommended size: 1920×1080 px (1080p) or 1280×720 px (720p).
               </p>
             </div>
 

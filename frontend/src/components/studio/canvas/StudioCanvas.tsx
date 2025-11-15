@@ -212,6 +212,26 @@ export function StudioCanvas({
     return () => window.removeEventListener('backgroundUpdated', handleBackgroundUpdated);
   }, []);
 
+  // Load stream logo from localStorage
+  const [streamLogo, setStreamLogo] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadLogo = () => {
+      const logo = localStorage.getItem('streamLogo');
+      setStreamLogo(logo);
+    };
+
+    loadLogo();
+
+    // Listen for custom event for logo updates
+    const handleLogoUpdated = ((e: CustomEvent) => {
+      setStreamLogo(e.detail.url);
+    }) as EventListener;
+
+    window.addEventListener('logoUpdated', handleLogoUpdated);
+    return () => window.removeEventListener('logoUpdated', handleLogoUpdated);
+  }, []);
+
   // Calculate total participants (local user if on stage + remote on-stage)
   const onStageParticipants = Array.from(remoteParticipants.values()).filter(
     (p) => p.role !== 'backstage' && p.id !== 'screen-share'
@@ -577,6 +597,32 @@ export function StudioCanvas({
               {banner.subtitle && <div className="text-sm opacity-90 mt-1">{banner.subtitle}</div>}
             </div>
           ))}
+
+        {/* Logo Overlay - Top Left Corner */}
+        {streamLogo && (
+          <div
+            className="absolute"
+            style={{
+              top: '20px',
+              left: '20px',
+              zIndex: 20,
+              maxWidth: '150px',
+              maxHeight: '150px',
+            }}
+          >
+            <img
+              src={streamLogo}
+              alt="Stream Logo"
+              style={{
+                width: 'auto',
+                height: 'auto',
+                maxWidth: '150px',
+                maxHeight: '150px',
+                objectFit: 'contain',
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
