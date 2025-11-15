@@ -12,47 +12,84 @@ export function useCaptions(enabled: boolean, language: string) {
 
   useEffect(() => {
     if (enabled) {
-      if (!captionService.isSupported()) {
-        toast.error('Speech recognition not supported in this browser');
-        return;
-      }
-
-      captionService.onCaption((caption: Caption) => {
-        setCurrentCaption(caption);
-
-        // Clear interim captions after 3 seconds
-        if (!caption.isFinal) {
-          setTimeout(() => {
-            setCurrentCaption((prev) => {
-              if (prev && !prev.isFinal && prev.text === caption.text) {
-                return null;
-              }
-              return prev;
-            });
-          }, 3000);
-        } else {
-          // Clear final captions after 5 seconds
-          setTimeout(() => {
-            setCurrentCaption((prev) => {
-              if (prev && prev.isFinal && prev.text === caption.text) {
-                return null;
-              }
-              return prev;
-            });
-          }, 5000);
+      const startCaptions = async () => {
+        // Check browser support
+        if (!captionService.isSupported()) {
+          toast.error('Speech recognition not supported in this browser. Try Chrome or Edge.');
+          return;
         }
-      });
 
-      captionService.onError((error: string) => {
-        console.error('Caption error:', error);
-        if (error !== 'no-speech' && error !== 'aborted') {
-          toast.error(`Caption error: ${error}`);
+        try {
+          // Request microphone permission explicitly
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+          // Stop the test stream immediately - we just needed to check permissions
+          stream.getTracks().forEach(track => track.stop());
+
+          // Set up caption callbacks
+          captionService.onCaption((caption: Caption) => {
+            setCurrentCaption(caption);
+
+            // Clear interim captions after 3 seconds
+            if (!caption.isFinal) {
+              setTimeout(() => {
+                setCurrentCaption((prev) => {
+                  if (prev && !prev.isFinal && prev.text === caption.text) {
+                    return null;
+                  }
+                  return prev;
+                });
+              }, 3000);
+            } else {
+              // Clear final captions after 5 seconds
+              setTimeout(() => {
+                setCurrentCaption((prev) => {
+                  if (prev && prev.isFinal && prev.text === caption.text) {
+                    return null;
+                  }
+                  return prev;
+                });
+              }, 5000);
+            }
+          });
+
+          captionService.onError((error: string) => {
+            console.error('Caption error:', error);
+
+            // Provide user-friendly error messages
+            if (error === 'not-allowed') {
+              toast.error('Microphone access denied. Please allow microphone access to use captions.');
+            } else if (error === 'no-speech') {
+              // Ignore no-speech errors as they're normal
+            } else if (error === 'aborted') {
+              // Ignore aborted errors as they're normal
+            } else if (error === 'audio-capture') {
+              toast.error('No microphone found. Please connect a microphone to use captions.');
+            } else if (error === 'network') {
+              toast.error('Network error. Speech recognition requires an internet connection.');
+            } else {
+              toast.error(`Caption error: ${error}`);
+            }
+          });
+
+          // Start the caption service
+          captionService.start({ language });
+          const langName = POPULAR_LANGUAGES.find((l) => l.code === language)?.name;
+          toast.success(`AI Captions started (${langName})`);
+        } catch (error: any) {
+          console.error('Failed to start captions:', error);
+
+          if (error.name === 'NotAllowedError') {
+            toast.error('Microphone access denied. Please allow microphone access in your browser settings.');
+          } else if (error.name === 'NotFoundError') {
+            toast.error('No microphone found. Please connect a microphone.');
+          } else {
+            toast.error('Failed to start captions. Please check your microphone permissions.');
+          }
         }
-      });
+      };
 
-      captionService.start({ language });
-      const langName = POPULAR_LANGUAGES.find((l) => l.code === language)?.name;
-      toast.success(`AI Captions started (${langName})`);
+      startCaptions();
     } else if (!enabled && captionService.active()) {
       captionService.stop();
       setCurrentCaption(null);

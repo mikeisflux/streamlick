@@ -8,18 +8,53 @@ import {
 } from '@heroicons/react/24/solid';
 import { ClockIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
+import { recordingService } from '../services/recording.service';
+import { compositorService } from '../services/compositor.service';
 
 interface RecordingControlsProps {
   broadcastId?: string;
+}
+
+interface SavedRecording {
+  id: string;
+  name: string;
+  duration: string;
+  size: string;
+  date: string;
+  blob: Blob;
 }
 
 export function RecordingControls({ broadcastId }: RecordingControlsProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [recordings, setRecordings] = useState<
-    Array<{ id: string; name: string; duration: string; size: string; date: string }>
-  >([]);
+
+  // Load recordings from localStorage
+  const [recordings, setRecordings] = useState<SavedRecording[]>(() => {
+    const saved = localStorage.getItem('saved_recordings');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Note: Blob data is not preserved in localStorage, only metadata
+        return parsed.map((r: any) => ({ ...r, blob: null }));
+      } catch (e) {
+        console.error('Failed to load recordings:', e);
+      }
+    }
+    return [];
+  });
+
+  // Persist recording metadata to localStorage (without blobs)
+  useEffect(() => {
+    const toSave = recordings.map(({ id, name, duration, size, date }) => ({
+      id,
+      name,
+      duration,
+      size,
+      date,
+    }));
+    localStorage.setItem('saved_recordings', JSON.stringify(toSave));
+  }, [recordings]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -52,8 +87,15 @@ export function RecordingControls({ broadcastId }: RecordingControlsProps) {
 
   const startRecording = async () => {
     try {
-      // TODO: Implement actual recording start via API
-      console.log('Starting recording for broadcast:', broadcastId);
+      // Get the composite output stream
+      const stream = compositorService.getOutputStream();
+      if (!stream) {
+        toast.error('No active stream to record');
+        return;
+      }
+
+      // Start recording with the composite stream
+      await recordingService.startRecording(stream);
       setIsRecording(true);
       setRecordingTime(0);
       toast.success('Recording started');
@@ -65,23 +107,29 @@ export function RecordingControls({ broadcastId }: RecordingControlsProps) {
 
   const stopRecording = async () => {
     try {
-      // TODO: Implement actual recording stop via API
-      console.log('Stopping recording');
+      // Stop recording and get the blob
+      const blob = await recordingService.stopRecording();
+
+      // Calculate size in MB
+      const sizeMB = (blob.size / (1024 * 1024)).toFixed(2);
+
+      // Create recording entry
+      const newRecording: SavedRecording = {
+        id: `rec-${Date.now()}`,
+        name: `Recording ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`,
+        duration: formatTime(recordingTime),
+        size: `${sizeMB} MB`,
+        date: new Date().toLocaleString(),
+        blob: blob,
+      };
 
       // Add to recordings list
-      const newRecording = {
-        id: `rec-${Date.now()}`,
-        name: `Recording ${new Date().toLocaleDateString()}`,
-        duration: formatTime(recordingTime),
-        size: '245 MB', // TODO: Calculate actual size
-        date: new Date().toLocaleString(),
-      };
       setRecordings((prev) => [newRecording, ...prev]);
 
       setIsRecording(false);
       setIsPaused(false);
       setRecordingTime(0);
-      toast.success('Recording saved');
+      toast.success('Recording saved successfully');
     } catch (error) {
       console.error('Failed to stop recording:', error);
       toast.error('Failed to stop recording');
@@ -89,13 +137,25 @@ export function RecordingControls({ broadcastId }: RecordingControlsProps) {
   };
 
   const pauseRecording = () => {
-    setIsPaused(true);
-    toast('Recording paused');
+    try {
+      recordingService.pauseRecording();
+      setIsPaused(true);
+      toast('Recording paused');
+    } catch (error) {
+      console.error('Failed to pause recording:', error);
+      toast.error('Failed to pause recording');
+    }
   };
 
   const resumeRecording = () => {
-    setIsPaused(false);
-    toast.success('Recording resumed');
+    try {
+      recordingService.resumeRecording();
+      setIsPaused(false);
+      toast.success('Recording resumed');
+    } catch (error) {
+      console.error('Failed to resume recording:', error);
+      toast.error('Failed to resume recording');
+    }
   };
 
   const downloadRecording = (recordingId: string) => {
@@ -105,25 +165,15 @@ export function RecordingControls({ broadcastId }: RecordingControlsProps) {
       return;
     }
 
-    // Create a dummy video file blob for demonstration
-    // In production, this would fetch the actual recording from your backend
-    const dummyContent = `Recording: ${recording.name}\nDuration: ${recording.duration}\nDate: ${recording.date}`;
-    const blob = new Blob([dummyContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
+    if (!recording.blob) {
+      toast.error('Recording data not available - please record a new session');
+      return;
+    }
 
-    // Create download link and trigger download
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${recording.name.replace(/\s+/g, '_')}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    // Clean up the URL object
-    setTimeout(() => URL.revokeObjectURL(url), 100);
-
+    // Download the actual video file
+    const filename = `${recording.name.replace(/\s+/g, '_').replace(/:/g, '-')}.webm`;
+    recordingService.downloadRecording(recording.blob, filename);
     toast.success('Download started - check your downloads folder');
-    console.log('Downloaded recording:', recordingId);
   };
 
   const deleteRecording = (recordingId: string) => {

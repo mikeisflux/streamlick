@@ -582,6 +582,12 @@ export function Studio() {
           onClose={() => setShowProducerMode(false)}
           broadcastId={broadcastId}
           producerId={broadcast?.userId}
+          remoteParticipants={remoteParticipants}
+          onPromoteToLive={handlePromoteToLive}
+          onDemoteToBackstage={handleDemoteToBackstage}
+          onMuteParticipant={handleMuteParticipant}
+          onUnmuteParticipant={handleUnmuteParticipant}
+          onLayoutChange={handleLayoutChange}
         />
       )}
 

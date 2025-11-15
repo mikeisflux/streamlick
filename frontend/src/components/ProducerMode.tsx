@@ -2,10 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { multiTrackRecordingService, RecordedTrack } from '../services/multitrack-recording.service';
 import toast from 'react-hot-toast';
 
-interface ProducerModeProps {
-  broadcastId?: string;
-  producerId?: string;
-  onClose?: () => void;
+interface RemoteParticipant {
+  id: string;
+  name: string;
+  stream: MediaStream | null;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
+  role: 'host' | 'guest' | 'backstage';
 }
 
 interface Participant {
@@ -15,12 +18,42 @@ interface Participant {
   audioEnabled: boolean;
   videoEnabled: boolean;
   status: 'connected' | 'connecting' | 'disconnected';
-  stream?: MediaStream; // Add stream property for recording
+  stream?: MediaStream | null;
 }
 
-export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeProps) {
-  // Load participants from localStorage or use defaults
+interface ProducerModeProps {
+  broadcastId?: string;
+  producerId?: string;
+  onClose?: () => void;
+  remoteParticipants?: Map<string, RemoteParticipant>;
+  onPromoteToLive?: (participantId: string) => void;
+  onDemoteToBackstage?: (participantId: string) => void;
+  onMuteParticipant?: (participantId: string) => void;
+  onUnmuteParticipant?: (participantId: string) => void;
+  onLayoutChange?: (layout: number) => void;
+}
+
+export function ProducerMode({
+  broadcastId,
+  producerId,
+  onClose,
+  remoteParticipants,
+  onPromoteToLive,
+  onDemoteToBackstage,
+  onMuteParticipant,
+  onUnmuteParticipant,
+  onLayoutChange,
+}: ProducerModeProps) {
+  // Convert remote participants map to local state format
   const [participants, setParticipants] = useState<Participant[]>(() => {
+    if (remoteParticipants && remoteParticipants.size > 0) {
+      return Array.from(remoteParticipants.values()).map(p => ({
+        ...p,
+        status: 'connected' as const,
+      }));
+    }
+
+    // Fallback to localStorage or defaults if no remote participants
     const storageKey = `producer_participants_${broadcastId || 'default'}`;
     const saved = localStorage.getItem(storageKey);
     if (saved) {
@@ -30,7 +63,8 @@ export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeP
         console.error('Failed to parse saved participants:', e);
       }
     }
-    // Default participants
+
+    // Default participants for demo
     return [
       {
         id: '1',
@@ -59,11 +93,23 @@ export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeP
     ];
   });
 
-  // Persist participants to localStorage whenever they change
+  // Sync with remote participants when they change
   useEffect(() => {
-    const storageKey = `producer_participants_${broadcastId || 'default'}`;
-    localStorage.setItem(storageKey, JSON.stringify(participants));
-  }, [participants, broadcastId]);
+    if (remoteParticipants && remoteParticipants.size > 0) {
+      setParticipants(Array.from(remoteParticipants.values()).map(p => ({
+        ...p,
+        status: 'connected' as const,
+      })));
+    }
+  }, [remoteParticipants]);
+
+  // Persist participants to localStorage when they change (fallback for demo mode)
+  useEffect(() => {
+    if (!remoteParticipants || remoteParticipants.size === 0) {
+      const storageKey = `producer_participants_${broadcastId || 'default'}`;
+      localStorage.setItem(storageKey, JSON.stringify(participants));
+    }
+  }, [participants, broadcastId, remoteParticipants]);
 
   const [selectedLayout, setSelectedLayout] = useState(1);
   const [mainAudioVolume, setMainAudioVolume] = useState(100);
@@ -85,32 +131,66 @@ export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeP
   const dragOffsetRef = useRef({ x: 0, y: 0 });
 
   const toggleParticipantRole = (participantId: string) => {
-    setParticipants(
-      participants.map((p) =>
-        p.id === participantId
-          ? {
-              ...p,
-              role: p.role === 'guest' ? 'backstage' : 'guest',
-            }
-          : p
-      )
-    );
+    const participant = participants.find(p => p.id === participantId);
+    if (!participant) return;
+
+    // Use the provided handlers if available, otherwise update local state
+    if (participant.role === 'backstage' && onPromoteToLive) {
+      onPromoteToLive(participantId);
+    } else if (participant.role !== 'backstage' && onDemoteToBackstage) {
+      onDemoteToBackstage(participantId);
+    } else {
+      // Fallback to local state for demo mode
+      setParticipants(
+        participants.map((p) =>
+          p.id === participantId
+            ? {
+                ...p,
+                role: p.role === 'backstage' ? 'guest' : 'backstage',
+              }
+            : p
+        )
+      );
+    }
   };
 
   const toggleParticipantAudio = (participantId: string) => {
-    setParticipants(
-      participants.map((p) =>
-        p.id === participantId ? { ...p, audioEnabled: !p.audioEnabled } : p
-      )
-    );
+    const participant = participants.find(p => p.id === participantId);
+    if (!participant) return;
+
+    // Use the provided handlers if available, otherwise update local state
+    if (participant.audioEnabled && onMuteParticipant) {
+      onMuteParticipant(participantId);
+    } else if (!participant.audioEnabled && onUnmuteParticipant) {
+      onUnmuteParticipant(participantId);
+    } else {
+      // Fallback to local state for demo mode
+      setParticipants(
+        participants.map((p) =>
+          p.id === participantId ? { ...p, audioEnabled: !p.audioEnabled } : p
+        )
+      );
+    }
   };
 
   const toggleParticipantVideo = (participantId: string) => {
+    // Video toggling updates local state and dispatches event for compositor
     setParticipants(
       participants.map((p) =>
         p.id === participantId ? { ...p, videoEnabled: !p.videoEnabled } : p
       )
     );
+
+    // Dispatch event for the compositor to handle video visibility
+    const participant = participants.find(p => p.id === participantId);
+    if (participant) {
+      window.dispatchEvent(new CustomEvent('participantVideoToggle', {
+        detail: {
+          participantId,
+          videoEnabled: !participant.videoEnabled
+        }
+      }));
+    }
   };
 
   // Multi-track recording handlers
@@ -454,7 +534,18 @@ export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeP
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((layout) => (
                     <button
                       key={layout}
-                      onClick={() => setSelectedLayout(layout)}
+                      onClick={() => {
+                        setSelectedLayout(layout);
+                        // Call the layout change handler if provided
+                        if (onLayoutChange) {
+                          onLayoutChange(layout);
+                        } else {
+                          // Fallback: dispatch event for layout change
+                          window.dispatchEvent(new CustomEvent('layoutChange', {
+                            detail: { layout }
+                          }));
+                        }
+                      }}
                       className={`aspect-square rounded flex items-center justify-center text-sm transition-colors ${
                         selectedLayout === layout
                           ? 'bg-blue-600 text-white'
@@ -614,16 +705,47 @@ export function ProducerMode({ broadcastId, producerId, onClose }: ProducerModeP
               <div className="bg-gray-800 rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
                 <div className="space-y-2">
-                  <button className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors">
+                  <button
+                    onClick={() => {
+                      // Open scene manager
+                      localStorage.setItem('showSceneManager', 'true');
+                      window.dispatchEvent(new CustomEvent('toggleSceneManager', { detail: { show: true } }));
+                      toast.success('Opening scene manager...');
+                    }}
+                    className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
+                  >
                     🎨 Change Scene
                   </button>
-                  <button className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors">
+                  <button
+                    onClick={() => {
+                      // Show banner/lower third
+                      window.dispatchEvent(new CustomEvent('toggleBannerDrawer', { detail: { show: true } }));
+                      toast.success('Opening banner settings...');
+                    }}
+                    className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                  >
                     📝 Show Lower Third
                   </button>
-                  <button className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors">
+                  <button
+                    onClick={() => {
+                      // Play media clip/stinger
+                      window.dispatchEvent(new CustomEvent('toggleMediaLibrary', { detail: { show: true } }));
+                      toast.success('Opening media library...');
+                    }}
+                    className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
+                  >
                     🎵 Play Stinger
                   </button>
-                  <button className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors">
+                  <button
+                    onClick={() => {
+                      // Emergency cut to logo/splash screen
+                      if (confirm('Cut stream to logo screen? This will hide all participants.')) {
+                        window.dispatchEvent(new CustomEvent('emergencyCut', { detail: { active: true } }));
+                        toast.success('Emergency cut activated');
+                      }
+                    }}
+                    className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                  >
                     🚨 Emergency Cut
                   </button>
                 </div>
