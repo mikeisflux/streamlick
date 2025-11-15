@@ -134,6 +134,24 @@ export function useCanvasSettings() {
     }
   }, [settings]);
 
+  // Listen for style settings updates from StylePanel
+  useEffect(() => {
+    const handleStyleSettingsUpdated = ((e: CustomEvent) => {
+      // Update canvas background color when styles are applied
+      if (e.detail.backgroundColor) {
+        setSettings((prev) => ({
+          ...prev,
+          canvasBackgroundColor: e.detail.backgroundColor,
+        }));
+      }
+    }) as EventListener;
+
+    window.addEventListener('styleSettingsUpdated', handleStyleSettingsUpdated);
+    return () => {
+      window.removeEventListener('styleSettingsUpdated', handleStyleSettingsUpdated);
+    };
+  }, []);
+
   // Individual setters for each setting
   const updateSetting = <K extends keyof CanvasSettings>(key: K, value: CanvasSettings[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }));

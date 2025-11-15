@@ -183,15 +183,32 @@ export function StudioCanvas({
 
     loadStyleSettings();
 
-    // Listen for storage changes from StylePanel
+    // Listen for storage changes from other tabs
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key?.startsWith('style_') || e.key === 'mirrorVideo') {
         loadStyleSettings();
       }
     };
 
+    // Listen for custom event for same-tab updates
+    const handleStyleSettingsUpdated = ((e: CustomEvent) => {
+      // Load mirror video from localStorage since it's not part of the style event
+      const mirrorVideo = localStorage.getItem('mirrorVideo') === 'true';
+
+      setStyleSettings({
+        cameraFrame: e.detail.cameraFrame,
+        borderWidth: e.detail.borderWidth,
+        primaryColor: e.detail.primaryColor,
+        mirrorVideo,
+      });
+    }) as EventListener;
+
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener('styleSettingsUpdated', handleStyleSettingsUpdated);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('styleSettingsUpdated', handleStyleSettingsUpdated);
+    };
   }, []);
 
   // Load stream background
