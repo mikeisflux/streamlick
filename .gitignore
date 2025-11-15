@@ -62,6 +62,18 @@ config.*.json
 !config.example.json
 !*.config.example.json
 
+# All config files (except examples and main configs)
+*.config.js
+*.config.ts
+!vite.config.ts
+!vitest.config.ts
+!tailwind.config.js
+!tailwind.config.ts
+!postcss.config.js
+!jest.config.js
+config/
+!config/.gitkeep
+
 # Logs
 logs/
 *.log

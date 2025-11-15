@@ -3,6 +3,7 @@ import {
   PhotoIcon,
   TrashIcon,
   ArrowUpTrayIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 
@@ -19,7 +20,7 @@ interface BrandSettings {
 export function BrandSettingsPanel() {
   const [settings, setSettings] = useState<BrandSettings>({
     logo: null,
-    logoPosition: 'top-right',
+    logoPosition: 'top-left',
     logoSize: 'medium',
     logoOpacity: 100,
     background: null,
@@ -122,6 +123,43 @@ export function BrandSettingsPanel() {
         <p className="text-sm text-gray-600">
           Customize your broadcast with your brand logo and backgrounds
         </p>
+      </div>
+
+      {/* Recommended Sizes Information */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+        <div className="flex items-start space-x-2">
+          <InformationCircleIcon className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+          <div className="space-y-2">
+            <h4 className="font-semibold text-blue-900 text-sm">
+              Recommended Asset Sizes
+            </h4>
+            <div className="text-sm text-blue-800 space-y-1.5">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                <div>
+                  <strong>Logos:</strong> 150×150 px
+                </div>
+                <div>
+                  <strong>Overlays:</strong> 1920×1080 px
+                </div>
+                <div>
+                  <strong>Backgrounds:</strong> 1280×720 px (720p) or 1920×1080 px (1080p)
+                </div>
+                <div>
+                  <strong>Video Clips:</strong> 1920×1080 px or 1280×720 px (16:9 ratio)
+                </div>
+                <div>
+                  <strong>Video Backgrounds:</strong> 1280×720 px (up to 1-2 min)
+                </div>
+                <div>
+                  <strong>File Size:</strong> Videos &lt;200MB, Images &lt;20MB
+                </div>
+              </div>
+              <p className="mt-2 text-xs italic">
+                All assets should maintain a 16:9 aspect ratio for optimal compatibility.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Logo Section */}
