@@ -21,6 +21,11 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   const [activeTab, setActiveTab] = useState<AssetTab>('brand');
   const brandPresetFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Track active background asset
+  const [activeBackgroundUrl, setActiveBackgroundUrl] = useState<string | null>(() => {
+    return localStorage.getItem('streamBackground');
+  });
+
   // Load assets from localStorage or use defaults
   const [assets, setAssets] = useState<Asset[]>(() => {
     const storageKey = `media_assets_${broadcastId || 'default'}`;
@@ -196,30 +201,51 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   };
 
   const handleUseAsset = (asset: Asset) => {
-    // Save asset based on type
-    if (asset.type === 'brand' || asset.type === 'image') {
-      // Set as stream background
-      localStorage.setItem('streamBackground', asset.url);
-      localStorage.setItem('streamBackgroundName', asset.name);
-      // Dispatch event to notify StudioCanvas
-      window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: asset.url, name: asset.name } }));
-      toast.success(`Now using "${asset.name}" as stream background`);
-    } else if (asset.type === 'music') {
-      localStorage.setItem('backgroundMusic', asset.url);
-      localStorage.setItem('backgroundMusicName', asset.name);
-      toast.success(`Now using "${asset.name}" as background music`);
-    } else if (asset.type === 'video') {
-      localStorage.setItem('backgroundVideo', asset.url);
-      localStorage.setItem('backgroundVideoName', asset.name);
-      toast.success(`Now using "${asset.name}" as background video`);
+    // Check if this asset is already active
+    const isActive = (asset.type === 'brand' || asset.type === 'image') && activeBackgroundUrl === asset.url;
+
+    if (isActive) {
+      // Remove the asset
+      if (asset.type === 'brand' || asset.type === 'image') {
+        localStorage.removeItem('streamBackground');
+        localStorage.removeItem('streamBackgroundName');
+        setActiveBackgroundUrl(null);
+        // Dispatch event to notify StudioCanvas
+        window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: null, name: null } }));
+        toast.success('Background removed');
+      }
+    } else {
+      // Save asset based on type
+      if (asset.type === 'brand' || asset.type === 'image') {
+        // Set as stream background
+        localStorage.setItem('streamBackground', asset.url);
+        localStorage.setItem('streamBackgroundName', asset.name);
+        setActiveBackgroundUrl(asset.url);
+        // Dispatch event to notify StudioCanvas
+        window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: asset.url, name: asset.name } }));
+        toast.success(`Now using "${asset.name}" as stream background`);
+      } else if (asset.type === 'music') {
+        localStorage.setItem('backgroundMusic', asset.url);
+        localStorage.setItem('backgroundMusicName', asset.name);
+        toast.success(`Now using "${asset.name}" as background music`);
+      } else if (asset.type === 'video') {
+        localStorage.setItem('backgroundVideo', asset.url);
+        localStorage.setItem('backgroundVideoName', asset.name);
+        toast.success(`Now using "${asset.name}" as background video`);
+      }
     }
   };
 
   const renderAssetCard = (asset: Asset) => {
+    // Check if this asset is currently active
+    const isActive = (asset.type === 'brand' || asset.type === 'image') && activeBackgroundUrl === asset.url;
+
     return (
       <div
         key={asset.id}
-        className="p-3 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow cursor-pointer group relative"
+        className={`p-3 bg-white rounded-lg hover:shadow-md transition-shadow cursor-pointer group relative ${
+          isActive ? 'border-2 border-blue-500' : 'border border-gray-200'
+        }`}
       >
         <div className="aspect-video bg-gray-100 rounded mb-2 overflow-hidden relative">
           {asset.thumbnailUrl ? (
@@ -233,15 +259,25 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               {asset.type === 'music' ? '🎵' : asset.type === 'image' ? '🖼️' : '🎬'}
             </div>
           )}
+          {/* Active indicator */}
+          {isActive && (
+            <div className="absolute top-2 right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded font-medium">
+              Active
+            </div>
+          )}
           <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 handleUseAsset(asset);
               }}
-              className="px-3 py-1 bg-white text-gray-900 hover:bg-gray-100 rounded text-sm font-medium"
+              className={`px-3 py-1 rounded text-sm font-medium ${
+                isActive
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-white text-gray-900 hover:bg-gray-100'
+              }`}
             >
-              Use Asset
+              {isActive ? 'Remove Asset' : 'Use Asset'}
             </button>
             <button
               onClick={(e) => {
