@@ -54,13 +54,28 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   // Persist assets to localStorage whenever they change
   useEffect(() => {
     const storageKey = `media_assets_${broadcastId || 'default'}`;
-    localStorage.setItem(storageKey, JSON.stringify(assets));
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(assets));
+    } catch (error: any) {
+      console.error('Failed to save assets to localStorage:', error);
+      if (error.name === 'QuotaExceededError') {
+        toast.error('Storage quota exceeded. Consider uploading smaller files or clearing old assets.');
+      }
+    }
   }, [assets, broadcastId]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
       const file = files[0];
+
+      // Check file size (warn if > 2MB for localStorage compatibility)
+      const maxSize = 2 * 1024 * 1024; // 2MB
+      if (file.size > maxSize) {
+        toast.error(`File too large (${(file.size / 1024 / 1024).toFixed(2)}MB). Please upload files smaller than 2MB for best performance.`);
+        return;
+      }
+
       const reader = new FileReader();
 
       reader.onload = (event) => {
@@ -111,6 +126,14 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
     const files = e.target.files;
     if (files && files.length > 0) {
       const file = files[0];
+
+      // Check file size
+      const maxSize = 2 * 1024 * 1024; // 2MB
+      if (file.size > maxSize) {
+        toast.error(`File too large (${(file.size / 1024 / 1024).toFixed(2)}MB). Please upload files smaller than 2MB.`);
+        return;
+      }
+
       const presetName = prompt('Enter a name for this brand preset:');
 
       if (!presetName) {
@@ -173,10 +196,23 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   };
 
   const handleUseAsset = (asset: Asset) => {
-    // Save asset as current logo/media for use in stream
-    localStorage.setItem('currentLogo', asset.url);
-    localStorage.setItem('currentLogoName', asset.name);
-    toast.success(`Now using "${asset.name}" in your stream`);
+    // Save asset based on type
+    if (asset.type === 'brand' || asset.type === 'image') {
+      // Set as stream background
+      localStorage.setItem('streamBackground', asset.url);
+      localStorage.setItem('streamBackgroundName', asset.name);
+      // Dispatch event to notify StudioCanvas
+      window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: asset.url, name: asset.name } }));
+      toast.success(`Now using "${asset.name}" as stream background`);
+    } else if (asset.type === 'music') {
+      localStorage.setItem('backgroundMusic', asset.url);
+      localStorage.setItem('backgroundMusicName', asset.name);
+      toast.success(`Now using "${asset.name}" as background music`);
+    } else if (asset.type === 'video') {
+      localStorage.setItem('backgroundVideo', asset.url);
+      localStorage.setItem('backgroundVideoName', asset.name);
+      toast.success(`Now using "${asset.name}" as background video`);
+    }
   };
 
   const renderAssetCard = (asset: Asset) => {

@@ -127,6 +127,9 @@ export function StudioCanvas({
     mirrorVideo: false,
   });
 
+  // Load stream background from localStorage
+  const [streamBackground, setStreamBackground] = useState<string | null>(null);
+
   useEffect(() => {
     const loadBanners = () => {
       const saved = localStorage.getItem('banners');
@@ -191,6 +194,24 @@ export function StudioCanvas({
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
+  // Load stream background
+  useEffect(() => {
+    const loadBackground = () => {
+      const bg = localStorage.getItem('streamBackground');
+      setStreamBackground(bg);
+    };
+
+    loadBackground();
+
+    // Listen for custom event for background updates
+    const handleBackgroundUpdated = ((e: CustomEvent) => {
+      setStreamBackground(e.detail.url);
+    }) as EventListener;
+
+    window.addEventListener('backgroundUpdated', handleBackgroundUpdated);
+    return () => window.removeEventListener('backgroundUpdated', handleBackgroundUpdated);
+  }, []);
+
   // Calculate total participants (local user if on stage + remote on-stage)
   const onStageParticipants = Array.from(remoteParticipants.values()).filter(
     (p) => p.role !== 'backstage' && p.id !== 'screen-share'
@@ -199,6 +220,10 @@ export function StudioCanvas({
 
   // Dynamic grid calculation using the formula: cols = Math.ceil(Math.sqrt(count))
   const calculateDynamicGrid = (participantCount: number) => {
+    // Special case for solo layout: use 2x2 grid to keep same size as 4-person layout
+    if (participantCount === 1) {
+      return { cols: 2, rows: 2 };
+    }
     const cols = Math.ceil(Math.sqrt(participantCount));
     const rows = Math.ceil(participantCount / cols);
     return { cols, rows };
@@ -268,6 +293,10 @@ export function StudioCanvas({
         }`}
         style={{
           backgroundColor,
+          backgroundImage: streamBackground ? `url(${streamBackground})` : 'none',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
           ...(getLayoutStyles(selectedLayout).gridCols && {
             gridTemplateColumns: `repeat(${getLayoutStyles(selectedLayout).gridCols}, 1fr)`,
             gridTemplateRows: `repeat(${getLayoutStyles(selectedLayout).gridRows}, 1fr)`,
@@ -377,27 +406,43 @@ export function StudioCanvas({
             {/* Simplified Auto-Layout - All layouts now use smart grid */}
             {/* Render local user first - only when on stage */}
             {isLocalUserOnStage && (
-              <div className={`${getLayoutStyles(selectedLayout).mainVideo}`}>
-                <ParticipantBox
-                  stream={localStream}
-                  videoEnabled={videoEnabled}
-                  audioEnabled={audioEnabled}
-                  name="You"
-                  positionNumber={1}
-                  isHost={true}
-                  videoRef={mainVideoRef}
-                  size="medium"
-                  connectionQuality="excellent"
-                  showPositionNumber={showPositionNumbers}
-                  showConnectionQuality={showConnectionQuality}
-                  showLowerThird={showLowerThirds}
-                  participantId="local-user"
-                  onRemoveFromStage={onRemoveFromStage}
-                  cameraFrame={styleSettings.cameraFrame}
-                  borderWidth={styleSettings.borderWidth}
-                  borderColor={styleSettings.primaryColor}
-                  mirrorVideo={styleSettings.mirrorVideo}
-                />
+              <div
+                className={totalParticipants === 1 ? '' : getLayoutStyles(selectedLayout).mainVideo}
+                style={
+                  totalParticipants === 1
+                    ? {
+                        gridColumn: '1 / -1',
+                        gridRow: '1 / -1',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '2rem',
+                      }
+                    : {}
+                }
+              >
+                <div style={totalParticipants === 1 ? { width: '50%', height: '50%' } : { width: '100%', height: '100%' }}>
+                  <ParticipantBox
+                    stream={localStream}
+                    videoEnabled={videoEnabled}
+                    audioEnabled={audioEnabled}
+                    name="You"
+                    positionNumber={1}
+                    isHost={true}
+                    videoRef={mainVideoRef}
+                    size="medium"
+                    connectionQuality="excellent"
+                    showPositionNumber={showPositionNumbers}
+                    showConnectionQuality={showConnectionQuality}
+                    showLowerThird={showLowerThirds}
+                    participantId="local-user"
+                    onRemoveFromStage={onRemoveFromStage}
+                    cameraFrame={styleSettings.cameraFrame}
+                    borderWidth={styleSettings.borderWidth}
+                    borderColor={styleSettings.primaryColor}
+                    mirrorVideo={styleSettings.mirrorVideo}
+                  />
+                </div>
               </div>
             )}
 
