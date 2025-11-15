@@ -109,6 +109,8 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
                     return {
                       ...asset,
                       url: objectURL,
+                      thumbnailUrl: mediaData.thumbnail, // Restore thumbnail from IndexedDB
+                      duration: mediaData.metadata.duration,
                     };
                   }
                 } catch (error) {
@@ -130,7 +132,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
             if (mediaData) {
               const objectURL = URL.createObjectURL(mediaData.blob);
               objectURLsRef.current.push(objectURL);
-              localStorage.setItem('streamLogo', objectURL);
+              // Don't save object URL to localStorage
               setActiveLogoUrl(objectURL);
               window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { url: objectURL } }));
             }
@@ -147,7 +149,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
             if (mediaData) {
               const objectURL = URL.createObjectURL(mediaData.blob);
               objectURLsRef.current.push(objectURL);
-              localStorage.setItem('streamOverlay', objectURL);
+              // Don't save object URL to localStorage
               window.dispatchEvent(new CustomEvent('overlayUpdated', { detail: { url: objectURL } }));
             }
           } catch (error) {
@@ -163,7 +165,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
             if (mediaData) {
               const objectURL = URL.createObjectURL(mediaData.blob);
               objectURLsRef.current.push(objectURL);
-              localStorage.setItem('streamBackground', objectURL);
+              // Don't save object URL to localStorage
               setActiveBackgroundUrl(objectURL);
               window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: objectURL } }));
             }
@@ -193,11 +195,17 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
 
     const storageKey = `media_assets_${broadcastId || 'default'}`;
     try {
-      // Only save metadata, not object URLs
+      // Only save minimal metadata
       const metadata = assets.map((asset) => ({
-        ...asset,
-        url: asset.storedInIndexedDB ? '' : asset.url, // Clear object URLs for IndexedDB assets
-        thumbnailUrl: asset.thumbnailUrl, // Keep thumbnails (they're small)
+        id: asset.id,
+        type: asset.type,
+        name: asset.name,
+        fileSize: asset.fileSize,
+        duration: asset.duration,
+        storedInIndexedDB: asset.storedInIndexedDB,
+        // Only include url/thumbnail for non-IndexedDB assets
+        url: asset.storedInIndexedDB ? undefined : asset.url,
+        thumbnailUrl: asset.storedInIndexedDB ? undefined : asset.thumbnailUrl,
       }));
 
       localStorage.setItem(storageKey, JSON.stringify(metadata));
@@ -282,13 +290,18 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               thumbnailUrl = fileURL;
             }
 
-            // Store blob in IndexedDB
-            await mediaStorageService.saveMedia(assetId, file, {
-              name: file.name,
-              type: assetType,
-              fileSize: file.size,
-              duration,
-            });
+            // Store blob in IndexedDB with thumbnail
+            await mediaStorageService.saveMedia(
+              assetId,
+              file,
+              {
+                name: file.name,
+                type: assetType,
+                fileSize: file.size,
+                duration,
+              },
+              thumbnailUrl // Save thumbnail in IndexedDB
+            );
 
             toast.dismiss();
             toast.success(`${file.name} uploaded successfully!`);
@@ -403,10 +416,10 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
                 const objectURL = URL.createObjectURL(mediaData.blob);
                 objectURLsRef.current.push(objectURL);
 
-                // Store the asset ID so we can reload it later
+                // Store only the asset ID - don't save URL to localStorage
                 localStorage.setItem('streamLogoAssetId', asset.id);
-                localStorage.setItem('streamLogo', objectURL);
                 localStorage.setItem('streamLogoName', asset.name);
+                localStorage.removeItem('streamLogo'); // Don't save object URLs
                 setActiveLogoUrl(objectURL);
                 window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { url: objectURL, name: asset.name } }));
                 toast.success(`Logo applied: ${asset.name}`);
@@ -416,12 +429,17 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               toast.error('Failed to apply logo');
             }
           } else {
-            localStorage.setItem('streamLogo', asset.url);
-            localStorage.setItem('streamLogoName', asset.name);
-            localStorage.removeItem('streamLogoAssetId');
-            setActiveLogoUrl(asset.url);
-            window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { url: asset.url, name: asset.name } }));
-            toast.success(`Logo applied: ${asset.name}`);
+            try {
+              localStorage.setItem('streamLogo', asset.url);
+              localStorage.setItem('streamLogoName', asset.name);
+              localStorage.removeItem('streamLogoAssetId');
+              setActiveLogoUrl(asset.url);
+              window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { url: asset.url, name: asset.name } }));
+              toast.success(`Logo applied: ${asset.name}`);
+            } catch (error) {
+              console.error('Failed to save logo:', error);
+              toast.error('Failed to apply logo - storage full');
+            }
           }
           break;
 
@@ -435,8 +453,8 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
                 objectURLsRef.current.push(objectURL);
 
                 localStorage.setItem('streamOverlayAssetId', asset.id);
-                localStorage.setItem('streamOverlay', objectURL);
                 localStorage.setItem('streamOverlayName', asset.name);
+                localStorage.removeItem('streamOverlay'); // Don't save object URLs
                 window.dispatchEvent(new CustomEvent('overlayUpdated', { detail: { url: objectURL, name: asset.name } }));
                 toast.success(`Overlay applied: ${asset.name}`);
               }
@@ -445,11 +463,16 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               toast.error('Failed to apply overlay');
             }
           } else {
-            localStorage.setItem('streamOverlay', asset.url);
-            localStorage.setItem('streamOverlayName', asset.name);
-            localStorage.removeItem('streamOverlayAssetId');
-            window.dispatchEvent(new CustomEvent('overlayUpdated', { detail: { url: asset.url, name: asset.name } }));
-            toast.success(`Overlay applied: ${asset.name}`);
+            try {
+              localStorage.setItem('streamOverlay', asset.url);
+              localStorage.setItem('streamOverlayName', asset.name);
+              localStorage.removeItem('streamOverlayAssetId');
+              window.dispatchEvent(new CustomEvent('overlayUpdated', { detail: { url: asset.url, name: asset.name } }));
+              toast.success(`Overlay applied: ${asset.name}`);
+            } catch (error) {
+              console.error('Failed to save overlay:', error);
+              toast.error('Failed to apply overlay - storage full');
+            }
           }
           break;
 
@@ -463,8 +486,8 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
                 objectURLsRef.current.push(objectURL);
 
                 localStorage.setItem('streamBackgroundAssetId', asset.id);
-                localStorage.setItem('streamBackground', objectURL);
                 localStorage.setItem('streamBackgroundName', asset.name);
+                localStorage.removeItem('streamBackground'); // Don't save object URLs
                 setActiveBackgroundUrl(objectURL);
                 window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: objectURL, name: asset.name } }));
                 toast.success(`Background applied: ${asset.name}`);
@@ -474,12 +497,17 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               toast.error('Failed to apply background');
             }
           } else {
-            localStorage.setItem('streamBackground', asset.url);
-            localStorage.setItem('streamBackgroundName', asset.name);
-            localStorage.removeItem('streamBackgroundAssetId');
-            setActiveBackgroundUrl(asset.url);
-            window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: asset.url, name: asset.name } }));
-            toast.success(`Background applied: ${asset.name}`);
+            try {
+              localStorage.setItem('streamBackground', asset.url);
+              localStorage.setItem('streamBackgroundName', asset.name);
+              localStorage.removeItem('streamBackgroundAssetId');
+              setActiveBackgroundUrl(asset.url);
+              window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: asset.url, name: asset.name } }));
+              toast.success(`Background applied: ${asset.name}`);
+            } catch (error) {
+              console.error('Failed to save background:', error);
+              toast.error('Failed to apply background - storage full');
+            }
           }
           break;
 

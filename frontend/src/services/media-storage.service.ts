@@ -29,7 +29,7 @@ class MediaStorageService {
     });
   }
 
-  async saveMedia(id: string, blob: Blob, metadata: any): Promise<void> {
+  async saveMedia(id: string, blob: Blob, metadata: any, thumbnail?: string): Promise<void> {
     if (!this.db) {
       await this.initialize();
     }
@@ -42,6 +42,7 @@ class MediaStorageService {
         id,
         blob,
         metadata,
+        thumbnail, // Store thumbnail with media
         timestamp: Date.now(),
       };
 
@@ -52,7 +53,7 @@ class MediaStorageService {
     });
   }
 
-  async getMedia(id: string): Promise<{ blob: Blob; metadata: any } | null> {
+  async getMedia(id: string): Promise<{ blob: Blob; metadata: any; thumbnail?: string } | null> {
     if (!this.db) {
       await this.initialize();
     }
@@ -67,6 +68,7 @@ class MediaStorageService {
           resolve({
             blob: request.result.blob,
             metadata: request.result.metadata,
+            thumbnail: request.result.thumbnail,
           });
         } else {
           resolve(null);
