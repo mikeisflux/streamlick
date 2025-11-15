@@ -61,27 +61,6 @@ export function Studio() {
   const cameraButtonRef = useRef<HTMLDivElement>(null);
   const speakerButtonRef = useRef<HTMLDivElement>(null);
 
-  // Responsive scaling - base resolution is 1920x1080
-  const [scale, setScale] = useState(1);
-
-  useEffect(() => {
-    const updateScale = () => {
-      const baseWidth = 1920;
-      const baseHeight = 1080;
-
-      const scaleX = window.innerWidth / baseWidth;
-      const scaleY = window.innerHeight / baseHeight;
-
-      // Use the smaller scale to ensure everything fits
-      const newScale = Math.min(scaleX, scaleY);
-      setScale(newScale);
-    };
-
-    updateScale();
-    window.addEventListener('resize', updateScale);
-    return () => window.removeEventListener('resize', updateScale);
-  }, []);
-
   const { broadcast, isLive } = useStudioStore();
   const { localStream, audioEnabled, videoEnabled, startCamera, stopCamera, toggleAudio, toggleVideo } = useMedia();
 
@@ -278,24 +257,7 @@ export function Studio() {
   }
 
   return (
-    <div
-      className="overflow-hidden"
-      style={{
-        width: '100vw',
-        height: '100vh',
-        backgroundColor: '#1a1a1a',
-      }}
-    >
-      <div
-        style={{
-          width: '1920px',
-          height: '1080px',
-          transform: `scale(${scale})`,
-          transformOrigin: 'top left',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
+    <div className="h-screen w-screen overflow-hidden flex flex-col" style={{ backgroundColor: '#1a1a1a' }}>
       {/* Top Bar */}
       <header
         style={{
@@ -749,7 +711,6 @@ export function Studio() {
         setLanguage={setCaptionLanguage}
         captionsEnabled={captionsEnabled}
       />
-      </div>
     </div>
   );
 }
