@@ -20,7 +20,7 @@ router.use(authenticateToken, requireAdmin);
  */
 router.get('/status', async (req, res) => {
   try {
-    const configured = hetznerService.isConfigured();
+    const configured = await hetznerService.isConfigured();
     res.json({
       configured,
       message: configured

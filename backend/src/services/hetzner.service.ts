@@ -5,6 +5,8 @@
 
 import axios from 'axios';
 import logger from '../utils/logger';
+import prisma from '../database/prisma';
+import { decrypt } from '../utils/crypto';
 
 export interface HetznerServer {
   id: number;
@@ -30,38 +32,75 @@ export interface DeploymentProgress {
 }
 
 class HetznerService {
-  private apiKey: string | undefined;
   private baseURL = 'https://api.hetzner.cloud/v1';
 
-  constructor() {
-    this.apiKey = process.env.HETZNER_API_KEY;
+  /**
+   * Get API key from database or environment variable
+   */
+  private async getApiKey(): Promise<string> {
+    // First, try to load from database (Admin Settings)
+    try {
+      const setting = await prisma.systemSetting.findUnique({
+        where: {
+          category_key: {
+            category: 'system',
+            key: 'HETZNER_API_KEY',
+          },
+        },
+      });
+
+      if (setting) {
+        const apiKey = setting.isEncrypted ? decrypt(setting.value) : setting.value;
+        if (apiKey) {
+          logger.debug('Loaded Hetzner API key from database');
+          return apiKey;
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to load Hetzner API key from database:', error);
+    }
+
+    // Fall back to environment variable
+    if (process.env.HETZNER_API_KEY) {
+      logger.debug('Loaded Hetzner API key from environment variable');
+      return process.env.HETZNER_API_KEY;
+    }
+
+    throw new Error('Hetzner API key not configured. Add HETZNER_API_KEY to Admin Settings.');
   }
 
   /**
    * Check if Hetzner API is configured
    */
-  isConfigured(): boolean {
-    return !!this.apiKey;
+  async isConfigured(): Promise<boolean> {
+    try {
+      const apiKey = await this.getApiKey();
+      return !!apiKey;
+    } catch {
+      return false;
+    }
   }
 
   /**
    * Get API client with auth
    */
-  private getClient() {
-    if (!this.apiKey) {
-      logger.error('Hetzner API key not configured. HETZNER_API_KEY environment variable is missing.');
+  private async getClient() {
+    const apiKey = await this.getApiKey();
+
+    if (!apiKey) {
+      logger.error('Hetzner API key not configured.');
       throw new Error('Hetzner API key not configured. Add HETZNER_API_KEY to Admin Settings.');
     }
 
     logger.debug('Creating Hetzner API client', {
       baseURL: this.baseURL,
-      keyPrefix: this.apiKey.substring(0, 20) + '...',
+      keyPrefix: apiKey.substring(0, 20) + '...',
     });
 
     return axios.create({
       baseURL: this.baseURL,
       headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
     });
