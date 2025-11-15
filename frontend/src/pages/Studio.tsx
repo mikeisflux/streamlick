@@ -587,7 +587,19 @@ export function Studio() {
           onDemoteToBackstage={handleDemoteToBackstage}
           onMuteParticipant={handleMuteParticipant}
           onUnmuteParticipant={handleUnmuteParticipant}
-          onLayoutChange={handleLayoutChange}
+          onLayoutChange={(layout: number) => {
+            // Map numeric layouts to named layouts
+            const layoutMap: { [key: number]: 'grid' | 'spotlight' | 'sidebar' | 'pip' } = {
+              1: 'grid',
+              2: 'spotlight',
+              3: 'sidebar',
+              4: 'pip',
+            };
+            const mappedLayout = layoutMap[layout];
+            if (mappedLayout) {
+              handleLayoutChange(mappedLayout);
+            }
+          }}
         />
       )}
 

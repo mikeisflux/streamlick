@@ -215,7 +215,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-400">
-              {asset.type === 'music' ? '🎵' : asset.type === 'image' ? '🖼️' : '🎬'}
+              {asset.type === 'music' ? '🎵' : (asset.type === 'logo' || asset.type === 'overlay' || asset.type === 'banner') ? '🖼️' : '🎬'}
             </div>
           )}
           {/* Active indicator */}
