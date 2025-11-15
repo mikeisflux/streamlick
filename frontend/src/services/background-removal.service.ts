@@ -241,6 +241,35 @@ class BackgroundRemovalService {
   }
 
   /**
+   * Cache for loaded background images
+   */
+  private backgroundImageCache: Map<string, HTMLImageElement> = new Map();
+
+  /**
+   * Load background image
+   */
+  private async loadBackgroundImage(url: string): Promise<HTMLImageElement> {
+    // Check cache first
+    if (this.backgroundImageCache.has(url)) {
+      return this.backgroundImageCache.get(url)!;
+    }
+
+    // Load new image
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        this.backgroundImageCache.set(url, img);
+        resolve(img);
+      };
+      img.onerror = () => {
+        reject(new Error(`Failed to load background image: ${url}`));
+      };
+      img.src = url;
+    });
+  }
+
+  /**
    * Draw with image background
    */
   private async drawImageBackground(
@@ -251,9 +280,20 @@ class BackgroundRemovalService {
 
     const { width, height } = this.canvasElement;
 
-    // Draw background image (would need to load image first)
+    // Draw background image
     if (this.backgroundOptions.imageUrl) {
-      // For now, just use a color as placeholder
+      try {
+        const bgImage = await this.loadBackgroundImage(this.backgroundOptions.imageUrl);
+        // Draw image to cover the entire canvas
+        ctx.drawImage(bgImage, 0, 0, width, height);
+      } catch (error) {
+        console.error('Failed to draw background image:', error);
+        // Fallback to solid color
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, width, height);
+      }
+    } else {
+      // No image URL, use solid color as fallback
       ctx.fillStyle = '#1a1a1a';
       ctx.fillRect(0, 0, width, height);
     }

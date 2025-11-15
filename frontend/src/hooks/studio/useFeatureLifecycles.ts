@@ -113,6 +113,7 @@ export function useBackgroundRemoval(
 ) {
   const [processedStream, setProcessedStream] = useState<MediaStream | null>(null);
 
+  // Start/stop background removal when enabled changes
   useEffect(() => {
     if (enabled && localStream) {
       const startBackgroundRemoval = async () => {
@@ -146,7 +147,14 @@ export function useBackgroundRemoval(
         backgroundRemovalService.stop();
       }
     };
-  }, [enabled, localStream, options]);
+  }, [enabled, localStream]);
+
+  // Update options in real-time when they change
+  useEffect(() => {
+    if (enabled && backgroundRemovalService.isActive()) {
+      backgroundRemovalService.updateOptions(options);
+    }
+  }, [enabled, options]);
 
   return { processedStream };
 }
