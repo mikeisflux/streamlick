@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { compositorService } from '../services/compositor.service';
 import { useMedia } from '../hooks/useMedia';
@@ -60,6 +60,27 @@ export function Studio() {
   const micButtonRef = useRef<HTMLDivElement>(null);
   const cameraButtonRef = useRef<HTMLDivElement>(null);
   const speakerButtonRef = useRef<HTMLDivElement>(null);
+
+  // Responsive scaling - base resolution is 1920x1080
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const updateScale = () => {
+      const baseWidth = 1920;
+      const baseHeight = 1080;
+
+      const scaleX = window.innerWidth / baseWidth;
+      const scaleY = window.innerHeight / baseHeight;
+
+      // Use the smaller scale to ensure everything fits
+      const newScale = Math.min(scaleX, scaleY);
+      setScale(newScale);
+    };
+
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    return () => window.removeEventListener('resize', updateScale);
+  }, []);
 
   const { broadcast, isLive } = useStudioStore();
   const { localStream, audioEnabled, videoEnabled, startCamera, stopCamera, toggleAudio, toggleVideo } = useMedia();
@@ -248,11 +269,23 @@ export function Studio() {
 
   return (
     <div
-      className="h-screen w-screen overflow-hidden flex flex-col"
+      className="overflow-hidden"
       style={{
+        width: '100vw',
+        height: '100vh',
         backgroundColor: '#1a1a1a',
       }}
     >
+      <div
+        style={{
+          width: '1920px',
+          height: '1080px',
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
       {/* Top Bar */}
       <header
         style={{
@@ -703,6 +736,7 @@ export function Studio() {
         setLanguage={setCaptionLanguage}
         captionsEnabled={captionsEnabled}
       />
+      </div>
     </div>
   );
 }
