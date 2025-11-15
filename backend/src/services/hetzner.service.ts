@@ -705,6 +705,22 @@ echo "⚠️  Remember to change the default password!"
       return [];
     }
   }
+
+  /**
+   * Update server labels (e.g., to assign role)
+   */
+  async updateServerLabels(serverId: number, labels: Record<string, string>): Promise<void> {
+    try {
+      const client = this.getClient();
+      await client.put(`/servers/${serverId}`, {
+        labels,
+      });
+      logger.info(`Updated server ${serverId} labels:`, labels);
+    } catch (error: any) {
+      logger.error('Failed to update server labels:', error);
+      throw new Error(`Failed to update labels: ${error.response?.data?.error?.message || error.message}`);
+    }
+  }
 }
 
 export const hetznerService = new HetznerService();

@@ -200,4 +200,43 @@ router.delete('/servers/:id', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/infrastructure/servers/:id/labels
+ * Update server labels (e.g., assign role)
+ */
+router.post('/servers/:id/labels', async (req, res) => {
+  try {
+    const serverId = parseInt(req.params.id);
+    const { role } = req.body;
+
+    if (isNaN(serverId)) {
+      return res.status(400).json({ error: 'Invalid server ID' });
+    }
+
+    if (!role) {
+      return res.status(400).json({ error: 'Role is required' });
+    }
+
+    // Validate role
+    const validRoles = ['media-server', 'api-server', 'frontend-server', 'load-balancer', 'database-server', 'redis-server'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({
+        error: `Invalid role. Must be one of: ${validRoles.join(', ')}`
+      });
+    }
+
+    await hetznerService.updateServerLabels(serverId, { role });
+
+    logger.info(`Updated server ${serverId} labels: role=${role}`);
+
+    res.json({
+      success: true,
+      message: `Server role updated to ${role}`,
+    });
+  } catch (error: any) {
+    logger.error('Update server labels failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
