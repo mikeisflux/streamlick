@@ -215,21 +215,40 @@ export function StudioCanvas({
   // Load stream logo from localStorage
   const [streamLogo, setStreamLogo] = useState<string | null>(null);
 
+  // Load stream overlay from localStorage
+  const [streamOverlay, setStreamOverlay] = useState<string | null>(null);
+
   useEffect(() => {
     const loadLogo = () => {
       const logo = localStorage.getItem('streamLogo');
       setStreamLogo(logo);
     };
 
+    const loadOverlay = () => {
+      const overlay = localStorage.getItem('streamOverlay');
+      setStreamOverlay(overlay);
+    };
+
     loadLogo();
+    loadOverlay();
 
     // Listen for custom event for logo updates
     const handleLogoUpdated = ((e: CustomEvent) => {
       setStreamLogo(e.detail.url);
     }) as EventListener;
 
+    // Listen for custom event for overlay updates
+    const handleOverlayUpdated = ((e: CustomEvent) => {
+      setStreamOverlay(e.detail.url);
+    }) as EventListener;
+
     window.addEventListener('logoUpdated', handleLogoUpdated);
-    return () => window.removeEventListener('logoUpdated', handleLogoUpdated);
+    window.addEventListener('overlayUpdated', handleOverlayUpdated);
+
+    return () => {
+      window.removeEventListener('logoUpdated', handleLogoUpdated);
+      window.removeEventListener('overlayUpdated', handleOverlayUpdated);
+    };
   }, []);
 
   // Calculate total participants (local user if on stage + remote on-stage)
@@ -589,8 +608,9 @@ export function StudioCanvas({
                 ...getBannerPositionStyles(banner.position),
                 backgroundColor: banner.backgroundColor,
                 color: banner.textColor,
-                zIndex: 15,
+                zIndex: 25,
                 maxWidth: '90%',
+                pointerEvents: 'none',
               }}
             >
               <div className="font-bold text-lg">{banner.title}</div>
@@ -620,6 +640,23 @@ export function StudioCanvas({
                 maxHeight: '150px',
                 objectFit: 'contain',
               }}
+            />
+          </div>
+        )}
+
+        {/* Full Screen Overlay - On top of everything */}
+        {streamOverlay && (
+          <div
+            className="absolute inset-0"
+            style={{
+              zIndex: 30,
+              pointerEvents: 'none',
+            }}
+          >
+            <img
+              src={streamOverlay}
+              alt="Stream Overlay"
+              className="w-full h-full object-cover"
             />
           </div>
         )}
