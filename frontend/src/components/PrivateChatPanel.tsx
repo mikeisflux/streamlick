@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 interface Message {
   id: string;
@@ -61,8 +61,10 @@ export function PrivateChatPanel({ broadcastId, currentUserId }: PrivateChatPane
   });
   const [inputMessage, setInputMessage] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [emojiPickerPosition, setEmojiPickerPosition] = useState({ top: 0, left: 0 });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const emojiButtonRef = useRef<HTMLButtonElement>(null);
 
   const COMMON_EMOJIS = [
     '😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂',
@@ -126,6 +128,17 @@ export function PrivateChatPanel({ broadcastId, currentUserId }: PrivateChatPane
     setShowEmojiPicker(false);
     inputRef.current?.focus();
   };
+
+  const toggleEmojiPicker = useCallback(() => {
+    if (!showEmojiPicker && emojiButtonRef.current) {
+      const rect = emojiButtonRef.current.getBoundingClientRect();
+      setEmojiPickerPosition({
+        top: rect.top - 250, // Position above the button (emoji picker height ~240px + padding)
+        left: rect.left - 100, // Slight offset to the left
+      });
+    }
+    setShowEmojiPicker(!showEmojiPicker);
+  }, [showEmojiPicker]);
 
   return (
     <div className="h-full flex flex-col bg-white">
@@ -207,16 +220,35 @@ export function PrivateChatPanel({ broadcastId, currentUserId }: PrivateChatPane
             <span>Show typing indicators</span>
           </label>
           <button
+            ref={emojiButtonRef}
             type="button"
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            onClick={toggleEmojiPicker}
             className="text-xs text-blue-600 hover:text-blue-700"
           >
             😀 Emoji
           </button>
+        </div>
+      </form>
 
+      {/* Emoji Picker - Fixed position to avoid overflow issues */}
+      {showEmojiPicker && (
+        <>
+          {/* Backdrop to close picker */}
+          <div
+            className="fixed inset-0"
+            style={{ zIndex: 999 }}
+            onClick={() => setShowEmojiPicker(false)}
+          />
           {/* Emoji Picker */}
-          {showEmojiPicker && (
-            <div className="absolute bottom-full left-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-xl p-3 z-50">
+          <div
+            className="fixed bg-white border border-gray-200 rounded-lg shadow-xl p-3"
+            style={{
+              zIndex: 1000,
+              maxWidth: '280px',
+              top: `${emojiPickerPosition.top}px`,
+              left: `${emojiPickerPosition.left}px`,
+            }}
+          >
               <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
                 <span className="text-xs font-semibold text-gray-700">Pick an emoji</span>
                 <button
@@ -228,7 +260,7 @@ export function PrivateChatPanel({ broadcastId, currentUserId }: PrivateChatPane
                   </svg>
                 </button>
               </div>
-              <div className="grid grid-cols-10 gap-1 max-h-48 overflow-y-auto" style={{ width: '320px' }}>
+              <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
                 {COMMON_EMOJIS.map((emoji, index) => (
                   <button
                     key={index}
@@ -242,9 +274,8 @@ export function PrivateChatPanel({ broadcastId, currentUserId }: PrivateChatPane
                 ))}
               </div>
             </div>
-          )}
-        </div>
-      </form>
+          </>
+        )}
 
       {/* Quick Actions */}
       <div className="border-t border-gray-200 p-2 bg-white">
