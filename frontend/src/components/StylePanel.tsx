@@ -264,7 +264,14 @@ export function StylePanel({ broadcastId }: StylePanelProps) {
       )}
 
       <div className="pt-4 border-t border-gray-200">
-        <button className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+        <button
+          onClick={() => {
+            // Dispatch event to notify StudioCanvas of style changes
+            window.dispatchEvent(new Event('storage'));
+            toast.success('Style applied successfully!');
+          }}
+          className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+        >
           Apply Style
         </button>
       </div>

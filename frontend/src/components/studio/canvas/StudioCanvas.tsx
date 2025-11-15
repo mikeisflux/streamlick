@@ -119,6 +119,14 @@ export function StudioCanvas({
   // Load banners from localStorage
   const [banners, setBanners] = useState<Banner[]>([]);
 
+  // Load style settings from localStorage
+  const [styleSettings, setStyleSettings] = useState({
+    cameraFrame: 'rounded' as 'none' | 'rounded' | 'circle' | 'square',
+    borderWidth: 2,
+    primaryColor: '#0066ff',
+    mirrorVideo: false,
+  });
+
   useEffect(() => {
     const loadBanners = () => {
       const saved = localStorage.getItem('banners');
@@ -133,10 +141,49 @@ export function StudioCanvas({
 
     loadBanners();
 
-    // Listen for storage changes to update banners in real-time
+    // Listen for storage changes from other tabs
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'banners') {
         loadBanners();
+      }
+    };
+
+    // Listen for custom event for same-tab updates
+    const handleBannersUpdated = ((e: CustomEvent) => {
+      setBanners(e.detail);
+    }) as EventListener;
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('bannersUpdated', handleBannersUpdated);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('bannersUpdated', handleBannersUpdated);
+    };
+  }, []);
+
+  // Load style settings
+  useEffect(() => {
+    const loadStyleSettings = () => {
+      const cameraFrame = (localStorage.getItem('style_cameraFrame') as any) || 'rounded';
+      const borderWidth = parseInt(localStorage.getItem('style_borderWidth') || '2');
+      const primaryColor = localStorage.getItem('style_primaryColor') || '#0066ff';
+      const mirrorVideo = localStorage.getItem('mirrorVideo') === 'true';
+
+      setStyleSettings({
+        cameraFrame,
+        borderWidth,
+        primaryColor,
+        mirrorVideo,
+      });
+    };
+
+    loadStyleSettings();
+
+    // Listen for storage changes from StylePanel
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key?.startsWith('style_') || e.key === 'mirrorVideo') {
+        loadStyleSettings();
       }
     };
 
@@ -253,6 +300,10 @@ export function StudioCanvas({
                     showLowerThird={showLowerThirds}
                     participantId="local-user"
                     onRemoveFromStage={onRemoveFromStage}
+                    cameraFrame={styleSettings.cameraFrame}
+                    borderWidth={styleSettings.borderWidth}
+                    borderColor={styleSettings.primaryColor}
+                    mirrorVideo={styleSettings.mirrorVideo}
                   />
                 </div>
               )}
@@ -275,6 +326,10 @@ export function StudioCanvas({
                       showLowerThird={showLowerThirds}
                       participantId={participant.id}
                       onRemoveFromStage={onRemoveFromStage}
+                      cameraFrame={styleSettings.cameraFrame}
+                      borderWidth={styleSettings.borderWidth}
+                      borderColor={styleSettings.primaryColor}
+                      mirrorVideo={false}
                     />
                   </div>
                 ))}
@@ -338,6 +393,10 @@ export function StudioCanvas({
                   showLowerThird={showLowerThirds}
                   participantId="local-user"
                   onRemoveFromStage={onRemoveFromStage}
+                  cameraFrame={styleSettings.cameraFrame}
+                  borderWidth={styleSettings.borderWidth}
+                  borderColor={styleSettings.primaryColor}
+                  mirrorVideo={styleSettings.mirrorVideo}
                 />
               </div>
             )}
@@ -359,6 +418,10 @@ export function StudioCanvas({
                       showLowerThird={showLowerThirds}
                       participantId={participant.id}
                       onRemoveFromStage={onRemoveFromStage}
+                      cameraFrame={styleSettings.cameraFrame}
+                      borderWidth={styleSettings.borderWidth}
+                      borderColor={styleSettings.primaryColor}
+                      mirrorVideo={false}
                     />
                   </div>
                 ))}

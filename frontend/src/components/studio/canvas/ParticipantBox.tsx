@@ -16,6 +16,11 @@ interface ParticipantBoxProps {
   showLowerThird?: boolean;
   participantId?: string;
   onRemoveFromStage?: (participantId: string) => void;
+  // Style settings
+  cameraFrame?: 'none' | 'rounded' | 'circle' | 'square';
+  borderWidth?: number;
+  borderColor?: string;
+  mirrorVideo?: boolean;
 }
 
 export function ParticipantBox({
@@ -34,9 +39,28 @@ export function ParticipantBox({
   showLowerThird = true,
   participantId,
   onRemoveFromStage,
+  cameraFrame = 'rounded',
+  borderWidth = 0,
+  borderColor = '#0066ff',
+  mirrorVideo = false,
 }: ParticipantBoxProps) {
   const iconSize = size === 'small' ? 'w-6 h-6' : size === 'medium' ? 'w-10 h-10' : 'w-16 h-16';
   const textSize = size === 'small' ? 'text-xs' : 'text-sm';
+
+  // Calculate border radius based on frame type
+  const getBorderRadius = () => {
+    switch (cameraFrame) {
+      case 'circle':
+        return '50%';
+      case 'rounded':
+        return '12px';
+      case 'square':
+        return '0px';
+      case 'none':
+      default:
+        return '0px';
+    }
+  };
 
   // Internal video ref for when no external ref is provided
   const internalVideoRef = useRef<HTMLVideoElement>(null);
@@ -128,7 +152,12 @@ export function ParticipantBox({
           playsInline
           muted
           className="w-full h-full object-cover"
-          style={{ willChange: 'auto' }}
+          style={{
+            willChange: 'auto',
+            border: cameraFrame !== 'none' && borderWidth > 0 ? `${borderWidth}px solid ${borderColor}` : 'none',
+            borderRadius: getBorderRadius(),
+            transform: mirrorVideo ? 'scaleX(-1)' : 'none',
+          }}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-gray-900">

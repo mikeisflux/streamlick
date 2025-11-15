@@ -51,6 +51,8 @@ export function BannerEditorPanel() {
   // Persist banners to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem('banners', JSON.stringify(banners));
+    // Dispatch custom event to notify same-tab components of banner changes
+    window.dispatchEvent(new CustomEvent('bannersUpdated', { detail: banners }));
   }, [banners]);
 
   const bannerTypes = [
