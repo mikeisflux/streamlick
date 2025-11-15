@@ -82,14 +82,18 @@ export function BannerEditorPanel() {
   ];
 
   const createNewBanner = () => {
+    // Load colors from StylePanel settings
+    const primaryColor = localStorage.getItem('style_primaryColor') || '#3b82f6';
+    const textColor = localStorage.getItem('style_textColor') || '#ffffff';
+
     const newBanner: Banner = {
       id: `banner-${Date.now()}`,
       type: 'lower-third',
       title: 'New Banner',
       subtitle: '',
       position: 'bottom-left',
-      backgroundColor: '#3b82f6',
-      textColor: '#ffffff',
+      backgroundColor: primaryColor,
+      textColor: textColor,
       visible: false,
     };
     setEditingBanner(newBanner);

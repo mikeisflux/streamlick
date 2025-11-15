@@ -41,6 +41,17 @@ export function StylePanel({ broadcastId }: StylePanelProps) {
 
   useEffect(() => {
     localStorage.setItem('style_backgroundColor', backgroundColor);
+    // Also update canvas settings for background color
+    try {
+      const canvasSettingsStr = localStorage.getItem('streamlick_canvas_settings');
+      if (canvasSettingsStr) {
+        const canvasSettings = JSON.parse(canvasSettingsStr);
+        canvasSettings.canvasBackgroundColor = backgroundColor;
+        localStorage.setItem('streamlick_canvas_settings', JSON.stringify(canvasSettings));
+      }
+    } catch (error) {
+      console.error('Failed to update canvas background color:', error);
+    }
   }, [backgroundColor]);
 
   useEffect(() => {
@@ -266,8 +277,31 @@ export function StylePanel({ broadcastId }: StylePanelProps) {
       <div className="pt-4 border-t border-gray-200">
         <button
           onClick={() => {
+            // Force update canvas background color in case it wasn't synced
+            try {
+              const canvasSettingsStr = localStorage.getItem('streamlick_canvas_settings');
+              if (canvasSettingsStr) {
+                const canvasSettings = JSON.parse(canvasSettingsStr);
+                canvasSettings.canvasBackgroundColor = backgroundColor;
+                localStorage.setItem('streamlick_canvas_settings', JSON.stringify(canvasSettings));
+              }
+            } catch (error) {
+              console.error('Failed to update canvas settings:', error);
+            }
+
             // Dispatch event to notify StudioCanvas of style changes
             window.dispatchEvent(new Event('storage'));
+            // Also dispatch a custom event for immediate updates
+            window.dispatchEvent(new CustomEvent('styleSettingsUpdated', {
+              detail: {
+                primaryColor,
+                secondaryColor,
+                backgroundColor,
+                textColor,
+                cameraFrame,
+                borderWidth
+              }
+            }));
             toast.success('Style applied successfully!');
           }}
           className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
