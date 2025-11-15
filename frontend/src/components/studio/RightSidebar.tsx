@@ -8,6 +8,15 @@ import { PrivateChatPanel } from '../PrivateChatPanel';
 import { RecordingControls } from '../RecordingControls';
 import { TeleprompterSettings } from '../../hooks/studio/useTeleprompter';
 
+interface Comment {
+  id: string;
+  platform: 'youtube' | 'facebook' | 'twitch' | 'linkedin' | 'x' | 'rumble';
+  authorName: string;
+  authorAvatar?: string;
+  message: string;
+  timestamp: Date;
+}
+
 interface RightSidebarProps {
   rightSidebarOpen: boolean;
   activeRightTab: 'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording' | null;
@@ -17,6 +26,7 @@ interface RightSidebarProps {
   onShowBannerDrawer: () => void;
   rightSidebarRef: RefObject<HTMLElement>;
   teleprompterState: ReturnType<typeof import('../../hooks/studio/useTeleprompter').useTeleprompter>;
+  onCommentClick?: (comment: Comment) => void;
 }
 
 export function RightSidebar({
@@ -28,6 +38,7 @@ export function RightSidebar({
   onShowBannerDrawer,
   rightSidebarRef,
   teleprompterState,
+  onCommentClick,
 }: RightSidebarProps) {
   return (
     <>
@@ -258,7 +269,7 @@ export function RightSidebar({
 
             {/* Panel Content */}
             <div className="flex-1 overflow-y-auto">
-              {activeRightTab === 'comments' && <CommentsPanel broadcastId={broadcastId} />}
+              {activeRightTab === 'comments' && <CommentsPanel broadcastId={broadcastId} onCommentClick={onCommentClick} />}
               {activeRightTab === 'banners' && (
                 <div className="p-4">
                   <h3 className="text-sm font-semibold text-gray-900 mb-3">Banners</h3>

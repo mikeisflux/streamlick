@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import { CaptionOverlay } from './CanvasOverlay';
 import { ParticipantBox } from './ParticipantBox';
 import { TeleprompterOverlay } from './TeleprompterOverlay';
+import { CommentOverlay } from './CommentOverlay';
 import { Caption } from '../../../services/caption.service';
 
 interface Banner {
@@ -28,6 +29,15 @@ interface ChatMessage {
   author: string;
   message: string;
   timestamp: number;
+}
+
+interface Comment {
+  id: string;
+  platform: 'youtube' | 'facebook' | 'twitch' | 'linkedin' | 'x' | 'rumble';
+  authorName: string;
+  authorAvatar?: string;
+  message: string;
+  timestamp: Date;
 }
 
 interface StudioCanvasProps {
@@ -63,6 +73,8 @@ interface StudioCanvasProps {
   teleprompterScrollSpeed?: number;
   teleprompterScrollPosition?: number;
   showTeleprompterOnCanvas?: boolean;
+  displayedComment?: Comment | null;
+  onDismissComment?: () => void;
 }
 
 export function StudioCanvas({
@@ -98,6 +110,8 @@ export function StudioCanvas({
   teleprompterScrollSpeed = 2,
   teleprompterScrollPosition = 0,
   showTeleprompterOnCanvas = false,
+  displayedComment = null,
+  onDismissComment = () => {},
 }: StudioCanvasProps) {
   const mainVideoRef = useRef<HTMLVideoElement>(null);
   const screenShareVideoRef = useRef<HTMLVideoElement>(null);
@@ -432,6 +446,9 @@ export function StudioCanvas({
             scrollPosition={teleprompterScrollPosition}
           />
         )}
+
+        {/* Comment Overlay */}
+        <CommentOverlay comment={displayedComment} onDismiss={onDismissComment} />
 
         {/* Banner Overlays */}
         {banners

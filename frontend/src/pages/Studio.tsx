@@ -231,6 +231,16 @@ export function Studio() {
   // Local user stage status - starts backstage by default
   const [isLocalUserOnStage, setIsLocalUserOnStage] = useState(false);
 
+  // Displayed comment on stream
+  const [displayedComment, setDisplayedComment] = useState<{
+    id: string;
+    platform: 'youtube' | 'facebook' | 'twitch' | 'linkedin' | 'x' | 'rumble';
+    authorName: string;
+    authorAvatar?: string;
+    message: string;
+    timestamp: Date;
+  } | null>(null);
+
   // Canvas Settings (persisted to localStorage)
   const canvasSettings = useCanvasSettings();
 
@@ -419,6 +429,8 @@ export function Studio() {
               teleprompterScrollSpeed={teleprompterState.scrollSpeed}
               teleprompterScrollPosition={teleprompterState.scrollPosition}
               showTeleprompterOnCanvas={teleprompterState.showOnCanvas}
+              displayedComment={displayedComment}
+              onDismissComment={() => setDisplayedComment(null)}
             />
           </div>
 
@@ -500,6 +512,7 @@ export function Studio() {
           onShowBannerDrawer={() => setShowBannerDrawer(true)}
           rightSidebarRef={rightSidebarRef}
           teleprompterState={teleprompterState}
+          onCommentClick={setDisplayedComment}
         />
       </div>
 

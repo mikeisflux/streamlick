@@ -13,9 +13,10 @@ interface Comment {
 
 interface CommentsPanelProps {
   broadcastId?: string;
+  onCommentClick?: (comment: Comment) => void;
 }
 
-export function CommentsPanel({ broadcastId }: CommentsPanelProps) {
+export function CommentsPanel({ broadcastId, onCommentClick }: CommentsPanelProps) {
   const [filter, setFilter] = useState<'all' | 'youtube' | 'facebook' | 'twitch' | 'linkedin' | 'x' | 'rumble'>('all');
   const [comments, setComments] = useState<Comment[]>([
     {
@@ -144,13 +145,15 @@ export function CommentsPanel({ broadcastId }: CommentsPanelProps) {
           filteredComments.map((comment) => (
             <div
               key={comment.id}
+              onClick={() => onCommentClick?.(comment)}
               className={`p-3 rounded-lg border ${
                 comment.isFeatured
                   ? 'border-yellow-400 bg-yellow-50'
                   : comment.isModerated
                   ? 'border-red-300 bg-red-50 opacity-50'
                   : 'border-gray-200 bg-white hover:shadow-md'
-              } transition-all`}
+              } transition-all ${onCommentClick ? 'cursor-pointer hover:border-blue-400' : ''}`}
+              title={onCommentClick ? 'Click to display on stream' : ''}
             >
               <div className="flex items-start gap-3">
                 {/* Avatar */}
