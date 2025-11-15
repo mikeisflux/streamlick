@@ -111,7 +111,7 @@ class HetznerService {
    */
   async listServers(): Promise<HetznerServer[]> {
     try {
-      const client = this.getClient();
+      const client = await this.getClient();
       const response = await client.get('/servers');
       return response.data.servers;
     } catch (error: any) {
@@ -154,7 +154,7 @@ class HetznerService {
     domain?: string; // Domain name for SSL/Nginx config
   }): Promise<HetznerServer> {
     try {
-      const client = this.getClient();
+      const client = await this.getClient();
 
       logger.info(`Deploying ${options.role}: ${options.name} (${options.serverType}) in ${options.location}`);
 
@@ -690,7 +690,7 @@ echo "⚠️  Remember to change the default password!"
    */
   async deleteServer(serverId: number): Promise<void> {
     try {
-      const client = this.getClient();
+      const client = await this.getClient();
       await client.delete(`/servers/${serverId}`);
       logger.info(`Server deleted: ${serverId}`);
     } catch (error: any) {
@@ -704,7 +704,7 @@ echo "⚠️  Remember to change the default password!"
    */
   async getServerTypes() {
     try {
-      const client = this.getClient();
+      const client = await this.getClient();
       const response = await client.get('/server_types');
 
       // Filter to only CCX types (dedicated CPU for media servers)
@@ -731,7 +731,7 @@ echo "⚠️  Remember to change the default password!"
    */
   async getLocations() {
     try {
-      const client = this.getClient();
+      const client = await this.getClient();
       const response = await client.get('/locations');
 
       return response.data.locations.map((loc: any) => ({
@@ -751,7 +751,7 @@ echo "⚠️  Remember to change the default password!"
    */
   async getSSHKeys() {
     try {
-      const client = this.getClient();
+      const client = await this.getClient();
       const response = await client.get('/ssh_keys');
 
       return response.data.ssh_keys.map((key: any) => ({
@@ -770,7 +770,7 @@ echo "⚠️  Remember to change the default password!"
    */
   async updateServerLabels(serverId: number, labels: Record<string, string>): Promise<void> {
     try {
-      const client = this.getClient();
+      const client = await this.getClient();
       await client.put(`/servers/${serverId}`, {
         labels,
       });

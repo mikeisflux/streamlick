@@ -54,7 +54,7 @@
     "@types/jest": "^29.5.11",
     "@types/jsonwebtoken": "^9.0.5",
     "@types/multer": "^2.0.0",
-    "@types/node": "^20.19.24",
+    "@types/node": "^20.19.25",
     "@types/passport": "^1.0.16",
     "@types/passport-jwt": "^3.0.13",
     "@types/supertest": "^6.0.2",
