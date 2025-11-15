@@ -225,3 +225,19 @@ settings.override.json
 .env.e2e
 cypress.env.json
 playwright.env.json
+
+# Additional config patterns
+**/config/*.json
+**/config/*.js
+**/config/*.ts
+!**/config/*.example.*
+!**/config/default.*
+*.config.json
+!*.example.config.json
+
+# All .env variants (comprehensive)
+**/.env
+**/.env.*
+!**/.env.example
+.env.backup.*
+.env.*.backup

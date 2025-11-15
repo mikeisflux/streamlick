@@ -621,8 +621,8 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 px-2">
-        <div className="flex gap-1 overflow-x-auto scrollbar-hide">
+      <div className="border-b border-gray-200 px-2 py-2">
+        <div className="grid grid-cols-3 gap-1">
           {[
             { id: 'logos', label: 'Logos', icon: '⭐' },
             { id: 'overlays', label: 'Overlays', icon: '🎨' },
@@ -635,10 +635,10 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as AssetTab)}
-              className={`px-3 py-2 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
+              className={`px-3 py-2 text-xs font-medium border-2 rounded transition-colors ${
                 activeTab === tab.id
                   ? 'text-blue-600 border-blue-600 bg-blue-50'
-                  : 'text-gray-600 border-transparent hover:text-gray-900 hover:bg-gray-50'
+                  : 'text-gray-600 border-gray-200 hover:text-gray-900 hover:bg-gray-50 hover:border-gray-300'
               }`}
             >
               <span className="mr-1">{tab.icon}</span>
