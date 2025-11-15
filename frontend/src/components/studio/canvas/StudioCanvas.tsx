@@ -168,13 +168,7 @@ export function StudioCanvas({
     };
   };
 
-  // Update video srcObject when localStream changes
-  useEffect(() => {
-    if (mainVideoRef.current && localStream) {
-      mainVideoRef.current.srcObject = localStream;
-    }
-  }, [localStream]);
-
+  // Set srcObject for screen share video
   useEffect(() => {
     if (screenShareVideoRef.current && screenShareStream) {
       screenShareVideoRef.current.srcObject = screenShareStream;

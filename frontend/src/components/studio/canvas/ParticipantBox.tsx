@@ -1,4 +1,4 @@
-import { RefObject, useState, useEffect } from 'react';
+import { RefObject, useState, useEffect, useRef } from 'react';
 
 interface ParticipantBoxProps {
   stream: MediaStream | null;
@@ -38,6 +38,10 @@ export function ParticipantBox({
   const iconSize = size === 'small' ? 'w-6 h-6' : size === 'medium' ? 'w-10 h-10' : 'w-16 h-16';
   const textSize = size === 'small' ? 'text-xs' : 'text-sm';
 
+  // Internal video ref for when no external ref is provided
+  const internalVideoRef = useRef<HTMLVideoElement>(null);
+  const activeVideoRef = videoRef || internalVideoRef;
+
   // Avatar state
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
 
@@ -48,6 +52,13 @@ export function ParticipantBox({
       setSelectedAvatar(storedAvatar);
     }
   }, []);
+
+  // Set srcObject on video element when stream changes
+  useEffect(() => {
+    if (activeVideoRef.current && stream && videoEnabled) {
+      activeVideoRef.current.srcObject = stream;
+    }
+  }, [stream, videoEnabled, activeVideoRef]);
 
   // Connection quality color mapping
   const qualityColors = {
@@ -112,7 +123,7 @@ export function ParticipantBox({
       {/* Video or Camera Off Placeholder */}
       {stream && videoEnabled ? (
         <video
-          ref={videoRef}
+          ref={activeVideoRef}
           autoPlay
           playsInline
           muted
