@@ -3,10 +3,10 @@ import toast from 'react-hot-toast';
 import {
   PlusIcon,
   TrashIcon,
-  EyeIcon,
-  EyeSlashIcon,
   PencilIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
+import { PlayIcon } from '@heroicons/react/24/solid';
 
 interface Banner {
   id: string;
@@ -130,12 +130,22 @@ export function BannerEditorPanel() {
     toast.success('Banner deleted successfully');
   };
 
-  const toggleBannerVisibility = (id: string) => {
+  const addBannerToStage = (id: string) => {
     setBanners((prev) =>
       prev.map((b) =>
-        b.id === id ? { ...b, visible: !b.visible } : b
+        b.id === id ? { ...b, visible: true } : b
       )
     );
+    toast.success('Banner added to stage');
+  };
+
+  const removeBannerFromStage = (id: string) => {
+    setBanners((prev) =>
+      prev.map((b) =>
+        b.id === id ? { ...b, visible: false } : b
+      )
+    );
+    toast.success('Banner removed from stage');
   };
 
   const editBanner = (banner: Banner) => {
@@ -161,14 +171,22 @@ export function BannerEditorPanel() {
           {banners.map((banner) => (
             <div
               key={banner.id}
-              className={`p-4 rounded-lg border-2 transition-all ${
+              className={`relative p-4 rounded-lg border-2 transition-all ${
                 banner.visible
                   ? 'border-green-500 bg-green-50'
                   : 'border-gray-200 bg-white'
               }`}
             >
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
+              {/* On Stage Indicator */}
+              {banner.visible && (
+                <div className="absolute top-2 right-2 px-2 py-1 bg-green-600 text-white text-xs font-semibold rounded-full flex items-center space-x-1">
+                  <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+                  <span>ON STAGE</span>
+                </div>
+              )}
+
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1 pr-20">
                   <div className="flex items-center space-x-2 mb-1">
                     <span className="px-2 py-1 text-xs font-medium bg-gray-200 text-gray-700 rounded">
                       {bannerTypes.find((t) => t.value === banner.type)?.label}
@@ -202,21 +220,6 @@ export function BannerEditorPanel() {
                     <PencilIcon className="w-5 h-5 text-gray-600" />
                   </button>
                   <button
-                    onClick={() => toggleBannerVisibility(banner.id)}
-                    className={`p-2 rounded-lg transition-colors ${
-                      banner.visible
-                        ? 'bg-green-100 hover:bg-green-200'
-                        : 'hover:bg-gray-200'
-                    }`}
-                    title={banner.visible ? 'Hide' : 'Show'}
-                  >
-                    {banner.visible ? (
-                      <EyeIcon className="w-5 h-5 text-green-600" />
-                    ) : (
-                      <EyeSlashIcon className="w-5 h-5 text-gray-600" />
-                    )}
-                  </button>
-                  <button
                     onClick={() => deleteBanner(banner.id)}
                     className="p-2 rounded-lg hover:bg-red-100 transition-colors"
                     title="Delete"
@@ -225,6 +228,25 @@ export function BannerEditorPanel() {
                   </button>
                 </div>
               </div>
+
+              {/* Add to Stage / Remove Button */}
+              {banner.visible ? (
+                <button
+                  onClick={() => removeBannerFromStage(banner.id)}
+                  className="w-full px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium flex items-center justify-center space-x-2"
+                >
+                  <XMarkIcon className="w-5 h-5" />
+                  <span>Remove from Stage</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => addBannerToStage(banner.id)}
+                  className="w-full px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-medium flex items-center justify-center space-x-2"
+                >
+                  <PlayIcon className="w-5 h-5" />
+                  <span>Add to Stage</span>
+                </button>
+              )}
             </div>
           ))}
 
