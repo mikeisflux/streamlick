@@ -24,7 +24,12 @@ export const mediasoupConfig = {
         channels: 2,
         parameters: {
           useinbandfec: 1,     // Enable in-band FEC for packet loss recovery
-          usedtx: 1,           // Enable discontinuous transmission
+          usedtx: 0,           // Disable discontinuous transmission for better quality
+          maxaveragebitrate: 128000,  // 128 kbps for high-quality stereo audio
+          maxplaybackrate: 48000,     // Maximum playback rate
+          stereo: 1,                   // Enable stereo
+          sprop-stereo: 1,            // Signal stereo support
+          cbr: 1,                      // Constant bitrate for consistent quality
         },
       },
       {

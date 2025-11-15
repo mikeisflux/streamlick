@@ -106,7 +106,7 @@ export class AdaptiveBitrateService extends EventEmitter {
     {
       name: '480p Low',
       videoBitrate: 1200,
-      audioBitrate: 96,
+      audioBitrate: 128,  // Maintain audio quality even on low video bitrate
       width: 854,
       height: 480,
       framerate: 30,
@@ -114,7 +114,7 @@ export class AdaptiveBitrateService extends EventEmitter {
     {
       name: '360p Very Low',
       videoBitrate: 600,
-      audioBitrate: 64,
+      audioBitrate: 128,  // Maintain audio quality even on low video bitrate
       width: 640,
       height: 360,
       framerate: 24,

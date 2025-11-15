@@ -15,9 +15,16 @@ export function useMedia() {
           frameRate: { ideal: 30 },
         },
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+          // Enable all noise reduction features
+          echoCancellation: { ideal: true },
+          noiseSuppression: { ideal: true },
+          autoGainControl: { ideal: true },
+          // High-quality audio settings
+          sampleRate: { ideal: 48000 },
+          sampleSize: { ideal: 16 },
+          channelCount: { ideal: 2 },
+          // Reduce latency for live streaming
+          latency: { ideal: 0.01 },
         },
       });
       setLocalStream(stream);
