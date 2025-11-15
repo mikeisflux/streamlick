@@ -121,6 +121,56 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
 
           setAssets(loadedAssets);
         }
+
+        // Reload active logo from IndexedDB if needed
+        const logoAssetId = localStorage.getItem('streamLogoAssetId');
+        if (logoAssetId) {
+          try {
+            const mediaData = await mediaStorageService.getMedia(logoAssetId);
+            if (mediaData) {
+              const objectURL = URL.createObjectURL(mediaData.blob);
+              objectURLsRef.current.push(objectURL);
+              localStorage.setItem('streamLogo', objectURL);
+              setActiveLogoUrl(objectURL);
+              window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { url: objectURL } }));
+            }
+          } catch (error) {
+            console.error('Failed to reload logo from IndexedDB:', error);
+          }
+        }
+
+        // Reload active overlay from IndexedDB if needed
+        const overlayAssetId = localStorage.getItem('streamOverlayAssetId');
+        if (overlayAssetId) {
+          try {
+            const mediaData = await mediaStorageService.getMedia(overlayAssetId);
+            if (mediaData) {
+              const objectURL = URL.createObjectURL(mediaData.blob);
+              objectURLsRef.current.push(objectURL);
+              localStorage.setItem('streamOverlay', objectURL);
+              window.dispatchEvent(new CustomEvent('overlayUpdated', { detail: { url: objectURL } }));
+            }
+          } catch (error) {
+            console.error('Failed to reload overlay from IndexedDB:', error);
+          }
+        }
+
+        // Reload active background from IndexedDB if needed
+        const backgroundAssetId = localStorage.getItem('streamBackgroundAssetId');
+        if (backgroundAssetId) {
+          try {
+            const mediaData = await mediaStorageService.getMedia(backgroundAssetId);
+            if (mediaData) {
+              const objectURL = URL.createObjectURL(mediaData.blob);
+              objectURLsRef.current.push(objectURL);
+              localStorage.setItem('streamBackground', objectURL);
+              setActiveBackgroundUrl(objectURL);
+              window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: objectURL } }));
+            }
+          } catch (error) {
+            console.error('Failed to reload background from IndexedDB:', error);
+          }
+        }
       } catch (error) {
         console.error('Failed to load assets:', error);
       } finally {
@@ -320,7 +370,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
     }
   };
 
-  const handleUseAsset = (asset: Asset) => {
+  const handleUseAsset = async (asset: Asset) => {
     // Check if this asset is already active
     const isActiveLogo = asset.type === 'logo' && activeLogoUrl === asset.url;
     const isActiveBackground = (asset.type === 'background' || asset.type === 'videoBackground') && activeBackgroundUrl === asset.url;
@@ -329,6 +379,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
       // Remove the logo
       localStorage.removeItem('streamLogo');
       localStorage.removeItem('streamLogoName');
+      localStorage.removeItem('streamLogoAssetId');
       setActiveLogoUrl(null);
       window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { url: null, name: null } }));
       toast.success('Logo removed');
@@ -336,6 +387,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
       // Remove the background
       localStorage.removeItem('streamBackground');
       localStorage.removeItem('streamBackgroundName');
+      localStorage.removeItem('streamBackgroundAssetId');
       setActiveBackgroundUrl(null);
       window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: null, name: null } }));
       toast.success('Background removed');
@@ -343,28 +395,92 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
       // Apply asset based on type
       switch (asset.type) {
         case 'logo':
-          localStorage.setItem('streamLogo', asset.url);
-          localStorage.setItem('streamLogoName', asset.name);
-          setActiveLogoUrl(asset.url);
-          window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { url: asset.url, name: asset.name } }));
-          toast.success(`Logo applied: ${asset.name}`);
+          // For IndexedDB assets, we need to handle them specially
+          if (asset.storedInIndexedDB) {
+            try {
+              const mediaData = await mediaStorageService.getMedia(asset.id);
+              if (mediaData) {
+                const objectURL = URL.createObjectURL(mediaData.blob);
+                objectURLsRef.current.push(objectURL);
+
+                // Store the asset ID so we can reload it later
+                localStorage.setItem('streamLogoAssetId', asset.id);
+                localStorage.setItem('streamLogo', objectURL);
+                localStorage.setItem('streamLogoName', asset.name);
+                setActiveLogoUrl(objectURL);
+                window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { url: objectURL, name: asset.name } }));
+                toast.success(`Logo applied: ${asset.name}`);
+              }
+            } catch (error) {
+              console.error('Failed to load logo from IndexedDB:', error);
+              toast.error('Failed to apply logo');
+            }
+          } else {
+            localStorage.setItem('streamLogo', asset.url);
+            localStorage.setItem('streamLogoName', asset.name);
+            localStorage.removeItem('streamLogoAssetId');
+            setActiveLogoUrl(asset.url);
+            window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { url: asset.url, name: asset.name } }));
+            toast.success(`Logo applied: ${asset.name}`);
+          }
           break;
 
         case 'overlay':
           // Overlays go on top of everything
-          localStorage.setItem('streamOverlay', asset.url);
-          localStorage.setItem('streamOverlayName', asset.name);
-          window.dispatchEvent(new CustomEvent('overlayUpdated', { detail: { url: asset.url, name: asset.name } }));
-          toast.success(`Overlay applied: ${asset.name}`);
+          if (asset.storedInIndexedDB) {
+            try {
+              const mediaData = await mediaStorageService.getMedia(asset.id);
+              if (mediaData) {
+                const objectURL = URL.createObjectURL(mediaData.blob);
+                objectURLsRef.current.push(objectURL);
+
+                localStorage.setItem('streamOverlayAssetId', asset.id);
+                localStorage.setItem('streamOverlay', objectURL);
+                localStorage.setItem('streamOverlayName', asset.name);
+                window.dispatchEvent(new CustomEvent('overlayUpdated', { detail: { url: objectURL, name: asset.name } }));
+                toast.success(`Overlay applied: ${asset.name}`);
+              }
+            } catch (error) {
+              console.error('Failed to load overlay from IndexedDB:', error);
+              toast.error('Failed to apply overlay');
+            }
+          } else {
+            localStorage.setItem('streamOverlay', asset.url);
+            localStorage.setItem('streamOverlayName', asset.name);
+            localStorage.removeItem('streamOverlayAssetId');
+            window.dispatchEvent(new CustomEvent('overlayUpdated', { detail: { url: asset.url, name: asset.name } }));
+            toast.success(`Overlay applied: ${asset.name}`);
+          }
           break;
 
         case 'background':
         case 'videoBackground':
-          localStorage.setItem('streamBackground', asset.url);
-          localStorage.setItem('streamBackgroundName', asset.name);
-          setActiveBackgroundUrl(asset.url);
-          window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: asset.url, name: asset.name } }));
-          toast.success(`Background applied: ${asset.name}`);
+          if (asset.storedInIndexedDB) {
+            try {
+              const mediaData = await mediaStorageService.getMedia(asset.id);
+              if (mediaData) {
+                const objectURL = URL.createObjectURL(mediaData.blob);
+                objectURLsRef.current.push(objectURL);
+
+                localStorage.setItem('streamBackgroundAssetId', asset.id);
+                localStorage.setItem('streamBackground', objectURL);
+                localStorage.setItem('streamBackgroundName', asset.name);
+                setActiveBackgroundUrl(objectURL);
+                window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: objectURL, name: asset.name } }));
+                toast.success(`Background applied: ${asset.name}`);
+              }
+            } catch (error) {
+              console.error('Failed to load background from IndexedDB:', error);
+              toast.error('Failed to apply background');
+            }
+          } else {
+            localStorage.setItem('streamBackground', asset.url);
+            localStorage.setItem('streamBackgroundName', asset.name);
+            localStorage.removeItem('streamBackgroundAssetId');
+            setActiveBackgroundUrl(asset.url);
+            window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: asset.url, name: asset.name } }));
+            toast.success(`Background applied: ${asset.name}`);
+          }
           break;
 
         case 'videoClip':
