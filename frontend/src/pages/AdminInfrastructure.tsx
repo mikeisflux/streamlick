@@ -53,6 +53,7 @@ export function AdminInfrastructure() {
   });
   const [deploying, setDeploying] = useState(false);
   const [availableSSHKeys, setAvailableSSHKeys] = useState<any[]>([]);
+  const [apiKeyMissing, setApiKeyMissing] = useState(false);
 
   // Redirect if not admin
   useEffect(() => {
@@ -72,9 +73,18 @@ export function AdminInfrastructure() {
     try {
       const response = await api.get('/infrastructure/servers');
       setServers(response.data.servers || []);
+      setApiKeyMissing(false);
     } catch (error: any) {
       console.error('Error loading servers:', error);
-      toast.error('Failed to load servers');
+      const errorMessage = error.response?.data?.error || 'Failed to load servers';
+
+      // Check if it's a configuration error
+      if (errorMessage.includes('API key not configured') || errorMessage.includes('HETZNER_API_KEY')) {
+        setApiKeyMissing(true);
+        toast.error('Hetzner API key not configured. Add it in Admin Settings → System Config.');
+      } else {
+        toast.error(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -205,6 +215,53 @@ export function AdminInfrastructure() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-gray-600">Loading infrastructure...</div>
+      </div>
+    );
+  }
+
+  // Show API key configuration message
+  if (apiKeyMissing) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8 px-4">
+        <div className="max-w-3xl mx-auto">
+          <button
+            onClick={() => navigate('/admin')}
+            className="mb-4 text-primary-600 hover:text-primary-700 flex items-center gap-2"
+          >
+            ← Back to Admin
+          </button>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <svg className="w-12 h-12 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Hetzner API Key Required</h2>
+                <p className="text-gray-600 mb-4">
+                  To manage infrastructure, you need to configure your Hetzner Cloud API key.
+                </p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <h3 className="font-semibold text-blue-900 mb-2">How to get your API key:</h3>
+                  <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
+                    <li>Go to <a href="https://console.hetzner.cloud" target="_blank" rel="noopener noreferrer" className="underline">Hetzner Cloud Console</a></li>
+                    <li>Select your project</li>
+                    <li>Go to Security → API Tokens</li>
+                    <li>Click "Generate API Token"</li>
+                    <li>Copy the token (it starts with "read_write...")</li>
+                  </ol>
+                </div>
+                <button
+                  onClick={() => navigate('/admin/settings')}
+                  className="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-semibold transition-colors"
+                >
+                  Go to Settings → Add API Key
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
