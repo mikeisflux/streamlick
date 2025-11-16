@@ -887,85 +887,48 @@ function RecordingSettings({ props }: { props: CanvasSettingsModalProps }) {
 
 // Hotkeys Settings Tab
 function HotkeysSettings() {
+  // ACTUAL WORKING HOTKEYS (from useStudioHotkeys.ts)
   const hotkeyGroups = [
     {
-      category: 'DEVICES',
+      category: 'AUDIO & VIDEO',
       hotkeys: [
-        { action: 'Mute/unmute mic', key: 'Ctrl+D' },
-        { action: 'Camera on/off', key: 'Ctrl+E' },
+        { action: 'Toggle microphone', key: 'M', description: 'Mute/unmute your microphone' },
+        { action: 'Toggle camera', key: 'V', description: 'Turn camera on/off' },
       ],
     },
     {
-      category: 'SHARING',
+      category: 'STREAMING & RECORDING',
       hotkeys: [
-        { action: 'Share screen', key: 'Shift+S' },
-        { action: 'Share video', key: 'Shift+V' },
-        { action: 'Share image', key: 'Shift+I' },
-        { action: 'Play/pause shared video', key: 'Not set' },
-        { action: 'Share second camera', key: 'Not set' },
+        { action: 'Go live', key: 'Ctrl+L', description: 'Start streaming' },
+        { action: 'End broadcast', key: 'Ctrl+E', description: 'Stop streaming' },
+        { action: 'Toggle recording', key: 'R', description: 'Start/stop recording' },
       ],
     },
     {
-      category: 'SLIDES',
+      category: 'SCREEN SHARING',
       hotkeys: [
-        { action: 'Next slideshow slide', key: 'Right' },
-        { action: 'Previous slideshow slide', key: 'Left' },
-      ],
-    },
-    {
-      category: 'STREAMING AND RECORDING',
-      hotkeys: [
-        { action: 'Start stream/recording', key: 'Not set' },
-        { action: 'End stream/recording', key: 'Not set' },
-        { action: 'Pause/resume recording', key: 'Not set' },
-        { action: 'Cancel recording', key: 'Not set' },
+        { action: 'Toggle screen share', key: 'S', description: 'Start/stop screen sharing' },
       ],
     },
     {
       category: 'LAYOUTS',
       hotkeys: [
-        { action: 'Solo layout', key: 'Shift+1' },
-        { action: 'Cropped layout', key: 'Shift+2' },
-        { action: 'Group layout', key: 'Shift+3' },
-        { action: 'Spotlight layout', key: 'Shift+4' },
-        { action: 'News layout', key: 'Shift+5' },
-        { action: 'Screen layout', key: 'Shift+6' },
-        { action: 'Picture-in-picture layout', key: 'Shift+7' },
-        { action: 'Cinema layout', key: 'Shift+8' },
-        { action: 'Mission Briefing', key: 'Not set' },
-        { action: 'Next layout', key: 'L' },
-        { action: 'Previous layout', key: 'Shift+L' },
+        { action: 'Grid layout', key: '1', description: 'Switch to grid layout' },
+        { action: 'Spotlight layout', key: '2', description: 'Switch to spotlight layout' },
+        { action: 'Sidebar layout', key: '3', description: 'Switch to sidebar layout' },
+        { action: 'Picture-in-picture layout', key: '4', description: 'Switch to PIP layout' },
       ],
     },
     {
-      category: 'SCENES',
+      category: 'CHAT & DISPLAY',
       hotkeys: [
-        { action: 'Next scene', key: 'Not set' },
-        { action: 'Previous scene', key: 'Not set' },
+        { action: 'Toggle chat on stream', key: 'C', description: 'Show/hide chat overlay' },
       ],
     },
     {
-      category: 'NAVIGATION',
+      category: 'HELP',
       hotkeys: [
-        { action: 'Open comments tab', key: 'Not set' },
-        { action: 'Open banners tab', key: 'Not set' },
-        { action: 'Open media assets tab', key: 'Not set' },
-        { action: 'Open style tab', key: 'Not set' },
-        { action: 'Open notes tab', key: 'Not set' },
-        { action: 'Open people tab', key: 'Not set' },
-        { action: 'Open private chat', key: 'Not set' },
-        { action: 'Open recording tab', key: 'Not set' },
-        { action: 'Open settings', key: 'Not set' },
-        { action: 'Next tab', key: 'T' },
-        { action: 'Previous tab', key: 'Shift+T' },
-      ],
-    },
-    {
-      category: 'OTHER',
-      hotkeys: [
-        { action: 'Enter/exit fullscreen', key: 'Shift+F' },
-        { action: 'Toggle display names', key: 'Not set' },
-        { action: 'Create marker', key: 'B' },
+        { action: 'Show keyboard shortcuts', key: 'Shift+?', description: 'Display this help' },
       ],
     },
   ];
@@ -1010,9 +973,15 @@ function HotkeysSettings() {
         ))}
 
         <div className="mt-6 pt-6 border-t border-gray-700">
-          <p className="text-sm text-gray-500 italic">
-            Even more hotkey options are coming soon!
-          </p>
+          <div className="flex items-start gap-3 p-4 rounded" style={{ backgroundColor: '#1a1a1a' }}>
+            <span className="text-2xl">💡</span>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-300 mb-1">All hotkeys are active and ready to use!</p>
+              <p className="text-xs text-gray-500">
+                Press <code className="px-2 py-0.5 bg-gray-800 rounded">Shift+?</code> while in the studio to see the hotkey reference overlay.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
