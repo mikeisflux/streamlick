@@ -474,6 +474,7 @@ export function Studio() {
               showPositionNumbers={canvasSettings.showPositionNumbers}
               showConnectionQuality={canvasSettings.showConnectionQuality}
               showLowerThirds={canvasSettings.showLowerThirds}
+              orientation={canvasSettings.orientation}
               onRemoveFromStage={handleRemoveFromStage}
               teleprompterNotes={teleprompterState.notes}
               teleprompterFontSize={teleprompterState.fontSize}

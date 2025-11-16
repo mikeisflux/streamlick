@@ -75,6 +75,7 @@ interface StudioCanvasProps {
   showTeleprompterOnCanvas?: boolean;
   displayedComment?: Comment | null;
   onDismissComment?: () => void;
+  orientation?: 'landscape' | 'portrait';
 }
 
 export function StudioCanvas({
@@ -112,6 +113,7 @@ export function StudioCanvas({
   showTeleprompterOnCanvas = false,
   displayedComment = null,
   onDismissComment = () => {},
+  orientation = 'landscape',
 }: StudioCanvasProps) {
   const mainVideoRef = useRef<HTMLVideoElement>(null);
   const screenShareVideoRef = useRef<HTMLVideoElement>(null);
@@ -404,13 +406,16 @@ export function StudioCanvas({
     return positions[position];
   };
 
+  // Calculate aspect ratio based on orientation
+  const aspectRatio = orientation === 'portrait' ? '9 / 16' : '16 / 9';
+
   return (
     <div
       className="relative"
       style={{
         width: '100%',
-        maxWidth: '1001px',
-        aspectRatio: '16 / 9',
+        maxWidth: orientation === 'portrait' ? '563px' : '1001px',
+        aspectRatio,
         backgroundColor,
         border: editMode ? '4px solid #8B5CF6' : 'none',
         boxSizing: 'border-box',
