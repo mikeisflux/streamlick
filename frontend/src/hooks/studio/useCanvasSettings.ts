@@ -134,6 +134,82 @@ export function useCanvasSettings() {
     }
   }, [settings]);
 
+  // Apply appearance theme to document
+  useEffect(() => {
+    const root = document.documentElement;
+
+    if (settings.appearance === 'dark') {
+      root.classList.add('dark');
+      root.classList.remove('light');
+    } else if (settings.appearance === 'light') {
+      root.classList.add('light');
+      root.classList.remove('dark');
+    } else {
+      // Auto - detect system preference
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (prefersDark) {
+        root.classList.add('dark');
+        root.classList.remove('light');
+      } else {
+        root.classList.add('light');
+        root.classList.remove('dark');
+      }
+
+      // Listen for system theme changes
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handleChange = (e: MediaQueryListEvent) => {
+        if (e.matches) {
+          root.classList.add('dark');
+          root.classList.remove('light');
+        } else {
+          root.classList.add('light');
+          root.classList.remove('dark');
+        }
+      };
+
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+  }, [settings.appearance]);
+
+  // Apply auto-adjust brightness to video elements
+  useEffect(() => {
+    const styleId = 'streamlick-video-brightness';
+    let styleElement = document.getElementById(styleId) as HTMLStyleElement;
+
+    if (!styleElement) {
+      styleElement = document.createElement('style');
+      styleElement.id = styleId;
+      document.head.appendChild(styleElement);
+    }
+
+    if (settings.autoAdjustBrightness) {
+      // Auto-adjust: enhance brightness and contrast slightly for better visibility
+      styleElement.textContent = `
+        video {
+          filter: brightness(1.1) contrast(1.05);
+        }
+      `;
+    } else {
+      styleElement.textContent = '';
+    }
+
+    return () => {
+      const el = document.getElementById(styleId);
+      if (el) el.remove();
+    };
+  }, [settings.autoAdjustBrightness]);
+
+  // Apply selected background from Visual Effects settings
+  useEffect(() => {
+    // Dispatch background change event that BackgroundSettingsDropdown listens to
+    if (settings.selectedBackground && settings.selectedBackground !== 'none') {
+      window.dispatchEvent(new CustomEvent('visualEffectsBackgroundSelected', {
+        detail: { backgroundId: settings.selectedBackground }
+      }));
+    }
+  }, [settings.selectedBackground]);
+
   // Listen for style settings updates from StylePanel
   useEffect(() => {
     const handleStyleSettingsUpdated = ((e: CustomEvent) => {

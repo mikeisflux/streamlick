@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
+import { playTestTone } from '../../../utils/audioTest';
+import toast from 'react-hot-toast';
 
 interface MediaDevice {
   deviceId: string;
@@ -618,10 +620,15 @@ function AudioSettings({ props }: { props: CanvasSettingsModalProps }) {
             onMouseLeave={(e) => {
               e.currentTarget.style.backgroundColor = '#0066ff';
             }}
-            onClick={() => {
-              // Play test sound
-              const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTcIGWi77eefTRAMUKfj8LZjHAY4ktfyzHksBSR3x/DdkEAKFF606+uoVRQKRp/g8r5sIQUrgc7y2Yk3CBlou+3nn00QDFCn4/C2YxwGOJLX8sx5LAUkd8fw3ZBAC');
-              audio.play();
+            onClick={async () => {
+              try {
+                toast.loading('Playing test tone...', { id: 'speaker-test' });
+                await playTestTone(1000, 440); // 1 second, 440Hz (A note)
+                toast.success('Speaker test complete', { id: 'speaker-test' });
+              } catch (error) {
+                console.error('Speaker test failed:', error);
+                toast.error('Failed to play test tone', { id: 'speaker-test' });
+              }
             }}
           >
             Test
