@@ -207,7 +207,7 @@ class CommentPostingService {
 
       // Post comment to live video
       const response = await axios.post(
-        `https://graph.facebook.com/v18.0/${liveVideoId}/comments`,
+        `https://graph.facebook.com/v24.0/${liveVideoId}/comments`,
         {
           message,
         },
@@ -225,10 +225,25 @@ class CommentPostingService {
       };
     } catch (error: any) {
       logger.error('Facebook post error:', error.response?.data || error.message);
+
+      // Handle specific Facebook API error codes (2025 best practices)
+      const errorCode = error.response?.data?.error?.code;
+      let errorMessage = error.response?.data?.error?.message || error.message;
+
+      if (errorCode === 190) {
+        errorMessage = 'Facebook access token expired. Please reconnect your account.';
+      } else if (errorCode === 368) {
+        errorMessage = 'Temporarily blocked by Facebook. Please try again later.';
+      } else if (errorCode === 100) {
+        errorMessage = 'Invalid parameter. Please check your message content.';
+      } else if (errorCode >= 200 && errorCode <= 299) {
+        errorMessage = 'Permission denied. Please ensure your Facebook app has the required permissions.';
+      }
+
       return {
         platform: 'facebook',
         success: false,
-        error: error.response?.data?.error?.message || error.message,
+        error: errorMessage,
       };
     }
   }
