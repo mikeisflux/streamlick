@@ -431,10 +431,14 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   };
 
   const handleUseAsset = async (asset: Asset) => {
-    // Check if this asset is already active
-    const isActiveLogo = asset.type === 'logo' && activeLogoUrl === asset.url;
-    const isActiveOverlay = asset.type === 'overlay' && activeOverlayUrl === asset.url;
-    const isActiveBackground = (asset.type === 'background' || asset.type === 'videoBackground') && activeBackgroundUrl === asset.url;
+    // Check if this asset is already active (check both URL and asset ID for IndexedDB assets)
+    const logoAssetId = localStorage.getItem('streamLogoAssetId');
+    const overlayAssetId = localStorage.getItem('streamOverlayAssetId');
+    const backgroundAssetId = localStorage.getItem('streamBackgroundAssetId');
+
+    const isActiveLogo = asset.type === 'logo' && (activeLogoUrl === asset.url || logoAssetId === asset.id);
+    const isActiveOverlay = asset.type === 'overlay' && (activeOverlayUrl === asset.url || overlayAssetId === asset.id);
+    const isActiveBackground = (asset.type === 'background' || asset.type === 'videoBackground') && (activeBackgroundUrl === asset.url || backgroundAssetId === asset.id);
 
     if (isActiveLogo) {
       // Remove the logo
