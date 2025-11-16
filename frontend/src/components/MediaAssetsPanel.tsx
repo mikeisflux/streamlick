@@ -217,9 +217,8 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
       localStorage.setItem(storageKey, JSON.stringify(metadata));
     } catch (error: any) {
       console.error('Failed to save asset metadata:', error);
-      if (error.name === 'QuotaExceededError') {
-        toast.error('Storage quota exceeded. Please clear some assets.');
-      }
+      // Note: All media files are now stored in IndexedDB, so localStorage quota issues should not occur
+      // The only data in localStorage is minimal metadata (IDs, names, types)
     }
   }, [assets, broadcastId, isLoadingAssets]);
 
@@ -249,8 +248,9 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
         return;
       }
 
-      // Determine if file should be stored in IndexedDB (large files)
-      const shouldUseIndexedDB = file.size > 1 * 1024 * 1024; // 1MB threshold
+      // Store ALL media files in IndexedDB to avoid localStorage quota limits
+      // User's machine has unlimited local storage via IndexedDB
+      const shouldUseIndexedDB = true; // Always use IndexedDB for media files
 
       // Determine asset type based on active tab and file type
       let assetType: Asset['type'] = 'logo';
@@ -276,8 +276,8 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
           let duration: number | undefined;
 
           if (shouldUseIndexedDB) {
-            // Store large file in IndexedDB
-            toast.loading('Processing large file...');
+            // Store file in IndexedDB
+            toast.loading('Processing file...');
 
             // Create object URL directly from file
             fileURL = URL.createObjectURL(file);
@@ -570,9 +570,31 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
           break;
 
         case 'videoClip':
-          // Play video clip
-          window.dispatchEvent(new CustomEvent('playVideoClip', { detail: { url: asset.url, name: asset.name } }));
-          toast.success(`Playing: ${asset.name}`);
+          // Play video clip on canvas
+          if (asset.storedInIndexedDB) {
+            try {
+              const mediaData = await mediaStorageService.getMedia(asset.id);
+              if (mediaData) {
+                const objectURL = URL.createObjectURL(mediaData.blob);
+                objectURLsRef.current.push(objectURL);
+
+                localStorage.setItem('streamVideoClip', objectURL);
+                localStorage.setItem('streamVideoClipAssetId', asset.id);
+                localStorage.setItem('streamVideoClipName', asset.name);
+                window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: objectURL, name: asset.name } }));
+                toast.success(`Playing: ${asset.name}`);
+              }
+            } catch (error) {
+              console.error('Failed to load video clip from IndexedDB:', error);
+              toast.error('Failed to play video clip');
+            }
+          } else {
+            localStorage.setItem('streamVideoClip', asset.url);
+            localStorage.setItem('streamVideoClipName', asset.name);
+            localStorage.removeItem('streamVideoClipAssetId');
+            window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: asset.url, name: asset.name } }));
+            toast.success(`Playing: ${asset.name}`);
+          }
           break;
 
         case 'banner':

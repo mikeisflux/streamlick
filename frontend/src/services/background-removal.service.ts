@@ -149,7 +149,10 @@ class BackgroundRemovalService {
     }
 
     if (this.outputStream) {
-      this.outputStream.getTracks().forEach(track => track.stop());
+      // CRITICAL FIX: Only stop the video track (canvas capture stream)
+      // Don't stop audio tracks as they are references to the original stream
+      const videoTracks = this.outputStream.getVideoTracks();
+      videoTracks.forEach(track => track.stop());
       this.outputStream = null;
     }
 

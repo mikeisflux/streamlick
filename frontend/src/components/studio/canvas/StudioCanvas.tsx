@@ -235,6 +235,9 @@ export function StudioCanvas({
   // Load stream overlay from localStorage
   const [streamOverlay, setStreamOverlay] = useState<string | null>(null);
 
+  // Load video clip from localStorage
+  const [videoClip, setVideoClip] = useState<string | null>(null);
+
   // Custom layout positions for edit mode
   interface ParticipantPosition {
     id: string;
@@ -304,8 +307,14 @@ export function StudioCanvas({
       setStreamOverlay(overlay);
     };
 
+    const loadVideoClip = () => {
+      const clip = localStorage.getItem('streamVideoClip');
+      setVideoClip(clip);
+    };
+
     loadLogo();
     loadOverlay();
+    loadVideoClip();
 
     // Listen for custom event for logo updates
     const handleLogoUpdated = ((e: CustomEvent) => {
@@ -317,12 +326,19 @@ export function StudioCanvas({
       setStreamOverlay(e.detail.url);
     }) as EventListener;
 
+    // Listen for custom event for video clip updates
+    const handleVideoClipUpdated = ((e: CustomEvent) => {
+      setVideoClip(e.detail.url);
+    }) as EventListener;
+
     window.addEventListener('logoUpdated', handleLogoUpdated);
     window.addEventListener('overlayUpdated', handleOverlayUpdated);
+    window.addEventListener('videoClipUpdated', handleVideoClipUpdated);
 
     return () => {
       window.removeEventListener('logoUpdated', handleLogoUpdated);
       window.removeEventListener('overlayUpdated', handleOverlayUpdated);
+      window.removeEventListener('videoClipUpdated', handleVideoClipUpdated);
     };
   }, []);
 
@@ -744,6 +760,32 @@ export function StudioCanvas({
               src={streamOverlay}
               alt="Stream Overlay"
               className="w-full h-full object-cover"
+            />
+          </div>
+        )}
+
+        {/* Video Clip Overlay - Plays on top of canvas */}
+        {videoClip && (
+          <div
+            className="absolute inset-0"
+            style={{
+              zIndex: 35,
+              pointerEvents: 'none',
+            }}
+          >
+            <video
+              src={videoClip}
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-full h-full object-cover"
+              onEnded={() => {
+                // Auto-remove video clip when it ends (if not looping)
+                setVideoClip(null);
+                localStorage.removeItem('streamVideoClip');
+                window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
+              }}
             />
           </div>
         )}
