@@ -235,6 +235,64 @@ export function StudioCanvas({
   // Load stream overlay from localStorage
   const [streamOverlay, setStreamOverlay] = useState<string | null>(null);
 
+  // Custom layout positions for edit mode
+  interface ParticipantPosition {
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }
+
+  const [customLayoutPositions, setCustomLayoutPositions] = useState<Map<string, ParticipantPosition>>(new Map());
+
+  // Load custom layout positions from localStorage
+  useEffect(() => {
+    const loadCustomLayout = () => {
+      const saved = localStorage.getItem(`customLayout_${selectedLayout}`);
+      if (saved) {
+        try {
+          const positions = JSON.parse(saved);
+          setCustomLayoutPositions(new Map(positions));
+        } catch (e) {
+          console.error('Failed to load custom layout:', e);
+        }
+      } else {
+        // Initialize with default positions if no custom layout
+        setCustomLayoutPositions(new Map());
+      }
+    };
+
+    loadCustomLayout();
+  }, [selectedLayout]);
+
+  // Save custom layout positions to localStorage
+  const saveCustomLayout = () => {
+    const positions = Array.from(customLayoutPositions.entries());
+    localStorage.setItem(`customLayout_${selectedLayout}`, JSON.stringify(positions));
+    console.log('Custom layout saved for layout', selectedLayout);
+  };
+
+  // Handle position change for a participant
+  const handlePositionChange = (participantId: string, position: { x: number; y: number; width: number; height: number }) => {
+    setCustomLayoutPositions(prev => {
+      const newMap = new Map(prev);
+      newMap.set(participantId, { id: participantId, ...position });
+      return newMap;
+    });
+  };
+
+  // Auto-save when positions change (debounced in real implementation)
+  useEffect(() => {
+    if (editMode && customLayoutPositions.size > 0) {
+      const timeoutId = setTimeout(() => {
+        saveCustomLayout();
+      }, 500); // Debounce saves
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [customLayoutPositions, editMode]);
+
   useEffect(() => {
     const loadLogo = () => {
       const logo = localStorage.getItem('streamLogo');
@@ -389,6 +447,9 @@ export function StudioCanvas({
                     borderWidth={styleSettings.borderWidth}
                     borderColor={styleSettings.primaryColor}
                     mirrorVideo={styleSettings.mirrorVideo}
+                    editMode={editMode}
+                    position={customLayoutPositions.get('local-user')}
+                    onPositionChange={(pos) => handlePositionChange('local-user', pos)}
                   />
                 </div>
               )}
@@ -415,6 +476,9 @@ export function StudioCanvas({
                       borderWidth={styleSettings.borderWidth}
                       borderColor={styleSettings.primaryColor}
                       mirrorVideo={false}
+                      editMode={editMode}
+                      position={customLayoutPositions.get(participant.id)}
+                      onPositionChange={(pos) => handlePositionChange(participant.id, pos)}
                     />
                   </div>
                 ))}
@@ -497,6 +561,9 @@ export function StudioCanvas({
                     borderWidth={styleSettings.borderWidth}
                     borderColor={styleSettings.primaryColor}
                     mirrorVideo={styleSettings.mirrorVideo}
+                    editMode={editMode}
+                    position={customLayoutPositions.get('local-user')}
+                    onPositionChange={(pos) => handlePositionChange('local-user', pos)}
                   />
                 </div>
               </div>
@@ -523,6 +590,9 @@ export function StudioCanvas({
                       borderWidth={styleSettings.borderWidth}
                       borderColor={styleSettings.primaryColor}
                       mirrorVideo={false}
+                      editMode={editMode}
+                      position={customLayoutPositions.get(participant.id)}
+                      onPositionChange={(pos) => handlePositionChange(participant.id, pos)}
                     />
                   </div>
                 ))}
