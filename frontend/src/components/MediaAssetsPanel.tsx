@@ -613,10 +613,14 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   };
 
   const renderAssetCard = (asset: Asset) => {
-    // Check if this asset is currently active
-    const isActive = (asset.type === 'logo' && activeLogoUrl === asset.url) ||
-                     (asset.type === 'overlay' && activeOverlayUrl === asset.url) ||
-                     ((asset.type === 'background' || asset.type === 'videoBackground') && activeBackgroundUrl === asset.url);
+    // Check if this asset is currently active (check both URL and asset ID for IndexedDB assets)
+    const logoAssetId = localStorage.getItem('streamLogoAssetId');
+    const overlayAssetId = localStorage.getItem('streamOverlayAssetId');
+    const backgroundAssetId = localStorage.getItem('streamBackgroundAssetId');
+
+    const isActive = (asset.type === 'logo' && (activeLogoUrl === asset.url || logoAssetId === asset.id)) ||
+                     (asset.type === 'overlay' && (activeOverlayUrl === asset.url || overlayAssetId === asset.id)) ||
+                     ((asset.type === 'background' || asset.type === 'videoBackground') && (activeBackgroundUrl === asset.url || backgroundAssetId === asset.id));
 
     return (
       <div
@@ -665,7 +669,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
                   : 'bg-white text-gray-900 hover:bg-gray-100'
               }`}
             >
-              {isActive ? 'Remove Asset' : 'Use Asset'}
+              {isActive ? 'Remove' : 'Use'}
             </button>
             <button
               onClick={(e) => {
