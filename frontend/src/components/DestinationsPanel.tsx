@@ -17,6 +17,7 @@ interface StreamDestination {
   viewerCount: number;
   streamKey?: string;
   rtmpUrl?: string;
+  comingSoon?: boolean;
 }
 
 interface DestinationsPanelProps {
@@ -25,12 +26,12 @@ interface DestinationsPanelProps {
 
 // Available platforms that can be connected
 const AVAILABLE_PLATFORMS = [
-  { platform: 'youtube', name: 'YouTube' },
-  { platform: 'facebook', name: 'Facebook Live' },
-  { platform: 'linkedin', name: 'LinkedIn Live' },
-  { platform: 'twitch', name: 'Twitch' },
-  { platform: 'x', name: 'X (Twitter)' },
-  { platform: 'rumble', name: 'Rumble' },
+  { platform: 'youtube', name: 'YouTube', comingSoon: false },
+  { platform: 'facebook', name: 'Facebook Live', comingSoon: false },
+  { platform: 'twitch', name: 'Twitch', comingSoon: false },
+  { platform: 'x', name: 'X (Twitter)', comingSoon: false },
+  { platform: 'linkedin', name: 'LinkedIn Live', comingSoon: true },
+  { platform: 'rumble', name: 'Rumble', comingSoon: true },
 ];
 
 export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
@@ -67,6 +68,7 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
           connected: !!connected,
           viewerCount: 0,
           rtmpUrl: connected?.rtmpUrl,
+          comingSoon: available.comingSoon,
         };
       });
 
@@ -94,6 +96,7 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
         enabled: false,
         connected: false,
         viewerCount: 0,
+        comingSoon: p.comingSoon,
       })));
     } finally {
       setLoading(false);
@@ -306,20 +309,31 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
                   type="checkbox"
                   checked={dest.enabled}
                   onChange={() => toggleDestination(dest.id)}
-                  disabled={!dest.connected && dest.platform !== 'custom'}
+                  disabled={dest.comingSoon || (!dest.connected && dest.platform !== 'custom')}
                   className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 disabled:opacity-50"
                 />
 
                 {/* Platform Icon */}
-                {getPlatformIcon(dest.platform)}
+                <div className={dest.comingSoon ? 'opacity-50' : ''}>
+                  {getPlatformIcon(dest.platform)}
+                </div>
 
                 {/* Platform Name */}
-                <span className="font-medium text-gray-900">{dest.name}</span>
+                <span className={`font-medium ${dest.comingSoon ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                  {dest.name}
+                </span>
+
+                {/* Coming Soon Badge */}
+                {dest.comingSoon && (
+                  <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
+                    Coming Soon
+                  </span>
+                )}
               </div>
 
               {/* Connection Status */}
               <div className="flex items-center space-x-2">
-                {!dest.connected && dest.platform !== 'custom' && (
+                {!dest.comingSoon && !dest.connected && dest.platform !== 'custom' && (
                   <button
                     onClick={() => connectDestination(dest.id)}
                     className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
