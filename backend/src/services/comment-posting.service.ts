@@ -445,14 +445,30 @@ class CommentPostingService {
         };
       }
 
-      // Note: Rumble's API is not publicly documented
-      // This is a placeholder implementation
-      // You'll need to update this based on Rumble's actual API when available
+      const apiKey = decrypt(destination.accessToken);
+
+      // Post message to Rumble live chat using their API
+      // API endpoint: https://rumble.com/service.php?name=live.post_comment
+      const response = await axios.post(
+        'https://rumble.com/service.php',
+        null,
+        {
+          params: {
+            name: 'live.post_comment',
+            key: apiKey,
+            message: message,
+          },
+        }
+      );
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
 
       return {
         platform: 'rumble',
-        success: false,
-        error: 'Rumble API integration not yet available - API documentation needed',
+        success: true,
+        messageId: response.data?.comment_id || response.data?.id || 'unknown',
       };
     } catch (error: any) {
       logger.error('Rumble post error:', error.message);

@@ -30,8 +30,8 @@ const AVAILABLE_PLATFORMS = [
   { platform: 'facebook', name: 'Facebook Live', comingSoon: false },
   { platform: 'twitch', name: 'Twitch', comingSoon: false },
   { platform: 'x', name: 'X (Twitter)', comingSoon: false },
+  { platform: 'rumble', name: 'Rumble', comingSoon: false }, // NOW AVAILABLE!
   { platform: 'linkedin', name: 'LinkedIn Live', comingSoon: true },
-  { platform: 'rumble', name: 'Rumble', comingSoon: true },
 ];
 
 export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {

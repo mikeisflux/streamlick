@@ -764,6 +764,99 @@ router.get('/linkedin/callback', async (req, res) => {
 });
 
 /**
+ * Rumble API Key Setup
+ * Rumble uses API key authentication instead of OAuth
+ */
+router.post('/rumble/setup', authenticate, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const { apiKey, channelUrl } = req.body;
+
+    if (!apiKey || !channelUrl) {
+      return res.status(400).json({ error: 'API key and channel URL are required' });
+    }
+
+    logger.info(`[Rumble] Setup request from user ${userId}`);
+
+    // Import Rumble service functions
+    const { validateRumbleApiKey, getRumbleChannelInfo } = await import('../services/rumble.service');
+
+    // Validate API key
+    const isValid = await validateRumbleApiKey(apiKey);
+    if (!isValid) {
+      logger.warn(`[Rumble] Invalid API key for user ${userId}`);
+      return res.status(400).json({ error: 'Invalid Rumble API key. Please check your key and try again.' });
+    }
+
+    // Get channel info
+    let channelInfo;
+    try {
+      channelInfo = await getRumbleChannelInfo(apiKey);
+    } catch (error: any) {
+      logger.error(`[Rumble] Failed to get channel info for user ${userId}:`, error.message);
+      // Continue anyway, use provided channel URL
+      channelInfo = {
+        channelId: 'unknown',
+        channelName: channelUrl.split('/').pop() || 'Rumble Channel',
+        channelUrl: channelUrl,
+      };
+    }
+
+    // Check if Rumble destination already exists for this user
+    const existingDestination = await prisma.destination.findFirst({
+      where: {
+        userId,
+        platform: 'rumble',
+      },
+    });
+
+    if (existingDestination) {
+      // Update existing destination
+      await prisma.destination.update({
+        where: { id: existingDestination.id },
+        data: {
+          displayName: channelInfo.channelName,
+          accessToken: encrypt(apiKey),
+          rtmpUrl: '', // Will be set when creating live stream
+          streamKey: encrypt(''), // Will be set when creating live stream
+          isActive: true,
+        },
+      });
+
+      logger.info(`[Rumble] Updated destination for user ${userId}: ${channelInfo.channelName}`);
+    } else {
+      // Create new destination
+      await prisma.destination.create({
+        data: {
+          userId,
+          platform: 'rumble',
+          displayName: channelInfo.channelName,
+          accessToken: encrypt(apiKey),
+          refreshToken: null,
+          rtmpUrl: '', // Will be set when creating live stream
+          streamKey: encrypt(''), // Will be set when creating live stream
+          isActive: true,
+        },
+      });
+
+      logger.info(`[Rumble] Created new destination for user ${userId}: ${channelInfo.channelName}`);
+    }
+
+    res.json({
+      message: 'Rumble connected successfully',
+      channelName: channelInfo.channelName,
+      channelUrl: channelInfo.channelUrl,
+    });
+  } catch (error: any) {
+    logger.error('[Rumble] Setup error:', error);
+    res.status(500).json({
+      error: 'Failed to connect to Rumble. Please try again.',
+      details: error.message,
+    });
+  }
+});
+
+/**
  * Disconnect OAuth
  */
 router.delete('/disconnect/:destinationId', authenticate, async (req, res) => {
