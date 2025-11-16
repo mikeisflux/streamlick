@@ -118,6 +118,14 @@ export function useBackgroundRemoval(
     if (enabled && localStream) {
       const startBackgroundRemoval = async () => {
         try {
+          // Verify localStream is active before processing
+          const videoTracks = localStream.getVideoTracks();
+          if (videoTracks.length === 0 || videoTracks[0].readyState !== 'live') {
+            console.error('Local stream is not active, cannot start background removal');
+            toast.error('Camera not active');
+            return;
+          }
+
           // Load model if not already loaded
           if (!backgroundRemovalService.isModelLoaded()) {
             toast.loading('Loading AI background model...', { id: 'bg-model' });
@@ -126,28 +134,43 @@ export function useBackgroundRemoval(
           }
 
           // Start background removal
+          console.log('[Background Removal] Starting with stream:', localStream.id);
           const outputStream = await backgroundRemovalService.start(localStream, options);
           setProcessedStream(outputStream);
           toast.success(`Background ${options.type} enabled`);
         } catch (error) {
           console.error('Failed to start background removal:', error);
           toast.error('Failed to enable background removal');
+          setProcessedStream(null); // Ensure fallback to original stream
         }
       };
 
       startBackgroundRemoval();
-    } else if (!enabled && backgroundRemovalService.isActive()) {
-      backgroundRemovalService.stop();
-      setProcessedStream(null);
-      toast.success('Background removal stopped');
-    }
-
-    return () => {
+    } else if (!enabled) {
+      // Always stop and clear processed stream when disabled
       if (backgroundRemovalService.isActive()) {
+        console.log('[Background Removal] Stopping and restoring original stream');
         backgroundRemovalService.stop();
       }
-    };
-  }, [enabled, localStream]);
+      setProcessedStream(null);
+
+      // Verify localStream is still valid
+      if (localStream) {
+        const videoTracks = localStream.getVideoTracks();
+        console.log('[Background Removal] Original stream status:', {
+          id: localStream.id,
+          videoTracks: videoTracks.length,
+          active: videoTracks[0]?.readyState
+        });
+      }
+
+      if (backgroundRemovalService.isActive()) {
+        toast.success('Background removal stopped');
+      }
+    }
+
+    // No cleanup needed - we handle stop explicitly in the effect
+  }, [enabled]); // REMOVED localStream dependency to prevent restarts
 
   // Update options in real-time when they change
   useEffect(() => {
@@ -174,6 +197,8 @@ export function useVerticalSimulcast(
           // Get the source stream (processed or original)
           const sourceStream = processedStream || compositorService.getOutputStream() || localStream;
 
+          console.log('[Vertical Simulcast] Starting with stream:', sourceStream.id);
+
           // Start vertical compositor
           const outputStream = await verticalCompositorService.start(sourceStream, {
             outputWidth: parseInt(resolution.split('x')[0]),
@@ -187,22 +212,22 @@ export function useVerticalSimulcast(
         } catch (error) {
           console.error('Failed to start vertical simulcast:', error);
           toast.error('Failed to enable vertical simulcast');
+          setVerticalStream(null); // Ensure cleanup on error
         }
       };
 
       startVerticalSimulcast();
-    } else if (!enabled && verticalCompositorService.active()) {
-      verticalCompositorService.stop();
+    } else if (!enabled) {
+      if (verticalCompositorService.active()) {
+        console.log('[Vertical Simulcast] Stopping');
+        verticalCompositorService.stop();
+        toast.success('Vertical simulcast stopped');
+      }
       setVerticalStream(null);
-      toast.success('Vertical simulcast stopped');
     }
 
-    return () => {
-      if (verticalCompositorService.active()) {
-        verticalCompositorService.stop();
-      }
-    };
-  }, [enabled, localStream, processedStream, resolution]);
+    // No cleanup needed - we handle stop explicitly in the effect
+  }, [enabled, resolution]); // REMOVED stream dependencies to prevent restarts
 
   return { verticalStream };
 }
