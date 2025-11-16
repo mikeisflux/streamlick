@@ -68,6 +68,11 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   const [isLoadingAssets, setIsLoadingAssets] = useState(true);
   const objectURLsRef = useRef<string[]>([]);
 
+  // Track active overlay asset
+  const [activeOverlayUrl, setActiveOverlayUrl] = useState<string | null>(() => {
+    return localStorage.getItem('streamOverlay');
+  });
+
   // Track active background asset
   const [activeBackgroundUrl, setActiveBackgroundUrl] = useState<string | null>(() => {
     return localStorage.getItem('streamBackground');
@@ -150,6 +155,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               const objectURL = URL.createObjectURL(mediaData.blob);
               objectURLsRef.current.push(objectURL);
               // Don't save object URL to localStorage
+              setActiveOverlayUrl(objectURL);
               window.dispatchEvent(new CustomEvent('overlayUpdated', { detail: { url: objectURL } }));
             }
           } catch (error) {
@@ -362,6 +368,31 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
       const asset = assets.find((a) => a.id === assetId);
 
       if (asset) {
+        // Check if this asset is currently active and remove it from the screen
+        const isActiveLogo = asset.type === 'logo' && activeLogoUrl === asset.url;
+        const isActiveOverlay = asset.type === 'overlay' && activeOverlayUrl === asset.url;
+        const isActiveBackground = (asset.type === 'background' || asset.type === 'videoBackground') && activeBackgroundUrl === asset.url;
+
+        if (isActiveLogo) {
+          localStorage.removeItem('streamLogo');
+          localStorage.removeItem('streamLogoName');
+          localStorage.removeItem('streamLogoAssetId');
+          setActiveLogoUrl(null);
+          window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { url: null, name: null } }));
+        } else if (isActiveOverlay) {
+          localStorage.removeItem('streamOverlay');
+          localStorage.removeItem('streamOverlayName');
+          localStorage.removeItem('streamOverlayAssetId');
+          setActiveOverlayUrl(null);
+          window.dispatchEvent(new CustomEvent('overlayUpdated', { detail: { url: null, name: null } }));
+        } else if (isActiveBackground) {
+          localStorage.removeItem('streamBackground');
+          localStorage.removeItem('streamBackgroundName');
+          localStorage.removeItem('streamBackgroundAssetId');
+          setActiveBackgroundUrl(null);
+          window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: null, name: null } }));
+        }
+
         // Delete from IndexedDB if stored there
         if (asset.storedInIndexedDB) {
           try {
@@ -378,7 +409,23 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
         }
       }
 
-      setAssets(assets.filter((a) => a.id !== assetId));
+      // Remove from assets list and save
+      const updatedAssets = assets.filter((a) => a.id !== assetId);
+      setAssets(updatedAssets);
+
+      // Save to localStorage
+      const storageKey = `media_assets_${broadcastId || 'default'}`;
+      localStorage.setItem(storageKey, JSON.stringify(updatedAssets.map(a => ({
+        id: a.id,
+        type: a.type,
+        name: a.name,
+        url: a.url,
+        thumbnailUrl: a.thumbnailUrl,
+        duration: a.duration,
+        fileSize: a.fileSize,
+        storedInIndexedDB: a.storedInIndexedDB,
+      }))));
+
       toast.success('Asset deleted successfully');
     }
   };
@@ -386,6 +433,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   const handleUseAsset = async (asset: Asset) => {
     // Check if this asset is already active
     const isActiveLogo = asset.type === 'logo' && activeLogoUrl === asset.url;
+    const isActiveOverlay = asset.type === 'overlay' && activeOverlayUrl === asset.url;
     const isActiveBackground = (asset.type === 'background' || asset.type === 'videoBackground') && activeBackgroundUrl === asset.url;
 
     if (isActiveLogo) {
@@ -396,6 +444,14 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
       setActiveLogoUrl(null);
       window.dispatchEvent(new CustomEvent('logoUpdated', { detail: { url: null, name: null } }));
       toast.success('Logo removed');
+    } else if (isActiveOverlay) {
+      // Remove the overlay
+      localStorage.removeItem('streamOverlay');
+      localStorage.removeItem('streamOverlayName');
+      localStorage.removeItem('streamOverlayAssetId');
+      setActiveOverlayUrl(null);
+      window.dispatchEvent(new CustomEvent('overlayUpdated', { detail: { url: null, name: null } }));
+      toast.success('Overlay removed');
     } else if (isActiveBackground) {
       // Remove the background
       localStorage.removeItem('streamBackground');
@@ -455,6 +511,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
                 localStorage.setItem('streamOverlayAssetId', asset.id);
                 localStorage.setItem('streamOverlayName', asset.name);
                 localStorage.removeItem('streamOverlay'); // Don't save object URLs
+                setActiveOverlayUrl(objectURL);
                 window.dispatchEvent(new CustomEvent('overlayUpdated', { detail: { url: objectURL, name: asset.name } }));
                 toast.success(`Overlay applied: ${asset.name}`);
               }
@@ -467,6 +524,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               localStorage.setItem('streamOverlay', asset.url);
               localStorage.setItem('streamOverlayName', asset.name);
               localStorage.removeItem('streamOverlayAssetId');
+              setActiveOverlayUrl(asset.url);
               window.dispatchEvent(new CustomEvent('overlayUpdated', { detail: { url: asset.url, name: asset.name } }));
               toast.success(`Overlay applied: ${asset.name}`);
             } catch (error) {
@@ -535,6 +593,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   const renderAssetCard = (asset: Asset) => {
     // Check if this asset is currently active
     const isActive = (asset.type === 'logo' && activeLogoUrl === asset.url) ||
+                     (asset.type === 'overlay' && activeOverlayUrl === asset.url) ||
                      ((asset.type === 'background' || asset.type === 'videoBackground') && activeBackgroundUrl === asset.url);
 
     return (
