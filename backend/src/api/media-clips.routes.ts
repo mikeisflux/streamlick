@@ -4,7 +4,9 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
+import { URL } from 'url';
 import logger from '../utils/logger';
+import prisma from '../database/prisma';
 
 const router = Router();
 
@@ -69,18 +71,39 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
     const userId = req.user?.userId;
     const { type } = req.query;
 
-    // In production, fetch from database
-    // For now, return mock data structure
-    const clips: any[] = [];
+    // Add pagination
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+    const offset = parseInt(req.query.offset as string) || 0;
 
-    if (type) {
-      // Filter by type if provided
+    // Build where clause
+    const where: any = { userId };
+    if (type && ['video', 'audio', 'image'].includes(type as string)) {
+      where.type = type;
     }
 
-    res.json({ clips });
+    // Fetch clips with pagination
+    const [clips, total] = await Promise.all([
+      prisma.mediaClip.findMany({
+        where,
+        take: limit,
+        skip: offset,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.mediaClip.count({ where }),
+    ]);
+
+    return res.json({
+      clips,
+      pagination: {
+        limit,
+        offset,
+        total,
+        hasMore: offset + limit < total,
+      },
+    });
   } catch (error: any) {
     logger.error('Get media clips error:', error);
-    res.status(500).json({ error: 'Failed to retrieve media clips' });
+    return res.status(500).json({ error: 'Failed to retrieve media clips' });
   }
 });
 
@@ -99,6 +122,13 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req: Reques
 
     const { name, description, hotkey, volume } = req.body;
 
+    // Validate volume
+    const volumeValue = volume ? parseInt(volume) : 100;
+    if (isNaN(volumeValue) || volumeValue < 0 || volumeValue > 100) {
+      fs.unlinkSync(file.path);
+      return res.status(400).json({ error: 'Volume must be between 0 and 100' });
+    }
+
     // Determine clip type from mime type
     let clipType: 'video' | 'audio' | 'image';
     if (file.mimetype.startsWith('video/')) {
@@ -116,34 +146,36 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req: Reques
     // Generate URL for the uploaded file
     const fileUrl = `/uploads/media-clips/${file.filename}`;
 
-    // Create clip record
-    const clip = {
-      id: uuidv4(),
-      userId,
-      name: name || file.originalname,
-      description: description || null,
-      type: clipType,
-      url: fileUrl,
-      thumbnailUrl: null, // Could generate thumbnails for videos
-      duration: null, // Could extract duration from video/audio metadata
-      fileSize: file.size,
-      mimeType: file.mimetype,
-      hotkey: hotkey || null,
-      volume: volume ? parseInt(volume) : 100,
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    // In production, save to database
-    // await db.mediaClip.create({ data: clip });
+    // Save to database
+    const clip = await prisma.mediaClip.create({
+      data: {
+        userId,
+        name: name || file.originalname,
+        description: description || null,
+        type: clipType,
+        fileUrl: fileUrl,
+        thumbnailUrl: null,
+        fileSizeBytes: BigInt(file.size),
+        mimeType: file.mimetype,
+        durationMs: null,
+        hotkey: hotkey || null,
+        volume: volumeValue,
+        isActive: true,
+      },
+    });
 
     logger.info(`Media clip uploaded: ${clip.name} (${clip.type}) by user ${userId}`);
 
-    res.status(201).json({ clip });
+    return res.status(201).json({ clip });
   } catch (error: any) {
     logger.error('Upload media clip error:', error);
-    res.status(500).json({ error: 'Failed to upload media clip' });
+
+    // Clean up file if database operation failed
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    return res.status(500).json({ error: 'Failed to upload media clip' });
   }
 });
 
@@ -164,33 +196,68 @@ router.post('/link', authMiddleware, async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Type must be video, audio, or image' });
     }
 
-    const clip = {
-      id: uuidv4(),
-      userId,
-      name,
-      description: description || null,
-      type,
-      url,
-      thumbnailUrl: null,
-      duration: null,
-      fileSize: 0, // Unknown for external files
-      mimeType: '', // Unknown for external files
-      hotkey: hotkey || null,
-      volume: volume || 100,
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    // Validate volume
+    const volumeValue = volume ? parseInt(volume) : 100;
+    if (isNaN(volumeValue) || volumeValue < 0 || volumeValue > 100) {
+      return res.status(400).json({ error: 'Volume must be between 0 and 100' });
+    }
 
-    // In production, save to database
-    // await db.mediaClip.create({ data: clip });
+    // SSRF Protection: Validate URL
+    try {
+      const parsedUrl = new URL(url);
+
+      // Only allow http/https protocols
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        return res.status(400).json({ error: 'Only HTTP/HTTPS URLs are allowed' });
+      }
+
+      // Block internal/private IP addresses
+      const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254', '[::1]'];
+      const hostname = parsedUrl.hostname.toLowerCase();
+
+      if (blockedHosts.includes(hostname)) {
+        return res.status(400).json({ error: 'Invalid URL: internal addresses not allowed' });
+      }
+
+      // Block private IP ranges (10.x.x.x, 172.16-31.x.x, 192.168.x.x)
+      const isPrivateIP =
+        /^10\./.test(hostname) ||
+        /^172\.(1[6-9]|2[0-9]|3[01])\./.test(hostname) ||
+        /^192\.168\./.test(hostname) ||
+        /^fc00:/i.test(hostname) || // IPv6 private
+        /^fe80:/i.test(hostname);   // IPv6 link-local
+
+      if (isPrivateIP) {
+        return res.status(400).json({ error: 'Invalid URL: private IP addresses not allowed' });
+      }
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+
+    // Save to database
+    const clip = await prisma.mediaClip.create({
+      data: {
+        userId,
+        name,
+        description: description || null,
+        type,
+        fileUrl: url,
+        thumbnailUrl: null,
+        fileSizeBytes: BigInt(0), // Unknown for external files
+        mimeType: '', // Unknown for external files
+        durationMs: null,
+        hotkey: hotkey || null,
+        volume: volumeValue,
+        isActive: true,
+      },
+    });
 
     logger.info(`Media clip linked: ${clip.name} (${clip.type}) by user ${userId}`);
 
-    res.status(201).json({ clip });
+    return res.status(201).json({ clip });
   } catch (error: any) {
     logger.error('Link media clip error:', error);
-    res.status(500).json({ error: 'Failed to link media clip' });
+    return res.status(500).json({ error: 'Failed to link media clip' });
   }
 });
 
@@ -204,18 +271,45 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, description, hotkey, volume, isActive } = req.body;
 
-    // In production, update in database
-    // await db.mediaClip.update({
-    //   where: { id, userId },
-    //   data: { name, description, hotkey, volume, isActive, updatedAt: new Date() }
-    // });
+    // CRITICAL FIX: Verify ownership before update (IDOR protection)
+    const clip = await prisma.mediaClip.findUnique({
+      where: { id },
+    });
+
+    if (!clip) {
+      return res.status(404).json({ error: 'Media clip not found' });
+    }
+
+    if (clip.userId !== userId) {
+      return res.status(404).json({ error: 'Media clip not found' });
+    }
+
+    // Validate volume if provided
+    if (volume !== undefined) {
+      const volumeValue = parseInt(volume);
+      if (isNaN(volumeValue) || volumeValue < 0 || volumeValue > 100) {
+        return res.status(400).json({ error: 'Volume must be between 0 and 100' });
+      }
+    }
+
+    // Update clip
+    const updated = await prisma.mediaClip.update({
+      where: { id },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(description !== undefined && { description }),
+        ...(hotkey !== undefined && { hotkey }),
+        ...(volume !== undefined && { volume: parseInt(volume) }),
+        ...(isActive !== undefined && { isActive }),
+      },
+    });
 
     logger.info(`Media clip updated: ${id} by user ${userId}`);
 
-    res.json({ success: true });
+    return res.json({ clip: updated });
   } catch (error: any) {
     logger.error('Update media clip error:', error);
-    res.status(500).json({ error: 'Failed to update media clip' });
+    return res.status(500).json({ error: 'Failed to update media clip' });
   }
 });
 
@@ -228,26 +322,41 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
     const userId = req.user?.userId;
     const { id } = req.params;
 
-    // In production, fetch clip from database to get file path
-    // const clip = await db.mediaClip.findUnique({ where: { id, userId } });
+    // CRITICAL FIX: Verify ownership before delete (IDOR protection)
+    const clip = await prisma.mediaClip.findUnique({
+      where: { id },
+    });
+
+    if (!clip) {
+      return res.status(404).json({ error: 'Media clip not found' });
+    }
+
+    if (clip.userId !== userId) {
+      return res.status(404).json({ error: 'Media clip not found' });
+    }
 
     // Delete file if it's a local upload
-    // if (clip && clip.url.startsWith('/uploads/')) {
-    //   const filePath = path.join(__dirname, '../..', clip.url);
-    //   if (fs.existsSync(filePath)) {
-    //     fs.unlinkSync(filePath);
-    //   }
-    // }
+    if (clip.fileUrl && clip.fileUrl.startsWith('/uploads/')) {
+      const filePath = path.join(__dirname, '../..', clip.fileUrl);
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch (fileError) {
+          logger.error(`Failed to delete file: ${filePath}`, fileError);
+          // Continue with database deletion even if file deletion fails
+        }
+      }
+    }
 
     // Delete from database
-    // await db.mediaClip.delete({ where: { id, userId } });
+    await prisma.mediaClip.delete({ where: { id } });
 
     logger.info(`Media clip deleted: ${id} by user ${userId}`);
 
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (error: any) {
     logger.error('Delete media clip error:', error);
-    res.status(500).json({ error: 'Failed to delete media clip' });
+    return res.status(500).json({ error: 'Failed to delete media clip' });
   }
 });
 
@@ -260,17 +369,23 @@ router.get('/:id', authMiddleware, async (req: Request, res: Response) => {
     const userId = req.user?.userId;
     const { id } = req.params;
 
-    // In production, fetch from database
-    // const clip = await db.mediaClip.findUnique({ where: { id, userId } });
+    // CRITICAL FIX: Verify ownership (IDOR protection)
+    const clip = await prisma.mediaClip.findUnique({
+      where: { id },
+    });
 
-    // if (!clip) {
-    //   return res.status(404).json({ error: 'Media clip not found' });
-    // }
+    if (!clip) {
+      return res.status(404).json({ error: 'Media clip not found' });
+    }
 
-    res.json({ clip: null });
+    if (clip.userId !== userId) {
+      return res.status(404).json({ error: 'Media clip not found' });
+    }
+
+    return res.json({ clip });
   } catch (error: any) {
     logger.error('Get media clip error:', error);
-    res.status(500).json({ error: 'Failed to retrieve media clip' });
+    return res.status(500).json({ error: 'Failed to retrieve media clip' });
   }
 });
 
