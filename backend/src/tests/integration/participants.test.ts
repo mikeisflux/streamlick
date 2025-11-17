@@ -24,6 +24,7 @@ describe('Participant Management Integration Tests', () => {
         email: 'host@participants.test',
         name: 'Host User',
         planType: 'core',
+        password: 'testpassword123',
       },
     });
 
@@ -32,6 +33,7 @@ describe('Participant Management Integration Tests', () => {
         email: 'guest@participants.test',
         name: 'Guest User',
         planType: 'free',
+        password: 'testpassword123',
       },
     });
 
@@ -248,8 +250,8 @@ describe('Participant Management Integration Tests', () => {
     beforeEach(async () => {
       participant = await prisma.participant.create({
         data: {
-          broadcastId: testBroadcast.id,
-          userId: guestUser.id,
+          broadcast: { connect: { id: testBroadcast.id } },
+          user: { connect: { id: guestUser.id } },
           name: 'Controllable Guest',
           role: 'guest',
           status: 'joined',
@@ -314,8 +316,8 @@ describe('Participant Management Integration Tests', () => {
     beforeEach(async () => {
       participant = await prisma.participant.create({
         data: {
-          broadcastId: testBroadcast.id,
-          userId: guestUser.id,
+          broadcast: { connect: { id: testBroadcast.id } },
+          user: { connect: { id: guestUser.id } },
           name: 'Kickable Guest',
           role: 'guest',
           status: 'joined',
@@ -355,8 +357,8 @@ describe('Participant Management Integration Tests', () => {
     beforeEach(async () => {
       participant = await prisma.participant.create({
         data: {
-          broadcastId: testBroadcast.id,
-          userId: guestUser.id,
+          broadcast: { connect: { id: testBroadcast.id } },
+          user: { connect: { id: guestUser.id } },
           name: 'Bannable Guest',
           role: 'guest',
           status: 'joined',
@@ -377,7 +379,7 @@ describe('Participant Management Integration Tests', () => {
       const ban = await prisma.bannedParticipant.findFirst({
         where: {
           broadcastId: testBroadcast.id,
-          userId: guestUser.id,
+          user: { id: guestUser.id },
         },
       });
       expect(ban).toBeTruthy();
@@ -399,7 +401,7 @@ describe('Participant Management Integration Tests', () => {
         .set('Authorization', `Bearer ${hostToken}`)
         .send({
           broadcastId: testBroadcast.id,
-          userId: guestUser.id,
+          user: { connect: { id: guestUser.id } },
           name: 'Trying to rejoin',
           role: 'guest',
         })
@@ -428,7 +430,7 @@ describe('Participant Management Integration Tests', () => {
       const ban = await prisma.bannedParticipant.findFirst({
         where: {
           broadcastId: testBroadcast.id,
-          userId: guestUser.id,
+          user: { id: guestUser.id },
         },
       });
       expect(ban).toBeNull();

@@ -4,7 +4,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import { authMiddleware } from '../middleware/auth.middleware';
+import { authenticate as authMiddleware } from '../auth/middleware';
 import logger from '../utils/logger';
 
 const router = Router();
@@ -137,7 +137,7 @@ router.post('/:type/upload', authMiddleware, adminMiddleware, (req: Request, res
           name: name || file.originalname,
           category: category || 'default',
           url: `/uploads/assets/${type}/${file.filename}`,
-          fileSize: file.size,
+          fileSizeBytes: file.size,
           mimeType: file.mimetype,
           isDefault: isDefault === 'true',
           isActive: true,

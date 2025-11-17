@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 
 export function Terms() {
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen">
       {/* Header */}
       <header className="bg-gray-800 border-b border-gray-700">
         <div className="max-w-4xl mx-auto px-6 py-4">

@@ -8,6 +8,7 @@ class AudioMixerService {
   private audioContext: AudioContext | null = null;
   private destination: MediaStreamAudioDestinationNode | null = null;
   private sources: Map<string, MediaStreamAudioSourceNode> = new Map();
+  private gainNodes: Map<string, GainNode> = new Map();
 
   /**
    * Initialize the audio mixer
@@ -51,8 +52,9 @@ class AudioMixerService {
     source.connect(gainNode);
     gainNode.connect(this.destination);
 
-    // Store source
+    // Store source and gain node
     this.sources.set(id, source);
+    this.gainNodes.set(id, gainNode);
 
     console.log(`Audio stream added: ${id}`);
   }
@@ -62,9 +64,19 @@ class AudioMixerService {
    */
   removeStream(id: string): void {
     const source = this.sources.get(id);
+    const gainNode = this.gainNodes.get(id);
+
     if (source) {
       source.disconnect();
       this.sources.delete(id);
+    }
+
+    if (gainNode) {
+      gainNode.disconnect();
+      this.gainNodes.delete(id);
+    }
+
+    if (source || gainNode) {
       console.log(`Audio stream removed: ${id}`);
     }
   }
@@ -76,12 +88,12 @@ class AudioMixerService {
     // Volume should be 0-1
     const clampedVolume = Math.max(0, Math.min(1, volume));
 
-    const source = this.sources.get(id);
-    if (source) {
-      // Get the gain node (first destination)
-      const gainNode = source.context.createGain();
+    const gainNode = this.gainNodes.get(id);
+    if (gainNode) {
       gainNode.gain.value = clampedVolume;
       console.log(`Volume set for ${id}: ${clampedVolume}`);
+    } else {
+      console.warn(`Cannot set volume for ${id}: stream not found`);
     }
   }
 
@@ -102,11 +114,16 @@ class AudioMixerService {
   stop(): void {
     console.log('Stopping audio mixer');
 
-    // Disconnect all sources
+    // Disconnect all sources and gain nodes
     this.sources.forEach((source) => {
       source.disconnect();
     });
     this.sources.clear();
+
+    this.gainNodes.forEach((gainNode) => {
+      gainNode.disconnect();
+    });
+    this.gainNodes.clear();
 
     // Close audio context
     if (this.audioContext && this.audioContext.state !== 'closed') {

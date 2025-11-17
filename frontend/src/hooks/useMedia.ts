@@ -1,10 +1,23 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 
 export function useMedia() {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [videoEnabled, setVideoEnabled] = useState(true);
+
+  // Use refs to avoid stale closures in callbacks
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const screenStreamRef = useRef<MediaStream | null>(null);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    localStreamRef.current = localStream;
+  }, [localStream]);
+
+  useEffect(() => {
+    screenStreamRef.current = screenStream;
+  }, [screenStream]);
 
   const startCamera = useCallback(async () => {
     try {
@@ -15,11 +28,17 @@ export function useMedia() {
           frameRate: { ideal: 30 },
         },
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+          // Enable all noise reduction features
+          echoCancellation: { ideal: true },
+          noiseSuppression: { ideal: true },
+          autoGainControl: { ideal: true },
+          // High-quality audio settings
+          sampleRate: { ideal: 48000 },
+          sampleSize: { ideal: 16 },
+          channelCount: { ideal: 2 },
         },
       });
+      localStreamRef.current = stream;
       setLocalStream(stream);
       return stream;
     } catch (error) {
@@ -29,20 +48,22 @@ export function useMedia() {
   }, []);
 
   const stopCamera = useCallback(() => {
-    if (localStream) {
-      localStream.getTracks().forEach((track) => track.stop());
-      setLocalStream(null);
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
     }
-  }, [localStream]);
+    setLocalStream(null);
+  }, []); // No dependencies - uses ref
 
   const startScreenShare = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           cursor: 'always',
-        },
+        } as MediaTrackConstraints,
         audio: true,
       });
+      screenStreamRef.current = stream;
       setScreenStream(stream);
       return stream;
     } catch (error) {
@@ -52,31 +73,32 @@ export function useMedia() {
   }, []);
 
   const stopScreenShare = useCallback(() => {
-    if (screenStream) {
-      screenStream.getTracks().forEach((track) => track.stop());
-      setScreenStream(null);
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((track) => track.stop());
+      screenStreamRef.current = null;
     }
-  }, [screenStream]);
+    setScreenStream(null);
+  }, []); // No dependencies - uses ref
 
   const toggleAudio = useCallback(() => {
-    if (localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
+    if (localStreamRef.current) {
+      const audioTrack = localStreamRef.current.getAudioTracks()[0];
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         setAudioEnabled(audioTrack.enabled);
       }
     }
-  }, [localStream]);
+  }, []); // No dependencies - uses ref
 
   const toggleVideo = useCallback(() => {
-    if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
+    if (localStreamRef.current) {
+      const videoTrack = localStreamRef.current.getVideoTracks()[0];
       if (videoTrack) {
         videoTrack.enabled = !videoTrack.enabled;
         setVideoEnabled(videoTrack.enabled);
       }
     }
-  }, [localStream]);
+  }, []); // No dependencies - uses ref
 
   return {
     localStream,

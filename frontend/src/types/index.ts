@@ -3,7 +3,8 @@ export interface User {
   email: string;
   name?: string;
   avatarUrl?: string;
-  planType: 'free' | 'core' | 'advanced' | 'teams' | 'business';
+  planType: 'pro'; // Single $20/month plan with all features
+  role?: 'user' | 'admin'; // User role for access control
   createdAt: string;
 }
 
@@ -73,7 +74,7 @@ export interface Participant {
   broadcastId: string;
   userId?: string;
   name?: string;
-  role: 'host' | 'guest' | 'backstage';
+  role: 'host' | 'guest' | 'backstage' | 'greenroom';
   status: 'invited' | 'joined' | 'disconnected';
   joinedAt?: string;
   leftAt?: string;
@@ -91,4 +92,50 @@ export interface MediaState {
   audio: boolean;
   video: boolean;
   screen: boolean;
+}
+
+// WebRTC/Socket Service Types
+export interface SocketCallback<T = unknown> {
+  (data: T): void;
+}
+
+export interface SocketErrorResponse {
+  error: string;
+}
+
+export interface TransportData {
+  id: string;
+  iceParameters: unknown; // mediasoup IceParameters
+  iceCandidates: unknown[]; // mediasoup IceCandidate[]
+  dtlsParameters: unknown; // mediasoup DtlsParameters
+  error?: string;
+}
+
+export interface ProduceResponse {
+  producerId: string;
+  error?: string;
+}
+
+export interface ConsumeResponse {
+  consumerId: string;
+  producerId: string;
+  kind: 'audio' | 'video';
+  rtpParameters: unknown; // mediasoup RtpParameters
+  transportId: string;
+  iceParameters: unknown; // mediasoup IceParameters
+  iceCandidates: unknown[]; // mediasoup IceCandidate[]
+  dtlsParameters: unknown; // mediasoup DtlsParameters
+  error?: string;
+}
+
+export interface ConnectTransportResponse {
+  error?: string;
+}
+
+export interface PerformanceMetrics {
+  averageRenderTime: string;
+  droppedFrames: number;
+  totalFrames: number;
+  dropRate: string;
+  participantCount: number;
 }

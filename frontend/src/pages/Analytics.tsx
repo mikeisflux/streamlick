@@ -3,6 +3,7 @@ import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuthStore } from '../store/authStore';
+import { useBranding } from '../context/BrandingContext';
 import { Button } from '../components/Button';
 
 interface UserAnalytics {
@@ -42,6 +43,7 @@ interface BroadcastHistory {
 
 export const Analytics: React.FC = () => {
   const { user, logout } = useAuthStore();
+  const { branding } = useBranding();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState<UserAnalytics | null>(null);
@@ -58,8 +60,8 @@ export const Analytics: React.FC = () => {
     try {
       setLoading(true);
       const [analyticsRes, historyRes] = await Promise.all([
-        api.get(`/api/analytics/user/${user?.id}`),
-        api.get(`/api/analytics/user/${user?.id}/broadcasts?limit=50`),
+        api.get(`/analytics/user/${user?.id}`),
+        api.get(`/analytics/user/${user?.id}/broadcasts?limit=50`),
       ]);
 
       setAnalytics(analyticsRes.data);
@@ -113,7 +115,21 @@ export const Analytics: React.FC = () => {
     <header className="bg-white shadow-sm">
       <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">🎥 Streamlick</h1>
+          {branding?.logoUrl ? (
+            <img
+              src={branding.logoUrl.startsWith('http') ? branding.logoUrl : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${branding.logoUrl}`}
+              alt={branding.config?.platformName || 'Logo'}
+              className="h-10 object-contain cursor-pointer"
+              onClick={() => navigate('/dashboard')}
+            />
+          ) : (
+            <h1
+              className="text-2xl font-bold text-gray-900 cursor-pointer"
+              onClick={() => navigate('/dashboard')}
+            >
+              {branding?.config?.platformName || 'Streamlick'}
+            </h1>
+          )}
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-600">{user?.email}</span>
             <Button variant="ghost" size="sm" onClick={() => logout()}>
@@ -148,34 +164,6 @@ export const Analytics: React.FC = () => {
           >
             Billing
           </button>
-          {user?.role === 'admin' && (
-            <>
-              <button
-                onClick={() => navigate('/admin/assets')}
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
-              >
-                Admin Assets
-              </button>
-              <button
-                onClick={() => navigate('/admin/settings')}
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
-              >
-                Admin Settings
-              </button>
-              <button
-                onClick={() => navigate('/admin/testing')}
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
-              >
-                Testing
-              </button>
-              <button
-                onClick={() => navigate('/admin/logs')}
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
-              >
-                Logs
-              </button>
-            </>
-          )}
         </nav>
       </div>
     </header>
@@ -183,7 +171,7 @@ export const Analytics: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen">
         {renderHeader()}
         <div className="flex items-center justify-center h-96">
           <div className="text-gray-600">Loading analytics...</div>
@@ -194,7 +182,7 @@ export const Analytics: React.FC = () => {
 
   if (!analytics) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen">
         {renderHeader()}
         <div className="flex flex-col items-center justify-center h-96">
           <div className="text-gray-600 mb-4">No analytics data available</div>
@@ -216,7 +204,7 @@ export const Analytics: React.FC = () => {
   const totalPlatformStreams = platformData.reduce((sum, p) => sum + p.value, 0);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       {renderHeader()}
 
       <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">

@@ -10,6 +10,8 @@
  */
 
 import { audioMixerService } from './audio-mixer.service';
+import type { PerformanceMetrics } from '../types';
+import logger from '../utils/logger';
 
 interface ParticipantStream {
   id: string;
@@ -66,10 +68,14 @@ class CompositorService {
   private lowerThird: LowerThird | null = null;
   private mediaClipOverlay: HTMLVideoElement | HTMLImageElement | null = null;
 
-  // Canvas dimensions (3840x2160 for 4K UHD)
-  private readonly WIDTH = 3840;
-  private readonly HEIGHT = 2160;
-  private readonly FPS = 30;
+  // Image caching to prevent memory leaks from creating Images every frame
+  private backgroundImage: HTMLImageElement | null = null;
+  private overlayImages: Map<string, HTMLImageElement> = new Map();
+
+  // Canvas dimensions - configurable via environment or defaults to 4K UHD (3840x2160)
+  private readonly WIDTH = parseInt(import.meta.env.VITE_CANVAS_WIDTH || '3840');
+  private readonly HEIGHT = parseInt(import.meta.env.VITE_CANVAS_HEIGHT || '2160');
+  private readonly FPS = parseInt(import.meta.env.VITE_CANVAS_FPS || '30');
 
   // Performance tracking
   private frameCount = 0;
@@ -77,7 +83,7 @@ class CompositorService {
   private lastFpsReport = 0;
   private renderTimes: number[] = [];
   private droppedFrames = 0;
-  private performanceCallback?: (metrics: any) => void;
+  private performanceCallback?: (metrics: PerformanceMetrics) => void;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -93,7 +99,7 @@ class CompositorService {
    * Initialize compositor with participants
    */
   async initialize(participants: ParticipantStream[]): Promise<void> {
-    console.log('Initializing compositor with', participants.length, 'participants');
+    logger.info('Initializing compositor with', participants.length, 'participants');
 
     // Clear existing state
     this.stop();
@@ -125,7 +131,7 @@ class CompositorService {
    * Add a participant to the composition
    */
   async addParticipant(participant: ParticipantStream): Promise<void> {
-    console.log('Adding participant to compositor:', participant.id);
+    logger.info('Adding participant to compositor:', participant.id);
 
     const video = document.createElement('video');
     video.srcObject = participant.stream;
@@ -133,13 +139,20 @@ class CompositorService {
     video.playsInline = true;
     video.muted = true; // Mute for composition (audio handled separately)
 
-    // Wait for video to be ready
-    await new Promise<void>((resolve) => {
-      video.onloadedmetadata = () => {
-        video.play();
-        resolve();
-      };
-    });
+    // Wait for video to be ready with 5 second timeout
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        video.onloadedmetadata = () => {
+          video.play().catch(err => logger.error('Failed to play video:', err));
+          resolve();
+        };
+      }),
+      new Promise<void>((_, reject) => setTimeout(() => {
+        const error = new Error(`Video metadata load timeout for participant ${participant.id}`);
+        logger.error(error.message);
+        reject(error);
+      }, 5000))
+    ]);
 
     this.videoElements.set(participant.id, video);
     this.participants.set(participant.id, participant);
@@ -149,7 +162,7 @@ class CompositorService {
    * Remove a participant from the composition
    */
   removeParticipant(participantId: string): void {
-    console.log('Removing participant from compositor:', participantId);
+    logger.info('Removing participant from compositor:', participantId);
 
     const video = this.videoElements.get(participantId);
     if (video) {
@@ -165,7 +178,7 @@ class CompositorService {
    * Update layout configuration
    */
   setLayout(layout: LayoutConfig): void {
-    console.log('Updating compositor layout:', layout.type);
+    logger.info('Updating compositor layout:', layout.type);
     this.layout = layout;
   }
 
@@ -173,12 +186,78 @@ class CompositorService {
    * Add overlay asset (logo, banner, etc.)
    */
   async addOverlay(overlay: OverlayAsset): Promise<void> {
-    console.log('Adding overlay:', overlay.type, overlay.id);
+    logger.info('Adding overlay:', overlay.type, overlay.id);
 
     if (overlay.type === 'background') {
-      this.background = overlay;
+      // Preload background image with 10 second timeout before setting overlay
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+
+      try {
+        await Promise.race([
+          new Promise<void>((resolve, reject) => {
+            img.onload = () => {
+              // Clean up event listeners to prevent memory leaks
+              img.onload = null;
+              img.onerror = null;
+              resolve();
+            };
+            img.onerror = () => {
+              // Clean up event listeners
+              img.onload = null;
+              img.onerror = null;
+              reject(new Error('Failed to load background image'));
+            };
+            img.src = overlay.url;
+          }),
+          new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error('Background image load timeout')), 10000)
+          )
+        ]);
+
+        // Only set overlay and image if loading succeeded
+        this.background = overlay;
+        this.backgroundImage = img;
+      } catch (error) {
+        logger.error('Failed to load background image:', error);
+        // Maintain consistent state - don't set overlay or image on error
+        throw error;
+      }
     } else {
       this.overlays.push(overlay);
+
+      // Preload overlay image with 10 second timeout
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+
+      try {
+        await Promise.race([
+          new Promise<void>((resolve, reject) => {
+            img.onload = () => {
+              // Clean up event listeners to prevent memory leaks
+              img.onload = null;
+              img.onerror = null;
+              resolve();
+            };
+            img.onerror = () => {
+              // Clean up event listeners
+              img.onload = null;
+              img.onerror = null;
+              reject(new Error(`Failed to load overlay image: ${overlay.id}`));
+            };
+            img.src = overlay.url;
+          }),
+          new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error(`Overlay image load timeout: ${overlay.id}`)), 10000)
+          )
+        ]);
+        this.overlayImages.set(overlay.id, img);
+      } catch (error) {
+        logger.error(`Failed to load overlay image ${overlay.id}:`, error);
+        // Remove from overlays array on failure
+        this.overlays = this.overlays.filter((o) => o.id !== overlay.id);
+        throw error;
+      }
     }
   }
 
@@ -188,8 +267,14 @@ class CompositorService {
   removeOverlay(overlayId: string): void {
     this.overlays = this.overlays.filter((o) => o.id !== overlayId);
 
+    // Clean up cached overlay image
+    if (this.overlayImages.has(overlayId)) {
+      this.overlayImages.delete(overlayId);
+    }
+
     if (this.background?.id === overlayId) {
       this.background = null;
+      this.backgroundImage = null;
     }
   }
 
@@ -199,7 +284,9 @@ class CompositorService {
   addChatMessage(message: ChatMessage): void {
     this.chatMessages.push(message);
 
-    // Keep only last 50 messages
+    // Keep only last 50 messages - use slice to avoid O(n) shift operation
+    // Slice is more efficient as it creates a new array with correct references
+    // rather than shifting all elements one position
     if (this.chatMessages.length > 50) {
       this.chatMessages = this.chatMessages.slice(-50);
     }
@@ -267,7 +354,7 @@ class CompositorService {
   start(): void {
     if (this.isCompositing) return;
 
-    console.log('Starting compositor');
+    logger.info('Starting compositor');
     this.isCompositing = true;
 
     // Capture stream from canvas
@@ -282,7 +369,7 @@ class CompositorService {
    * Stop compositing
    */
   stop(): void {
-    console.log('Stopping compositor');
+    logger.info('Stopping compositor');
     this.isCompositing = false;
 
     if (this.animationFrameId) {
@@ -294,6 +381,10 @@ class CompositorService {
       this.outputStream.getTracks().forEach((track) => track.stop());
       this.outputStream = null;
     }
+
+    // Clean up cached images
+    this.backgroundImage = null;
+    this.overlayImages.clear();
 
     // Stop audio mixer
     audioMixerService.stop();
@@ -391,14 +482,15 @@ class CompositorService {
         this.drawMediaClipOverlay();
       }
     } catch (error) {
-      console.error('Compositor animation error:', error);
+      logger.error('Compositor animation error:', error);
     }
 
     // Track render time
     const renderTime = performance.now() - frameStartTime;
     this.renderTimes.push(renderTime);
 
-    // Keep only last 100 render times
+    // Keep only last 100 render times for performance tracking
+    // This provides a rolling window for FPS and render time calculations without unbounded memory growth
     if (this.renderTimes.length > 100) {
       this.renderTimes.shift();
     }
@@ -443,20 +535,20 @@ class CompositorService {
       this.performanceCallback(metrics);
     }
 
-    console.log('Compositor performance:', metrics);
+    logger.performance('Compositor performance:', metrics);
   }
 
   /**
    * Set performance callback for external monitoring
    */
-  setPerformanceCallback(callback: (metrics: any) => void): void {
+  setPerformanceCallback(callback: (metrics: PerformanceMetrics) => void): void {
     this.performanceCallback = callback;
   }
 
   /**
    * Get current performance metrics
    */
-  getPerformanceMetrics(): any {
+  getPerformanceMetrics(): PerformanceMetrics | null {
     if (this.renderTimes.length === 0) return null;
 
     const avgRenderTime = this.renderTimes.reduce((a, b) => a + b, 0) / this.renderTimes.length;
@@ -474,13 +566,11 @@ class CompositorService {
    * Draw background image
    */
   private drawBackground(): void {
-    if (!this.background || !this.ctx) return;
+    if (!this.background || !this.ctx || !this.backgroundImage) return;
 
-    const img = new Image();
-    img.src = this.background.url;
-
+    // Use cached image - no new Image objects created every frame!
     // Draw stretched to fill canvas
-    this.ctx.drawImage(img, 0, 0, this.WIDTH, this.HEIGHT);
+    this.ctx.drawImage(this.backgroundImage, 0, 0, this.WIDTH, this.HEIGHT);
   }
 
   /**
@@ -697,8 +787,9 @@ class CompositorService {
     if (!this.ctx) return;
 
     this.overlays.forEach((overlay) => {
-      const img = new Image();
-      img.src = overlay.url;
+      // Use cached image - no new Image objects created every frame!
+      const img = this.overlayImages.get(overlay.id);
+      if (!img) return; // Image not loaded yet
 
       const pos = overlay.position || { x: 0, y: 0 };
       const width = overlay.position?.width || img.width;

@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { authMiddleware } from '../middleware/auth.middleware';
+import { authenticate as authMiddleware } from '../auth/middleware';
 import logger from '../utils/logger';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 const router = Router();
 
@@ -255,6 +257,127 @@ router.delete('/diagnostic', authMiddleware, async (req: Request, res: Response)
   } catch (error: any) {
     logger.error('Clear logs error:', error);
     res.status(500).json({ error: 'Failed to clear logs' });
+  }
+});
+
+/**
+ * GET /api/logs/application
+ * Get application logs from Winston log files
+ */
+router.get('/application', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { limit = 500, level, search } = req.query;
+
+    // Read Winston log files
+    const logsDir = path.join(process.cwd(), 'logs');
+    let logLines: any[] = [];
+
+    try {
+      const combinedLogPath = path.join(logsDir, 'combined.log');
+      const fileExists = await fs.access(combinedLogPath).then(() => true).catch(() => false);
+
+      if (fileExists) {
+        const combinedLog = await fs.readFile(combinedLogPath, 'utf-8');
+        const lines = combinedLog.split('\n').filter(line => line.trim());
+
+        logLines = lines
+          .slice(-Number(limit))
+          .map((line: string) => {
+            try {
+              return JSON.parse(line);
+            } catch {
+              return {
+                timestamp: new Date().toISOString(),
+                level: 'info',
+                message: line,
+              };
+            }
+          })
+          .filter((log: any) => {
+            // Filter by level
+            if (level && log.level !== level) return false;
+
+            // Filter by search
+            if (search && !JSON.stringify(log).toLowerCase().includes(String(search).toLowerCase())) {
+              return false;
+            }
+
+            return true;
+          });
+      }
+    } catch (error) {
+      logger.error('Error reading application log files:', error);
+    }
+
+    res.json({
+      logs: logLines.reverse(), // Most recent first
+      total: logLines.length,
+    });
+  } catch (error: any) {
+    logger.error('Get application logs error:', error);
+    res.status(500).json({ error: 'Failed to fetch application logs' });
+  }
+});
+
+/**
+ * GET /api/logs/oauth
+ * Get OAuth-specific logs
+ */
+router.get('/oauth', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { limit = 100, platform } = req.query;
+
+    const logsDir = path.join(process.cwd(), 'logs');
+    const combinedLogPath = path.join(logsDir, 'combined.log');
+
+    try {
+      const logExists = await fs.access(combinedLogPath).then(() => true).catch(() => false);
+
+      if (logExists) {
+        const logContent = await fs.readFile(combinedLogPath, 'utf-8');
+        const lines = logContent.split('\n').filter(line => line.trim());
+
+        const oauthLogs = lines
+          .slice(-Number(limit) * 5) // Read more to ensure we get enough OAuth logs
+          .map(line => {
+            try {
+              return JSON.parse(line);
+            } catch {
+              return null;
+            }
+          })
+          .filter(log => {
+            if (!log) return false;
+
+            // Filter for OAuth-related logs
+            const message = JSON.stringify(log).toLowerCase();
+            const isOAuth = message.includes('oauth') || message.includes('[oauth]');
+
+            if (!isOAuth) return false;
+
+            // Filter by platform if specified
+            if (platform && !message.includes(String(platform).toLowerCase())) {
+              return false;
+            }
+
+            return true;
+          })
+          .slice(-Number(limit)); // Take only the requested limit
+
+        res.json({
+          logs: oauthLogs.reverse(),
+          total: oauthLogs.length,
+        });
+      } else {
+        res.json({ logs: [], total: 0 });
+      }
+    } catch (error) {
+      logger.error('Error reading OAuth logs:', error);
+      res.json({ logs: [], total: 0 });
+    }
+  } catch (error: any) {
+    logger.error('Get OAuth logs error:', error);
+    res.status(500).json({ error: 'Failed to fetch OAuth logs' });
   }
 });
 

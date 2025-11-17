@@ -17,18 +17,27 @@ export interface StreamerOptions {
   audioBitrate: string;
 }
 
+enum StreamState {
+  STREAMING = 'streaming',
+  RECONNECTING = 'reconnecting',
+  FAILED = 'failed',
+  STOPPED = 'stopped'
+}
+
 interface StreamerState {
   command: any;
   retryCount: number;
   maxRetries: number;
   lastError?: string;
-  isReconnecting: boolean;
+  state: StreamState;
   reconnectTimer?: NodeJS.Timeout;
 }
 
 const activeStreamers = new Map<string, StreamerState>();
-const MAX_RETRIES = 5;
-const BASE_RETRY_DELAY = 2000; // 2 seconds
+
+// Configurable retry parameters via environment variables
+const MAX_RETRIES = parseInt(process.env.RTMP_MAX_RETRIES || '5', 10);
+const BASE_RETRY_DELAY = parseInt(process.env.RTMP_BASE_RETRY_DELAY || '2000', 10); // milliseconds
 
 /**
  * Start RTMP streaming with automatic reconnection
@@ -44,7 +53,7 @@ function createStream(
 
   // Calculate encoder parameters dynamically for optimal streaming
   // Based on industry best practices: YouTube (6-8Mbps), Twitch (6Mbps max), Facebook (4Mbps recommended)
-  const bitrateNumeric = parseInt(options.videoBitrate);
+  const bitrateNumeric = parseInt(options.videoBitrate, 10);
   const bufsize = `${bitrateNumeric * 2}k`; // 2x bitrate for VBV buffer (industry standard)
   const gopSize = options.fps * 2; // 2-second keyframe interval (required by YouTube, Twitch, Facebook)
 
@@ -120,7 +129,7 @@ function createStream(
 
       const state = activeStreamers.get(streamKey);
       if (state) {
-        state.isReconnecting = false;
+        state.state = StreamState.STREAMING;
         (state as any).startTime = startTime;
       }
     })
@@ -151,9 +160,9 @@ function createStream(
         broadcastId
       );
 
-      // Check if we should retry
-      if (state.retryCount < state.maxRetries && !state.isReconnecting) {
-        state.isReconnecting = true;
+      // Check if we should retry (atomic state transition)
+      if (state.retryCount < state.maxRetries && state.state === StreamState.STREAMING) {
+        state.state = StreamState.RECONNECTING;
         state.retryCount++;
 
         // Calculate exponential backoff delay
@@ -224,15 +233,15 @@ function createStream(
         {
           destination: dest.platform,
           duration,
-          wasReconnecting: state?.isReconnecting || false,
+          wasReconnecting: state?.state === StreamState.RECONNECTING || false,
         },
         broadcastId
       );
 
-      if (state && !state.isReconnecting) {
-        // Stream ended unexpectedly, try to reconnect
+      if (state && state.state === StreamState.STREAMING) {
+        // Stream ended unexpectedly, try to reconnect (atomic state transition)
         if (state.retryCount < state.maxRetries) {
-          state.isReconnecting = true;
+          state.state = StreamState.RECONNECTING;
           state.retryCount++;
 
           const delay = Math.min(BASE_RETRY_DELAY * Math.pow(2, state.retryCount - 1), 30000);
@@ -261,19 +270,36 @@ function createStream(
       }
     });
 
-  command.run();
-
-  // Store or update state
+  // Store or update state BEFORE running command to avoid race condition
   const existingState = activeStreamers.get(streamKey);
   if (existingState) {
     existingState.command = command;
+    existingState.state = StreamState.STREAMING;
   } else {
     activeStreamers.set(streamKey, {
       command,
       retryCount,
       maxRetries: MAX_RETRIES,
-      isReconnecting: false,
+      state: StreamState.STREAMING,
     });
+  }
+
+  // Try to run the command - if it fails, remove from activeStreamers
+  try {
+    command.run();
+  } catch (error) {
+    logger.error(`Failed to start FFmpeg command for ${dest.platform}:`, error);
+    diagnosticLogger.logError(
+      'ffmpeg',
+      'FFmpegStreamer',
+      `Failed to run FFmpeg command for ${dest.platform}`,
+      error as Error,
+      { destination: dest.platform, destinationId: dest.id },
+      broadcastId
+    );
+    // Remove from activeStreamers since command failed to start
+    activeStreamers.delete(streamKey);
+    return;
   }
 }
 
@@ -351,7 +377,7 @@ export function getStreamStats(broadcastId: string, destinationId: string): {
   retryCount: number;
   maxRetries: number;
   lastError?: string;
-  isReconnecting: boolean;
+  state: StreamState;
 } | null {
   const streamKey = `${broadcastId}-${destinationId}`;
   const state = activeStreamers.get(streamKey);
@@ -364,7 +390,7 @@ export function getStreamStats(broadcastId: string, destinationId: string): {
     retryCount: state.retryCount,
     maxRetries: state.maxRetries,
     lastError: state.lastError,
-    isReconnecting: state.isReconnecting,
+    state: state.state,
   };
 }
 
@@ -381,7 +407,7 @@ export function getAllStreamStats(broadcastId: string): Map<string, any> {
         retryCount: state.retryCount,
         maxRetries: state.maxRetries,
         lastError: state.lastError,
-        isReconnecting: state.isReconnecting,
+        state: state.state,
       });
     }
   });
@@ -406,12 +432,18 @@ export function retryStream(
     return false;
   }
 
-  if (state.isReconnecting) {
+  if (state.state === StreamState.RECONNECTING) {
     logger.warn(`Stream ${streamKey} is already reconnecting`);
     return false;
   }
 
   logger.info(`Manually retrying stream for ${dest.platform}`);
+
+  // Clear any pending reconnection timer
+  if (state.reconnectTimer) {
+    clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = undefined;
+  }
 
   // Clear existing command if any
   if (state.command) {

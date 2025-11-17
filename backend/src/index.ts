@@ -4,6 +4,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
+import cookieParser from 'cookie-parser';
 
 import authRoutes from './api/auth.routes';
 import broadcastsRoutes from './api/broadcasts.routes';
@@ -18,17 +20,38 @@ import logsRoutes from './routes/logs.routes';
 import mediaClipsRoutes from './api/media-clips.routes';
 import participantControlRoutes from './routes/participant.routes';
 import backgroundsRoutes from './api/backgrounds.routes';
+import adminRoutes from './api/admin.routes';
 import adminAssetsRoutes from './api/admin-assets.routes';
 import adminSettingsRoutes from './api/admin-settings.routes';
 import adminTestingRoutes from './api/admin-testing.routes';
+import adminLogsRoutes from './api/admin-logs.routes';
 import moderationRoutes from './api/moderation.routes';
 import analyticsRoutes from './api/analytics.routes';
 import mediaServersRoutes from './api/media-servers.routes';
+import infrastructureRoutes from './api/infrastructure.routes';
+import brandingRoutes, { publicBrandingRouter } from './api/branding.routes';
+import tokenWarningsRoutes from './api/token-warnings.routes';
+import pageContentRoutes from './api/page-content.routes';
+import emailsRoutes from './api/emails.routes';
+import commentsRoutes from './api/comments.routes';
 
 import initializeSocket from './socket';
 import logger from './utils/logger';
+import { validateCsrfToken } from './auth/csrf';
 
 dotenv.config();
+
+// Validate critical environment variables at startup
+if (!process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_KEY.length < 32) {
+  logger.error('ENCRYPTION_KEY must be set and at least 32 characters long');
+  logger.error('Generate one with: openssl rand -hex 32');
+  process.exit(1);
+}
+
+if (!process.env.DATABASE_URL) {
+  logger.error('DATABASE_URL must be set');
+  process.exit(1);
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -37,23 +60,44 @@ const io = initializeSocket(server);
 const PORT = process.env.API_PORT || 3000;
 
 // Middleware
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" } // Allow cross-origin resources
+}));
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3002',
-  credentials: true,
+  credentials: true, // Allow cookies
 }));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(cookieParser()); // Parse cookies
 
-// Rate limiting
+// Default request size limit - small for security (DoS prevention)
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
+
+// Increased limits for specific endpoints that need to handle larger payloads
+app.use('/api/destinations/branding/upload', express.json({ limit: '10mb' }));
+app.use('/api/broadcasts/clips/upload', express.json({ limit: '50mb' }));
+app.use('/api/broadcasts/clips/upload', express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Rate limiting - configurable via environment variables
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10), // default 15 minutes (900000ms)
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '500', 10), // default 500 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 app.use('/api/', limiter);
 
-// Serve uploaded media clips
-app.use('/uploads', express.static('uploads'));
+// CSRF protection for all API routes (except GET, HEAD, OPTIONS, webhooks)
+app.use('/api/', validateCsrfToken);
+
+// Serve uploaded media clips and branding images with CORS
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+}, express.static(path.join(__dirname, '../uploads')));
 
 // Health check
 app.get('/health', (req, res) => {
@@ -76,15 +120,33 @@ app.use('/api/broadcasts', participantControlRoutes);
 app.use('/api/backgrounds', backgroundsRoutes);
 app.use('/api/admin/assets', adminAssetsRoutes);
 app.use('/api/assets', adminAssetsRoutes); // Public endpoint for defaults
-app.use('/api/admin', adminSettingsRoutes);
 app.use('/api/admin/testing', adminTestingRoutes);
+app.use('/api/admin/branding', brandingRoutes);
+app.use('/api/admin/page-content', pageContentRoutes);
+app.use('/api/admin', adminRoutes); // Admin management routes (users, broadcasts, templates, analytics)
+app.use('/api/admin', adminSettingsRoutes); // Admin settings routes (system-config, storage-stats, etc)
+app.use('/api/admin/logs', adminLogsRoutes); // Admin logs routes (system logs, diagnostics)
 app.use('/api/moderation', moderationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/media-servers', mediaServersRoutes);
+app.use('/api/infrastructure', infrastructureRoutes);
+app.use('/api/branding', publicBrandingRouter); // Public branding endpoint
+app.use('/api/token-warnings', tokenWarningsRoutes);
+app.use('/api/page-content', pageContentRoutes); // Public endpoint for getting page content
+app.use('/api/emails', emailsRoutes); // Email management routes
+app.use('/api/comments', commentsRoutes); // Comment posting routes
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  logger.error('Unhandled error:', err);
+  // Sanitize error before logging to prevent exposing sensitive data
+  const sanitizedError = {
+    message: err.message || 'Unknown error',
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    code: err.code,
+    statusCode: err.statusCode || err.status
+  };
+
+  logger.error('Unhandled error:', sanitizedError);
   res.status(500).json({ error: 'Internal server error' });
 });
 

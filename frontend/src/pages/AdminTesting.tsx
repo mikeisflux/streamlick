@@ -319,14 +319,14 @@ export default function AdminTesting() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 p-8 flex items-center justify-center">
+      <div className="min-h-screen p-8 flex items-center justify-center">
         <div className="text-white text-xl">Loading test suites...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 p-8">
+    <div className="min-h-screen p-8">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">🧪 Production Testing Dashboard</h1>

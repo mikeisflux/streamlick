@@ -13,6 +13,8 @@ import logger from '../utils/logger';
 interface Pipeline {
   videoPlainTransport: PlainTransport | null;
   audioPlainTransport: PlainTransport | null;
+  videoConsumer: any | null;
+  audioConsumer: any | null;
   ffmpegProcesses: Map<string, any>;
 }
 
@@ -39,10 +41,20 @@ export async function createCompositorPipeline(
       comedia: true,
     });
 
+    // Add error handler for video transport (listenererror for listening socket errors)
+    videoTransport.on('listenererror', (error) => {
+      logger.error(`Video plain transport listener error for broadcast ${broadcastId}:`, error);
+    });
+
     const audioTransport = await router.createPlainTransport({
       listenIp: { ip: '127.0.0.1', announcedIp: undefined },
       rtcpMux: false,
       comedia: true,
+    });
+
+    // Add error handler for audio transport (listenererror for listening socket errors)
+    audioTransport.on('listenererror', (error) => {
+      logger.error(`Audio plain transport listener error for broadcast ${broadcastId}:`, error);
     });
 
     logger.info(
@@ -142,6 +154,8 @@ export async function createCompositorPipeline(
     activePipelines.set(broadcastId, {
       videoPlainTransport: videoTransport,
       audioPlainTransport: audioTransport,
+      videoConsumer,
+      audioConsumer,
       ffmpegProcesses,
     });
 
@@ -174,15 +188,30 @@ export async function stopCompositorPipeline(broadcastId: string): Promise<void>
     }
   });
 
+  // Close consumers
+  try {
+    if (pipeline.videoConsumer && !pipeline.videoConsumer.closed) {
+      pipeline.videoConsumer.close();
+      logger.info('Video consumer closed');
+    }
+    if (pipeline.audioConsumer && !pipeline.audioConsumer.closed) {
+      pipeline.audioConsumer.close();
+      logger.info('Audio consumer closed');
+    }
+  } catch (error) {
+    logger.error('Error closing consumers:', error);
+  }
+
   // Close plain transports
   try {
-    if (pipeline.videoPlainTransport) {
-      await pipeline.videoPlainTransport.close();
+    if (pipeline.videoPlainTransport && !pipeline.videoPlainTransport.closed) {
+      pipeline.videoPlainTransport.close();
+      logger.info('Video plain transport closed');
     }
-    if (pipeline.audioPlainTransport) {
-      await pipeline.audioPlainTransport.close();
+    if (pipeline.audioPlainTransport && !pipeline.audioPlainTransport.closed) {
+      pipeline.audioPlainTransport.close();
+      logger.info('Audio plain transport closed');
     }
-    logger.info('Plain transports closed');
   } catch (error) {
     logger.error('Error closing plain transports:', error);
   }

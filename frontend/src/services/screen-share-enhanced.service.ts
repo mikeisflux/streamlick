@@ -9,8 +9,10 @@
  * - Multiple screen share support
  */
 
-import { io, Socket } from 'socket.io-client';
+import io from 'socket.io-client';
 import { EventEmitter } from 'events';
+
+type Socket = ReturnType<typeof io>;
 
 export interface ScreenShareParticipant {
   participantId: string;
@@ -131,7 +133,7 @@ export class ScreenShareEnhancedService extends EventEmitter {
         video: {
           cursor: 'always',
           displaySurface: 'monitor',
-        },
+        } as MediaTrackConstraints,
         audio: includeSystemAudio ? {
           echoCancellation: false,
           noiseSuppression: false,
@@ -280,7 +282,7 @@ export class ScreenShareEnhancedService extends EventEmitter {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           cursor: 'always',
-        },
+        } as MediaTrackConstraints,
         audio: {
           echoCancellation: false,
           noiseSuppression: false,

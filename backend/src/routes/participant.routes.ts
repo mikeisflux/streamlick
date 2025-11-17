@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authMiddleware } from '../middleware/auth.middleware';
-import { logger } from '../utils/logger';
+import { authenticate as authMiddleware } from '../auth/middleware';
+import logger from '../utils/logger';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -30,11 +30,11 @@ router.post('/:broadcastId/ban', authMiddleware, async (req: Request, res: Respo
     }
 
     // Create ban record
-    const ban = await prisma.participantBan.create({
+    const ban = await prisma.bannedParticipant.create({
       data: {
         broadcastId,
-        participantId,
-        bannedAt: new Date(),
+        user: { connect: { id: participantId } },
+        bannedBy: userId,
       },
     });
 
@@ -70,10 +70,10 @@ router.delete('/:broadcastId/ban/:participantId', authMiddleware, async (req: Re
     }
 
     // Delete ban record
-    await prisma.participantBan.deleteMany({
+    await prisma.bannedParticipant.deleteMany({
       where: {
         broadcastId,
-        participantId,
+        user: { id: participantId },
       },
     });
 
@@ -109,9 +109,8 @@ router.get('/:broadcastId/bans', authMiddleware, async (req: Request, res: Respo
     }
 
     // Get all bans for this broadcast
-    const bans = await prisma.participantBan.findMany({
+    const bans = await prisma.bannedParticipant.findMany({
       where: { broadcastId },
-      orderBy: { bannedAt: 'desc' },
     });
 
     res.json({ bans });
@@ -129,10 +128,10 @@ router.get('/:broadcastId/ban-check/:participantId', async (req: Request, res: R
   try {
     const { broadcastId, participantId } = req.params;
 
-    const ban = await prisma.participantBan.findFirst({
+    const ban = await prisma.bannedParticipant.findFirst({
       where: {
         broadcastId,
-        participantId,
+        user: { id: participantId },
       },
     });
 

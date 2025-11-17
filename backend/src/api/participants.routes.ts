@@ -24,6 +24,8 @@ router.post('/invite', authenticate, async (req: AuthRequest, res) => {
     }
 
     const joinLinkToken = generateToken(32);
+    // Invite links expire after 24 hours
+    const joinLinkExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     const participant = await prisma.participant.create({
       data: {
@@ -32,6 +34,7 @@ router.post('/invite', authenticate, async (req: AuthRequest, res) => {
         role: role || 'guest',
         status: 'invited',
         joinLinkToken,
+        joinLinkExpiry,
       },
     });
 
@@ -62,8 +65,23 @@ router.post('/join/:token', optionalAuth, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Invalid invite link' });
     }
 
+    // Check if invite link has expired
+    if (participant.joinLinkExpiry && participant.joinLinkExpiry < new Date()) {
+      return res.status(410).json({ error: 'Invite link has expired' });
+    }
+
     if (participant.status === 'joined') {
       return res.status(400).json({ error: 'Invite link already used' });
+    }
+
+    // Validate invite is for intended user if userId was specified
+    if (participant.userId) {
+      if (!req.user) {
+        return res.status(401).json({ error: 'This invite requires authentication' });
+      }
+      if (req.user.userId !== participant.userId) {
+        return res.status(403).json({ error: 'This invite is for a different user' });
+      }
     }
 
     const updated = await prisma.participant.update({

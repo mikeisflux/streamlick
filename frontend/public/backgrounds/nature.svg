@@ -1,0 +1,14 @@
+<svg width="1920" height="1080" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="natureGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0c4a6e;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#0369a1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#065f46;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#natureGrad)"/>
+  <!-- Mountain silhouettes -->
+  <path d="M 0 700 L 400 400 L 800 700 Z" fill="#064e3b" opacity="0.4"/>
+  <path d="M 600 700 L 1000 300 L 1400 700 Z" fill="#064e3b" opacity="0.5"/>
+  <path d="M 1200 700 L 1600 450 L 1920 700 Z" fill="#064e3b" opacity="0.4"/>
+</svg>

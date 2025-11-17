@@ -22,25 +22,40 @@ export function AdminLogs() {
   const [selectedCategory, setSelectedCategory] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [limit, setLimit] = useState(500);
+  const [activeTab, setActiveTab] = useState<'diagnostic' | 'application' | 'oauth'>('application');
 
   useEffect(() => {
     fetchLogs();
-  }, [selectedLevel, selectedCategory, limit]);
+  }, [selectedLevel, selectedCategory, limit, activeTab]);
 
   const fetchLogs = async () => {
     setIsLoading(true);
     try {
       const params: any = { limit };
 
-      if (selectedLevel.length > 0) {
-        params.level = selectedLevel.join(',');
+      // Build endpoint based on active tab
+      let endpoint = '/logs/diagnostic';
+      if (activeTab === 'application') {
+        endpoint = '/logs/application';
+        if (selectedLevel.length > 0) {
+          params.level = selectedLevel[0]; // Application logs use single level
+        }
+        if (searchQuery) {
+          params.search = searchQuery;
+        }
+      } else if (activeTab === 'oauth') {
+        endpoint = '/logs/oauth';
+      } else {
+        // Diagnostic logs
+        if (selectedLevel.length > 0) {
+          params.level = selectedLevel.join(',');
+        }
+        if (selectedCategory.length > 0) {
+          params.category = selectedCategory.join(',');
+        }
       }
 
-      if (selectedCategory.length > 0) {
-        params.category = selectedCategory.join(',');
-      }
-
-      const response = await api.get('/logs/diagnostic', { params });
+      const response = await api.get(endpoint, { params });
       setLogs(response.data.logs || []);
     } catch (error) {
       toast.error('Failed to fetch logs');
@@ -154,14 +169,50 @@ export function AdminLogs() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
+    <div className="min-h-screen text-white p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Diagnostic Logs</h1>
+          <h1 className="text-3xl font-bold mb-2">Application Logs</h1>
           <p className="text-gray-400">
-            View and analyze diagnostic logs for debugging and optimization
+            View and analyze logs for debugging and monitoring
           </p>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="mb-6 border-b border-gray-700">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveTab('application')}
+              className={`px-6 py-3 font-medium transition-colors ${
+                activeTab === 'application'
+                  ? 'text-white border-b-2 border-blue-500'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              📋 Application Logs
+            </button>
+            <button
+              onClick={() => setActiveTab('oauth')}
+              className={`px-6 py-3 font-medium transition-colors ${
+                activeTab === 'oauth'
+                  ? 'text-white border-b-2 border-blue-500'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              🔐 OAuth Logs
+            </button>
+            <button
+              onClick={() => setActiveTab('diagnostic')}
+              className={`px-6 py-3 font-medium transition-colors ${
+                activeTab === 'diagnostic'
+                  ? 'text-white border-b-2 border-blue-500'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              🔧 Diagnostic Logs
+            </button>
+          </div>
         </div>
 
         {/* Controls */}

@@ -1,10 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './store/authStore';
+import { BrandingProvider } from './context/BrandingContext';
 import { Login } from './pages/Login';
 import { VerifyAuth } from './pages/VerifyAuth';
+import { VerifyEmail } from './pages/VerifyEmail';
 import { Dashboard } from './pages/Dashboard';
-import { StudioEnhanced as Studio } from './pages/StudioEnhanced';
+import { Studio } from './pages/Studio';
 import { GuestJoin } from './pages/GuestJoin';
 import { Landing } from './pages/Landing';
 import { Billing } from './pages/Billing';
@@ -14,15 +16,42 @@ import { AdminLogs } from './pages/AdminLogs';
 import AdminSettings from './pages/AdminSettings';
 import AdminTesting from './pages/AdminTesting';
 import { AdminServers } from './pages/AdminServers';
+import { AdminInfrastructure } from './pages/AdminInfrastructure';
+import { Admin } from './pages/Admin';
+import AdminPageManager from './pages/AdminPageManager';
+import { AdminUsers } from './pages/AdminUsers';
+import { AdminBroadcasts } from './pages/AdminBroadcasts';
+import { AdminTemplates } from './pages/AdminTemplates';
+import { AdminAnalytics } from './pages/AdminAnalytics';
+import { AdminEmails } from './pages/AdminEmails';
 import { Privacy } from './pages/Privacy';
 import { Terms } from './pages/Terms';
+import { DataDeletion } from './pages/DataDeletion';
 import { FAQ } from './pages/FAQ';
 import { Analytics } from './pages/Analytics';
+import { OAuthSuccess } from './pages/OAuthSuccess';
 import { useEffect } from 'react';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore((state) => ({
+    isAuthenticated: state.isAuthenticated,
+    user: state.user,
+  }));
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+
+  if (user?.role !== 'admin') {
+    return <Navigate to="/dashboard" />;
+  }
+
+  return <>{children}</>;
 }
 
 function App() {
@@ -33,13 +62,16 @@ function App() {
   }, [checkAuth]);
 
   return (
-    <BrowserRouter>
-      <Toaster position="top-right" />
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/auth/verify" element={<VerifyAuth />} />
-        <Route path="/join/:token" element={<GuestJoin />} />
+    <BrandingProvider>
+      <BrowserRouter>
+        <Toaster position="top-right" />
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/auth/verify" element={<VerifyAuth />} />
+          <Route path="/auth/verify-email" element={<VerifyEmail />} />
+          <Route path="/oauth-success" element={<OAuthSuccess />} />
+          <Route path="/join/:token" element={<GuestJoin />} />
         <Route
           path="/dashboard"
           element={
@@ -81,50 +113,116 @@ function App() {
           }
         />
         <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <Admin />
+            </AdminRoute>
+          }
+        />
+        <Route
           path="/admin/assets"
           element={
-            <PrivateRoute>
+            <AdminRoute>
               <AdminAssets />
-            </PrivateRoute>
+            </AdminRoute>
           }
         />
         <Route
           path="/admin/logs"
           element={
-            <PrivateRoute>
+            <AdminRoute>
               <AdminLogs />
-            </PrivateRoute>
+            </AdminRoute>
           }
         />
         <Route
           path="/admin/settings"
           element={
-            <PrivateRoute>
+            <AdminRoute>
               <AdminSettings />
-            </PrivateRoute>
+            </AdminRoute>
           }
         />
         <Route
           path="/admin/testing"
           element={
-            <PrivateRoute>
+            <AdminRoute>
               <AdminTesting />
-            </PrivateRoute>
+            </AdminRoute>
           }
         />
         <Route
           path="/admin/servers"
           element={
-            <PrivateRoute>
+            <AdminRoute>
               <AdminServers />
-            </PrivateRoute>
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/infrastructure"
+          element={
+            <AdminRoute>
+              <AdminInfrastructure />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/pages"
+          element={
+            <AdminRoute>
+              <AdminPageManager />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <AdminRoute>
+              <AdminUsers />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/broadcasts"
+          element={
+            <AdminRoute>
+              <AdminBroadcasts />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/templates"
+          element={
+            <AdminRoute>
+              <AdminTemplates />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/analytics"
+          element={
+            <AdminRoute>
+              <AdminAnalytics />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/emails"
+          element={
+            <AdminRoute>
+              <AdminEmails />
+            </AdminRoute>
           }
         />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
+        <Route path="/data-deletion" element={<DataDeletion />} />
         <Route path="/faq" element={<FAQ />} />
       </Routes>
     </BrowserRouter>
+    </BrandingProvider>
   );
 }
 

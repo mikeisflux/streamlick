@@ -4,7 +4,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import { authMiddleware } from '../middleware/auth.middleware';
+import { authenticate as authMiddleware } from '../auth/middleware';
 import logger from '../utils/logger';
 
 const router = Router();
@@ -64,15 +64,15 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req: Reques
     const { name } = req.body;
 
     // Save to database
-    const background = await prisma.background.create({
+    const background = await prisma.asset.create({
       data: {
         id: uuidv4(),
         userId,
+        type: 'background',
         name: name || file.originalname,
-        url: `/uploads/backgrounds/${file.filename}`,
-        fileSize: file.size,
+        fileUrl: `/uploads/backgrounds/${file.filename}`,
+        fileSizeBytes: file.size,
         mimeType: file.mimetype,
-        isActive: true,
       },
     });
 
@@ -93,10 +93,10 @@ router.get('/custom', authMiddleware, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user.userId;
 
-    const backgrounds = await prisma.background.findMany({
+    const backgrounds = await prisma.asset.findMany({
       where: {
         userId,
-        isActive: true,
+        type: 'background',
       },
       orderBy: {
         createdAt: 'desc',
@@ -120,7 +120,7 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
     const userId = (req as any).user.userId;
 
     // Get background
-    const background = await prisma.background.findUnique({
+    const background = await prisma.asset.findUnique({
       where: { id },
     });
 
@@ -133,13 +133,13 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
     }
 
     // Delete file
-    const filePath = path.join(__dirname, '../..', background.url);
+    const filePath = path.join(__dirname, '../..', background.fileUrl);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
 
     // Delete from database
-    await prisma.background.delete({
+    await prisma.asset.delete({
       where: { id },
     });
 

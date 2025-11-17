@@ -3,7 +3,7 @@ import express from 'express';
 import destinationsRouter from '../../api/destinations.routes';
 import prisma from '../../database/prisma';
 import { generateAccessToken } from '../../auth/jwt';
-import { encrypt, decrypt } from '../../utils/encryption';
+import { encrypt, decrypt } from '../../utils/crypto';
 
 const app = express();
 app.use(express.json());
@@ -19,6 +19,7 @@ describe('Destinations API', () => {
         email: 'streamer@example.com',
         name: 'Test Streamer',
         planType: 'core',
+        password: 'testpassword123',
       },
     });
 
@@ -108,6 +109,7 @@ describe('Destinations API', () => {
         data: {
           email: 'freeuser@example.com',
           planType: 'free',
+          password: 'testpassword123',
         },
       });
 
@@ -205,6 +207,7 @@ describe('Destinations API', () => {
         data: {
           email: 'other@example.com',
           planType: 'free',
+          password: 'testpassword123',
         },
       });
 
@@ -288,6 +291,7 @@ describe('Destinations API', () => {
         data: {
           email: 'intruder@example.com',
           planType: 'free',
+          password: 'testpassword123',
         },
       });
 
@@ -349,6 +353,7 @@ describe('Destinations API', () => {
         data: {
           email: 'deleter@example.com',
           planType: 'free',
+          password: 'testpassword123',
         },
       });
 

@@ -4,9 +4,11 @@ import { verifyAccessToken } from '../auth/jwt';
 import { ChatManager, ChatMessage } from '../services/chat.service';
 import { streamHealthMonitor, StreamHealthMetrics } from '../services/stream-health.service';
 import logger from '../utils/logger';
+import { setIOInstance } from './io-instance';
+import prisma from '../database/prisma';
 
-// Import adaptive bitrate service (will be available after media-server is compiled)
-// For now, we'll create placeholder types
+// Bitrate profile configuration for adaptive streaming
+// Used by get-bitrate-profiles socket handler to return available quality presets
 interface BitrateProfile {
   name: string;
   videoBitrate: number;
@@ -14,14 +16,6 @@ interface BitrateProfile {
   width: number;
   height: number;
   framerate: number;
-}
-
-interface BitrateAdjustment {
-  broadcastId: string;
-  oldProfile: BitrateProfile;
-  newProfile: BitrateProfile;
-  reason: string;
-  timestamp: Date;
 }
 
 interface SocketData {
@@ -45,14 +39,24 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
   io.use((socket, next) => {
     try {
       const token = socket.handshake.auth.token;
-      if (token) {
-        const payload = verifyAccessToken(token);
-        socket.data.userId = payload.userId;
+
+      // Require authentication - no token means no connection
+      if (!token) {
+        logger.warn(`Socket connection rejected: No authentication token provided (${socket.id})`);
+        return next(new Error('Authentication required'));
       }
+
+      // Verify token
+      const payload = verifyAccessToken(token);
+      socket.data.userId = payload.userId;
+      socket.data.userEmail = payload.email;
+      socket.data.userRole = payload.role;
+
       next();
     } catch (error) {
       logger.error('Socket auth error:', error);
-      next(new Error('Authentication failed'));
+      // Authentication failed - disconnect socket
+      return next(new Error('Authentication failed'));
     }
   });
 
@@ -143,7 +147,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         }
 
         // Update participant role in database
-        const prisma = require('../database/prisma').default;
         await prisma.participant.update({
           where: { id: participantId },
           data: { role: 'guest' }, // 'guest' means live guest
@@ -172,7 +175,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         }
 
         // Update participant role in database
-        const prisma = require('../database/prisma').default;
         await prisma.participant.update({
           where: { id: participantId },
           data: { role: 'backstage' },
@@ -539,6 +541,9 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
       logger.info(`Socket disconnected: ${socket.id}`);
     });
   });
+
+  // Set global io instance for use in routes
+  setIOInstance(io);
 
   return io;
 }

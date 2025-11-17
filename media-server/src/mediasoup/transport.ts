@@ -13,7 +13,7 @@ export async function createWebRtcTransport(router: Router): Promise<WebRtcTrans
     }
   });
 
-  transport.on('close', () => {
+  transport.on('@close', () => {
     logger.info(`WebRTC transport closed [id:${transport.id}]`);
   });
 
@@ -38,7 +38,9 @@ export async function createProducer(
   logger.info(`Producer created [id:${producer.id}, kind:${kind}]`);
 
   producer.on('transportclose', () => {
-    producer.close();
+    if (!producer.closed) {
+      producer.close();
+    }
   });
 
   return producer;
@@ -58,11 +60,15 @@ export async function createConsumer(
   logger.info(`Consumer created [id:${consumer.id}]`);
 
   consumer.on('transportclose', () => {
-    consumer.close();
+    if (!consumer.closed) {
+      consumer.close();
+    }
   });
 
   consumer.on('producerclose', () => {
-    consumer.close();
+    if (!consumer.closed) {
+      consumer.close();
+    }
   });
 
   return consumer;

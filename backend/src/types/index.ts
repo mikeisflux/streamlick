@@ -1,11 +1,8 @@
 export interface JwtPayload {
   userId: string;
   email: string;
-}
-
-export interface MagicLinkToken {
-  email: string;
-  exp: number;
+  role?: 'user' | 'admin';
+  id?: string; // Alias for userId for compatibility
 }
 
 export interface BroadcastStatus {
@@ -18,7 +15,7 @@ export interface BroadcastStatus {
 export interface ParticipantInfo {
   id: string;
   name: string;
-  role: 'host' | 'guest' | 'backstage';
+  role: 'host' | 'guest' | 'backstage' | 'greenroom';
   status: 'invited' | 'joined' | 'disconnected';
   audio: boolean;
   video: boolean;

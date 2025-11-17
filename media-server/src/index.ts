@@ -8,9 +8,47 @@ import { createWorkers, createRouter, getRouter } from './mediasoup/worker';
 import { createWebRtcTransport, connectTransport, createProducer, createConsumer } from './mediasoup/transport';
 import { startRTMPStream, stopRTMPStream } from './rtmp/streamer';
 import { createCompositorPipeline, stopCompositorPipeline } from './rtmp/compositor-pipeline';
+import { diagnosticLogger } from './services/diagnostic-logger.service';
+import { adaptiveBitrateService } from './services/adaptive-bitrate.service';
 import logger from './utils/logger';
 
 dotenv.config();
+
+// Validate critical environment variables at startup
+function validateEnvironment() {
+  const errors: string[] = [];
+
+  if (!process.env.MEDIASOUP_ANNOUNCED_IP) {
+    errors.push('MEDIASOUP_ANNOUNCED_IP must be set (your server\'s public IP address)');
+  }
+
+  if (!process.env.FRONTEND_URL) {
+    errors.push('FRONTEND_URL must be set (e.g., https://streamlick.com)');
+  }
+
+  // Warn about localhost/127.0.0.1 in production
+  if (process.env.NODE_ENV === 'production') {
+    if (process.env.MEDIASOUP_ANNOUNCED_IP === '127.0.0.1' || process.env.MEDIASOUP_ANNOUNCED_IP === 'localhost') {
+      errors.push('MEDIASOUP_ANNOUNCED_IP cannot be localhost/127.0.0.1 in production - use your server\'s public IP');
+    }
+    if (process.env.FRONTEND_URL?.includes('localhost')) {
+      errors.push('FRONTEND_URL cannot contain localhost in production');
+    }
+  }
+
+  if (errors.length > 0) {
+    logger.error('Environment validation failed:');
+    errors.forEach(error => logger.error(`  - ${error}`));
+    process.exit(1);
+  }
+
+  logger.info('Environment validation passed');
+  logger.info(`  MEDIASOUP_ANNOUNCED_IP: ${process.env.MEDIASOUP_ANNOUNCED_IP}`);
+  logger.info(`  FRONTEND_URL: ${process.env.FRONTEND_URL}`);
+  logger.info(`  NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
+}
+
+validateEnvironment();
 
 const app = express();
 const server = http.createServer(app);
@@ -26,8 +64,186 @@ const PORT = process.env.MEDIA_SERVER_PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Define broadcast data structure
+interface BroadcastData {
+  transports: Map<string, any>;
+  producers: Map<string, any>;
+  consumers: Map<string, any>;
+  sockets: Set<string>; // Track connected sockets
+  createdAt: Date;
+  lastActivity: Date;
+}
+
 // Store active rooms and their transports/producers/consumers
-const broadcasts = new Map<string, any>();
+const broadcasts = new Map<string, BroadcastData>();
+
+// Track which broadcast each socket belongs to
+const socketToBroadcast = new Map<string, Set<string>>();
+
+// Mutex for broadcast cleanup to prevent race conditions
+const cleanupLocks = new Map<string, Promise<void>>();
+
+// Helper function to acquire cleanup lock
+async function withCleanupLock<T>(
+  broadcastId: string,
+  operation: () => Promise<T>
+): Promise<T> {
+  // Wait for any existing cleanup to complete
+  while (cleanupLocks.has(broadcastId)) {
+    await cleanupLocks.get(broadcastId);
+  }
+
+  // Create new lock
+  let releaseLock: () => void;
+  const lockPromise = new Promise<void>((resolve) => {
+    releaseLock = resolve;
+  });
+  cleanupLocks.set(broadcastId, lockPromise);
+
+  try {
+    return await operation();
+  } finally {
+    // Release lock
+    cleanupLocks.delete(broadcastId);
+    releaseLock!();
+  }
+}
+
+// Helper function to clean up a broadcast
+async function cleanupBroadcast(broadcastId: string): Promise<void> {
+  const broadcast = broadcasts.get(broadcastId);
+  if (!broadcast) return;
+
+  logger.info(`Cleaning up broadcast ${broadcastId}...`);
+
+  let cleanupErrors: Error[] = [];
+
+  try {
+    // Close all transports
+    try {
+      for (const [transportId, transport] of broadcast.transports) {
+        try {
+          if (!transport.closed) {
+            transport.close();
+            logger.debug(`Closed transport ${transportId}`);
+          }
+        } catch (error) {
+          logger.error(`Error closing transport ${transportId}:`, error);
+          cleanupErrors.push(error as Error);
+        }
+      }
+    } catch (error) {
+      logger.error(`Error iterating transports for ${broadcastId}:`, error);
+      cleanupErrors.push(error as Error);
+    }
+
+    // Close all producers
+    try {
+      for (const [producerId, producer] of broadcast.producers) {
+        try {
+          if (!producer.closed) {
+            producer.close();
+            logger.debug(`Closed producer ${producerId}`);
+          }
+        } catch (error) {
+          logger.error(`Error closing producer ${producerId}:`, error);
+          cleanupErrors.push(error as Error);
+        }
+      }
+    } catch (error) {
+      logger.error(`Error iterating producers for ${broadcastId}:`, error);
+      cleanupErrors.push(error as Error);
+    }
+
+    // Close all consumers
+    try {
+      for (const [consumerId, consumer] of broadcast.consumers) {
+        try {
+          if (!consumer.closed) {
+            consumer.close();
+            logger.debug(`Closed consumer ${consumerId}`);
+          }
+        } catch (error) {
+          logger.error(`Error closing consumer ${consumerId}:`, error);
+          cleanupErrors.push(error as Error);
+        }
+      }
+    } catch (error) {
+      logger.error(`Error iterating consumers for ${broadcastId}:`, error);
+      cleanupErrors.push(error as Error);
+    }
+
+    // Stop any RTMP streams
+    try {
+      await stopCompositorPipeline(broadcastId);
+    } catch (error) {
+      logger.debug(`No compositor pipeline to stop for ${broadcastId}`);
+    }
+
+    try {
+      stopRTMPStream(broadcastId);
+    } catch (error) {
+      logger.debug(`No RTMP stream to stop for ${broadcastId}`);
+    }
+  } catch (error) {
+    logger.error(`Unexpected error during broadcast cleanup for ${broadcastId}:`, error);
+    cleanupErrors.push(error as Error);
+  } finally {
+    // Always remove from broadcasts map, even if errors occurred
+    try {
+      broadcasts.delete(broadcastId);
+      if (cleanupErrors.length > 0) {
+        logger.warn(`Broadcast ${broadcastId} cleaned up with ${cleanupErrors.length} error(s)`);
+      } else {
+        logger.info(`Broadcast ${broadcastId} cleaned up successfully`);
+      }
+    } catch (error) {
+      logger.error(`Error removing broadcast ${broadcastId} from map:`, error);
+    }
+  }
+}
+
+// Helper function to track socket connection to broadcast
+function trackSocketBroadcast(socketId: string, broadcastId: string): void {
+  // Track broadcast for this socket
+  if (!socketToBroadcast.has(socketId)) {
+    socketToBroadcast.set(socketId, new Set());
+  }
+  socketToBroadcast.get(socketId)!.add(broadcastId);
+
+  // Add socket to broadcast
+  const broadcast = broadcasts.get(broadcastId);
+  if (broadcast) {
+    broadcast.sockets.add(socketId);
+    broadcast.lastActivity = new Date();
+  }
+}
+
+// Helper function to remove socket from broadcast tracking
+async function untrackSocketBroadcast(socketId: string): Promise<void> {
+  const broadcastIds = socketToBroadcast.get(socketId);
+  if (!broadcastIds) return;
+
+  for (const broadcastId of broadcastIds) {
+    // Use mutex to prevent race condition when multiple sockets disconnect simultaneously
+    await withCleanupLock(broadcastId, async () => {
+      const broadcast = broadcasts.get(broadcastId);
+      if (broadcast) {
+        broadcast.sockets.delete(socketId);
+
+        // If no more sockets connected, clean up the broadcast
+        if (broadcast.sockets.size === 0) {
+          logger.info(`Last socket disconnected from broadcast ${broadcastId}, cleaning up...`);
+          await cleanupBroadcast(broadcastId);
+        } else {
+          logger.debug(`${broadcast.sockets.size} socket(s) still connected to broadcast ${broadcastId}`);
+        }
+      }
+    });
+  }
+
+  socketToBroadcast.delete(socketId);
+}
 
 // Health check with server stats
 app.get('/health', (req, res) => {
@@ -98,9 +314,11 @@ io.on('connection', (socket) => {
   // Create transport
   socket.on('create-transport', async ({ broadcastId, direction }, callback) => {
     try {
-      const router = getRouter(broadcastId);
+      // Get or create router for this broadcast
+      let router = getRouter(broadcastId);
       if (!router) {
-        throw new Error('Router not found');
+        logger.debug(`Router not found for ${broadcastId}, creating...`);
+        router = await createRouter(broadcastId);
       }
 
       const transport = await createWebRtcTransport(router);
@@ -110,21 +328,31 @@ io.on('connection', (socket) => {
           transports: new Map(),
           producers: new Map(),
           consumers: new Map(),
+          sockets: new Set(),
+          createdAt: new Date(),
+          lastActivity: new Date(),
         });
       }
 
-      const broadcast = broadcasts.get(broadcastId);
+      // Track this socket for this broadcast
+      trackSocketBroadcast(socket.id, broadcastId);
+
+      const broadcast = broadcasts.get(broadcastId)!;
       broadcast.transports.set(transport.id, transport);
 
-      callback({
-        id: transport.id,
-        iceParameters: transport.iceParameters,
-        iceCandidates: transport.iceCandidates,
-        dtlsParameters: transport.dtlsParameters,
-      });
+      if (callback && typeof callback === 'function') {
+        callback({
+          id: transport.id,
+          iceParameters: transport.iceParameters,
+          iceCandidates: transport.iceCandidates,
+          dtlsParameters: transport.dtlsParameters,
+        });
+      }
     } catch (error) {
       logger.error('Create transport error:', error);
-      callback({ error: 'Failed to create transport' });
+      if (callback && typeof callback === 'function') {
+        callback({ error: 'Failed to create transport' });
+      }
     }
   });
 
@@ -144,10 +372,14 @@ io.on('connection', (socket) => {
       }
 
       await connectTransport(transport, dtlsParameters);
-      callback({ connected: true });
+      if (callback && typeof callback === 'function') {
+        callback({ connected: true });
+      }
     } catch (error) {
       logger.error('Connect transport error:', error);
-      callback({ error: 'Failed to connect transport' });
+      if (callback && typeof callback === 'function') {
+        callback({ error: 'Failed to connect transport' });
+      }
     }
   });
 
@@ -171,15 +403,22 @@ io.on('connection', (socket) => {
       const producer = await createProducer(transport, kind, rtpParameters);
 
       const broadcast = broadcasts.get(broadcastId);
+      if (!broadcast) {
+        throw new Error(`Broadcast ${broadcastId} not found`);
+      }
       broadcast.producers.set(producer.id, producer);
 
       // Notify other participants
       socket.to(broadcastId).emit('new-producer', { producerId: producer.id, kind });
 
-      callback({ producerId: producer.id });
+      if (callback && typeof callback === 'function') {
+        callback({ producerId: producer.id });
+      }
     } catch (error) {
       logger.error('Produce error:', error);
-      callback({ error: 'Failed to produce' });
+      if (callback && typeof callback === 'function') {
+        callback({ error: 'Failed to produce' });
+      }
     }
   });
 
@@ -202,7 +441,9 @@ io.on('connection', (socket) => {
       }
 
       if (!router.canConsume({ producerId, rtpCapabilities })) {
-        callback({ error: 'Cannot consume' });
+        if (callback && typeof callback === 'function') {
+          callback({ error: 'Cannot consume' });
+        }
         return;
       }
 
@@ -213,19 +454,23 @@ io.on('connection', (socket) => {
       const consumer = await createConsumer(transport, producer, rtpCapabilities);
       broadcast.consumers.set(consumer.id, consumer);
 
-      callback({
-        consumerId: consumer.id,
-        producerId: producer.id,
-        kind: consumer.kind,
-        rtpParameters: consumer.rtpParameters,
-        transportId: transport.id,
-        iceParameters: transport.iceParameters,
-        iceCandidates: transport.iceCandidates,
-        dtlsParameters: transport.dtlsParameters,
-      });
+      if (callback && typeof callback === 'function') {
+        callback({
+          consumerId: consumer.id,
+          producerId: producer.id,
+          kind: consumer.kind,
+          rtpParameters: consumer.rtpParameters,
+          transportId: transport.id,
+          iceParameters: transport.iceParameters,
+          iceCandidates: transport.iceCandidates,
+          dtlsParameters: transport.dtlsParameters,
+        });
+      }
     } catch (error) {
       logger.error('Consume error:', error);
-      callback({ error: 'Failed to consume' });
+      if (callback && typeof callback === 'function') {
+        callback({ error: 'Failed to consume' });
+      }
     }
   });
 
@@ -251,22 +496,30 @@ io.on('connection', (socket) => {
 
         if (videoProducer && audioProducer) {
           await createCompositorPipeline(router, broadcastId, videoProducer, audioProducer, destinations);
-          socket.emit('rtmp-started', { broadcastId, method: 'compositor-pipeline' });
+          if (socket.connected) {
+            socket.emit('rtmp-started', { broadcastId, method: 'compositor-pipeline' });
+          }
           logger.info('RTMP started with compositor pipeline');
         } else {
           logger.warn('Composite producers not found, falling back to legacy RTMP');
           startRTMPStream(broadcastId, destinations);
-          socket.emit('rtmp-started', { broadcastId, method: 'legacy' });
+          if (socket.connected) {
+            socket.emit('rtmp-started', { broadcastId, method: 'legacy' });
+          }
         }
       } else {
         // Fallback to legacy RTMP (for backwards compatibility)
         logger.info('Using legacy RTMP streaming');
         startRTMPStream(broadcastId, destinations);
-        socket.emit('rtmp-started', { broadcastId, method: 'legacy' });
+        if (socket.connected) {
+          socket.emit('rtmp-started', { broadcastId, method: 'legacy' });
+        }
       }
     } catch (error) {
       logger.error('Start RTMP error:', error);
-      socket.emit('rtmp-error', { error: 'Failed to start RTMP stream' });
+      if (socket.connected) {
+        socket.emit('rtmp-error', { error: 'Failed to start RTMP stream' });
+      }
     }
   });
 
@@ -279,24 +532,34 @@ io.on('connection', (socket) => {
       // Stop legacy RTMP (if active)
       stopRTMPStream(broadcastId);
 
-      socket.emit('rtmp-stopped', { broadcastId });
+      if (socket.connected) {
+        socket.emit('rtmp-stopped', { broadcastId });
+      }
       logger.info(`RTMP streaming stopped for broadcast ${broadcastId}`);
     } catch (error) {
       logger.error('Stop RTMP error:', error);
-      socket.emit('rtmp-error', { error: 'Failed to stop RTMP stream' });
+      if (socket.connected) {
+        socket.emit('rtmp-error', { error: 'Failed to stop RTMP stream' });
+      }
     }
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     logger.info(`Media socket disconnected: ${socket.id}`);
+
+    // Clean up broadcasts if this was the last socket
+    await untrackSocketBroadcast(socket.id);
+
+    logger.debug(`Socket ${socket.id} cleanup completed`);
   });
 });
 
 // Initialize and start server
 async function start() {
   try {
-    // Create mediasoup workers
-    await createWorkers(1);
+    // Create mediasoup workers (at least 2 for redundancy)
+    const numWorkers = parseInt(process.env.MEDIASOUP_WORKERS || '2');
+    await createWorkers(numWorkers);
 
     server.listen(PORT, () => {
       logger.info(`🎥 Streamlick Media Server running on port ${PORT}`);
@@ -310,13 +573,98 @@ async function start() {
 
 start();
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-  server.close(() => {
-    logger.info('Server closed');
+// Force exit after timeout if graceful shutdown hangs (configurable, default 30 seconds)
+const SHUTDOWN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_TIMEOUT_MS || '30000', 10);
+let shutdownTimeout: NodeJS.Timeout | null = null;
+
+// Graceful shutdown handler
+async function gracefulShutdown(signal: string) {
+  logger.info(`${signal} received, initiating graceful shutdown...`);
+
+  // Start shutdown timeout
+  shutdownTimeout = setTimeout(() => {
+    logger.error(`Graceful shutdown timeout (${SHUTDOWN_TIMEOUT_MS}ms), forcing exit`);
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+
+  try {
+    // 1. Stop accepting new connections
+    logger.info('Closing server to prevent new connections...');
+    server.close();
+
+    // 2. Disconnect all active socket.io connections
+    logger.info('Disconnecting all active socket connections...');
+    io.disconnectSockets();
+
+    // 3. Clean up all broadcasts
+    logger.info(`Cleaning up ${broadcasts.size} active broadcast(s)...`);
+    const cleanupPromises = Array.from(broadcasts.keys()).map(broadcastId =>
+      cleanupBroadcast(broadcastId)
+    );
+    await Promise.all(cleanupPromises);
+    logger.info('All broadcasts cleaned up');
+
+    // 4. Stop all adaptive bitrate monitoring
+    try {
+      adaptiveBitrateService.stopAll();
+      logger.info('Adaptive bitrate monitoring stopped');
+    } catch (error) {
+      logger.error('Error stopping adaptive bitrate service:', error);
+    }
+
+    // 5. Close diagnostic logger
+    try {
+      diagnosticLogger.destroy();
+      logger.info('Diagnostic logger closed');
+    } catch (error) {
+      logger.error('Error closing diagnostic logger:', error);
+    }
+
+    // 6. Close all mediasoup workers
+    try {
+      const { closeWorkers } = await import('./mediasoup/worker');
+      await closeWorkers();
+      logger.info('Mediasoup workers closed');
+    } catch (error) {
+      logger.error('Error closing workers:', error);
+    }
+
+    // Clear shutdown timeout on successful cleanup
+    if (shutdownTimeout) {
+      clearTimeout(shutdownTimeout);
+      shutdownTimeout = null;
+    }
+
+    logger.info('Graceful shutdown completed successfully');
     process.exit(0);
-  });
+  } catch (error) {
+    logger.error('Error during graceful shutdown:', error);
+
+    // Clear shutdown timeout on error (we're about to exit anyway)
+    if (shutdownTimeout) {
+      clearTimeout(shutdownTimeout);
+      shutdownTimeout = null;
+    }
+
+    process.exit(1);
+  }
+}
+
+// Graceful shutdown on SIGTERM (Docker, Kubernetes)
+process.on('SIGTERM', () => {
+  gracefulShutdown('SIGTERM');
+});
+
+// Graceful shutdown on SIGINT (Ctrl+C)
+process.on('SIGINT', () => {
+  gracefulShutdown('SIGINT');
+});
+
+// Exit handler
+process.on('exit', () => {
+  if (shutdownTimeout) {
+    clearTimeout(shutdownTimeout);
+  }
 });
 
 export { app, server, io };

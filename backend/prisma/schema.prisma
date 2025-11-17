@@ -11,10 +11,14 @@ datasource db {
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
+  password  String   // Hashed password
   name      String?
   avatarUrl String?  @map("avatar_url")
   planType  String   @default("free") @map("plan_type") // free, core, advanced, teams, business
   role      String   @default("user") // user, admin
+  emailVerified            Boolean   @default(false) @map("email_verified")
+  emailVerificationToken   String?   @map("email_verification_token")
+  emailVerificationExpiry  DateTime? @map("email_verification_expiry")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -54,21 +58,22 @@ model Broadcast {
 }
 
 model Destination {
-  id             String   @id @default(uuid())
-  userId         String   @map("user_id")
-  platform       String   // youtube, facebook, linkedin, twitch, custom_rtmp
-  platformUserId String?  @map("platform_user_id")
-  displayName    String?  @map("display_name")
-  rtmpUrl        String?  @map("rtmp_url")
-  streamKey      String?  @map("stream_key") // Encrypted
-  accessToken    String?  @map("access_token") // Encrypted
-  refreshToken   String?  @map("refresh_token") // Encrypted
-  channelId      String?  @map("channel_id") // For platform-specific moderation
-  pageId         String?  @map("page_id") // For Facebook page moderation
-  username       String?  // Platform username for Twitch, etc.
-  isActive       Boolean  @default(true) @map("is_active")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id             String    @id @default(uuid())
+  userId         String    @map("user_id")
+  platform       String    // youtube, facebook, linkedin, twitch, custom_rtmp
+  platformUserId String?   @map("platform_user_id")
+  displayName    String?   @map("display_name")
+  rtmpUrl        String?   @map("rtmp_url")
+  streamKey      String?   @map("stream_key") // Encrypted
+  accessToken    String?   @map("access_token") // Encrypted
+  refreshToken   String?   @map("refresh_token") // Encrypted
+  tokenExpiresAt DateTime? @map("token_expires_at") // When access token expires
+  channelId      String?   @map("channel_id") // For platform-specific moderation
+  pageId         String?   @map("page_id") // For Facebook page moderation
+  username       String?   // Platform username for Twitch, etc.
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   broadcastDestinations BroadcastDestination[]
@@ -82,6 +87,7 @@ model BroadcastDestination {
   destinationId String   @map("destination_id")
   streamUrl     String?  @map("stream_url")
   streamKey     String?  @map("stream_key") // Encrypted
+  liveVideoId   String?  @map("live_video_id") // Platform-specific live video ID (Facebook, YouTube, etc.)
   status        String?  // pending, streaming, ended, error
   viewerCount   Int      @default(0) @map("viewer_count")
   createdAt     DateTime @default(now()) @map("created_at")
@@ -93,16 +99,17 @@ model BroadcastDestination {
 }
 
 model Participant {
-  id            String    @id @default(uuid())
-  broadcastId   String    @map("broadcast_id")
-  userId        String?   @map("user_id")
-  joinLinkToken String?   @unique @map("join_link_token")
-  name          String?
-  role          String?   // host, guest, backstage
-  status        String?   // invited, joined, disconnected
-  joinedAt      DateTime? @map("joined_at")
-  leftAt        DateTime? @map("left_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
+  id                String    @id @default(uuid())
+  broadcastId       String    @map("broadcast_id")
+  userId            String?   @map("user_id")
+  joinLinkToken     String?   @unique @map("join_link_token")
+  joinLinkExpiry    DateTime? @map("join_link_expiry")
+  name              String?
+  role              String?   // host, guest, backstage
+  status            String?   // invited, joined, disconnected
+  joinedAt          DateTime? @map("joined_at")
+  leftAt            DateTime? @map("left_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
 
   broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
   user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -421,4 +428,142 @@ model PlatformAnalytics {
   @@index([date])
   @@index([platform])
   @@map("platform_analytics")
+}
+
+model EmailProvider {
+  id          String   @id @default(uuid())
+  name        String
+  displayName String?  @map("display_name")
+  type        String?  @default("sendgrid") // sendgrid, mailgun, postmark, smtp
+  apiKey      String?  @map("api_key") // Encrypted
+  apiSecret   String?  @map("api_secret") // Encrypted
+  smtpHost    String?  @map("smtp_host")
+  smtpPort    Int?     @map("smtp_port")
+  smtpUser    String?  @map("smtp_user")
+  smtpPass    String?  @map("smtp_pass") // Encrypted
+  fromEmail   String   @map("from_email")
+  fromName    String   @map("from_name")
+  enabled     Boolean  @default(true)
+  isDefault   Boolean  @default(false) @map("is_default")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("email_providers")
+}
+
+model Mailbox {
+  id            String   @id @default(uuid())
+  name          String?
+  email         String   @unique
+  password      String?  // Encrypted
+  type          String?  // imap, pop3, etc
+  imapHost      String?  @map("imap_host")
+  imapPort      Int?     @map("imap_port")
+  smtpHost      String?  @map("smtp_host")
+  smtpPort      Int?     @map("smtp_port")
+  syncFrequency Int?     @map("sync_frequency") // minutes
+  autoReply     String?  @map("auto_reply") @db.Text
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("mailboxes")
+}
+
+model Email {
+  id          String    @id @default(uuid())
+  mailboxId   String?   @map("mailbox_id")
+  fromEmail   String?   @default("") @map("from_email")
+  fromName    String?   @map("from_name")
+  toEmail     String?   @default("") @map("to_email")
+  ccEmails    String?   @map("cc_emails") @db.Text
+  bccEmails   String?   @map("bcc_emails") @db.Text
+  subject     String?   @default("")
+  bodyText    String?   @map("body_text") @db.Text
+  bodyHtml    String?   @map("body_html") @db.Text
+  attachments String?   @db.Text // JSON stored as text
+  headers     String?   @db.Text // JSON stored as text
+  messageId   String?   @map("message_id")
+  inReplyTo   String?   @map("in_reply_to")
+  direction   String?   // inbound, outbound
+  status      String?   // draft, queued, sent, delivered, failed
+  errorMessage String?  @map("error_message") @db.Text
+  sentAt      DateTime? @map("sent_at")
+  receivedAt  DateTime? @map("received_at")
+  isRead      Boolean   @default(false) @map("is_read")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([mailboxId])
+  @@index([sentAt])
+  @@map("emails")
+}
+
+model SiteBranding {
+  id               String   @id @default(uuid())
+  siteName         String?  @map("site_name")
+  siteTagline      String?  @map("site_tagline")
+  platformName     String   @default("Streamlick") @map("platform_name")
+  tagline          String?
+  logoUrl          String?  @map("logo_url")
+  faviconUrl       String?  @map("favicon_url")
+  heroUrl          String?  @map("hero_url")
+  primaryColor     String?  @map("primary_color")
+  secondaryColor   String?  @map("secondary_color")
+  accentColor      String?  @map("accent_color")
+  backgroundColor  String?  @map("background_color")
+  textColor        String?  @map("text_color")
+  metaTitle        String?  @map("meta_title")
+  metaDescription  String?  @map("meta_description") @db.Text
+  metaKeywords     String?  @map("meta_keywords") @db.Text
+  showPoweredBy    Boolean  @default(true) @map("show_powered_by")
+  maintenanceMode  Boolean  @default(false) @map("maintenance_mode")
+  isActive         Boolean  @default(true) @map("is_active")
+  config           Json?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("site_branding")
+}
+
+model CloudProvider {
+  id          String   @id @default(uuid())
+  name        String   // hetzner, aws, digitalocean, etc.
+  displayName String?  @map("display_name")
+  type        String?  @default("compute") // compute, storage, dns
+  apiKey      String   @map("api_key") // Encrypted
+  apiSecret   String?  @map("api_secret") // Encrypted
+  region      String?
+  enabled     Boolean  @default(true)
+  isDefault   Boolean  @default(false) @map("is_default")
+  config      Json?    // Provider-specific configuration
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("cloud_providers")
+}
+
+model InfrastructureServer {
+  id             String   @id @default(uuid())
+  providerId     String?  @map("provider_id")
+  name           String
+  type           String   // media_server, database, cache, etc.
+  status         String   // provisioning, active, stopped, error
+  healthStatus   String?  @map("health_status") // healthy, unhealthy, unknown
+  ipAddress      String?  @map("ip_address")
+  externalId     String?  @map("external_id") // Provider's server ID
+  serverSize     String?  @map("server_size") // cx11, cx21, etc
+  region         String?
+  instanceType   String?  @map("instance_type")
+  cpuCores       Int?     @map("cpu_cores")
+  memoryGb       Int?     @map("memory_gb")
+  specs          Json?    // CPU, RAM, storage specs
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([providerId])
+  @@index([status])
+  @@map("infrastructure_servers")
 }

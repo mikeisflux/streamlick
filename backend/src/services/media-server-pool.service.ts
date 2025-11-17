@@ -45,8 +45,15 @@ class MediaServerPool {
    * MEDIA_SERVERS=http://server1:3001,http://server2:3001,http://server3:3001
    */
   private initializeFromEnv() {
-    const serversEnv = process.env.MEDIA_SERVERS || 'http://localhost:3001';
-    const serverUrls = serversEnv.split(',').map(s => s.trim());
+    const serversEnv = process.env.MEDIA_SERVERS || '';
+
+    // If no servers configured, start with empty pool
+    if (!serversEnv || serversEnv.trim() === '') {
+      logger.warn('No media servers configured in MEDIA_SERVERS environment variable. Pool starting empty. Add servers via admin panel or set MEDIA_SERVERS environment variable.');
+      return;
+    }
+
+    const serverUrls = serversEnv.split(',').map(s => s.trim()).filter(s => s);
 
     serverUrls.forEach((url, index) => {
       const serverId = `media-server-${index + 1}`;
@@ -203,10 +210,17 @@ class MediaServerPool {
    * Check health of individual server
    */
   private async checkServerHealth(server: MediaServer) {
+    // Create abort controller for proper timeout cleanup
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 5000);
+
     try {
       const response = await axios.get(`${server.url}/health`, {
         timeout: 5000,
+        signal: abortController.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (response.status === 200) {
         const stats: MediaServerStats = response.data;
@@ -226,6 +240,9 @@ class MediaServerPool {
         }
       }
     } catch (error: any) {
+      // Clear timeout on error
+      clearTimeout(timeoutId);
+
       // Mark server as unhealthy
       if (server.isHealthy) {
         logger.error(`${server.id} health check failed: ${error.message}`);

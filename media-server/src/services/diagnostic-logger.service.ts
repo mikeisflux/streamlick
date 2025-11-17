@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
-import logger from '../../../backend/src/utils/logger';
+import logger from '../utils/logger';
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug' | 'performance';
 export type LogCategory = 'rtp-pipeline' | 'ffmpeg' | 'compositor' | 'network' | 'system';
@@ -86,11 +86,18 @@ export class DiagnosticLoggerService extends EventEmitter {
   private readonly LOG_DIR = path.join(__dirname, '../../../../logs/diagnostics');
   private currentLogFile: string | null = null;
   private logStream: fs.WriteStream | null = null;
+  private currentDate: string = '';
+  private rotationCheckInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     super();
     this.ensureLogDirectory();
     this.rotateLogFile();
+
+    // Check for date change every hour and rotate if needed
+    this.rotationCheckInterval = setInterval(() => {
+      this.checkAndRotateIfNeeded();
+    }, 3600000); // 1 hour
   }
 
   /**
@@ -103,6 +110,17 @@ export class DiagnosticLoggerService extends EventEmitter {
   }
 
   /**
+   * Check if date has changed and rotate if needed
+   */
+  private checkAndRotateIfNeeded(): void {
+    const date = new Date().toISOString().split('T')[0];
+    if (date !== this.currentDate) {
+      logger.info('Date changed, rotating diagnostic log file');
+      this.rotateLogFile();
+    }
+  }
+
+  /**
    * Rotate log file (daily rotation)
    */
   private rotateLogFile(): void {
@@ -111,6 +129,7 @@ export class DiagnosticLoggerService extends EventEmitter {
     }
 
     const date = new Date().toISOString().split('T')[0];
+    this.currentDate = date;
     this.currentLogFile = path.join(this.LOG_DIR, `diagnostic-${date}.jsonl`);
     this.logStream = fs.createWriteStream(this.currentLogFile, { flags: 'a' });
 
@@ -422,6 +441,11 @@ export class DiagnosticLoggerService extends EventEmitter {
    * Clean up
    */
   destroy(): void {
+    if (this.rotationCheckInterval) {
+      clearInterval(this.rotationCheckInterval);
+      this.rotationCheckInterval = null;
+    }
+
     if (this.logStream) {
       this.logStream.end();
       this.logStream = null;

@@ -1,12 +1,107 @@
 import { Router } from 'express';
 import axios from 'axios';
 import { PrismaClient } from '@prisma/client';
-import { authenticate } from '../middleware/auth';
+import { authenticate } from '../auth/middleware';
 import { encrypt, decrypt } from '../utils/crypto';
 import logger from '../utils/logger';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+/**
+ * Get OAuth credentials from database (admin settings) or environment variables
+ */
+async function getOAuthCredentials(platform: string): Promise<{
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+}> {
+  try {
+    // Try to get from database first
+    const settings = await prisma.systemSetting.findMany({
+      where: {
+        category: 'oauth',
+        key: {
+          in: [
+            `${platform}_client_id`,
+            `${platform}_client_secret`,
+            `${platform}_redirect_uri`,
+          ],
+        },
+      },
+    });
+
+    logger.info(`[OAuth] Retrieved ${settings.length} settings for ${platform}:`,
+      settings.map(s => ({ key: s.key, hasValue: !!s.value, isEncrypted: s.isEncrypted })));
+
+    const dbClientId = settings.find(s => s.key === `${platform}_client_id`)?.value;
+    const dbClientSecret = settings.find(s => s.key === `${platform}_client_secret`)?.value;
+    const dbRedirectUri = settings.find(s => s.key === `${platform}_redirect_uri`)?.value;
+
+    logger.info(`[OAuth] Raw database values for ${platform}:`, {
+      clientId: dbClientId ? `${dbClientId.substring(0, 10)}...` : 'missing',
+      clientSecret: dbClientSecret ? 'present' : 'missing',
+      redirectUri: dbRedirectUri ? dbRedirectUri.substring(0, 30) : 'missing'
+    });
+
+    // Decrypt all encrypted values
+    let clientId = dbClientId;
+    let clientSecret = dbClientSecret;
+    let redirectUri = dbRedirectUri;
+
+    if (clientId) {
+      try {
+        clientId = decrypt(clientId);
+        logger.info(`[OAuth] Successfully decrypted clientId for ${platform}`);
+      } catch (err) {
+        logger.warn(`[OAuth] Failed to decrypt clientId for ${platform}, using as-is:`, err);
+      }
+    }
+
+    if (clientSecret) {
+      try {
+        clientSecret = decrypt(clientSecret);
+        logger.info(`[OAuth] Successfully decrypted clientSecret for ${platform}`);
+      } catch (err) {
+        logger.warn(`[OAuth] Failed to decrypt clientSecret for ${platform}, using as-is:`, err);
+      }
+    }
+
+    if (redirectUri) {
+      try {
+        redirectUri = decrypt(redirectUri);
+        logger.info(`[OAuth] Successfully decrypted redirectUri for ${platform}: ${redirectUri}`);
+      } catch (err) {
+        logger.warn(`[OAuth] Failed to decrypt redirectUri for ${platform}, using as-is:`, err);
+      }
+    }
+
+    // Use database values if available, otherwise fall back to environment variables
+    const envPrefix = platform.toUpperCase();
+    const finalCreds = {
+      clientId: clientId || process.env[`${envPrefix}_CLIENT_ID`] || '',
+      clientSecret: clientSecret || process.env[`${envPrefix}_CLIENT_SECRET`] || '',
+      redirectUri: redirectUri || process.env[`${envPrefix}_REDIRECT_URI`] || '',
+    };
+
+    logger.info(`[OAuth] Final credentials for ${platform}:`, {
+      clientId: finalCreds.clientId ? `${finalCreds.clientId.substring(0, 10)}...` : 'MISSING',
+      clientSecret: finalCreds.clientSecret ? 'present' : 'MISSING',
+      redirectUri: finalCreds.redirectUri || 'MISSING'
+    });
+
+    return finalCreds;
+  } catch (error) {
+    logger.error(`Error getting OAuth credentials for ${platform}:`, error);
+    // Fall back to environment variables
+    const envPrefix = platform.toUpperCase();
+    return {
+      clientId: process.env[`${envPrefix}_CLIENT_ID`] || '',
+      clientSecret: process.env[`${envPrefix}_CLIENT_SECRET`] || '',
+      redirectUri: process.env[`${envPrefix}_REDIRECT_URI`] || '',
+    };
+  }
+}
 
 // OAuth URLs
 const YOUTUBE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -16,9 +111,18 @@ const YOUTUBE_SCOPES = [
   'https://www.googleapis.com/auth/youtube.force-ssl',
 ].join(' ');
 
-const FACEBOOK_AUTH_URL = 'https://www.facebook.com/v18.0/dialog/oauth';
-const FACEBOOK_TOKEN_URL = 'https://graph.facebook.com/v18.0/oauth/access_token';
-const FACEBOOK_SCOPES = ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts'].join(',');
+const FACEBOOK_AUTH_URL = 'https://www.facebook.com/v24.0/dialog/oauth';
+const FACEBOOK_TOKEN_URL = 'https://graph.facebook.com/v24.0/oauth/access_token';
+// Facebook scopes - Using minimal auto-approved scopes
+// Additional scopes (publish_video, pages_manage_posts) require Facebook app review
+const FACEBOOK_SCOPES = [
+  'pages_show_list',               // Required for listing user's pages (auto-approved)
+  'pages_read_engagement',         // Required for reading page data (auto-approved)
+  'pages_read_user_content',       // For reading comments on live videos (usually auto-approved)
+  'publish_video',                 // Required for creating live videos (REQUIRES app review)
+  'pages_manage_posts',            // For managing posts and comments (REQUIRES app review)
+  'read_insights',                 // For analytics and viewer stats (may require app review)
+].join(',');
 
 const TWITCH_AUTH_URL = 'https://id.twitch.tv/oauth2/authorize';
 const TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
@@ -41,22 +145,41 @@ const LINKEDIN_SCOPES = ['w_member_social', 'r_liteprofile', 'r_organization_soc
  */
 
 // Step 1: Initiate YouTube OAuth
-router.get('/youtube/authorize', authenticate, (req, res) => {
-  const userId = req.user!.id;
-  const state = Buffer.from(JSON.stringify({ userId, platform: 'youtube' })).toString('base64');
+router.get('/youtube/authorize', authenticate, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const state = Buffer.from(JSON.stringify({ userId, platform: 'youtube' })).toString('base64');
 
-  const params = new URLSearchParams({
-    client_id: process.env.YOUTUBE_CLIENT_ID || '',
-    redirect_uri: process.env.YOUTUBE_REDIRECT_URI || '',
-    response_type: 'code',
-    scope: YOUTUBE_SCOPES,
-    state,
-    access_type: 'offline',
-    prompt: 'consent',
-  });
+    logger.info(`[OAuth] YouTube authorize request from user ${userId}`);
+    const credentials = await getOAuthCredentials('youtube');
 
-  const authUrl = `${YOUTUBE_AUTH_URL}?${params.toString()}`;
-  res.json({ url: authUrl });
+    logger.info(`[OAuth] Checking YouTube credentials - clientId: ${!!credentials.clientId}, redirectUri: ${!!credentials.redirectUri}`);
+
+    if (!credentials.clientId || !credentials.redirectUri) {
+      logger.error(`[OAuth] YouTube OAuth validation failed - clientId: ${credentials.clientId ? 'present' : 'MISSING'}, redirectUri: ${credentials.redirectUri || 'MISSING'}`);
+      return res.status(400).json({
+        error: 'YouTube OAuth not configured. Please configure in Admin Settings.'
+      });
+    }
+
+    logger.info(`[OAuth] YouTube credentials validated successfully`);
+
+    const params = new URLSearchParams({
+      client_id: credentials.clientId,
+      redirect_uri: credentials.redirectUri,
+      response_type: 'code',
+      scope: YOUTUBE_SCOPES,
+      state,
+      access_type: 'offline',
+      prompt: 'consent',
+    });
+
+    const authUrl = `${YOUTUBE_AUTH_URL}?${params.toString()}`;
+    res.json({ url: authUrl });
+  } catch (error) {
+    logger.error('YouTube authorize error:', error);
+    res.status(500).json({ error: 'Failed to initialize YouTube OAuth' });
+  }
 });
 
 // Step 2: YouTube OAuth Callback
@@ -71,20 +194,25 @@ router.get('/youtube/callback', async (req, res) => {
     // Decode state
     const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
 
+    const credentials = await getOAuthCredentials('youtube');
+
     // Exchange code for tokens
     const tokenResponse = await axios.post(YOUTUBE_TOKEN_URL, {
       code,
-      client_id: process.env.YOUTUBE_CLIENT_ID,
-      client_secret: process.env.YOUTUBE_CLIENT_SECRET,
-      redirect_uri: process.env.YOUTUBE_REDIRECT_URI,
+      client_id: credentials.clientId,
+      client_secret: credentials.clientSecret,
+      redirect_uri: credentials.redirectUri,
       grant_type: 'authorization_code',
     });
 
     const { access_token, refresh_token, expires_in } = tokenResponse.data;
 
+    // Calculate token expiration (expires_in is in seconds, default 1 hour)
+    const tokenExpiresAt = new Date(Date.now() + (expires_in || 3600) * 1000);
+
     // Get YouTube channel info
     const channelResponse = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
-      params: { part: 'snippet', mine: true },
+      params: { part: 'snippet,id', mine: true },
       headers: { Authorization: `Bearer ${access_token}` },
     });
 
@@ -93,36 +221,30 @@ router.get('/youtube/callback', async (req, res) => {
       return res.status(400).json({ error: 'No YouTube channel found' });
     }
 
-    // Get stream key
-    const streamKeyResponse = await axios.get('https://www.googleapis.com/youtube/v3/liveStreams', {
-      params: { part: 'cdn', mine: true },
-      headers: { Authorization: `Bearer ${access_token}` },
-    });
-
-    const streamKey = streamKeyResponse.data.items?.[0]?.cdn?.ingestionInfo?.streamName || '';
-
     // Store destination
+    // Note: Live stream RTMP URLs are created dynamically when broadcast starts
     await prisma.destination.create({
       data: {
         userId,
         platform: 'youtube',
-        name: channel.snippet.title,
-        rtmpUrl: 'rtmp://a.rtmp.youtube.com/live2',
-        streamKey: encrypt(streamKey),
+        platformUserId: channel.id,
+        displayName: channel.snippet.title,
+        channelId: channel.id,
+        rtmpUrl: null, // Will be set when creating live broadcast
+        streamKey: null, // Will be set when creating live broadcast
         accessToken: encrypt(access_token),
         refreshToken: refresh_token ? encrypt(refresh_token) : null,
-        expiresAt: new Date(Date.now() + expires_in * 1000),
-        isEnabled: true,
+        tokenExpiresAt,
       },
     });
 
     logger.info(`YouTube OAuth completed for user ${userId}`);
 
     // Redirect to settings page
-    res.redirect(`${process.env.FRONTEND_URL}/settings?tab=destinations&success=youtube`);
+    res.redirect(`${process.env.FRONTEND_URL}/oauth-success?success=youtube`);
   } catch (error) {
     logger.error('YouTube OAuth callback error:', error);
-    res.redirect(`${process.env.FRONTEND_URL}/settings?tab=destinations&error=youtube`);
+    res.redirect(`${process.env.FRONTEND_URL}/oauth-success?error=youtube`);
   }
 });
 
@@ -131,47 +253,94 @@ router.get('/youtube/callback', async (req, res) => {
  */
 
 // Step 1: Initiate Facebook OAuth
-router.get('/facebook/authorize', authenticate, (req, res) => {
-  const userId = req.user!.id;
-  const state = Buffer.from(JSON.stringify({ userId, platform: 'facebook' })).toString('base64');
+router.get('/facebook/authorize', authenticate, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const state = Buffer.from(JSON.stringify({ userId, platform: 'facebook' })).toString('base64');
 
-  const params = new URLSearchParams({
-    client_id: process.env.FACEBOOK_APP_ID || '',
-    redirect_uri: process.env.FACEBOOK_REDIRECT_URI || '',
-    state,
-    scope: FACEBOOK_SCOPES,
-  });
+    logger.info(`[OAuth] Facebook authorize request from user ${userId}`);
+    const credentials = await getOAuthCredentials('facebook');
 
-  const authUrl = `${FACEBOOK_AUTH_URL}?${params.toString()}`;
-  res.json({ url: authUrl });
+    if (!credentials.clientId || !credentials.redirectUri) {
+      logger.error('[OAuth] Facebook OAuth not configured');
+      return res.status(400).json({
+        error: 'Facebook OAuth not configured. Please configure in Admin Settings.'
+      });
+    }
+
+    const params = new URLSearchParams({
+      client_id: credentials.clientId,
+      redirect_uri: credentials.redirectUri,
+      state,
+      scope: FACEBOOK_SCOPES,
+    });
+
+    const authUrl = `${FACEBOOK_AUTH_URL}?${params.toString()}`;
+    logger.info('[OAuth] Facebook auth URL generated:', {
+      redirectUri: credentials.redirectUri,
+      scopes: FACEBOOK_SCOPES,
+      authUrlLength: authUrl.length
+    });
+    res.json({ url: authUrl });
+  } catch (error) {
+    logger.error('Facebook authorize error:', error);
+    res.status(500).json({ error: 'Failed to initialize Facebook OAuth' });
+  }
 });
 
 // Step 2: Facebook OAuth Callback
 router.get('/facebook/callback', async (req, res) => {
   try {
-    const { code, state } = req.query;
+    // Log all query parameters to debug
+    logger.info('[OAuth] Facebook callback received with query params:', req.query);
+
+    const { code, state, error, error_reason, error_description } = req.query;
+
+    // Check if Facebook returned an error
+    if (error) {
+      logger.error('[OAuth] Facebook returned error:', { error, error_reason, error_description });
+      return res.redirect(`${process.env.FRONTEND_URL}/oauth-success?error=facebook&reason=${error_reason || error}`);
+    }
 
     if (!code || !state) {
-      return res.status(400).json({ error: 'Missing code or state' });
+      logger.error('[OAuth] Missing code or state in callback. Query params:', req.query);
+      return res.status(400).json({ error: 'Missing code or state', receivedParams: Object.keys(req.query) });
     }
 
     const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
 
-    // Exchange code for token
+    const credentials = await getOAuthCredentials('facebook');
+
+    // Step 1: Exchange code for short-lived token
     const tokenResponse = await axios.get(FACEBOOK_TOKEN_URL, {
       params: {
-        client_id: process.env.FACEBOOK_APP_ID,
-        client_secret: process.env.FACEBOOK_APP_SECRET,
-        redirect_uri: process.env.FACEBOOK_REDIRECT_URI,
+        client_id: credentials.clientId,
+        client_secret: credentials.clientSecret,
+        redirect_uri: credentials.redirectUri,
         code,
       },
     });
 
-    const { access_token } = tokenResponse.data;
+    const { access_token: shortLivedToken } = tokenResponse.data;
+
+    // Step 2: Exchange short-lived token for long-lived token (~60 days)
+    const longLivedResponse = await axios.get('https://graph.facebook.com/v24.0/oauth/access_token', {
+      params: {
+        grant_type: 'fb_exchange_token',
+        client_id: credentials.clientId,
+        client_secret: credentials.clientSecret,
+        fb_exchange_token: shortLivedToken,
+      },
+    });
+
+    const { access_token: longLivedToken, expires_in } = longLivedResponse.data;
+
+    // Calculate token expiration date (expires_in is in seconds, default 60 days)
+    const tokenExpiresAt = new Date(Date.now() + (expires_in || 5184000) * 1000); // 5184000 = 60 days in seconds
 
     // Get user's pages
-    const pagesResponse = await axios.get('https://graph.facebook.com/v18.0/me/accounts', {
-      params: { access_token },
+    const pagesResponse = await axios.get('https://graph.facebook.com/v24.0/me/accounts', {
+      params: { access_token: longLivedToken },
     });
 
     const page = pagesResponse.data.data?.[0];
@@ -179,43 +348,44 @@ router.get('/facebook/callback', async (req, res) => {
       return res.status(400).json({ error: 'No Facebook page found' });
     }
 
-    // Get page access token
-    const pageAccessToken = page.access_token;
+    // Get page access token (short-lived)
+    const pageShortToken = page.access_token;
 
-    // Get live video stream key
-    const streamKeyResponse = await axios.get(
-      `https://graph.facebook.com/v18.0/${page.id}/live_videos`,
-      {
-        params: {
-          access_token: pageAccessToken,
-          fields: 'stream_url,secure_stream_url',
-        },
-      }
-    );
+    // Exchange page token for long-lived token
+    const pageLongLivedResponse = await axios.get('https://graph.facebook.com/v24.0/oauth/access_token', {
+      params: {
+        grant_type: 'fb_exchange_token',
+        client_id: credentials.clientId,
+        client_secret: credentials.clientSecret,
+        fb_exchange_token: pageShortToken,
+      },
+    });
 
-    const streamUrl = streamKeyResponse.data.data?.[0]?.secure_stream_url ||
-                      'rtmps://live-api-s.facebook.com:443/rtmp/';
+    const { access_token: pageLongLivedToken, expires_in: pageExpiresIn } = pageLongLivedResponse.data;
+    const pageTokenExpiresAt = new Date(Date.now() + (pageExpiresIn || 5184000) * 1000);
 
     // Store destination
+    // Note: Live video RTMP URLs are created dynamically when broadcast starts
     await prisma.destination.create({
       data: {
         userId,
         platform: 'facebook',
-        name: page.name,
-        rtmpUrl: streamUrl,
-        streamKey: encrypt(''), // Facebook uses URL-based keys
-        accessToken: encrypt(pageAccessToken),
+        platformUserId: page.id,
+        displayName: page.name,
+        pageId: page.id,
+        rtmpUrl: null, // Will be set when creating live video
+        streamKey: null, // Will be set when creating live video
+        accessToken: encrypt(pageLongLivedToken),
         refreshToken: null,
-        expiresAt: null, // Page tokens don't expire
-        isEnabled: true,
+        tokenExpiresAt: pageTokenExpiresAt,
       },
     });
 
     logger.info(`Facebook OAuth completed for user ${userId}`);
-    res.redirect(`${process.env.FRONTEND_URL}/settings?tab=destinations&success=facebook`);
+    res.redirect(`${process.env.FRONTEND_URL}/oauth-success?success=facebook`);
   } catch (error) {
     logger.error('Facebook OAuth callback error:', error);
-    res.redirect(`${process.env.FRONTEND_URL}/settings?tab=destinations&error=facebook`);
+    res.redirect(`${process.env.FRONTEND_URL}/oauth-success?error=facebook`);
   }
 });
 
@@ -224,20 +394,33 @@ router.get('/facebook/callback', async (req, res) => {
  */
 
 // Step 1: Initiate Twitch OAuth
-router.get('/twitch/authorize', authenticate, (req, res) => {
-  const userId = req.user!.id;
-  const state = Buffer.from(JSON.stringify({ userId, platform: 'twitch' })).toString('base64');
+router.get('/twitch/authorize', authenticate, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const state = Buffer.from(JSON.stringify({ userId, platform: 'twitch' })).toString('base64');
 
-  const params = new URLSearchParams({
-    client_id: process.env.TWITCH_CLIENT_ID || '',
-    redirect_uri: process.env.TWITCH_REDIRECT_URI || '',
-    response_type: 'code',
-    scope: TWITCH_SCOPES,
-    state,
-  });
+    const credentials = await getOAuthCredentials('twitch');
 
-  const authUrl = `${TWITCH_AUTH_URL}?${params.toString()}`;
-  res.json({ url: authUrl });
+    if (!credentials.clientId || !credentials.redirectUri) {
+      return res.status(400).json({
+        error: 'Twitch OAuth not configured. Please configure in Admin Settings.'
+      });
+    }
+
+    const params = new URLSearchParams({
+      client_id: credentials.clientId,
+      redirect_uri: credentials.redirectUri,
+      response_type: 'code',
+      scope: TWITCH_SCOPES,
+      state,
+    });
+
+    const authUrl = `${TWITCH_AUTH_URL}?${params.toString()}`;
+    res.json({ url: authUrl });
+  } catch (error) {
+    logger.error('Twitch authorize error:', error);
+    res.status(500).json({ error: 'Failed to initialize Twitch OAuth' });
+  }
 });
 
 // Step 2: Twitch OAuth Callback
@@ -251,13 +434,15 @@ router.get('/twitch/callback', async (req, res) => {
 
     const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
 
+    const credentials = await getOAuthCredentials('twitch');
+
     // Exchange code for token
     const tokenResponse = await axios.post(TWITCH_TOKEN_URL, {
-      client_id: process.env.TWITCH_CLIENT_ID,
-      client_secret: process.env.TWITCH_CLIENT_SECRET,
+      client_id: credentials.clientId,
+      client_secret: credentials.clientSecret,
       code,
       grant_type: 'authorization_code',
-      redirect_uri: process.env.TWITCH_REDIRECT_URI,
+      redirect_uri: credentials.redirectUri,
     });
 
     const { access_token, refresh_token } = tokenResponse.data;
@@ -266,7 +451,7 @@ router.get('/twitch/callback', async (req, res) => {
     const userResponse = await axios.get('https://api.twitch.tv/helix/users', {
       headers: {
         Authorization: `Bearer ${access_token}`,
-        'Client-Id': process.env.TWITCH_CLIENT_ID || '',
+        'Client-Id': credentials.clientId,
       },
     });
 
@@ -281,7 +466,7 @@ router.get('/twitch/callback', async (req, res) => {
       {
         headers: {
           Authorization: `Bearer ${access_token}`,
-          'Client-Id': process.env.TWITCH_CLIENT_ID || '',
+          'Client-Id': credentials.clientId,
         },
       }
     );
@@ -293,21 +478,19 @@ router.get('/twitch/callback', async (req, res) => {
       data: {
         userId,
         platform: 'twitch',
-        name: twitchUser.display_name,
+        displayName: twitchUser.display_name,
         rtmpUrl: `rtmp://live.twitch.tv/app`,
         streamKey: encrypt(streamKey),
         accessToken: encrypt(access_token),
         refreshToken: refresh_token ? encrypt(refresh_token) : null,
-        expiresAt: null, // Twitch tokens don't have explicit expiry
-        isEnabled: true,
       },
     });
 
     logger.info(`Twitch OAuth completed for user ${userId}`);
-    res.redirect(`${process.env.FRONTEND_URL}/settings?tab=destinations&success=twitch`);
+    res.redirect(`${process.env.FRONTEND_URL}/oauth-success?success=twitch`);
   } catch (error) {
     logger.error('Twitch OAuth callback error:', error);
-    res.redirect(`${process.env.FRONTEND_URL}/settings?tab=destinations&error=twitch`);
+    res.redirect(`${process.env.FRONTEND_URL}/oauth-success?error=twitch`);
   }
 });
 
@@ -316,29 +499,42 @@ router.get('/twitch/callback', async (req, res) => {
  */
 
 // Step 1: Initiate X OAuth
-router.get('/x/authorize', authenticate, (req, res) => {
-  const userId = req.user!.id;
-  const state = Buffer.from(JSON.stringify({ userId, platform: 'x' })).toString('base64');
+router.get('/x/authorize', authenticate, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const state = Buffer.from(JSON.stringify({ userId, platform: 'x' })).toString('base64');
 
-  // Generate PKCE code verifier and challenge
-  const codeVerifier = Buffer.from(Math.random().toString()).toString('base64').substring(0, 128);
-  const codeChallenge = Buffer.from(codeVerifier).toString('base64url');
+    const credentials = await getOAuthCredentials('x');
 
-  // Store code verifier in session/cache (in production, use Redis)
-  // For now, we'll include it in state (not secure for production)
+    if (!credentials.clientId || !credentials.redirectUri) {
+      return res.status(400).json({
+        error: 'X/Twitter OAuth not configured. Please configure in Admin Settings.'
+      });
+    }
 
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: process.env.X_CLIENT_ID || '',
-    redirect_uri: process.env.X_REDIRECT_URI || '',
-    scope: X_SCOPES,
-    state,
-    code_challenge: codeChallenge,
-    code_challenge_method: 'S256',
-  });
+    // Generate PKCE code verifier and challenge
+    const codeVerifier = Buffer.from(Math.random().toString()).toString('base64').substring(0, 128);
+    const codeChallenge = Buffer.from(codeVerifier).toString('base64url');
 
-  const authUrl = `${X_AUTH_URL}?${params.toString()}`;
-  res.json({ url: authUrl });
+    // Store code verifier in session/cache (in production, use Redis)
+    // For now, we'll include it in state (not secure for production)
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: credentials.clientId,
+      redirect_uri: credentials.redirectUri,
+      scope: X_SCOPES,
+      state,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
+    });
+
+    const authUrl = `${X_AUTH_URL}?${params.toString()}`;
+    res.json({ url: authUrl });
+  } catch (error) {
+    logger.error('X authorize error:', error);
+    res.status(500).json({ error: 'Failed to initialize X OAuth' });
+  }
 });
 
 // Step 2: X OAuth Callback
@@ -352,14 +548,16 @@ router.get('/x/callback', async (req, res) => {
 
     const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
 
+    const credentials = await getOAuthCredentials('x');
+
     // Exchange code for token (with PKCE)
     const tokenResponse = await axios.post(
       X_TOKEN_URL,
       {
         code,
         grant_type: 'authorization_code',
-        client_id: process.env.X_CLIENT_ID,
-        redirect_uri: process.env.X_REDIRECT_URI,
+        client_id: credentials.clientId,
+        redirect_uri: credentials.redirectUri,
         code_verifier: 'STORED_CODE_VERIFIER', // Should retrieve from cache
       },
       {
@@ -389,21 +587,19 @@ router.get('/x/callback', async (req, res) => {
       data: {
         userId,
         platform: 'x',
-        name: `@${xUser.username}`,
+        displayName: `@${xUser.username}`,
         rtmpUrl: 'rtmp://fa.contribute.live-video.net/app', // X/Twitter Media Studio RTMP
         streamKey: encrypt(''), // User must get from Media Studio
         accessToken: encrypt(access_token),
         refreshToken: refresh_token ? encrypt(refresh_token) : null,
-        expiresAt: null,
-        isEnabled: true,
       },
     });
 
     logger.info(`X OAuth completed for user ${userId}`);
-    res.redirect(`${process.env.FRONTEND_URL}/settings?tab=destinations&success=x`);
+    res.redirect(`${process.env.FRONTEND_URL}/oauth-success?success=x`);
   } catch (error) {
     logger.error('X OAuth callback error:', error);
-    res.redirect(`${process.env.FRONTEND_URL}/settings?tab=destinations&error=x`);
+    res.redirect(`${process.env.FRONTEND_URL}/oauth-success?error=x`);
   }
 });
 
@@ -416,7 +612,7 @@ router.get('/x/callback', async (req, res) => {
 // Step 1: Setup Rumble with API Key
 router.post('/rumble/setup', authenticate, async (req, res) => {
   try {
-    const userId = req.user!.id;
+    const userId = req.user!.userId;
     const { apiKey, channelUrl } = req.body;
 
     if (!apiKey || !channelUrl) {
@@ -453,13 +649,11 @@ router.post('/rumble/setup', authenticate, async (req, res) => {
       data: {
         userId,
         platform: 'rumble',
-        name: userData.username || 'Rumble',
+        displayName: userData.username || 'Rumble',
         rtmpUrl,
         streamKey: encrypt(streamKey),
         accessToken: encrypt(apiKey), // Store API key as access token
         refreshToken: null,
-        expiresAt: null,
-        isEnabled: true,
       },
     });
 
@@ -476,20 +670,33 @@ router.post('/rumble/setup', authenticate, async (req, res) => {
  */
 
 // Step 1: Initiate LinkedIn OAuth
-router.get('/linkedin/authorize', authenticate, (req, res) => {
-  const userId = req.user!.id;
-  const state = Buffer.from(JSON.stringify({ userId, platform: 'linkedin' })).toString('base64');
+router.get('/linkedin/authorize', authenticate, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const state = Buffer.from(JSON.stringify({ userId, platform: 'linkedin' })).toString('base64');
 
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: process.env.LINKEDIN_CLIENT_ID || '',
-    redirect_uri: process.env.LINKEDIN_REDIRECT_URI || '',
-    state,
-    scope: LINKEDIN_SCOPES,
-  });
+    const credentials = await getOAuthCredentials('linkedin');
 
-  const authUrl = `${LINKEDIN_AUTH_URL}?${params.toString()}`;
-  res.json({ url: authUrl });
+    if (!credentials.clientId || !credentials.redirectUri) {
+      return res.status(400).json({
+        error: 'LinkedIn OAuth not configured. Please configure in Admin Settings.'
+      });
+    }
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: credentials.clientId,
+      redirect_uri: credentials.redirectUri,
+      state,
+      scope: LINKEDIN_SCOPES,
+    });
+
+    const authUrl = `${LINKEDIN_AUTH_URL}?${params.toString()}`;
+    res.json({ url: authUrl });
+  } catch (error) {
+    logger.error('LinkedIn authorize error:', error);
+    res.status(500).json({ error: 'Failed to initialize LinkedIn OAuth' });
+  }
 });
 
 // Step 2: LinkedIn OAuth Callback
@@ -503,15 +710,17 @@ router.get('/linkedin/callback', async (req, res) => {
 
     const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
 
+    const credentials = await getOAuthCredentials('linkedin');
+
     // Exchange code for token
     const tokenResponse = await axios.post(
       LINKEDIN_TOKEN_URL,
       new URLSearchParams({
         grant_type: 'authorization_code',
         code: code as string,
-        client_id: process.env.LINKEDIN_CLIENT_ID || '',
-        client_secret: process.env.LINKEDIN_CLIENT_SECRET || '',
-        redirect_uri: process.env.LINKEDIN_REDIRECT_URI || '',
+        client_id: credentials.clientId,
+        client_secret: credentials.clientSecret,
+        redirect_uri: credentials.redirectUri,
       }),
       {
         headers: {
@@ -538,21 +747,112 @@ router.get('/linkedin/callback', async (req, res) => {
       data: {
         userId,
         platform: 'linkedin',
-        name: displayName,
+        displayName: displayName,
         rtmpUrl: '', // Will be provided when creating live video
         streamKey: encrypt(''), // Will be provided when creating live video
         accessToken: encrypt(access_token),
         refreshToken: null,
-        expiresAt: new Date(Date.now() + expires_in * 1000),
-        isEnabled: true,
       },
     });
 
     logger.info(`LinkedIn OAuth completed for user ${userId}`);
-    res.redirect(`${process.env.FRONTEND_URL}/settings?tab=destinations&success=linkedin`);
+    res.redirect(`${process.env.FRONTEND_URL}/oauth-success?success=linkedin`);
   } catch (error: any) {
     logger.error('LinkedIn OAuth callback error:', error);
-    res.redirect(`${process.env.FRONTEND_URL}/settings?tab=destinations&error=linkedin`);
+    res.redirect(`${process.env.FRONTEND_URL}/oauth-success?error=linkedin`);
+  }
+});
+
+/**
+ * Rumble API Key Setup
+ * Rumble uses API key authentication instead of OAuth
+ */
+router.post('/rumble/setup', authenticate, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const { apiKey, channelUrl } = req.body;
+
+    if (!apiKey || !channelUrl) {
+      return res.status(400).json({ error: 'API key and channel URL are required' });
+    }
+
+    logger.info(`[Rumble] Setup request from user ${userId}`);
+
+    // Import Rumble service functions
+    const { validateRumbleApiKey, getRumbleChannelInfo } = await import('../services/rumble.service');
+
+    // Validate API key
+    const isValid = await validateRumbleApiKey(apiKey);
+    if (!isValid) {
+      logger.warn(`[Rumble] Invalid API key for user ${userId}`);
+      return res.status(400).json({ error: 'Invalid Rumble API key. Please check your key and try again.' });
+    }
+
+    // Get channel info
+    let channelInfo;
+    try {
+      channelInfo = await getRumbleChannelInfo(apiKey);
+    } catch (error: any) {
+      logger.error(`[Rumble] Failed to get channel info for user ${userId}:`, error.message);
+      // Continue anyway, use provided channel URL
+      channelInfo = {
+        channelId: 'unknown',
+        channelName: channelUrl.split('/').pop() || 'Rumble Channel',
+        channelUrl: channelUrl,
+      };
+    }
+
+    // Check if Rumble destination already exists for this user
+    const existingDestination = await prisma.destination.findFirst({
+      where: {
+        userId,
+        platform: 'rumble',
+      },
+    });
+
+    if (existingDestination) {
+      // Update existing destination
+      await prisma.destination.update({
+        where: { id: existingDestination.id },
+        data: {
+          displayName: channelInfo.channelName,
+          accessToken: encrypt(apiKey),
+          rtmpUrl: '', // Will be set when creating live stream
+          streamKey: encrypt(''), // Will be set when creating live stream
+          isActive: true,
+        },
+      });
+
+      logger.info(`[Rumble] Updated destination for user ${userId}: ${channelInfo.channelName}`);
+    } else {
+      // Create new destination
+      await prisma.destination.create({
+        data: {
+          userId,
+          platform: 'rumble',
+          displayName: channelInfo.channelName,
+          accessToken: encrypt(apiKey),
+          refreshToken: null,
+          rtmpUrl: '', // Will be set when creating live stream
+          streamKey: encrypt(''), // Will be set when creating live stream
+          isActive: true,
+        },
+      });
+
+      logger.info(`[Rumble] Created new destination for user ${userId}: ${channelInfo.channelName}`);
+    }
+
+    res.json({
+      message: 'Rumble connected successfully',
+      channelName: channelInfo.channelName,
+      channelUrl: channelInfo.channelUrl,
+    });
+  } catch (error: any) {
+    logger.error('[Rumble] Setup error:', error);
+    res.status(500).json({
+      error: 'Failed to connect to Rumble. Please try again.',
+      details: error.message,
+    });
   }
 });
 
@@ -562,7 +862,7 @@ router.get('/linkedin/callback', async (req, res) => {
 router.delete('/disconnect/:destinationId', authenticate, async (req, res) => {
   try {
     const { destinationId } = req.params;
-    const userId = req.user!.id;
+    const userId = req.user!.userId;
 
     // Verify ownership
     const destination = await prisma.destination.findFirst({

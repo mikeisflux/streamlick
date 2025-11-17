@@ -3,11 +3,13 @@
 @tailwind utilities;
 
 @layer base {
-  * {
-    @apply border-border;
-  }
   body {
-    @apply bg-background text-foreground;
+    background: linear-gradient(to bottom,
+      #000000 0%,
+      #008080 50%,
+      #000000 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
   }
 }
 
@@ -25,5 +27,35 @@
 
   .animate-fade-in-down {
     animation: fade-in-down 0.3s ease-out;
+  }
+
+  /* Purple slider styling */
+  .slider-purple::-webkit-slider-thumb {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: #9333ea;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+
+  .slider-purple::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    background: #9333ea;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+
+  .slider-purple::-webkit-slider-thumb:hover {
+    background: #7e22ce;
+  }
+
+  .slider-purple::-moz-range-thumb:hover {
+    background: #7e22ce;
   }
 }

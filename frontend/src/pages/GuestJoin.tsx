@@ -16,6 +16,14 @@ export function GuestJoin() {
   const [broadcastInfo, setBroadcastInfo] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasJoined, setHasJoined] = useState(false);
+  const [guestStatus, setGuestStatus] = useState<'greenroom' | 'backstage' | 'live'>('greenroom');
+
+  // Device state
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>('');
+  const [selectedVideoDevice, setSelectedVideoDevice] = useState<string>('');
+  const [showDeviceSelectors, setShowDeviceSelectors] = useState(false);
 
   const {
     localStream,
@@ -25,6 +33,32 @@ export function GuestJoin() {
     toggleAudio,
     toggleVideo,
   } = useMedia();
+
+  // Load available devices
+  useEffect(() => {
+    const loadDevices = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const audioInputs = devices.filter((d) => d.kind === 'audioinput');
+        const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+
+        setAudioDevices(audioInputs);
+        setVideoDevices(videoInputs);
+
+        // Set defaults
+        if (audioInputs.length > 0 && !selectedAudioDevice) {
+          setSelectedAudioDevice(audioInputs[0].deviceId);
+        }
+        if (videoInputs.length > 0 && !selectedVideoDevice) {
+          setSelectedVideoDevice(videoInputs[0].deviceId);
+        }
+      } catch (error) {
+        console.error('Failed to enumerate devices:', error);
+      }
+    };
+
+    loadDevices();
+  }, []);
 
   useEffect(() => {
     const loadInvite = async () => {
@@ -41,6 +75,39 @@ export function GuestJoin() {
     loadInvite();
     startCamera();
   }, [token]);
+
+  // Listen for status changes from host
+  useEffect(() => {
+    if (!hasJoined) return;
+
+    const handlePromoted = () => {
+      setGuestStatus('live');
+      toast.success('You are now LIVE on the broadcast!', {
+        duration: 5000,
+        icon: '🔴',
+      });
+    };
+
+    const handleDemoted = () => {
+      setGuestStatus('backstage');
+      toast.success('Moved to backstage');
+    };
+
+    const handleMovedToBackstage = () => {
+      setGuestStatus('backstage');
+      toast.success('Moved to backstage - Get ready to go live!');
+    };
+
+    socketService.on('participant-promoted', handlePromoted);
+    socketService.on('participant-demoted', handleDemoted);
+    socketService.on('moved-to-backstage', handleMovedToBackstage);
+
+    return () => {
+      socketService.off('participant-promoted', handlePromoted);
+      socketService.off('participant-demoted', handleDemoted);
+      socketService.off('moved-to-backstage', handleMovedToBackstage);
+    };
+  }, [hasJoined]);
 
   const handleJoin = async () => {
     if (!guestName.trim()) {
@@ -63,31 +130,76 @@ export function GuestJoin() {
       socketService.connect('');
       socketService.joinStudio(broadcastInfo.id, participant.id);
 
-      // Initialize WebRTC
-      await webrtcService.initialize(broadcastInfo.id);
-      await webrtcService.createSendTransport();
+      // Initialize WebRTC with proper error handling
+      try {
+        await webrtcService.initialize(broadcastInfo.id);
+      } catch (error) {
+        console.error('Failed to initialize WebRTC:', error);
+        throw new Error('Failed to initialize WebRTC connection');
+      }
 
-      // Produce media
+      try {
+        await webrtcService.createSendTransport();
+      } catch (error) {
+        console.error('Failed to create send transport:', error);
+        throw new Error('Failed to create media transport');
+      }
+
+      // Produce media with individual error handling
       if (localStream) {
         const videoTrack = localStream.getVideoTracks()[0];
         const audioTrack = localStream.getAudioTracks()[0];
 
         if (videoTrack) {
-          await webrtcService.produceMedia(videoTrack);
+          try {
+            await webrtcService.produceMedia(videoTrack);
+          } catch (error) {
+            console.error('Failed to produce video:', error);
+            toast.error('Failed to send video - continuing with audio only');
+          }
         }
 
         if (audioTrack) {
-          await webrtcService.produceMedia(audioTrack);
+          try {
+            await webrtcService.produceMedia(audioTrack);
+          } catch (error) {
+            console.error('Failed to produce audio:', error);
+            toast.error('Failed to send audio - continuing with video only');
+          }
         }
       }
 
       setHasJoined(true);
       toast.success('Joined successfully! Waiting for host...');
     } catch (error) {
-      toast.error('Failed to join broadcast');
+      console.error('Failed to join broadcast:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to join broadcast');
+
+      // Cleanup on failure
+      try {
+        socketService.leaveStudio();
+        socketService.disconnect();
+        await webrtcService.close();
+      } catch (cleanupError) {
+        console.error('Cleanup error:', cleanupError);
+      }
+
       setIsJoining(false);
     }
   };
+
+  // Cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      if (hasJoined) {
+        socketService.leaveStudio();
+        socketService.disconnect();
+        webrtcService.close().catch((error) => {
+          console.error('Error cleaning up WebRTC on unmount:', error);
+        });
+      }
+    };
+  }, [hasJoined]);
 
   if (isLoading) {
     return (
@@ -126,48 +238,213 @@ export function GuestJoin() {
   }
 
   if (hasJoined) {
+    // Status badge styling
+    const getStatusBadge = () => {
+      switch (guestStatus) {
+        case 'live':
+          return {
+            bg: 'bg-red-600',
+            text: 'text-white',
+            label: 'LIVE',
+            icon: '🔴',
+            dot: 'bg-red-500',
+            pulse: true
+          };
+        case 'backstage':
+          return {
+            bg: 'bg-yellow-600',
+            text: 'text-white',
+            label: 'Backstage',
+            icon: '⏱️',
+            dot: 'bg-yellow-500',
+            pulse: false
+          };
+        default:
+          return {
+            bg: 'bg-green-600',
+            text: 'text-white',
+            label: 'In Greenroom',
+            icon: '🎭',
+            dot: 'bg-green-500',
+            pulse: false
+          };
+      }
+    };
+
+    const statusBadge = getStatusBadge();
+
     return (
-      <div className="min-h-screen bg-gray-900 flex flex-col">
-        <header className="bg-gray-800 border-b border-gray-700 px-6 py-4">
+      <div className="min-h-screen flex flex-col bg-gray-900">
+        <header className="bg-gray-800 border-b border-gray-700 px-6 py-4 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold text-white">{broadcastInfo.title}</h1>
-              <p className="text-sm text-gray-400 mt-1">Waiting in backstage...</p>
+              <div className="flex items-center gap-2 mt-1">
+                <div className={`w-2 h-2 rounded-full ${statusBadge.dot} ${statusBadge.pulse ? 'animate-pulse' : ''}`}></div>
+                <p className="text-sm text-gray-400">{statusBadge.label}</p>
+              </div>
+            </div>
+            {/* Status badge */}
+            <div className={`px-4 py-2 rounded-full ${statusBadge.bg} ${statusBadge.text} font-medium flex items-center gap-2`}>
+              <span>{statusBadge.icon}</span>
+              <span>{statusBadge.label}</span>
             </div>
           </div>
         </header>
 
-        <main className="flex-1 flex items-center justify-center p-6">
-          <div className="max-w-2xl w-full">
-            <div className="bg-black rounded-lg overflow-hidden aspect-video mb-6">
-              <VideoPreview stream={localStream} muted />
-            </div>
+        <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+          {/* Main Video Area */}
+          <div className="flex-1 flex flex-col items-center justify-center p-6">
+            <div className="w-full max-w-3xl">
+              {/* Video Preview */}
+              <div className="bg-black rounded-lg overflow-hidden aspect-video mb-6 relative">
+                <VideoPreview stream={localStream} muted />
+                {/* Your name badge */}
+                <div className="absolute bottom-4 left-4 bg-black bg-opacity-75 px-3 py-1 rounded-full">
+                  <span className="text-white text-sm font-medium">{guestName} (You)</span>
+                </div>
+              </div>
 
-            <div className="bg-gray-800 rounded-lg p-6 text-center">
-              <h2 className="text-2xl font-bold text-white mb-2">
-                You're in the waiting room
-              </h2>
-              <p className="text-gray-400 mb-6">
-                The host will bring you on screen shortly. Make sure your camera and microphone are working.
-              </p>
+              {/* Status Message */}
+              <div className={`rounded-lg p-6 text-center mb-6 ${
+                guestStatus === 'live'
+                  ? 'bg-gradient-to-r from-red-900 to-pink-900'
+                  : guestStatus === 'backstage'
+                  ? 'bg-gradient-to-r from-yellow-900 to-orange-900'
+                  : 'bg-gradient-to-r from-blue-900 to-purple-900'
+              }`}>
+                <div className="flex items-center justify-center mb-3">
+                  {guestStatus === 'live' ? (
+                    <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center animate-pulse">
+                      <span className="text-3xl">🔴</span>
+                    </div>
+                  ) : guestStatus === 'backstage' ? (
+                    <svg className="w-12 h-12 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-12 h-12 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  )}
+                </div>
+                <h2 className="text-2xl font-bold text-white mb-2">
+                  {guestStatus === 'live'
+                    ? 'You are LIVE!'
+                    : guestStatus === 'backstage'
+                    ? 'You\'re in Backstage'
+                    : 'Welcome to the Greenroom!'}
+                </h2>
+                <p className={`mb-4 ${
+                  guestStatus === 'live'
+                    ? 'text-red-200'
+                    : guestStatus === 'backstage'
+                    ? 'text-yellow-200'
+                    : 'text-blue-200'
+                }`}>
+                  {guestStatus === 'live'
+                    ? 'You\'re now visible to all viewers. Smile and be yourself!'
+                    : guestStatus === 'backstage'
+                    ? 'Get ready! The host will bring you on screen shortly. Make final adjustments to your camera and microphone.'
+                    : 'The host will move you to backstage and then bring you on screen when ready. Make sure your camera and microphone are working properly.'}
+                </p>
+                <div className={`inline-flex items-center px-4 py-2 rounded-lg ${
+                  guestStatus === 'live'
+                    ? 'bg-red-500 bg-opacity-20'
+                    : guestStatus === 'backstage'
+                    ? 'bg-yellow-500 bg-opacity-20'
+                    : 'bg-blue-500 bg-opacity-20'
+                }`}>
+                  <svg className={`w-4 h-4 mr-2 ${
+                    guestStatus === 'live'
+                      ? 'text-red-300'
+                      : guestStatus === 'backstage'
+                      ? 'text-yellow-300'
+                      : 'text-blue-300'
+                  }`} fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                  <span className={`text-sm ${
+                    guestStatus === 'live'
+                      ? 'text-red-200'
+                      : guestStatus === 'backstage'
+                      ? 'text-yellow-200'
+                      : 'text-blue-200'
+                  }`}>
+                    {guestStatus === 'live'
+                      ? 'Remember: Thousands may be watching you live!'
+                      : guestStatus === 'backstage'
+                      ? 'Tip: You can see and hear the broadcast, but viewers can\'t see you yet'
+                      : 'Tip: Test your audio and video before going live'}
+                  </span>
+                </div>
+              </div>
 
+              {/* Media Controls */}
               <div className="flex justify-center gap-4">
                 <button
                   onClick={toggleAudio}
-                  className={`p-4 rounded-full ${
-                    audioEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600'
-                  } text-white transition-colors`}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
+                    audioEnabled
+                      ? 'bg-gray-700 hover:bg-gray-600 text-white'
+                      : 'bg-red-600 hover:bg-red-700 text-white'
+                  }`}
+                  title={audioEnabled ? 'Mute microphone' : 'Unmute microphone'}
                 >
-                  {audioEnabled ? '🎤' : '🔇'}
+                  <span className="text-xl">{audioEnabled ? '🎤' : '🔇'}</span>
+                  <span>{audioEnabled ? 'Mute' : 'Unmute'}</span>
                 </button>
                 <button
                   onClick={toggleVideo}
-                  className={`p-4 rounded-full ${
-                    videoEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600'
-                  } text-white transition-colors`}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
+                    videoEnabled
+                      ? 'bg-gray-700 hover:bg-gray-600 text-white'
+                      : 'bg-red-600 hover:bg-red-700 text-white'
+                  }`}
+                  title={videoEnabled ? 'Turn off camera' : 'Turn on camera'}
                 >
-                  {videoEnabled ? '📹' : '📵'}
+                  <span className="text-xl">{videoEnabled ? '📹' : '📵'}</span>
+                  <span>{videoEnabled ? 'Stop Video' : 'Start Video'}</span>
                 </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Sidebar - Guest List & Info */}
+          <div className="w-full lg:w-80 bg-gray-800 border-l border-gray-700 flex flex-col">
+            <div className="p-4 border-b border-gray-700">
+              <h3 className="font-semibold text-white">Participants</h3>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {/* Current user */}
+              <div className="bg-gray-700 rounded-lg p-3 mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                  <span className="text-white font-medium">{guestName} (You)</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">In Greenroom</p>
+              </div>
+
+              {/* Info message */}
+              <div className="mt-4 p-3 bg-blue-900 bg-opacity-30 rounded-lg">
+                <p className="text-xs text-blue-200">
+                  Other guests in the greenroom will appear here. You can chat with them while waiting.
+                </p>
+              </div>
+            </div>
+
+            {/* Browser info */}
+            <div className="p-4 border-t border-gray-700 bg-gray-850">
+              <div className="text-xs text-gray-400 space-y-1">
+                <p className="font-medium text-gray-300">System Check:</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-green-400">✓</span>
+                  <span>Camera: {videoEnabled ? 'On' : 'Off'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-green-400">✓</span>
+                  <span>Microphone: {audioEnabled ? 'On' : 'Off'}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -177,66 +454,178 @@ export function GuestJoin() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-2xl w-full">
-        <div className="text-center mb-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-700 flex items-center justify-center px-4 py-8">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-3xl w-full">
+        {/* Header */}
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mb-4">
+            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Join Broadcast</h1>
-          <p className="text-gray-600">{broadcastInfo.title}</p>
+          <p className="text-lg text-gray-600">{broadcastInfo.title}</p>
+          <p className="text-sm text-gray-500 mt-2">Set up your camera and microphone before joining</p>
         </div>
 
         {/* Video Preview */}
-        <div className="bg-black rounded-lg overflow-hidden aspect-video mb-6">
+        <div className="bg-black rounded-xl overflow-hidden aspect-video mb-6 shadow-lg relative">
           <VideoPreview stream={localStream} muted />
+          {!videoEnabled && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+              <div className="text-center">
+                <div className="w-24 h-24 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+                <p className="text-gray-400">Camera is off</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Controls */}
-        <div className="flex justify-center gap-4 mb-6">
+        <div className="flex justify-center gap-3 mb-6">
           <button
             onClick={toggleAudio}
-            className={`p-4 rounded-full ${
-              audioEnabled ? 'bg-gray-200 hover:bg-gray-300' : 'bg-red-600'
-            } ${audioEnabled ? 'text-gray-900' : 'text-white'} transition-colors`}
+            className={`flex items-center gap-2 px-5 py-3 rounded-lg font-medium transition-all shadow-md ${
+              audioEnabled
+                ? 'bg-gray-100 hover:bg-gray-200 text-gray-900'
+                : 'bg-red-600 hover:bg-red-700 text-white'
+            }`}
+            title={audioEnabled ? 'Mute microphone' : 'Unmute microphone'}
           >
-            {audioEnabled ? '🎤' : '🔇'}
+            <span className="text-xl">{audioEnabled ? '🎤' : '🔇'}</span>
+            <span className="text-sm">{audioEnabled ? 'Mute' : 'Unmute'}</span>
           </button>
           <button
             onClick={toggleVideo}
-            className={`p-4 rounded-full ${
-              videoEnabled ? 'bg-gray-200 hover:bg-gray-300' : 'bg-red-600'
-            } ${videoEnabled ? 'text-gray-900' : 'text-white'} transition-colors`}
+            className={`flex items-center gap-2 px-5 py-3 rounded-lg font-medium transition-all shadow-md ${
+              videoEnabled
+                ? 'bg-gray-100 hover:bg-gray-200 text-gray-900'
+                : 'bg-red-600 hover:bg-red-700 text-white'
+            }`}
+            title={videoEnabled ? 'Turn off camera' : 'Turn on camera'}
           >
-            {videoEnabled ? '📹' : '📵'}
+            <span className="text-xl">{videoEnabled ? '📹' : '📵'}</span>
+            <span className="text-sm">{videoEnabled ? 'Stop Video' : 'Start Video'}</span>
+          </button>
+          <button
+            onClick={() => setShowDeviceSelectors(!showDeviceSelectors)}
+            className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium transition-all shadow-md bg-gray-100 hover:bg-gray-200 text-gray-900"
+            title="Device settings"
+          >
+            <span className="text-xl">⚙️</span>
+            <span className="text-sm">Settings</span>
           </button>
         </div>
+
+        {/* Device Selectors */}
+        {showDeviceSelectors && (
+          <div className="mb-6 space-y-4 p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
+            <h4 className="font-semibold text-gray-900 mb-3">Device Settings</h4>
+
+            {/* Camera Selector */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Camera
+              </label>
+              <select
+                value={selectedVideoDevice}
+                onChange={(e) => setSelectedVideoDevice(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+              >
+                {videoDevices.map((device) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    {device.label || `Camera ${device.deviceId.slice(0, 5)}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Microphone Selector */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Microphone
+              </label>
+              <select
+                value={selectedAudioDevice}
+                onChange={(e) => setSelectedAudioDevice(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+              >
+                {audioDevices.map((device) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    {device.label || `Microphone ${device.deviceId.slice(0, 5)}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <p className="text-xs text-gray-500 mt-2">
+              💡 Test your devices before joining to ensure everything works correctly
+            </p>
+          </div>
+        )}
 
         {/* Name Input */}
         <div className="space-y-4">
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-              Your Name
+            <label htmlFor="name" className="block text-sm font-semibold text-gray-700 mb-2">
+              Display Name <span className="text-red-500">*</span>
             </label>
             <input
               id="name"
               type="text"
               value={guestName}
               onChange={(e) => setGuestName(e.target.value)}
-              placeholder="Enter your name"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Enter your full name or brand name"
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
               onKeyPress={(e) => e.key === 'Enter' && handleJoin()}
+              autoFocus
             />
+            <p className="text-xs text-gray-500 mt-1">This is how you'll appear to viewers</p>
           </div>
 
           <Button
             onClick={handleJoin}
             disabled={isJoining || !guestName.trim()}
             size="lg"
-            className="w-full"
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
           >
-            {isJoining ? 'Joining...' : 'Join Broadcast'}
+            {isJoining ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Joining Greenroom...
+              </span>
+            ) : (
+              'Enter Greenroom'
+            )}
           </Button>
 
-          <p className="text-sm text-gray-500 text-center">
-            By joining, you agree to be recorded and streamed live.
+          {/* Consent and Info */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex gap-3">
+              <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              <div className="text-sm text-blue-900">
+                <p className="font-medium mb-1">Before you join:</p>
+                <ul className="space-y-1 text-blue-800">
+                  <li>• Make sure your camera and microphone are working</li>
+                  <li>• You'll wait in the greenroom until the host brings you on</li>
+                  <li>• By joining, you consent to being recorded and streamed live</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Browser requirements */}
+          <p className="text-xs text-gray-500 text-center">
+            Best experience on Chrome, Firefox, Safari, or Edge
           </p>
         </div>
       </div>

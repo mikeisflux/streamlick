@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { useBranding } from '../context/BrandingContext';
 import { Button } from '../components/Button';
 import toast from 'react-hot-toast';
 
 export function Billing() {
   const [isLoading, setIsLoading] = useState(false);
   const user = useAuthStore((state) => state.user);
+  const { branding } = useBranding();
   const navigate = useNavigate();
 
   const handleSubscribe = async () => {
@@ -28,11 +30,25 @@ export function Billing() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       {/* Header */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">🎥 Streamlick</h1>
+          {branding?.logoUrl ? (
+            <img
+              src={branding.logoUrl.startsWith('http') ? branding.logoUrl : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${branding.logoUrl}`}
+              alt={branding.config?.platformName || 'Logo'}
+              className="h-10 object-contain cursor-pointer"
+              onClick={() => navigate('/dashboard')}
+            />
+          ) : (
+            <h1
+              className="text-2xl font-bold text-gray-900 cursor-pointer"
+              onClick={() => navigate('/dashboard')}
+            >
+              {branding?.config?.platformName || 'Streamlick'}
+            </h1>
+          )}
           <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
             Back to Dashboard
           </Button>

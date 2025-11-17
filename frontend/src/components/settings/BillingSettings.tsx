@@ -74,8 +74,6 @@ export function BillingSettings() {
     }
   };
 
-  const isPaid = user?.planType !== 'free';
-
   return (
     <div className="space-y-6">
       <div>
@@ -97,7 +95,7 @@ export function BillingSettings() {
                   {user?.planType} Plan
                 </h3>
                 <p className="text-sm text-gray-600 mt-1">
-                  {isPaid ? '$20/month - All features included' : 'Limited features'}
+                  $20/month - All features included
                 </p>
               </div>
               <span
@@ -109,7 +107,7 @@ export function BillingSettings() {
                     : 'bg-gray-100 text-gray-800'
                 }`}
               >
-                {subscription?.status || 'Free'}
+                {subscription?.status || 'Inactive'}
               </span>
             </div>
 
@@ -137,14 +135,12 @@ export function BillingSettings() {
           {/* Plan Features */}
           <div className="bg-gray-50 rounded-lg p-6">
             <h3 className="font-semibold text-gray-900 mb-4">
-              {isPaid ? 'Your Features' : 'Upgrade to Pro'}
+              Your Pro Features
             </h3>
             <ul className="space-y-3">
               <li className="flex items-start">
                 <svg
-                  className={`w-6 h-6 ${
-                    isPaid ? 'text-green-500' : 'text-gray-400'
-                  } mr-3 flex-shrink-0`}
+                  className="w-6 h-6 text-green-500 mr-3 flex-shrink-0"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -154,15 +150,13 @@ export function BillingSettings() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span className={isPaid ? 'text-gray-900' : 'text-gray-600'}>
+                <span className="text-gray-900">
                   Up to 10 participants on screen
                 </span>
               </li>
               <li className="flex items-start">
                 <svg
-                  className={`w-6 h-6 ${
-                    isPaid ? 'text-green-500' : 'text-gray-400'
-                  } mr-3 flex-shrink-0`}
+                  className="w-6 h-6 text-green-500 mr-3 flex-shrink-0"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -172,15 +166,13 @@ export function BillingSettings() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span className={isPaid ? 'text-gray-900' : 'text-gray-600'}>
+                <span className="text-gray-900">
                   Unlimited streaming destinations
                 </span>
               </li>
               <li className="flex items-start">
                 <svg
-                  className={`w-6 h-6 ${
-                    isPaid ? 'text-green-500' : 'text-gray-400'
-                  } mr-3 flex-shrink-0`}
+                  className="w-6 h-6 text-green-500 mr-3 flex-shrink-0"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -190,15 +182,13 @@ export function BillingSettings() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span className={isPaid ? 'text-gray-900' : 'text-gray-600'}>
+                <span className="text-gray-900">
                   1080p Full HD streaming
                 </span>
               </li>
               <li className="flex items-start">
                 <svg
-                  className={`w-6 h-6 ${
-                    isPaid ? 'text-green-500' : 'text-gray-400'
-                  } mr-3 flex-shrink-0`}
+                  className="w-6 h-6 text-green-500 mr-3 flex-shrink-0"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -208,15 +198,13 @@ export function BillingSettings() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span className={isPaid ? 'text-gray-900' : 'text-gray-600'}>
+                <span className="text-gray-900">
                   Local recording (unlimited storage)
                 </span>
               </li>
               <li className="flex items-start">
                 <svg
-                  className={`w-6 h-6 ${
-                    isPaid ? 'text-green-500' : 'text-gray-400'
-                  } mr-3 flex-shrink-0`}
+                  className="w-6 h-6 text-green-500 mr-3 flex-shrink-0"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -226,15 +214,13 @@ export function BillingSettings() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span className={isPaid ? 'text-gray-900' : 'text-gray-600'}>
+                <span className="text-gray-900">
                   Custom branding & overlays
                 </span>
               </li>
               <li className="flex items-start">
                 <svg
-                  className={`w-6 h-6 ${
-                    isPaid ? 'text-green-500' : 'text-gray-400'
-                  } mr-3 flex-shrink-0`}
+                  className="w-6 h-6 text-green-500 mr-3 flex-shrink-0"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -244,7 +230,7 @@ export function BillingSettings() {
                     clipRule="evenodd"
                   />
                 </svg>
-                <span className={isPaid ? 'text-gray-900' : 'text-gray-600'}>
+                <span className="text-gray-900">
                   Priority support
                 </span>
               </li>
@@ -253,7 +239,7 @@ export function BillingSettings() {
 
           {/* Actions */}
           <div className="flex gap-4">
-            {!isPaid ? (
+            {subscription?.status === 'active' ? (
               <Button onClick={handleSubscribe} size="lg" className="flex-1">
                 Upgrade to Pro - $20/month
               </Button>

@@ -1,9 +1,16 @@
-import { io, Socket } from 'socket.io-client';
+import io from 'socket.io-client';
+import type { LayoutConfig } from '../types';
+
+type Socket = ReturnType<typeof io>;
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 class SocketService {
   private socket: Socket | null = null;
+  private reconnectAttempts = 0;
+  private readonly maxReconnectAttempts = 10;
+  private readonly baseReconnectDelay = 1000; // 1 second
+  private readonly maxReconnectDelay = 30000; // 30 seconds
 
   connect(token: string): void {
     if (this.socket?.connected) return;
@@ -11,17 +18,43 @@ class SocketService {
     this.socket = io(API_URL, {
       auth: { token },
       transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: this.maxReconnectAttempts,
+      reconnectionDelay: this.baseReconnectDelay,
+      reconnectionDelayMax: this.maxReconnectDelay,
+      randomizationFactor: 0.5, // Randomize delay to prevent thundering herd
+      timeout: 20000, // Connection timeout
     });
 
     this.socket.on('connect', () => {
       console.log('Socket connected');
+      this.reconnectAttempts = 0; // Reset on successful connection
     });
 
-    this.socket.on('disconnect', () => {
-      console.log('Socket disconnected');
+    this.socket.on('disconnect', (reason: string) => {
+      console.log('Socket disconnected:', reason);
     });
 
-    this.socket.on('error', (error) => {
+    this.socket.on('reconnect_attempt', (attempt: number) => {
+      this.reconnectAttempts = attempt;
+      const delay = Math.min(
+        this.baseReconnectDelay * Math.pow(2, attempt - 1),
+        this.maxReconnectDelay
+      );
+      console.log(`Reconnection attempt ${attempt}/${this.maxReconnectAttempts} (delay: ${delay}ms)`);
+    });
+
+    this.socket.on('reconnect_failed', () => {
+      console.error('Socket reconnection failed after maximum attempts');
+      this.reconnectAttempts = 0;
+    });
+
+    this.socket.on('reconnect', (attempt: number) => {
+      console.log(`Socket reconnected after ${attempt} attempts`);
+      this.reconnectAttempts = 0;
+    });
+
+    this.socket.on('error', (error: Error) => {
       console.error('Socket error:', error);
     });
   }
@@ -33,15 +66,19 @@ class SocketService {
     }
   }
 
-  emit(event: string, data?: any): void {
-    this.socket?.emit(event, data);
+  emit<T = unknown>(event: string, data?: unknown, callback?: (response: T) => void): void {
+    if (callback) {
+      this.socket?.emit(event, data, callback);
+    } else {
+      this.socket?.emit(event, data);
+    }
   }
 
-  on(event: string, callback: (...args: any[]) => void): void {
+  on<T = unknown>(event: string, callback: (data: T) => void): void {
     this.socket?.on(event, callback);
   }
 
-  off(event: string, callback?: (...args: any[]) => void): void {
+  off<T = unknown>(event: string, callback?: (data: T) => void): void {
     this.socket?.off(event, callback);
   }
 
@@ -57,8 +94,26 @@ class SocketService {
     this.emit('media-state-changed', { audio, video });
   }
 
-  updateLayout(layout: any): void {
+  updateLayout(layout: LayoutConfig): void {
     this.emit('layout-updated', layout);
+  }
+
+  getConnectionStatus(): {
+    connected: boolean;
+    reconnecting: boolean;
+    reconnectAttempts: number;
+    maxReconnectAttempts: number;
+  } {
+    return {
+      connected: this.socket?.connected || false,
+      reconnecting: this.reconnectAttempts > 0,
+      reconnectAttempts: this.reconnectAttempts,
+      maxReconnectAttempts: this.maxReconnectAttempts,
+    };
+  }
+
+  isConnected(): boolean {
+    return this.socket?.connected || false;
   }
 }
 

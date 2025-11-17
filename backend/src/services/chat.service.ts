@@ -52,7 +52,7 @@ export class YouTubeChatPoller {
         where: {
           userId: this.userId,
           platform: 'youtube',
-          isEnabled: true,
+          isActive: true,
         },
       });
 
@@ -137,12 +137,7 @@ export class YouTubeChatPoller {
               broadcastId: this.broadcastId,
               platform: 'youtube',
               authorName: message.author,
-              content: message.message,
-              timestamp: message.timestamp,
-              metadata: {
-                isSuperChat: message.isSuperChat,
-                amount: message.superChatAmount,
-              },
+              messageText: message.message,
             },
           });
         }
@@ -175,6 +170,18 @@ export class YouTubeChatPoller {
 
 /**
  * Facebook Live Comments Polling
+ *
+ * IMPORTANT (2025 Facebook API Best Practices):
+ * - This implementation uses polling, but Facebook recommends using Webhooks for real-time comments
+ * - Webhooks provide lower latency and reduce API calls
+ * - To implement webhooks:
+ *   1. Subscribe to 'live_videos' webhook topic for the Page
+ *   2. Listen for 'comments' field updates
+ *   3. Verify webhook signatures using app secret
+ *   4. Handle webhook events at POST /api/webhooks/facebook
+ * - Current polling interval: 3 seconds
+ * - API version: v24.0 (updated for 2025 compatibility)
+ * - Rate limits are monitored via x-app-usage header
  */
 export class FacebookChatPoller {
   private broadcastId: string;
@@ -198,7 +205,7 @@ export class FacebookChatPoller {
         where: {
           userId: this.userId,
           platform: 'facebook',
-          isEnabled: true,
+          isActive: true,
         },
       });
 
@@ -212,7 +219,7 @@ export class FacebookChatPoller {
       // Get live video (this would typically be created when going live)
       // For now, we'll poll for the most recent live video
       const liveVideoResponse = await axios.get(
-        'https://graph.facebook.com/v18.0/me/live_videos',
+        'https://graph.facebook.com/v24.0/me/live_videos',
         {
           params: {
             access_token: this.accessToken,
@@ -244,11 +251,11 @@ export class FacebookChatPoller {
 
     try {
       const response = await axios.get(
-        `https://graph.facebook.com/v18.0/${this.liveVideoId}/comments`,
+        `https://graph.facebook.com/v24.0/${this.liveVideoId}/comments`,
         {
           params: {
             access_token: this.accessToken,
-            fields: 'id,from,message,created_time',
+            fields: 'id,from{id,name,picture},message,created_time,parent,attachment',
             filter: 'stream',
             order: 'chronological',
           },
@@ -266,6 +273,7 @@ export class FacebookChatPoller {
             id: comment.id,
             platform: 'facebook',
             author: comment.from.name,
+            authorAvatar: comment.from.picture?.data?.url,
             message: comment.message,
             timestamp: commentTime,
           };
@@ -278,8 +286,7 @@ export class FacebookChatPoller {
               broadcastId: this.broadcastId,
               platform: 'facebook',
               authorName: message.author,
-              content: message.message,
-              timestamp: message.timestamp,
+              messageText: message.message,
             },
           });
 
@@ -287,14 +294,55 @@ export class FacebookChatPoller {
         }
       }
 
-      // Poll every 3 seconds
+      // Poll every 3 seconds (Facebook 2025 recommendation: use webhooks for real-time)
+      // TODO: Implement webhook subscription for better performance and reduced API calls
       this.pollingInterval = setTimeout(() => {
         this.poll();
       }, 3000);
     } catch (error: any) {
-      logger.error('Facebook chat poll error:', error.message);
+      logger.error('Facebook chat poll error:', error.response?.data || error.message);
 
-      // Retry after 10 seconds on error
+      // Handle specific Facebook API error codes
+      const errorCode = error.response?.data?.error?.code;
+      const errorSubcode = error.response?.data?.error?.error_subcode;
+
+      if (errorCode === 190) {
+        // Access token expired or invalid - stop polling
+        logger.error('Facebook access token expired (code 190). Stopping chat poller.');
+        this.stop();
+        return;
+      } else if (errorCode === 368) {
+        // Temporarily blocked for Policies violations - exponential backoff
+        logger.warn('Facebook API temporarily blocked (code 368). Retrying after 60s.');
+        this.pollingInterval = setTimeout(() => {
+          this.poll();
+        }, 60000); // Wait 60 seconds
+        return;
+      } else if (errorCode >= 200 && errorCode <= 299) {
+        // Permission error - stop polling
+        logger.error(`Facebook permission error (code ${errorCode}). Stopping chat poller.`);
+        this.stop();
+        return;
+      }
+
+      // Rate limit handling - check for rate limit headers
+      const rateLimitRemaining = error.response?.headers['x-app-usage'];
+      if (rateLimitRemaining) {
+        try {
+          const usage = JSON.parse(rateLimitRemaining);
+          if (usage.call_count >= 95) { // Near limit threshold
+            logger.warn('Facebook API rate limit approaching. Slowing down polling to 10s.');
+            this.pollingInterval = setTimeout(() => {
+              this.poll();
+            }, 10000); // Slow down to 10 seconds
+            return;
+          }
+        } catch (e) {
+          // Ignore JSON parse errors
+        }
+      }
+
+      // Default retry after 10 seconds on generic error
       this.pollingInterval = setTimeout(() => {
         this.poll();
       }, 10000);
@@ -334,7 +382,7 @@ export class TwitchChatPoller {
         where: {
           userId: this.userId,
           platform: 'twitch',
-          isEnabled: true,
+          isActive: true,
         },
       });
 
@@ -515,7 +563,7 @@ export class XChatPoller {
         where: {
           userId: this.userId,
           platform: 'x',
-          isEnabled: true,
+          isActive: true,
         },
       });
 
@@ -578,8 +626,7 @@ export class XChatPoller {
             broadcastId: this.broadcastId,
             platform: 'x',
             authorName: message.author,
-            content: message.message,
-            timestamp: message.timestamp,
+            messageText: message.message,
           },
         });
 
@@ -634,7 +681,7 @@ export class RumbleChatPoller {
         where: {
           userId: this.userId,
           platform: 'rumble',
-          isEnabled: true,
+          isActive: true,
         },
       });
 
@@ -686,12 +733,7 @@ export class RumbleChatPoller {
             broadcastId: this.broadcastId,
             platform: 'rumble',
             authorName: message.author,
-            content: message.message,
-            timestamp: message.timestamp,
-            metadata: {
-              isSuperChat: message.isSuperChat,
-              amount: message.superChatAmount,
-            },
+            messageText: message.message,
           },
         });
 

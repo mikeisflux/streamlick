@@ -6,13 +6,73 @@ pnpm-lock.yaml
 
 # Environment
 .env
+.env.*
 .env.local
+.env.development
 .env.production
+.env.test
+*.env
+!.env.example
+.env.backup
+.env.*.backup
 
 # Build outputs
 dist/
 build/
 *.tsbuildinfo
+
+# TypeScript compiled artifacts in src (shouldn't be there, but git may track them)
+backend/src/**/*.js
+backend/src/**/*.js.map
+backend/src/**/*.d.ts
+!backend/src/types/express.d.ts
+frontend/src/**/*.js
+frontend/src/**/*.js.map
+media-server/src/**/*.js
+media-server/src/**/*.js.map
+
+# Config files (local overrides)
+vite.config.*.ts
+vite.config.*.js
+vite.config.local.ts
+vite.config.local.js
+*.config.local.*
+config.local.*
+config/*.local.*
+tsconfig.local.json
+tsconfig.*.json
+!tsconfig.json
+!tsconfig.node.json
+
+# Additional config file variants
+jest.config.local.*
+vitest.config.local.*
+tailwind.config.local.*
+postcss.config.local.*
+*.config.development.*
+*.config.production.*
+*.config.staging.*
+*.config.test.*
+
+# All config.json files (except examples)
+config.json
+config.*.json
+*/config.json
+**/config.json
+!config.example.json
+!*.config.example.json
+
+# All config files (except examples and main configs)
+*.config.js
+*.config.ts
+!vite.config.ts
+!vitest.config.ts
+!tailwind.config.js
+!tailwind.config.ts
+!postcss.config.js
+!jest.config.js
+config/
+!config/.gitkeep
 
 # Logs
 logs/
@@ -46,3 +106,299 @@ temp/
 
 # Docker
 docker-compose.override.yml
+
+# Uploads and user-generated content
+uploads/
+backend/uploads/
+frontend/public/images/
+public/images/
+branding-config.json
+backend/uploads/branding-config.json
+
+# PM2 and process management
+ecosystem.config.js
+pm2.config.js
+*.pm2.json
+
+# Nginx and server configs
+*.nginx.conf
+nginx.conf
+sites-available/
+sites-enabled/
+
+# Secrets and credentials
+*secret*
+*secrets*
+*.pem
+*.key
+*.cert
+*.crt
+*.csr
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials.json
+credentials.*.json
+service-account*.json
+client_secret*.json
+
+# API keys and tokens
+.api-keys
+api-keys.json
+tokens.json
+*.token
+.token
+
+# Cloud provider credentials
+.aws/
+.azure/
+.gcloud/
+gcloud-credentials.json
+aws-credentials.json
+azure-credentials.json
+
+# SSH keys
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+*.ppk
+
+# Database credentials and configs
+database.json
+database.*.json
+db-config.json
+db-config.*.json
+prisma/.env
+prisma/.env.*
+.pgpass
+.my.cnf
+
+# OAuth and auth configs
+oauth-config.json
+oauth-config.*.json
+auth-config.json
+auth-config.*.json
+jwt-secret.txt
+.jwt
+
+# Email service configs
+email-config.json
+sendgrid.json
+mailgun.json
+ses-config.json
+
+# Payment provider credentials
+stripe-config.json
+stripe-*.json
+paypal-config.json
+
+# Hetzner and infrastructure credentials
+hetzner-token.txt
+hetzner-config.json
+.hcloud
+infrastructure-secrets.json
+
+# Backup files
+*.backup
+*.bak
+*.old
+*.orig
+backup/
+backups/
+
+# Local environment overrides
+.env.override
+.env.*.local
+local.env
+env.local
+
+# Configuration overrides
+config.local.json
+config.override.json
+settings.local.json
+settings.override.json
+
+# Testing configs with sensitive data
+.env.testing
+.env.e2e
+cypress.env.json
+playwright.env.json
+
+# Additional config patterns
+**/config/*.json
+**/config/*.js
+**/config/*.ts
+!**/config/*.example.*
+!**/config/default.*
+*.config.json
+!*.example.config.json
+
+# All .env variants (comprehensive)
+**/.env
+**/.env.*
+!**/.env.example
+.env.backup.*
+.env.*.backup
+
+# Additional environment file patterns
+.envrc
+.envrc.local
+.env.sh
+.env.bash
+environment
+environment.*
+!environment.example
+
+# Runtime configuration files
+app.config.json
+app.config.*.json
+!app.config.example.json
+runtime.config.json
+runtime.config.*.json
+application.config.json
+application.config.*.json
+
+# Server configuration files
+server.config.json
+server.config.*.json
+server.config.js
+server.config.ts
+!server.config.example.*
+
+# Environment-specific configs
+development.json
+production.json
+staging.json
+test.json
+local.json
+
+# Config directories (except examples)
+.config/
+!.config/.gitkeep
+!.config/example/
+
+# Certificate and SSL files
+ssl/
+certs/
+certificates/
+*.ca-bundle
+*.ca-cert
+
+# Backend-specific configs
+backend/.env*
+backend/config.json
+backend/config/*.json
+!backend/config/*.example.json
+backend/src/config/*.json
+!backend/src/config/*.example.json
+
+# Frontend-specific configs
+frontend/.env*
+frontend/config.json
+frontend/config/*.json
+!frontend/config/*.example.json
+
+# Media server configs
+media-server/.env*
+media-server/config.json
+media-server/config/*.json
+!media-server/config/*.example.json
+
+# Build and deployment configs
+.sentryclirc
+.npmrc
+.yarnrc
+.pnpmrc
+.npmrc.local
+.yarnrc.local
+.pnpmrc.local
+.nvmrc.local
+deploy.config.json
+deploy.config.*.json
+deployment.json
+deployment.*.json
+
+# CI/CD configs (local overrides only)
+.gitlab-ci.local.yml
+.circleci/local.yml
+jenkins.local.xml
+.travis.local.yml
+
+# Terraform and infrastructure as code
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform/
+terraform.tfvars
+terraform.tfvars.json
+.terraformrc
+terraform.rc
+
+# Ansible configs
+ansible.cfg
+inventory
+inventory.ini
+*.vault
+vault-pass.txt
+vault-password.txt
+
+# Kubernetes configs with secrets
+kubeconfig
+kubeconfig.*
+*.kubeconfig
+k8s-secrets.yaml
+k8s-secrets.yml
+secrets.yaml
+secrets.yml
+
+# Docker configs with secrets
+.dockercfg
+.docker/config.json
+docker-compose.secrets.yml
+
+# Session and auth tokens
+.session
+session.*
+*.session
+auth-tokens.json
+refresh-tokens.json
+
+# Analytics and tracking configs
+analytics.config.json
+gtm-config.json
+ga-config.json
+
+# Feature flags and A/B testing
+feature-flags.json
+feature-flags.*.json
+ab-test-config.json
+launchdarkly.json
+
+# Monitoring and observability
+datadog.json
+newrelic.json
+sentry.config.json
+honeycomb.json
+
+# Cache and temporary config
+.cache/config.json
+.temp/config.json
+
+# Local development files
+.local/
+.dev/
+dev-config.json
+local-settings.json
+
+# Package manager configs (with auth)
+.pnpm-store/
+.yarn/
+.npm/
+
+# IDE and editor configs (that might contain secrets)
+.vscode/settings.json
+.vscode/launch.json
+.idea/workspace.xml
+.idea/tasks.xml

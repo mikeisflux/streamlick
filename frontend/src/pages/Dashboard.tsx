@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { broadcastService } from '../services/broadcast.service';
 import { useAuthStore } from '../store/authStore';
+import { useBranding } from '../context/BrandingContext';
 import { Broadcast } from '../types';
 import { Button } from '../components/Button';
+import { API_URL } from '../services/api';
 import toast from 'react-hot-toast';
 
 export function Dashboard() {
@@ -11,6 +13,7 @@ export function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  const { branding } = useBranding();
 
   useEffect(() => {
     loadBroadcasts();
@@ -40,12 +43,26 @@ export function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       {/* Header */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-900">🎥 Streamlick</h1>
+            {branding?.logoUrl ? (
+              <img
+                src={branding.logoUrl.startsWith('http') ? branding.logoUrl : `${API_URL}${branding.logoUrl}`}
+                alt={branding.config?.platformName || 'Logo'}
+                className="w-[300px] h-[134px] object-contain cursor-pointer"
+                onClick={() => navigate('/dashboard')}
+              />
+            ) : (
+              <h1
+                className="text-2xl font-bold text-gray-900 cursor-pointer"
+                onClick={() => navigate('/dashboard')}
+              >
+                {branding?.config?.platformName || 'Streamlick'}
+              </h1>
+            )}
             <div className="flex items-center gap-4">
               <span className="text-sm text-gray-600">{user?.email}</span>
               <Button variant="ghost" size="sm" onClick={() => logout()}>
@@ -80,40 +97,6 @@ export function Dashboard() {
             >
               Billing
             </button>
-            {user?.role === 'admin' && (
-              <>
-                <button
-                  onClick={() => navigate('/admin/assets')}
-                  className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
-                >
-                  Admin Assets
-                </button>
-                <button
-                  onClick={() => navigate('/admin/settings')}
-                  className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
-                >
-                  Admin Settings
-                </button>
-                <button
-                  onClick={() => navigate('/admin/testing')}
-                  className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
-                >
-                  Testing
-                </button>
-                <button
-                  onClick={() => navigate('/admin/servers')}
-                  className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
-                >
-                  Servers
-                </button>
-                <button
-                  onClick={() => navigate('/admin/logs')}
-                  className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
-                >
-                  Logs
-                </button>
-              </>
-            )}
           </nav>
         </div>
       </header>
@@ -122,8 +105,8 @@ export function Dashboard() {
       <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h2 className="text-3xl font-bold text-gray-900">Your Broadcasts</h2>
-            <p className="text-gray-600 mt-1">Create and manage your live streams</p>
+            <h2 className="text-3xl font-bold text-white">Your Broadcasts</h2>
+            <p className="text-white mt-1">Create and manage your live streams</p>
           </div>
           <Button onClick={createBroadcast} size="lg">
             + Create Broadcast

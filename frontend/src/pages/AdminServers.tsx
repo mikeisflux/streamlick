@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import api from '../services/api.service';
+import api from '../services/api';
 import { toast } from 'react-hot-toast';
 
 interface MediaServer {
@@ -56,7 +56,7 @@ export function AdminServers() {
   // Load server stats
   const loadStats = async () => {
     try {
-      const response = await api.get('/api/media-servers/stats');
+      const response = await api.get('/media-servers/stats');
       setStats(response.data);
     } catch (error: any) {
       console.error('Error loading stats:', error);
@@ -82,7 +82,7 @@ export function AdminServers() {
 
     setAddingServer(true);
     try {
-      await api.post('/api/media-servers', { url: newServerUrl });
+      await api.post('/media-servers', { url: newServerUrl });
       toast.success('Media server added successfully!');
       setNewServerUrl('');
       setShowAddModal(false);
@@ -99,7 +99,7 @@ export function AdminServers() {
     if (!confirm('Are you sure you want to remove this server?')) return;
 
     try {
-      await api.delete(`/api/media-servers/${serverId}`);
+      await api.delete(`/media-servers/${serverId}`);
       toast.success('Server removed successfully');
       await loadStats();
     } catch (error: any) {

@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import logger from '../../../backend/src/utils/logger';
+import logger from '../utils/logger';
 
 export interface BitrateProfile {
   name: string;
@@ -106,7 +106,7 @@ export class AdaptiveBitrateService extends EventEmitter {
     {
       name: '480p Low',
       videoBitrate: 1200,
-      audioBitrate: 96,
+      audioBitrate: 128,  // Maintain audio quality even on low video bitrate
       width: 854,
       height: 480,
       framerate: 30,
@@ -114,7 +114,7 @@ export class AdaptiveBitrateService extends EventEmitter {
     {
       name: '360p Very Low',
       videoBitrate: 600,
-      audioBitrate: 64,
+      audioBitrate: 128,  // Maintain audio quality even on low video bitrate
       width: 640,
       height: 360,
       framerate: 24,
@@ -407,6 +407,27 @@ export class AdaptiveBitrateService extends EventEmitter {
    */
   getActiveBroadcasts(): string[] {
     return Array.from(this.currentProfiles.keys());
+  }
+
+  /**
+   * Stop all adaptive bitrate monitoring (cleanup)
+   */
+  stopAll(): void {
+    logger.info('Stopping all adaptive bitrate monitoring');
+
+    // Clear all intervals
+    this.monitoringIntervals.forEach((interval, broadcastId) => {
+      clearInterval(interval);
+      logger.info(`Cleared monitoring interval for broadcast ${broadcastId}`);
+    });
+
+    // Clear all maps
+    this.monitoringIntervals.clear();
+    this.currentProfiles.clear();
+    this.stabilityCounters.clear();
+    this.adjustmentHistory.clear();
+
+    logger.info('All adaptive bitrate monitoring stopped');
   }
 }
 

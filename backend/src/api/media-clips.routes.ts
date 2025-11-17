@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { authMiddleware } from '../middleware/auth.middleware';
+import { authenticate as authMiddleware } from '../auth/middleware';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -71,7 +71,7 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
 
     // In production, fetch from database
     // For now, return mock data structure
-    const clips = [];
+    const clips: any[] = [];
 
     if (type) {
       // Filter by type if provided

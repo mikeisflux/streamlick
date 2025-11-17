@@ -53,8 +53,23 @@ export const useStudioStore = create<StudioState>((set) => ({
       return { mediaStates };
     }),
 
-  setLocalStream: (stream) => set({ localStream: stream }),
-  setScreenStream: (stream) => set({ screenStream: stream }),
+  setLocalStream: (stream) =>
+    set((state) => {
+      // Stop all tracks from previous stream to prevent memory leak
+      if (state.localStream) {
+        state.localStream.getTracks().forEach((track) => track.stop());
+      }
+      return { localStream: stream };
+    }),
+
+  setScreenStream: (stream) =>
+    set((state) => {
+      // Stop all tracks from previous stream to prevent memory leak
+      if (state.screenStream) {
+        state.screenStream.getTracks().forEach((track) => track.stop());
+      }
+      return { screenStream: stream };
+    }),
   setIsLive: (isLive) => set({ isLive }),
   setIsRecording: (isRecording) => set({ isRecording }),
 

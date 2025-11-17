@@ -4,7 +4,8 @@ import { toast } from 'react-hot-toast';
 export interface Scene {
   id: string;
   name: string;
-  layout: 'solo' | 'sideBySide' | 'grid' | 'pip' | 'spotlight' | 'custom';
+  layout: 'solo' | 'sideBySide' | 'grid' | 'pip' | 'spotlight' | 'custom' | number;
+  selectedLayout?: number; // Layout ID for compatibility
   participants: {
     id: string;
     x: number;
@@ -23,14 +24,27 @@ export interface Scene {
     width: number;
     height: number;
   }[];
+  banners?: {
+    id: string;
+    type: 'lower-third' | 'text-overlay' | 'cta' | 'countdown';
+    title: string;
+    subtitle?: string;
+    position: 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
+    backgroundColor: string;
+    textColor: string;
+    visible: boolean;
+  }[];
   background?: {
     type: 'color' | 'image' | 'video';
     value: string;
+    url?: string; // For image/video backgrounds
   };
   audioSettings?: {
     masterVolume: number;
     participantVolumes: Record<string, number>;
   };
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 interface SceneManagerProps {
@@ -41,6 +55,8 @@ interface SceneManagerProps {
   onSceneUpdate: (sceneId: string, updates: Partial<Scene>) => void;
   onSceneDelete: (sceneId: string) => void;
   onSceneDuplicate: (sceneId: string) => void;
+  captureCurrentState?: () => Partial<Scene>;
+  updateCurrentSceneWithState?: () => void;
 }
 
 export type TransitionType =
@@ -61,6 +77,8 @@ export const SceneManager: React.FC<SceneManagerProps> = ({
   onSceneUpdate,
   onSceneDelete,
   onSceneDuplicate,
+  captureCurrentState,
+  updateCurrentSceneWithState,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [editingScene, setEditingScene] = useState<string | null>(null);
@@ -84,17 +102,28 @@ export const SceneManager: React.FC<SceneManagerProps> = ({
       return;
     }
 
+    // Capture current broadcast state if available
+    const currentState = captureCurrentState ? captureCurrentState() : {};
+
     const newScene: Scene = {
       id: `scene-${Date.now()}`,
       name: newSceneName,
-      layout: 'grid',
+      layout: 1,
+      selectedLayout: 1,
       participants: [],
       overlays: [],
+      banners: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      ...currentState, // Apply current broadcast state
     };
 
     onSceneCreate(newScene);
     setNewSceneName('');
-    toast.success(`Scene "${newSceneName}" created!`);
+    toast.success(`Scene "${newSceneName}" created with current settings!`, {
+      icon: '🎬',
+      duration: 2000,
+    });
   };
 
   const handleRenameScene = (sceneId: string, newName: string) => {
@@ -165,7 +194,7 @@ export const SceneManager: React.FC<SceneManagerProps> = ({
 
       {/* Current scene display */}
       <div className="bg-gray-900 rounded p-3 mb-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-2">
           <div>
             <div className="text-xs text-gray-400">Active Scene</div>
             <div className="text-white font-medium">{currentScene?.name || 'No scene'}</div>
@@ -175,6 +204,15 @@ export const SceneManager: React.FC<SceneManagerProps> = ({
             <span className="text-xs text-red-500">LIVE</span>
           </div>
         </div>
+        {updateCurrentSceneWithState && (
+          <button
+            onClick={updateCurrentSceneWithState}
+            className="w-full px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+            title="Update this scene with current broadcast settings"
+          >
+            💾 Update Scene
+          </button>
+        )}
       </div>
 
       {isExpanded && (
@@ -277,10 +315,17 @@ export const SceneManager: React.FC<SceneManagerProps> = ({
                     )}
                   </div>
 
-                  <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
-                    <span className="px-2 py-0.5 bg-gray-800 rounded">{scene.layout}</span>
-                    <span>{scene.participants.length} participants</span>
-                    <span>{scene.overlays.length} overlays</span>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                    <span className="px-2 py-0.5 bg-gray-800 rounded">Layout {scene.selectedLayout || scene.layout}</span>
+                    {scene.banners && scene.banners.length > 0 && (
+                      <span className="px-2 py-0.5 bg-purple-900/30 text-purple-300 rounded">{scene.banners.length} banner{scene.banners.length !== 1 ? 's' : ''}</span>
+                    )}
+                    {scene.background && (
+                      <span className="px-2 py-0.5 bg-blue-900/30 text-blue-300 rounded">Background</span>
+                    )}
+                    {scene.participants.length > 0 && (
+                      <span>{scene.participants.length} participant{scene.participants.length !== 1 ? 's' : ''}</span>
+                    )}
                   </div>
                 </div>
               );

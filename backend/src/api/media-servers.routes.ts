@@ -5,7 +5,7 @@
 
 import { Router } from 'express';
 import { mediaServerPool } from '../services/media-server-pool.service';
-import { authenticateToken, requireAdmin } from '../middleware/auth';
+import { authenticateToken, requireAdmin } from '../auth/middleware';
 
 const router = Router();
 

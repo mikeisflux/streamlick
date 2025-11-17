@@ -84,15 +84,16 @@ class RecordingService {
         return;
       }
 
+      // Store mimeType before cleanup
+      const mimeType = this.mediaRecorder.mimeType;
+
       this.mediaRecorder.onstop = () => {
         console.log('Recording stopped, creating blob...');
 
-        const blob = new Blob(this.recordedChunks, {
-          type: this.mediaRecorder!.mimeType,
-        });
+        const blob = new Blob(this.recordedChunks, { type: mimeType });
 
-        this.isRecording = false;
-        this.recordedChunks = [];
+        // Clean up MediaRecorder and state
+        this.cleanup();
 
         console.log('Recording blob created:', blob.size, 'bytes');
         resolve(blob);
@@ -100,6 +101,23 @@ class RecordingService {
 
       this.mediaRecorder.stop();
     });
+  }
+
+  /**
+   * Clean up MediaRecorder and associated resources
+   */
+  private cleanup(): void {
+    if (this.mediaRecorder) {
+      // Remove event listeners to prevent memory leaks
+      this.mediaRecorder.ondataavailable = null;
+      this.mediaRecorder.onstop = null;
+      this.mediaRecorder.onerror = null;
+      this.mediaRecorder = null;
+    }
+
+    this.isRecording = false;
+    this.recordedChunks = [];
+    this.startTime = 0;
   }
 
   /**

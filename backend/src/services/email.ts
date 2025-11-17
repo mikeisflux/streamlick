@@ -9,13 +9,13 @@ if (SENDGRID_API_KEY) {
   sgMail.setApiKey(SENDGRID_API_KEY);
 }
 
-export async function sendMagicLink(email: string, token: string): Promise<void> {
-  const magicLink = `${FRONTEND_URL}/auth/verify?token=${token}`;
+export async function sendVerificationEmail(email: string, token: string): Promise<void> {
+  const verificationLink = `${FRONTEND_URL}/auth/verify-email?token=${token}`;
 
   const msg = {
     to: email,
     from: FROM_EMAIL,
-    subject: 'Sign in to Streamlick',
+    subject: 'Verify your Streamlick account',
     html: `
       <!DOCTYPE html>
       <html>
@@ -35,12 +35,13 @@ export async function sendMagicLink(email: string, token: string): Promise<void>
               <h1>🎥 Streamlick</h1>
             </div>
             <div class="content">
-              <h2>Sign in to your account</h2>
-              <p>Click the button below to sign in to your Streamlick account. This link will expire in 15 minutes.</p>
-              <a href="${magicLink}" class="button">Sign In</a>
+              <h2>Welcome to Streamlick!</h2>
+              <p>Thank you for registering. Please verify your email address to complete your account setup.</p>
+              <p>Click the button below to verify your email. This link will expire in 24 hours.</p>
+              <a href="${verificationLink}" class="button">Verify Email</a>
               <p>Or copy and paste this link into your browser:</p>
-              <p style="background: white; padding: 10px; border-radius: 5px; word-break: break-all;">${magicLink}</p>
-              <p style="margin-top: 30px; color: #666;">If you didn't request this email, you can safely ignore it.</p>
+              <p style="background: white; padding: 10px; border-radius: 5px; word-break: break-all;">${verificationLink}</p>
+              <p style="margin-top: 30px; color: #666;">If you didn't create an account, you can safely ignore this email.</p>
             </div>
             <div class="footer">
               <p>&copy; 2024 Streamlick. All rights reserved.</p>
@@ -54,14 +55,14 @@ export async function sendMagicLink(email: string, token: string): Promise<void>
   try {
     if (SENDGRID_API_KEY) {
       await sgMail.send(msg);
-      logger.info(`Magic link sent to ${email}`);
+      logger.info(`Verification email sent to ${email}`);
     } else {
-      // Development mode: log the magic link
-      logger.info(`Magic link (dev mode): ${magicLink}`);
-      console.log('\n📧 Magic Link:', magicLink, '\n');
+      // Development mode: log the verification link
+      logger.info(`Verification link (dev mode): ${verificationLink}`);
+      console.log('\n📧 Email Verification Link:', verificationLink, '\n');
     }
   } catch (error) {
-    logger.error('Error sending magic link:', error);
-    throw new Error('Failed to send magic link');
+    logger.error('Error sending verification email:', error);
+    throw new Error('Failed to send verification email');
   }
 }

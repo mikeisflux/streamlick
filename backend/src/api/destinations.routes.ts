@@ -100,9 +100,9 @@ router.patch('/:id', authenticate, async (req: AuthRequest, res) => {
         userId: req.user!.userId,
       },
       data: {
-        ...(displayName && { displayName }),
-        ...(rtmpUrl && { rtmpUrl }),
-        ...(streamKey && { streamKey: encrypt(streamKey) }),
+        ...(displayName !== undefined && displayName !== null && { displayName }),
+        ...(rtmpUrl !== undefined && rtmpUrl !== null && { rtmpUrl }),
+        ...(streamKey !== undefined && streamKey !== null && { streamKey: encrypt(streamKey) }),
         ...(isActive !== undefined && { isActive }),
       },
     });
