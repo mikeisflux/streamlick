@@ -90,12 +90,24 @@ app.use('/api/', limiter);
 // CSRF protection for all API routes (except GET, HEAD, OPTIONS, webhooks)
 app.use('/api/', validateCsrfToken);
 
-// Serve uploaded media clips and branding images with CORS
+// CRITICAL FIX: Serve uploaded media clips and branding images with restricted CORS
+// Only allow requests from the configured frontend URL to prevent hotlinking and data exfiltration
 app.use('/uploads', (req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const allowedOrigin = process.env.FRONTEND_URL || 'http://localhost:3002';
+  const requestOrigin = req.headers.origin;
+
+  // Only set CORS header if request is from allowed origin
+  if (requestOrigin && requestOrigin === allowedOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', requestOrigin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-site'); // Changed from cross-origin
+  res.setHeader('X-Content-Type-Options', 'nosniff'); // Prevent MIME sniffing
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin'); // Limit referrer leakage
+
   next();
 }, express.static(path.join(__dirname, '../uploads')));
 
