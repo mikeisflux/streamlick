@@ -125,7 +125,7 @@ router.post(
   ]),
   async (req, res) => {
     try {
-      const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+      const files = req.files as any;
       const config = req.body.config ? JSON.parse(req.body.config) : {};
 
       logger.info('Saving branding settings:', {
