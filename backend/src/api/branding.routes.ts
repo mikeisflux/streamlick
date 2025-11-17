@@ -87,8 +87,11 @@ const upload = multer({
     } else if (file.fieldname === 'favicon') {
       const allowedTypes = /ico|png/;
       const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+      // CRITICAL FIX: Also validate MIME type for favicon
+      const allowedMimeTypes = /image\/(x-icon|vnd\.microsoft\.icon|png)/;
+      const mimetype = allowedMimeTypes.test(file.mimetype);
 
-      if (extname) {
+      if (extname && mimetype) {
         return cb(null, true);
       } else {
         return cb(new Error('Only ICO or PNG files are allowed for favicon'));

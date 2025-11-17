@@ -25,10 +25,61 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+// Allowed MIME types for asset uploads
+const ALLOWED_MIME_TYPES = [
+  // Images
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+  'image/x-icon',
+  'image/vnd.microsoft.icon',
+  // Videos
+  'video/mp4',
+  'video/webm',
+  'video/ogg',
+  'video/quicktime',
+  'video/x-msvideo',
+  // Audio
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wav',
+  'audio/ogg',
+  'audio/webm',
+  'audio/aac',
+  // Documents (if needed)
+  'application/pdf',
+];
+
 // Upload new asset (simplified - in production you'd use S3/presigned URLs)
 router.post('/upload', authenticate, async (req: AuthRequest, res) => {
   try {
     const { type, name, fileUrl, fileSizeBytes, mimeType, metadata } = req.body;
+
+    // CRITICAL FIX: Validate required fields
+    if (!type || !name || !fileUrl) {
+      return res.status(400).json({ error: 'Missing required fields: type, name, fileUrl' });
+    }
+
+    // CRITICAL FIX: Validate MIME type if provided
+    if (mimeType && !ALLOWED_MIME_TYPES.includes(mimeType)) {
+      return res.status(400).json({
+        error: 'Invalid MIME type',
+        allowedTypes: ALLOWED_MIME_TYPES
+      });
+    }
+
+    // CRITICAL FIX: Validate file size (max 2GB)
+    if (fileSizeBytes && fileSizeBytes > 2 * 1024 * 1024 * 1024) {
+      return res.status(400).json({ error: 'File size exceeds maximum allowed (2GB)' });
+    }
+
+    // CRITICAL FIX: Validate fileUrl format
+    if (!fileUrl.startsWith('http://') && !fileUrl.startsWith('https://') && !fileUrl.startsWith('/')) {
+      return res.status(400).json({ error: 'Invalid file URL format' });
+    }
 
     const asset = await prisma.asset.create({
       data: {

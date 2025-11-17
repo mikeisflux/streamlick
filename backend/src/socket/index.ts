@@ -800,12 +800,41 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     // Disconnect
     socket.on('disconnect', () => {
       const { broadcastId, participantId } = socket.data;
-      if (broadcastId && participantId) {
-        socket.to(`broadcast:${broadcastId}`).emit('participant-disconnected', {
-          participantId,
-        });
+
+      // CRITICAL FIX: Clean up resources on disconnect
+      if (broadcastId) {
+        // Stop health monitoring for this broadcast
+        try {
+          streamHealthMonitor.stopMonitoring(broadcastId);
+          logger.info(`Health monitoring stopped for broadcast ${broadcastId} (disconnect)`);
+        } catch (error) {
+          logger.error('Error stopping health monitoring on disconnect:', error);
+        }
+
+        // Check if we should stop chat manager (if no other sockets in broadcast room)
+        const roomSize = io.sockets.adapter.rooms.get(`broadcast:${broadcastId}`)?.size || 0;
+        if (roomSize <= 1) { // Only this socket left, or already gone
+          const chatManager = activeChatManagers.get(broadcastId);
+          if (chatManager) {
+            try {
+              chatManager.stopAll();
+              activeChatManagers.delete(broadcastId);
+              logger.info(`Chat polling stopped for broadcast ${broadcastId} (last participant disconnect)`);
+            } catch (error) {
+              logger.error('Error stopping chat manager on disconnect:', error);
+            }
+          }
+        }
+
+        // Notify others in the room about disconnection
+        if (participantId) {
+          socket.to(`broadcast:${broadcastId}`).emit('participant-disconnected', {
+            participantId,
+          });
+        }
       }
-      logger.info(`Socket disconnected: ${socket.id}`);
+
+      logger.info(`Socket disconnected: ${socket.id} (broadcast: ${broadcastId}, participant: ${participantId})`);
     });
   });
 

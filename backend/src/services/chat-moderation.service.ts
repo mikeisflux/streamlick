@@ -42,10 +42,12 @@ export class ChatModerationService {
   private static instance: ChatModerationService;
   private timeoutTimers: Map<string, NodeJS.Timeout> = new Map();
   private activeTimeouts: Map<string, ModerationAction> = new Map();
+  // CRITICAL FIX: Store interval reference for cleanup
+  private expirationCheckInterval: NodeJS.Timeout | null = null;
 
   private constructor() {
     // Start checking for expired timeouts every minute
-    setInterval(() => this.checkExpiredTimeouts(), 60000);
+    this.expirationCheckInterval = setInterval(() => this.checkExpiredTimeouts(), 60000);
   }
 
   static getInstance(): ChatModerationService {
@@ -733,13 +735,22 @@ export class ChatModerationService {
   }
 
   /**
-   * Cleanup
+   * CRITICAL FIX: Cleanup method to stop background tasks
+   * Call this when shutting down the service
    */
   cleanup(): void {
+    // CRITICAL FIX: Clear expiration check interval
+    if (this.expirationCheckInterval) {
+      clearInterval(this.expirationCheckInterval);
+      this.expirationCheckInterval = null;
+    }
+
     // Clear all timeout timers
     this.timeoutTimers.forEach(timer => clearTimeout(timer));
     this.timeoutTimers.clear();
     this.activeTimeouts.clear();
+
+    logger.info('Chat moderation service cleaned up');
   }
 }
 
