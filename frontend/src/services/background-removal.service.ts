@@ -144,6 +144,8 @@ class BackgroundRemovalService {
 
     if (this.videoElement) {
       this.videoElement.pause();
+      // CRITICAL FIX: Remove event listeners
+      this.videoElement.onloadedmetadata = null;
       this.videoElement.srcObject = null;
       this.videoElement = null;
     }
@@ -157,6 +159,31 @@ class BackgroundRemovalService {
     }
 
     this.canvasElement = null;
+  }
+
+  /**
+   * CRITICAL FIX: Cleanup all resources including ML model and cache
+   * Call this when completely done with background removal (e.g., component unmount)
+   */
+  async cleanup(): Promise<void> {
+    // Stop any active processing
+    this.stop();
+
+    // Clear background image cache
+    this.backgroundImageCache.clear();
+
+    // Dispose of TensorFlow model to free GPU/CPU memory
+    if (this.model) {
+      try {
+        await this.model.dispose();
+        console.log('BodyPix model disposed');
+      } catch (error) {
+        console.error('Error disposing BodyPix model:', error);
+      }
+      this.model = null;
+    }
+
+    this.isLoading = false;
   }
 
   /**

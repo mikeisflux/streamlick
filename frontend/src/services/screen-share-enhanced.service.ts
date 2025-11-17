@@ -52,6 +52,10 @@ export class ScreenShareEnhancedService extends EventEmitter {
     participants: new Map(),
     pendingRequests: [],
   };
+  // CRITICAL FIX: Track socket listeners for cleanup
+  private socketListeners = new Map<string, (...args: any[]) => void>();
+  // CRITICAL FIX: Track media stream event listeners
+  private trackListeners = new Map<MediaStreamTrack, Map<string, (...args: any[]) => void>>();
 
   private constructor() {
     super();
@@ -68,10 +72,13 @@ export class ScreenShareEnhancedService extends EventEmitter {
    * Initialize screen share service with socket connection
    */
   initialize(socket: Socket, broadcastId: string): void {
+    // CRITICAL FIX: Remove existing listeners before adding new ones
+    this.removeSocketListeners();
+
     this.socket = socket;
 
-    // Listen for participant screen share requests
-    this.socket.on('screen-share-request', (data: { participantId: string; participantName: string; hasAudio: boolean }) => {
+    // CRITICAL FIX: Track listeners for cleanup
+    const onScreenShareRequest = (data: { participantId: string; participantName: string; hasAudio: boolean }) => {
       const request: ScreenShareRequest = {
         participantId: data.participantId,
         participantName: data.participantName,
@@ -80,19 +87,23 @@ export class ScreenShareEnhancedService extends EventEmitter {
       };
       this.state.pendingRequests.push(request);
       this.emit('screen-share-request', request);
-    });
+    };
+    this.socketListeners.set('screen-share-request', onScreenShareRequest);
+    this.socket.on('screen-share-request', onScreenShareRequest);
 
-    // Listen for screen share approval responses
-    this.socket.on('screen-share-approved', (data: { participantId: string }) => {
+    const onScreenShareApproved = (data: { participantId: string }) => {
       this.emit('screen-share-approved', data.participantId);
-    });
+    };
+    this.socketListeners.set('screen-share-approved', onScreenShareApproved);
+    this.socket.on('screen-share-approved', onScreenShareApproved);
 
-    this.socket.on('screen-share-denied', (data: { participantId: string; reason?: string }) => {
+    const onScreenShareDenied = (data: { participantId: string; reason?: string }) => {
       this.emit('screen-share-denied', data);
-    });
+    };
+    this.socketListeners.set('screen-share-denied', onScreenShareDenied);
+    this.socket.on('screen-share-denied', onScreenShareDenied);
 
-    // Listen for participant screen share started
-    this.socket.on('participant-screen-share-started', (data: { participantId: string; participantName: string; hasAudio: boolean }) => {
+    const onParticipantScreenShareStarted = (data: { participantId: string; participantName: string; hasAudio: boolean }) => {
       const participant: ScreenShareParticipant = {
         participantId: data.participantId,
         participantName: data.participantName,
@@ -103,17 +114,51 @@ export class ScreenShareEnhancedService extends EventEmitter {
       };
       this.state.participants.set(data.participantId, participant);
       this.emit('participant-screen-share-started', participant);
-    });
+    };
+    this.socketListeners.set('participant-screen-share-started', onParticipantScreenShareStarted);
+    this.socket.on('participant-screen-share-started', onParticipantScreenShareStarted);
 
-    // Listen for participant screen share stopped
-    this.socket.on('participant-screen-share-stopped', (data: { participantId: string }) => {
+    const onParticipantScreenShareStopped = (data: { participantId: string }) => {
       const participant = this.state.participants.get(data.participantId);
       if (participant) {
         participant.stream?.getTracks().forEach(track => track.stop());
         this.state.participants.delete(data.participantId);
         this.emit('participant-screen-share-stopped', data.participantId);
       }
+    };
+    this.socketListeners.set('participant-screen-share-stopped', onParticipantScreenShareStopped);
+    this.socket.on('participant-screen-share-stopped', onParticipantScreenShareStopped);
+  }
+
+  // CRITICAL FIX: Remove socket listeners
+  private removeSocketListeners(): void {
+    if (!this.socket) return;
+
+    this.socketListeners.forEach((listener, event) => {
+      this.socket?.off(event, listener);
     });
+    this.socketListeners.clear();
+  }
+
+  // CRITICAL FIX: Remove track event listeners
+  private removeTrackListeners(track: MediaStreamTrack): void {
+    const listeners = this.trackListeners.get(track);
+    if (listeners) {
+      listeners.forEach((listener, event) => {
+        track.removeEventListener(event, listener);
+      });
+      this.trackListeners.delete(track);
+    }
+  }
+
+  // CRITICAL FIX: Remove all track event listeners
+  private removeAllTrackListeners(): void {
+    this.trackListeners.forEach((listeners, track) => {
+      listeners.forEach((listener, event) => {
+        track.removeEventListener(event, listener);
+      });
+    });
+    this.trackListeners.clear();
   }
 
   /**
@@ -144,10 +189,16 @@ export class ScreenShareEnhancedService extends EventEmitter {
       this.state.screenStream = screenStream;
       this.state.hasSystemAudio = includeSystemAudio && screenStream.getAudioTracks().length > 0;
 
-      // Handle browser "Stop Sharing" button
-      screenStream.getVideoTracks()[0].addEventListener('ended', () => {
+      // CRITICAL FIX: Handle browser "Stop Sharing" button and track listener
+      const screenTrack = screenStream.getVideoTracks()[0];
+      const onEnded = () => {
         this.stopBroadcasterScreenShare();
-      });
+      };
+      if (!this.trackListeners.has(screenTrack)) {
+        this.trackListeners.set(screenTrack, new Map());
+      }
+      this.trackListeners.get(screenTrack)!.set('ended', onEnded);
+      screenTrack.addEventListener('ended', onEnded);
 
       // Get camera stream if requested
       if (includeCamera) {
@@ -195,14 +246,24 @@ export class ScreenShareEnhancedService extends EventEmitter {
    * Stop broadcaster screen share
    */
   stopBroadcasterScreenShare(): void {
-    // Stop screen stream
-    this.state.screenStream?.getTracks().forEach(track => track.stop());
-    this.state.screenStream = null;
+    // CRITICAL FIX: Remove track event listeners before stopping tracks
+    if (this.state.screenStream) {
+      this.state.screenStream.getTracks().forEach(track => {
+        this.removeTrackListeners(track);
+        track.stop();
+      });
+      this.state.screenStream = null;
+    }
 
     // Stop camera stream if it was started for screen sharing
     // Note: Main camera stream is handled separately by the studio
-    this.state.cameraStream?.getTracks().forEach(track => track.stop());
-    this.state.cameraStream = null;
+    if (this.state.cameraStream) {
+      this.state.cameraStream.getTracks().forEach(track => {
+        this.removeTrackListeners(track);
+        track.stop();
+      });
+      this.state.cameraStream = null;
+    }
 
     this.state.isScreenSharing = false;
     this.state.hasCamera = false;
@@ -292,10 +353,16 @@ export class ScreenShareEnhancedService extends EventEmitter {
 
       const hasAudio = screenStream.getAudioTracks().length > 0;
 
-      // Handle browser "Stop Sharing" button
-      screenStream.getVideoTracks()[0].addEventListener('ended', () => {
+      // CRITICAL FIX: Handle browser "Stop Sharing" button and track listener
+      const participantTrack = screenStream.getVideoTracks()[0];
+      const onParticipantEnded = () => {
         this.stopParticipantScreenShare(participantId);
-      });
+      };
+      if (!this.trackListeners.has(participantTrack)) {
+        this.trackListeners.set(participantTrack, new Map());
+      }
+      this.trackListeners.get(participantTrack)!.set('ended', onParticipantEnded);
+      participantTrack.addEventListener('ended', onParticipantEnded);
 
       // Notify backend
       this.socket?.emit('participant-screen-share-started', {
@@ -315,8 +382,12 @@ export class ScreenShareEnhancedService extends EventEmitter {
    */
   stopParticipantScreenShare(participantId: string): void {
     const participant = this.state.participants.get(participantId);
-    if (participant) {
-      participant.stream?.getTracks().forEach(track => track.stop());
+    if (participant && participant.stream) {
+      // CRITICAL FIX: Remove track event listeners before stopping tracks
+      participant.stream.getTracks().forEach(track => {
+        this.removeTrackListeners(track);
+        track.stop();
+      });
       this.state.participants.delete(participantId);
     }
 
@@ -389,7 +460,11 @@ export class ScreenShareEnhancedService extends EventEmitter {
     this.state.participants.clear();
     this.state.pendingRequests = [];
 
-    this.removeAllListeners();
+    // CRITICAL FIX: Remove all event listeners
+    this.removeSocketListeners();
+    this.removeAllTrackListeners();
+    this.removeAllListeners(); // Remove EventEmitter listeners
+
     this.socket = null;
   }
 }

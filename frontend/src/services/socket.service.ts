@@ -11,6 +11,8 @@ class SocketService {
   private readonly maxReconnectAttempts = 10;
   private readonly baseReconnectDelay = 1000; // 1 second
   private readonly maxReconnectDelay = 30000; // 30 seconds
+  // CRITICAL FIX: Track event listeners for cleanup
+  private eventListeners = new Map<string, Set<(...args: any[]) => void>>();
 
   connect(token: string): void {
     if (this.socket?.connected) return;
@@ -61,9 +63,27 @@ class SocketService {
 
   disconnect(): void {
     if (this.socket) {
+      // CRITICAL FIX: Remove all event listeners before disconnecting
+      this.removeAllListeners();
       this.socket.disconnect();
       this.socket = null;
     }
+  }
+
+  // CRITICAL FIX: New method to remove all custom event listeners
+  removeAllListeners(): void {
+    if (!this.socket) return;
+
+    // Remove all tracked custom listeners
+    this.eventListeners.forEach((listeners, event) => {
+      listeners.forEach(listener => {
+        this.socket?.off(event, listener);
+      });
+    });
+    this.eventListeners.clear();
+
+    // Remove all Socket.IO internal listeners
+    this.socket.removeAllListeners();
   }
 
   emit<T = unknown>(event: string, data?: unknown, callback?: (response: T) => void): void {
@@ -75,11 +95,32 @@ class SocketService {
   }
 
   on<T = unknown>(event: string, callback: (data: T) => void): void {
-    this.socket?.on(event, callback);
+    if (!this.socket) return;
+
+    // CRITICAL FIX: Track listeners for cleanup
+    if (!this.eventListeners.has(event)) {
+      this.eventListeners.set(event, new Set());
+    }
+    this.eventListeners.get(event)!.add(callback);
+
+    this.socket.on(event, callback);
   }
 
   off<T = unknown>(event: string, callback?: (data: T) => void): void {
-    this.socket?.off(event, callback);
+    if (!this.socket) return;
+
+    // CRITICAL FIX: Remove from tracking
+    if (callback) {
+      this.eventListeners.get(event)?.delete(callback);
+      if (this.eventListeners.get(event)?.size === 0) {
+        this.eventListeners.delete(event);
+      }
+      this.socket.off(event, callback);
+    } else {
+      // Remove all listeners for this event
+      this.eventListeners.delete(event);
+      this.socket.off(event);
+    }
   }
 
   joinStudio(broadcastId: string, participantId: string): void {
