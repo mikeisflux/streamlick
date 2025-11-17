@@ -227,6 +227,7 @@ model MediaClip {
   userId        String   @map("user_id")
   type          String   // video, audio, image
   name          String
+  description   String?  // Optional description for the media clip
   fileUrl       String   @map("file_url")
   thumbnailUrl  String?  @map("thumbnail_url")
   fileSizeBytes BigInt?  @map("file_size_bytes")
