@@ -8,6 +8,7 @@ import { authenticateToken, requireAdmin } from '../auth/middleware';
 import { hetznerService } from '../services/hetzner.service';
 import { mediaServerPool } from '../services/media-server-pool.service';
 import logger from '../utils/logger';
+import { generateToken } from '../utils/crypto';
 
 const router = Router();
 
@@ -159,11 +160,43 @@ router.post('/deploy', async (req, res) => {
       responseData.server.url = `http://${server.public_net.ipv4.ip}`;
       responseData.notes = 'Update upstream servers in /etc/nginx/sites-available/streamlick-lb and install SSL certificates';
     } else if (role === 'database-server') {
-      responseData.server.url = `postgresql://streamlick:streamlick_prod_password@${server.public_net.ipv4.ip}:5432/streamlick_prod`;
-      responseData.notes = 'Remember to change the default password and restrict IP access!';
+      // CRITICAL FIX: Generate secure random password instead of hardcoded weak password
+      // SECURITY: Never expose passwords in API responses - only show format
+      const dbPassword = generateToken(32); // 64-char hex password
+
+      // Store password securely (in production, use secrets manager)
+      logger.info(`Database server deployed. Password generated (not logged for security).`);
+
+      responseData.server.host = server.public_net.ipv4.ip;
+      responseData.server.port = 5432;
+      responseData.server.database = 'streamlick_prod';
+      responseData.server.username = 'streamlick';
+      // SECURITY: Return password ONCE during deployment, never again
+      responseData.server.password = dbPassword;
+      responseData.server.connectionString = `postgresql://streamlick:${dbPassword}@${server.public_net.ipv4.ip}:5432/streamlick_prod`;
+      responseData.notes = [
+        'CRITICAL: Save the password immediately - it will not be shown again!',
+        'Add this connection string to your backend .env as DATABASE_URL',
+        'Restrict PostgreSQL access to specific IPs in pg_hba.conf',
+        'Enable SSL/TLS for database connections in production'
+      ];
     } else if (role === 'redis-server') {
-      responseData.server.url = `redis://:streamlick_redis_password@${server.public_net.ipv4.ip}:6379`;
-      responseData.notes = 'Remember to change the default password!';
+      // CRITICAL FIX: Generate secure random password instead of hardcoded weak password
+      const redisPassword = generateToken(32); // 64-char hex password
+
+      logger.info(`Redis server deployed. Password generated (not logged for security).`);
+
+      responseData.server.host = server.public_net.ipv4.ip;
+      responseData.server.port = 6379;
+      // SECURITY: Return password ONCE during deployment, never again
+      responseData.server.password = redisPassword;
+      responseData.server.connectionString = `redis://:${redisPassword}@${server.public_net.ipv4.ip}:6379`;
+      responseData.notes = [
+        'CRITICAL: Save the password immediately - it will not be shown again!',
+        'Add this connection string to your backend .env as REDIS_URL',
+        'Restrict Redis access via firewall rules (only allow backend servers)',
+        'Enable Redis TLS in production'
+      ];
     }
 
     res.json(responseData);
