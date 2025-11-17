@@ -103,6 +103,80 @@ async function getOAuthCredentials(platform: string): Promise<{
   }
 }
 
+/**
+ * CRITICAL FIX: OAuth CSRF Protection Functions
+ * Prevents CSRF attacks by validating state tokens
+ */
+
+/**
+ * Generate and store OAuth state token
+ */
+async function generateOAuthState(userId: string, platform: string): Promise<string> {
+  // Generate cryptographically random state token (32 bytes = 64 hex chars)
+  const state = generateToken(32);
+
+  // Store in database with 10 minute expiration
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  await prisma.oAuthState.create({
+    data: {
+      userId,
+      platform,
+      state,
+      expiresAt,
+    },
+  });
+
+  return state;
+}
+
+/**
+ * Verify and consume OAuth state token (single-use)
+ */
+async function verifyOAuthState(state: string, platform: string): Promise<string | null> {
+  try {
+    // Find valid, non-expired state token
+    const stateRecord = await prisma.oAuthState.findFirst({
+      where: {
+        state,
+        platform,
+        expiresAt: {
+          gte: new Date(), // Not expired
+        },
+      },
+    });
+
+    if (!stateRecord) {
+      logger.warn(`Invalid or expired OAuth state for ${platform}: ${state.substring(0, 10)}...`);
+      return null;
+    }
+
+    // Delete token immediately (single-use)
+    await prisma.oAuthState.delete({
+      where: { id: stateRecord.id },
+    });
+
+    return stateRecord.userId;
+  } catch (error) {
+    logger.error('OAuth state verification error:', error);
+    return null;
+  }
+}
+
+/**
+ * Cleanup expired OAuth state tokens (run periodically)
+ */
+async function cleanupExpiredOAuthStates(): Promise<number> {
+  const result = await prisma.oAuthState.deleteMany({
+    where: {
+      expiresAt: {
+        lt: new Date(),
+      },
+    },
+  });
+  return result.count;
+}
+
 // OAuth URLs
 const YOUTUBE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const YOUTUBE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -148,7 +222,9 @@ const LINKEDIN_SCOPES = ['w_member_social', 'r_liteprofile', 'r_organization_soc
 router.get('/youtube/authorize', authenticate, async (req, res) => {
   try {
     const userId = req.user!.userId;
-    const state = Buffer.from(JSON.stringify({ userId, platform: 'youtube' })).toString('base64');
+
+    // CRITICAL FIX: Generate cryptographically random state for CSRF protection
+    const state = await generateOAuthState(userId, 'youtube');
 
     logger.info(`[OAuth] YouTube authorize request from user ${userId}`);
     const credentials = await getOAuthCredentials('youtube');
@@ -191,8 +267,12 @@ router.get('/youtube/callback', async (req, res) => {
       return res.status(400).json({ error: 'Missing code or state' });
     }
 
-    // Decode state
-    const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
+    // CRITICAL FIX: Verify state token to prevent CSRF attacks
+    const userId = await verifyOAuthState(state as string, 'youtube');
+    if (!userId) {
+      logger.warn(`YouTube OAuth callback rejected: Invalid or expired state token`);
+      return res.redirect(`${process.env.FRONTEND_URL}/oauth-success?error=youtube_csrf`);
+    }
 
     const credentials = await getOAuthCredentials('youtube');
 
@@ -256,7 +336,8 @@ router.get('/youtube/callback', async (req, res) => {
 router.get('/facebook/authorize', authenticate, async (req, res) => {
   try {
     const userId = req.user!.userId;
-    const state = Buffer.from(JSON.stringify({ userId, platform: 'facebook' })).toString('base64');
+    // CRITICAL FIX: Generate cryptographically random state for CSRF protection
+    const state = await generateOAuthState(userId, 'facebook');
 
     logger.info(`[OAuth] Facebook authorize request from user ${userId}`);
     const credentials = await getOAuthCredentials('facebook');
@@ -307,7 +388,12 @@ router.get('/facebook/callback', async (req, res) => {
       return res.status(400).json({ error: 'Missing code or state', receivedParams: Object.keys(req.query) });
     }
 
-    const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
+    // CRITICAL FIX: Verify state token to prevent CSRF attacks
+    const userId = await verifyOAuthState(state as string, 'facebook');
+    if (!userId) {
+      logger.warn(`Facebook OAuth callback rejected: Invalid or expired state token`);
+      return res.redirect(`${process.env.FRONTEND_URL}/oauth-success?error=facebook_csrf`);
+    }
 
     const credentials = await getOAuthCredentials('facebook');
 
@@ -397,7 +483,8 @@ router.get('/facebook/callback', async (req, res) => {
 router.get('/twitch/authorize', authenticate, async (req, res) => {
   try {
     const userId = req.user!.userId;
-    const state = Buffer.from(JSON.stringify({ userId, platform: 'twitch' })).toString('base64');
+    // CRITICAL FIX: Generate cryptographically random state for CSRF protection
+    const state = await generateOAuthState(userId, 'twitch');
 
     const credentials = await getOAuthCredentials('twitch');
 
@@ -432,7 +519,12 @@ router.get('/twitch/callback', async (req, res) => {
       return res.status(400).json({ error: 'Missing code or state' });
     }
 
-    const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
+    // CRITICAL FIX: Verify state token to prevent CSRF attacks
+    const userId = await verifyOAuthState(state as string, 'twitch');
+    if (!userId) {
+      logger.warn(`Twitch OAuth callback rejected: Invalid or expired state token`);
+      return res.redirect(`${process.env.FRONTEND_URL}/oauth-success?error=twitch_csrf`);
+    }
 
     const credentials = await getOAuthCredentials('twitch');
 
@@ -502,7 +594,8 @@ router.get('/twitch/callback', async (req, res) => {
 router.get('/x/authorize', authenticate, async (req, res) => {
   try {
     const userId = req.user!.userId;
-    const state = Buffer.from(JSON.stringify({ userId, platform: 'x' })).toString('base64');
+    // CRITICAL FIX: Generate cryptographically random state for CSRF protection
+    const state = await generateOAuthState(userId, 'x');
 
     const credentials = await getOAuthCredentials('x');
 
@@ -562,7 +655,12 @@ router.get('/x/callback', async (req, res) => {
       return res.status(400).json({ error: 'Missing code or state' });
     }
 
-    const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
+    // CRITICAL FIX: Verify state token to prevent CSRF attacks
+    const userId = await verifyOAuthState(state as string, 'x');
+    if (!userId) {
+      logger.warn(`X OAuth callback rejected: Invalid or expired state token`);
+      return res.redirect(`${process.env.FRONTEND_URL}/oauth-success?error=x_csrf`);
+    }
 
     // CRITICAL FIX: Retrieve stored PKCE code_verifier from database
     const pkceRecord = await prisma.oAuthPKCE.findFirst({
@@ -716,7 +814,8 @@ router.post('/rumble/setup', authenticate, async (req, res) => {
 router.get('/linkedin/authorize', authenticate, async (req, res) => {
   try {
     const userId = req.user!.userId;
-    const state = Buffer.from(JSON.stringify({ userId, platform: 'linkedin' })).toString('base64');
+    // CRITICAL FIX: Generate cryptographically random state for CSRF protection
+    const state = await generateOAuthState(userId, 'linkedin');
 
     const credentials = await getOAuthCredentials('linkedin');
 
@@ -751,7 +850,12 @@ router.get('/linkedin/callback', async (req, res) => {
       return res.status(400).json({ error: 'Missing code or state' });
     }
 
-    const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
+    // CRITICAL FIX: Verify state token to prevent CSRF attacks
+    const userId = await verifyOAuthState(state as string, 'linkedin');
+    if (!userId) {
+      logger.warn(`LinkedIn OAuth callback rejected: Invalid or expired state token`);
+      return res.redirect(`${process.env.FRONTEND_URL}/oauth-success?error=linkedin_csrf`);
+    }
 
     const credentials = await getOAuthCredentials('linkedin');
 
