@@ -3,6 +3,7 @@ module.exports = {
     name: 'streamlick-backend',
     script: 'dist/index.js',
     cwd: '/home/streamlick/backend',
+    env_file: '/home/streamlick/backend/.env',
     env: {
       NODE_ENV: 'production',
       NODE_PATH: '/home/streamlick/backend/node_modules'
