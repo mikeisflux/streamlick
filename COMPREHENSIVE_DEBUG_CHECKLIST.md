@@ -944,6 +944,286 @@ env | grep -E "JWT_SECRET|ENCRYPTION_KEY|DATABASE_URL"
 
 ---
 
+## 🔴🔴 NEW CRITICAL ISSUES FROM COMPLETE FILE ANALYSIS
+
+### OAuth & Authentication Critical Flaws
+
+- [ ] **CRITICAL: PKCE Code Verifier Hardcoded**
+  - **File**: `backend/src/api/oauth.routes.ts:516-561`
+  - **Issue**: Generates random PKCE verifier but then uses hardcoded 'STORED_CODE_VERIFIER' string
+  - **Impact**: Complete X/Twitter OAuth security bypass
+  - **Fix**: Implement proper code verifier storage (Redis/session)
+  - **Test**: X OAuth flow will fail with invalid_grant error
+  ```typescript
+  // Line 516: Generates code verifier
+  const codeVerifier = Buffer.from(Math.random().toString()).toString('base64').substring(0, 128);
+
+  // Line 561: Uses WRONG hardcoded value!
+  code_verifier: 'STORED_CODE_VERIFIER', // Should retrieve from cache
+  ```
+
+- [ ] **CRITICAL: Refresh Token Not Invalidated on Logout**
+  - **File**: `backend/src/api/auth.routes.ts:234`
+  - **Issue**: Comment says "invalidate refresh token" but code doesn't do it
+  - **Impact**: Logged-out users can still refresh tokens
+  - **Fix**: Delete or mark refresh token as revoked in database
+  - **Test**: Logout, try to use old refresh token, should fail
+
+- [ ] **CRITICAL: Multiple PrismaClient Instances (5 total!)**
+  - **Files**:
+    - `backend/src/api/oauth.routes.ts:9`
+    - `backend/src/services/chat.service.ts:17`
+    - `backend/src/services/facebook.service.ts:6` (from earlier)
+    - `backend/src/services/rumble.service.ts:19`
+  - **Issue**: Each creates new database connection pool
+  - **Impact**: Database connections exhausted, OOM errors
+  - **Fix**: Import singleton from `../database/prisma`
+  - **Test**: Check `SELECT count(*) FROM pg_stat_activity`
+
+### Chat Service Memory Leaks
+
+- [ ] **MAJOR: setTimeout Never Cleared in Chat Pollers**
+  - **File**: `backend/src/services/chat.service.ts`
+  - **Lines**: 149-151 (YouTube), 299-301 (Facebook), 346-348 (Facebook retry), 637-639 (X)
+  - **Issue**: setTimeout callbacks not cleared if stop() called during timeout
+  - **Fix**: Store timeout IDs, clear in stop() method
+  - **Test**: Start chat, immediately stop, verify no pending timers
+  ```typescript
+  // Current (BAD):
+  this.pollingInterval = setTimeout(() => { this.poll(); }, 5000);
+
+  // In stop():
+  if (this.pollingInterval) {
+    clearTimeout(this.pollingInterval); // Only clears if still in setInterval
+  }
+
+  // FIX: Track ALL pending timeouts
+  private pendingTimeouts: Set<NodeJS.Timeout> = new Set();
+  const timeout = setTimeout(() => {
+    this.pendingTimeouts.delete(timeout);
+    this.poll();
+  }, 5000);
+  this.pendingTimeouts.add(timeout);
+  ```
+
+- [ ] **MAJOR: Twitch IRC setInterval for PING Never Cleared**
+  - **File**: `backend/src/services/chat.service.ts:465-469`
+  - **Issue**: PING interval runs forever even after stop()
+  - **Fix**: Store interval ID, clear in stop()
+  - **Test**: Start Twitch chat, stop, check for orphaned intervals
+
+- [ ] **MAJOR: Twitch IRC Infinite Reconnect Loop**
+  - **File**: `backend/src/services/chat.service.ts:456-461`
+  - **Issue**: Auto-reconnects every 5s forever if connection always fails
+  - **Fix**: Add max retry count or exponential backoff
+  - **Test**: Block Twitch IRC, verify doesn't retry forever
+
+- [ ] **MAJOR: require('ws') at Runtime**
+  - **File**: `backend/src/services/chat.service.ts:425`
+  - **Issue**: WebSocket library loaded dynamically, could fail
+  - **Fix**: Import at top: `import WebSocket from 'ws'`
+  - **Test**: Remove ws package, verify startup error not runtime error
+
+### Routing & Configuration Issues
+
+- [ ] **MAJOR: Duplicate Route Definition**
+  - **File**: `backend/src/api/oauth.routes.ts`
+  - **Issue**: `/rumble/setup` route defined twice (lines 613-666 AND 770-857)
+  - **Impact**: Second definition overwrites first, could cause confusion
+  - **Fix**: Remove duplicate (lines 770-857 appear to be the correct version)
+  - **Test**: POST to /rumble/setup, verify which handler responds
+
+- [ ] **CRITICAL: MediaSoup announcedIp Defaults to Localhost**
+  - **File**: `media-server/src/config/mediasoup.ts:80`
+  - **Issue**: `announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP || '127.0.0.1'`
+  - **Impact**: WebRTC will fail for all remote clients in production
+  - **Fix**: Require MEDIASOUP_ANNOUNCED_IP env var, no fallback
+  - **Test**: Deploy without env var, verify server refuses to start
+
+- [ ] **MAJOR: MediaSoup Port Range Too Small**
+  - **File**: `media-server/src/config/mediasoup.ts:15-16`
+  - **Issue**: rtcMinPort: 40000, rtcMaxPort: 40100 (only 100 ports)
+  - **Impact**: ~50 concurrent broadcasts max (2 ports per user)
+  - **Fix**: Increase range to 40000-49999 (10,000 ports)
+  - **Test**: Create 51 concurrent broadcasts, verify failures
+
+### Frontend Issues
+
+- [ ] **MAJOR: StudioStore reset() Doesn't Stop Tracks**
+  - **File**: `frontend/src/store/studioStore.ts:76-85`
+  - **Issue**: reset() sets streams to null but doesn't call track.stop()
+  - **Impact**: Media tracks keep running, camera/mic LED stays on
+  - **Fix**: Stop tracks before setting to null
+  - **Test**: Start broadcast, reset store, verify camera LED turns off
+  ```typescript
+  reset: () => {
+    const state = get();
+    if (state.localStream) {
+      state.localStream.getTracks().forEach(track => track.stop());
+    }
+    if (state.screenStream) {
+      state.screenStream.getTracks().forEach(track => track.stop());
+    }
+    set({ broadcast: null, /* ... */ });
+  }
+  ```
+
+- [ ] **MAJOR: CSRF Retry Infinite Loop**
+  - **File**: `frontend/src/services/api.ts:49-62`
+  - **Issue**: CSRF retry has no limit, could retry forever
+  - **Fix**: Add retry counter (max 1 retry)
+  - **Test**: Server returns 403 CSRF repeatedly, verify doesn't hang
+
+- [ ] **MINOR: Hard Redirect Loses Application State**
+  - **File**: `frontend/src/services/api.ts:74`
+  - **Issue**: `window.location.href = '/login'` loses React state
+  - **Fix**: Use React Router navigation
+  - **Test**: Get 401 during complex operation, verify graceful handling
+
+### Async & Blocking Issues
+
+- [ ] **MAJOR: bcrypt.hash Blocks Event Loop**
+  - **Files**:
+    - `backend/src/api/auth.routes.ts:102`
+    - `backend/src/api/admin.routes.ts:96`
+  - **Issue**: Synchronous bcrypt blocks Node.js event loop
+  - **Fix**: Already using async version, but ensure salt rounds not too high
+  - **Test**: Create 100 users simultaneously, measure response time
+  - **Note**: Salt rounds of 10 is acceptable, but monitor for performance issues
+
+- [ ] **MAJOR: Email Verification Blocks Registration Response**
+  - **File**: `backend/src/api/auth.routes.ts:123-145`
+  - **Issue**: Retry loop for email (up to 3 attempts with delays) blocks HTTP response
+  - **Fix**: Fire email sending async, return response immediately
+  - **Test**: Registration with failing email should still return quickly
+
+### Broadcast Lifecycle Issues
+
+- [ ] **MAJOR: setInterval ID Not Stored**
+  - **File**: `backend/src/api/broadcasts.routes.ts:191-201`
+  - **Issue**: Countdown interval created but ID not stored, can't be cleared
+  - **Fix**: Store in Map keyed by broadcastId, clear on stop
+  - **Test**: Start broadcast, immediately stop, verify countdown stops
+
+- [ ] **MAJOR: setTimeout for Go-Live Not Stored**
+  - **File**: `backend/src/api/broadcasts.routes.ts:319-354`
+  - **Issue**: 15-second timeout not stored, can't be cancelled
+  - **Fix**: Store timeout ID, clear on broadcast cancellation
+  - **Test**: Start countdown, stop before 15s, verify doesn't go live
+
+- [ ] **MAJOR: No Transaction for Multi-Destination Setup**
+  - **File**: `backend/src/api/broadcasts.routes.ts:206-316`
+  - **Issue**: Creates destination records without transaction, could partially fail
+  - **Fix**: Wrap all destination setup in Prisma transaction
+  - **Test**: Make one destination fail, verify rollback or consistent state
+
+### Database Schema Issues
+
+- [ ] **CRITICAL: Missing Database Indexes**
+  - **File**: `backend/prisma/schema.prisma`
+  - **Missing Indexes**:
+    - Line 39: `userId` on Broadcast - causes slow queries
+    - Line 103: `broadcastId` on Participant - N+1 queries
+    - Line 169: `broadcastId` on ChatMessage - slow chat retrieval
+    - Line 86: `broadcastId` on BroadcastDestination - slow destination lookups
+    - Line 105: `joinLinkToken` has @unique but no explicit index (probably OK)
+  - **Fix**: Add indexes via migration:
+  ```prisma
+  model Broadcast {
+    // ... fields ...
+    @@index([userId])
+    @@index([status])
+    @@index([scheduledAt])
+  }
+
+  model Participant {
+    @@index([broadcastId])
+    @@index([status])
+  }
+
+  model ChatMessage {
+    @@index([broadcastId, receivedAt])
+  }
+
+  model BroadcastDestination {
+    @@index([broadcastId])
+    @@index([destinationId])
+  }
+  ```
+  - **Test**: Run EXPLAIN ANALYZE on queries, verify index usage
+
+- [ ] **MINOR: BigInt JSON Serialization Issues**
+  - **File**: `backend/prisma/schema.prisma:124,143,218,239`
+  - **Issue**: `fileSizeBytes BigInt` might not serialize to JSON properly
+  - **Fix**: Convert to string when sending to client
+  - **Test**: Upload large file, verify fileSizeBytes in API response
+
+### Type Safety Issues
+
+- [ ] **MINOR: Type Coercion in Admin Routes**
+  - **File**: `backend/src/api/admin.routes.ts:138,187`
+  - **Issue**: `(req as any).user.userId` bypasses type safety
+  - **Fix**: Use proper AuthRequest type
+  - **Test**: TypeScript compilation should enforce types
+
+### Email Configuration
+
+- [ ] **MINOR: Default Email Address Probably Invalid**
+  - **File**: `backend/src/services/email.ts:5`
+  - **Issue**: FROM_EMAIL defaults to 'noreply@streamlick.com' which may not exist
+  - **Fix**: Require FROM_EMAIL env var or fail clearly
+  - **Test**: Send email without FROM_EMAIL set, check delivery
+
+- [ ] **MINOR: console.log in Production Code**
+  - **File**: `backend/src/services/email.ts:62`
+  - **Issue**: console.log used alongside logger
+  - **Fix**: Remove console.log, use logger only
+  - **Test**: Code review
+
+### Error Handling
+
+- [ ] **MAJOR: Prisma Connect Error Not Handled**
+  - **File**: `backend/src/database/prisma.ts:40-42`
+  - **Issue**: $connect() catch logs error but doesn't exit process
+  - **Fix**: Exit process if database connection fails
+  - **Test**: Start with invalid DATABASE_URL, verify exits cleanly
+  ```typescript
+  prisma.$connect()
+    .then(() => logger.info('Database connected'))
+    .catch((err: any) => {
+      logger.error('Database connection error:', err);
+      process.exit(1); // Exit if can't connect to database
+    });
+  ```
+
+### OAuth State Validation
+
+- [ ] **CRITICAL: OAuth State Parameter Not Validated**
+  - **File**: `backend/src/api/oauth.routes.ts` (all OAuth flows)
+  - **Issue**: State parameter is decoded but never checked against stored session state
+  - **Impact**: CSRF attacks on OAuth flows
+  - **Fix**: Store state in Redis/session, validate on callback
+  - **Test**: OAuth callback with wrong state should fail
+
+- [ ] **MINOR: OAuth Decryption Failures Logged as Warnings**
+  - **File**: `backend/src/api/oauth.routes.ts:56-76`
+  - **Issue**: Failed decryption continues with potentially wrong credentials
+  - **Fix**: Fail hard on decryption errors
+  - **Test**: Corrupt encrypted OAuth credential, verify fails properly
+
+### Admin Pagination Missing
+
+- [ ] **MAJOR: Admin Endpoints Missing Pagination**
+  - **Files**:
+    - `backend/src/api/admin.routes.ts:38` - GET /users
+    - `backend/src/api/admin.routes.ts:211` - GET /broadcasts
+    - `backend/src/api/admin.routes.ts:239` - GET /templates
+  - **Issue**: Fetches ALL records, could be thousands
+  - **Fix**: Add pagination with take/skip
+  - **Test**: Create 10,000 users, try to load admin panel
+
+---
+
 ## ✅ COMPLETION CRITERIA
 
 This checklist is complete when:
