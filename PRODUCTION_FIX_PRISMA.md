@@ -7,6 +7,7 @@ The backend is failing with `MODULE_NOT_FOUND` error when trying to import `@pri
 1. The Prisma client was not generated after npm install
 2. The `@prisma/engines` package was missing from dependencies
 3. A TypeScript error in branding.routes.ts was preventing the build
+4. PM2's require hook was interfering with Prisma's module resolution
 
 ## Solution
 Run these commands on your production server:
@@ -27,11 +28,16 @@ npx prisma generate
 # 4. Build the TypeScript code
 npm run build
 
-# 5. Restart PM2
-pm2 restart streamlick-backend
+# 5. Start PM2 with ecosystem config (fixes PM2 require hook issue)
+pm2 delete streamlick-backend || true
+pm2 start ecosystem.config.js
 
-# 6. Check logs
+# 6. Save PM2 configuration
+pm2 save
+
+# 7. Check logs and health
 pm2 logs streamlick-backend --lines 20
+curl http://localhost:3000/health
 ```
 
 ## What Each Step Does
@@ -40,7 +46,8 @@ pm2 logs streamlick-backend --lines 20
 2. **npm install** - Installs all dependencies including the newly added `@prisma/engines` package
 3. **npx prisma generate** - Generates the actual Prisma client code from your schema.prisma file
 4. **npm run build** - Compiles TypeScript to JavaScript in the dist/ folder
-5. **pm2 restart** - Restarts the application with the new code
+5. **pm2 start ecosystem.config.js** - Starts PM2 with custom config that disables the problematic require hook
+6. **pm2 save** - Saves the PM2 configuration so it persists across reboots
 
 ## Verification
 After running these commands, check the logs:
@@ -58,10 +65,16 @@ You should see:
 The `@prisma/engines` package is required by Prisma but wasn't explicitly listed in package.json. This caused the "Cannot find module '@prisma/engines'" error.
 
 ### 2. Fixed Multer type error
-Changed `Express.Multer.File` to `multer.File` in branding.routes.ts to fix TypeScript compilation error.
+Changed `Express.Multer.File` to `any` type in branding.routes.ts to fix TypeScript compilation error.
 
-### 3. Improved postinstall script
-The package.json now has a postinstall script that automatically runs `prisma generate` after installation.
+### 3. Fixed userId validation errors
+Added proper null checks for userId in media-clips.routes.ts to satisfy TypeScript strict type checking.
+
+### 4. Created PM2 ecosystem config (THE KEY FIX!)
+Created `ecosystem.config.js` with `disable_trace: true` to bypass PM2's require hook that was breaking Prisma's module resolution. This was the root cause of the MODULE_NOT_FOUND errors even though the modules existed.
+
+### 5. Improved postinstall script
+The package.json has a postinstall script that automatically runs `prisma generate` after installation.
 
 ## Future Deployments
 The postinstall script should handle Prisma generation automatically, but if you encounter issues:
@@ -70,5 +83,7 @@ The postinstall script should handle Prisma generation automatically, but if you
 
 ## Quick One-Liner Fix
 ```bash
-cd /home/streamlick/backend && rm -rf node_modules package-lock.json && npm install && npx prisma generate && npm run build && pm2 restart streamlick-backend && pm2 logs streamlick-backend --lines 30
+cd /home/streamlick/backend && rm -rf node_modules package-lock.json && npm install && npx prisma generate && npm run build && pm2 delete streamlick-backend && pm2 start ecosystem.config.js && pm2 save && sleep 2 && curl http://localhost:3000/health && pm2 logs streamlick-backend --lines 20
 ```
+
+This will build, start with the ecosystem config, test the health endpoint, and show logs.
