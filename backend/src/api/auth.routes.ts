@@ -279,7 +279,8 @@ router.post('/logout', authenticate, async (req: AuthRequest, res) => {
 
 // CRITICAL FIX: Refresh access token using refresh token
 // This endpoint allows clients to get a new access token when it expires
-router.post('/refresh', async (req, res) => {
+// Rate limited to prevent token refresh abuse
+router.post('/refresh', authRateLimiter, async (req, res) => {
   try {
     const refreshToken = req.cookies[COOKIE_NAMES.REFRESH_TOKEN];
 
@@ -451,7 +452,8 @@ router.post('/verify-email', async (req, res) => {
 });
 
 // Resend verification email
-router.post('/resend-verification', authenticate, async (req: AuthRequest, res) => {
+// Rate limited to prevent email flooding
+router.post('/resend-verification', authenticate, passwordResetRateLimiter, async (req: AuthRequest, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.userId },

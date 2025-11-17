@@ -5,20 +5,43 @@ import logger from '../utils/logger';
 
 const router = Router();
 
-// Get all assets for user
+// Get all assets for user (with pagination)
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
     const { type } = req.query;
 
-    const assets = await prisma.asset.findMany({
-      where: {
-        userId: req.user!.userId,
-        ...(type && { type: type as string }),
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    // Pagination parameters
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200); // Max 200 per page
+    const skip = (page - 1) * limit;
 
-    res.json(assets);
+    const where = {
+      userId: req.user!.userId,
+      ...(type && { type: type as string }),
+    };
+
+    // CRITICAL FIX: Add pagination to prevent performance issues with large asset collections
+    const [assets, total] = await Promise.all([
+      prisma.asset.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.asset.count({ where }),
+    ]);
+
+    // Return paginated response with metadata
+    res.json({
+      assets,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total,
+      },
+    });
   } catch (error) {
     logger.error('Get assets error:', error);
     res.status(500).json({ error: 'Failed to get assets' });

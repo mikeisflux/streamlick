@@ -17,22 +17,45 @@ import { getIOInstance } from '../socket/io-instance';
 
 const router = Router();
 
-// Get all broadcasts for user
+// Get all broadcasts for user (with pagination)
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
-    const broadcasts = await prisma.broadcast.findMany({
-      where: { userId: req.user!.userId },
-      include: {
-        participants: true,
-        recordings: true,
-        broadcastDestinations: {
-          include: { destination: true },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    // Pagination parameters
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100); // Max 100 per page
+    const skip = (page - 1) * limit;
 
-    res.json(broadcasts);
+    // CRITICAL FIX: Add pagination to prevent performance issues with large datasets
+    const [broadcasts, total] = await Promise.all([
+      prisma.broadcast.findMany({
+        where: { userId: req.user!.userId },
+        include: {
+          participants: true,
+          recordings: true,
+          broadcastDestinations: {
+            include: { destination: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.broadcast.count({
+        where: { userId: req.user!.userId },
+      }),
+    ]);
+
+    // Return paginated response with metadata
+    res.json({
+      broadcasts,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total,
+      },
+    });
   } catch (error) {
     logger.error('Get broadcasts error:', error);
     res.status(500).json({ error: 'Failed to get broadcasts' });
