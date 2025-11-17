@@ -3,32 +3,14 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
-import { authenticate, AuthRequest } from '../auth/middleware';
+// CRITICAL FIX: Use centralized requireAdmin middleware instead of duplicate
+import { authenticate, AuthRequest, requireAdmin } from '../auth/middleware';
 import logger from '../utils/logger';
 
 const execAsync = promisify(exec);
 const router = Router();
 
-// Admin middleware
-const requireAdmin = async (req: AuthRequest, res: any, next: any) => {
-  try {
-    const prisma = require('../database/prisma').default;
-    const user = await prisma.user.findUnique({
-      where: { id: req.user!.userId },
-      select: { role: true },
-    });
-
-    if (user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
-    next();
-  } catch (error) {
-    logger.error('Admin middleware error:', error);
-    res.status(500).json({ error: 'Authorization check failed' });
-  }
-};
-
+// CRITICAL FIX: Removed duplicate requireAdmin - use centralized version
 router.use(authenticate, requireAdmin);
 
 // Test suite definitions

@@ -38,6 +38,7 @@ import commentsRoutes from './api/comments.routes';
 import initializeSocket from './socket';
 import logger from './utils/logger';
 import { validateCsrfToken } from './auth/csrf';
+import { sanitizeInput } from './middleware/sanitize';
 
 dotenv.config();
 
@@ -59,15 +60,47 @@ const io = initializeSocket(server);
 
 const PORT = process.env.API_PORT || 3000;
 
-// Middleware
+// CRITICAL FIX: Enhanced security headers with strict CSP
 app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" } // Allow cross-origin resources
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline scripts for React
+      styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for React
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", process.env.FRONTEND_URL || 'http://localhost:3002'],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: true,
+  crossOriginOpenerPolicy: { policy: "same-origin" },
+  crossOriginResourcePolicy: { policy: "same-site" }, // Changed from cross-origin
+  dnsPrefetchControl: { allow: false },
+  frameguard: { action: "deny" },
+  hidePoweredBy: true,
+  hsts: {
+    maxAge: 31536000, // 1 year
+    includeSubDomains: true,
+    preload: true,
+  },
+  ieNoOpen: true,
+  noSniff: true,
+  originAgentCluster: true,
+  permittedCrossDomainPolicies: { permittedPolicies: "none" },
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  xssFilter: true,
 }));
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3002',
   credentials: true, // Allow cookies
 }));
 app.use(cookieParser()); // Parse cookies
+
+// CRITICAL FIX: Input sanitization middleware (apply before parsing)
+app.use('/api/', sanitizeInput);
 
 // Default request size limit - small for security (DoS prevention)
 app.use(express.json({ limit: '100kb' }));

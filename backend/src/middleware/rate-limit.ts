@@ -102,9 +102,33 @@ export const strictRateLimiter = rateLimit({
   },
 });
 
+/**
+ * CRITICAL FIX: Very strict rate limiting for upload endpoints
+ * Prevents storage exhaustion and bandwidth abuse
+ */
+export const uploadRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20, // Limit each IP to 20 uploads per hour
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many uploads, please try again later'
+  },
+  handler: (req, res) => {
+    logger.warn(`Upload rate limit exceeded for IP ${req.ip} on ${req.path}`);
+    res.status(429).json({
+      error: 'Too many uploads, please try again later'
+    });
+  },
+  keyGenerator: (req) => {
+    return req.ip || req.connection.remoteAddress || 'unknown';
+  },
+});
+
 export default {
   authRateLimiter,
   passwordResetRateLimiter,
   apiRateLimiter,
   strictRateLimiter,
+  uploadRateLimiter,
 };
