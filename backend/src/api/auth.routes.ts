@@ -2,10 +2,18 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import prisma from '../database/prisma';
-import { generateAccessToken, generateRefreshToken } from '../auth/jwt';
+import {
+  generateAccessToken,
+  generateRefreshToken,
+  verifyRefreshToken,
+  storeRefreshToken,
+  verifyStoredRefreshToken,
+  revokeRefreshToken,
+  revokeAllUserTokens
+} from '../auth/jwt';
 import { authenticate, AuthRequest } from '../auth/middleware';
 import { sendVerificationEmail } from '../services/email';
-import { setAuthCookies, clearAuthCookies } from '../auth/cookies';
+import { setAuthCookies, clearAuthCookies, COOKIE_NAMES } from '../auth/cookies';
 import { provideCsrfToken, validateCsrfToken } from '../auth/csrf';
 import logger from '../utils/logger';
 import { authRateLimiter, passwordResetRateLimiter } from '../middleware/rate-limit';
@@ -42,6 +50,14 @@ router.post('/login', authRateLimiter, async (req, res) => {
 
     const accessToken = generateAccessToken({ userId: user.id, email: user.email, role: user.role as 'user' | 'admin' });
     const refreshToken = generateRefreshToken({ userId: user.id, email: user.email, role: user.role as 'user' | 'admin' });
+
+    // CRITICAL FIX: Store refresh token in database for revocation capability
+    await storeRefreshToken(
+      user.id,
+      refreshToken,
+      req.headers['user-agent'],
+      req.ip
+    );
 
     // Set tokens in httpOnly cookies for XSS protection
     setAuthCookies(res, accessToken, refreshToken);
@@ -152,6 +168,14 @@ router.post('/register', authRateLimiter, async (req, res) => {
     const accessToken = generateAccessToken({ userId: user.id, email: user.email, role: user.role as 'user' | 'admin' });
     const refreshToken = generateRefreshToken({ userId: user.id, email: user.email, role: user.role as 'user' | 'admin' });
 
+    // CRITICAL FIX: Store refresh token in database for revocation capability
+    await storeRefreshToken(
+      user.id,
+      refreshToken,
+      req.headers['user-agent'],
+      req.ip
+    );
+
     // Set tokens in httpOnly cookies for XSS protection
     setAuthCookies(res, accessToken, refreshToken);
 
@@ -233,11 +257,91 @@ router.patch('/profile', authenticate, async (req: AuthRequest, res) => {
 
 // Logout
 router.post('/logout', authenticate, async (req: AuthRequest, res) => {
-  // Clear auth cookies
-  clearAuthCookies(res);
+  try {
+    // CRITICAL FIX: Revoke refresh token in database
+    const refreshToken = req.cookies[COOKIE_NAMES.REFRESH_TOKEN];
+    if (refreshToken) {
+      await revokeRefreshToken(refreshToken);
+      logger.info(`Refresh token revoked for user ${req.user!.userId}`);
+    }
 
-  // In a production app, you'd also invalidate the refresh token in the database here
-  res.json({ message: 'Logged out successfully' });
+    // Clear auth cookies
+    clearAuthCookies(res);
+
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    logger.error('Logout error:', error);
+    // Still clear cookies even if revocation fails
+    clearAuthCookies(res);
+    res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+// CRITICAL FIX: Refresh access token using refresh token
+// This endpoint allows clients to get a new access token when it expires
+router.post('/refresh', async (req, res) => {
+  try {
+    const refreshToken = req.cookies[COOKIE_NAMES.REFRESH_TOKEN];
+
+    if (!refreshToken) {
+      return res.status(401).json({ error: 'Refresh token required' });
+    }
+
+    // Verify JWT signature and expiration
+    let payload;
+    try {
+      payload = verifyRefreshToken(refreshToken);
+    } catch (error) {
+      logger.warn('Invalid refresh token JWT:', error);
+      return res.status(401).json({ error: 'Invalid refresh token' });
+    }
+
+    // CRITICAL FIX: Verify token hasn't been revoked
+    const isValid = await verifyStoredRefreshToken(refreshToken);
+    if (!isValid) {
+      logger.warn(`Revoked or invalid refresh token used by user ${payload.userId}`);
+      return res.status(401).json({ error: 'Refresh token has been revoked or expired' });
+    }
+
+    // Verify user still exists
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { id: true, email: true, role: true },
+    });
+
+    if (!user) {
+      logger.warn(`Refresh token for non-existent user ${payload.userId}`);
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    // Generate new access token (NOT a new refresh token - refresh token rotation is optional)
+    const newAccessToken = generateAccessToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role as 'user' | 'admin',
+    });
+
+    // Set new access token in cookie
+    res.cookie(COOKIE_NAMES.ACCESS_TOKEN, newAccessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/',
+    });
+
+    res.json({
+      message: 'Access token refreshed',
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    logger.error('Token refresh error:', error);
+    res.status(500).json({ error: 'Token refresh failed' });
+  }
 });
 
 // Verify email with token

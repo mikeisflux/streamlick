@@ -559,6 +559,24 @@ model CloudProvider {
   @@map("cloud_providers")
 }
 
+// CRITICAL FIX: Track refresh tokens to enable invalidation on logout
+model RefreshToken {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  tokenHash    String   @unique @map("token_hash") // SHA256 hash of the refresh token
+  deviceInfo   String?  @map("device_info") // User-agent or device identifier
+  ipAddress    String?  @map("ip_address")
+  isRevoked    Boolean  @default(false) @map("is_revoked")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  revokedAt    DateTime? @map("revoked_at")
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
 model InfrastructureServer {
   id             String   @id @default(uuid())
   providerId     String?  @map("provider_id")
