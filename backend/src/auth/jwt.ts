@@ -1,7 +1,12 @@
 import jwt, { SignOptions } from 'jsonwebtoken';
 import { JwtPayload } from '../types';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret';
+// CRITICAL FIX: Require JWT_SECRET to be set, no weak default
+if (!process.env.JWT_SECRET) {
+  throw new Error('CRITICAL: JWT_SECRET environment variable must be set. Generate one with: openssl rand -base64 64');
+}
+
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRATION = process.env.JWT_EXPIRATION || '30d'; // 30 days - users stay logged in
 const REFRESH_TOKEN_EXPIRATION = process.env.REFRESH_TOKEN_EXPIRATION || '90d'; // 90 days
 

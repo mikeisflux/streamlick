@@ -1,10 +1,15 @@
 import crypto from 'crypto';
 
 const ALGORITHM = 'aes-256-gcm';
+
+// CRITICAL FIX: Require ENCRYPTION_KEY to be set, no random fallback
+// Random keys on every restart would make all encrypted data inaccessible!
+if (!process.env.ENCRYPTION_KEY) {
+  throw new Error('CRITICAL: ENCRYPTION_KEY environment variable must be set. Generate one with: openssl rand -hex 32');
+}
+
 // ENCRYPTION_KEY must be a 32-byte hex string (64 characters)
-const SECRET_KEY = process.env.ENCRYPTION_KEY
-  ? Buffer.from(process.env.ENCRYPTION_KEY.slice(0, 64), 'hex')
-  : crypto.randomBytes(32);
+const SECRET_KEY = Buffer.from(process.env.ENCRYPTION_KEY.slice(0, 64), 'hex');
 const IV_LENGTH = 16;
 const TAG_LENGTH = 16;
 
