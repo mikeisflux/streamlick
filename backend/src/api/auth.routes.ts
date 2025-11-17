@@ -8,14 +8,17 @@ import { sendVerificationEmail } from '../services/email';
 import { setAuthCookies, clearAuthCookies } from '../auth/cookies';
 import { provideCsrfToken, validateCsrfToken } from '../auth/csrf';
 import logger from '../utils/logger';
+import { authRateLimiter, passwordResetRateLimiter } from '../middleware/rate-limit';
 
 const router = Router();
 
 // CSRF token endpoint - must be called before making authenticated requests
 router.get('/csrf-token', provideCsrfToken);
 
+// CRITICAL FIX: Apply rate limiting to login endpoint
+// Protects against brute force attacks (5 attempts per 15 minutes per IP)
 // Login with email/password
-router.post('/login', async (req, res) => {
+router.post('/login', authRateLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -60,8 +63,10 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// CRITICAL FIX: Apply rate limiting to register endpoint
+// Protects against account creation abuse (5 attempts per 15 minutes per IP)
 // Register new user
-router.post('/register', async (req, res) => {
+router.post('/register', authRateLimiter, async (req, res) => {
   try {
     const { email, password, name } = req.body;
 
