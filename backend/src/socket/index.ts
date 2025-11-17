@@ -28,11 +28,31 @@ interface SocketData {
 const activeChatManagers = new Map<string, ChatManager>();
 
 /**
+ * CRITICAL FIX: Validate UUID format to prevent DoS attacks
+ * Invalid UUIDs can cause database errors and resource exhaustion
+ */
+function isValidUUID(id: string | undefined | null): boolean {
+  if (!id || typeof id !== 'string') {
+    return false;
+  }
+
+  // UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(id);
+}
+
+/**
  * CRITICAL: Verify broadcast ownership/permission
  * Returns true if user is authorized to control this broadcast
  */
 async function verifyBroadcastAccess(userId: string, broadcastId: string): Promise<boolean> {
   try {
+    // CRITICAL FIX: Validate UUID format first
+    if (!isValidUUID(broadcastId)) {
+      logger.warn(`Invalid broadcast ID format: ${broadcastId}`);
+      return false;
+    }
+
     const broadcast = await prisma.broadcast.findUnique({
       where: { id: broadcastId },
       select: { userId: true },
@@ -95,6 +115,17 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     socket.on('join-studio', async ({ broadcastId, participantId }) => {
       try {
         const userId = socket.data.userId;
+
+        // CRITICAL FIX: Validate UUID formats first to prevent DoS
+        if (!isValidUUID(broadcastId)) {
+          logger.warn(`Join studio rejected: Invalid broadcastId format: ${broadcastId}`);
+          return socket.emit('error', { message: 'Invalid broadcast ID' });
+        }
+
+        if (!isValidUUID(participantId)) {
+          logger.warn(`Join studio rejected: Invalid participantId format: ${participantId}`);
+          return socket.emit('error', { message: 'Invalid participant ID' });
+        }
 
         // CRITICAL FIX: Verify participant belongs to this user or user owns broadcast
         const participant = await prisma.participant.findUnique({
@@ -197,6 +228,12 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           return socket.emit('error', { message: 'No broadcast ID' });
         }
 
+        // CRITICAL FIX: Validate UUID format to prevent DoS
+        if (!isValidUUID(participantId)) {
+          logger.warn(`Promote rejected: Invalid participantId format: ${participantId}`);
+          return socket.emit('error', { message: 'Invalid participant ID' });
+        }
+
         // CRITICAL FIX: Verify user owns the broadcast before promoting
         const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
         if (!hasAccess) {
@@ -231,6 +268,12 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
 
         if (!broadcastId) {
           return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // CRITICAL FIX: Validate UUID format to prevent DoS
+        if (!isValidUUID(participantId)) {
+          logger.warn(`Demote rejected: Invalid participantId format: ${participantId}`);
+          return socket.emit('error', { message: 'Invalid participant ID' });
         }
 
         // CRITICAL FIX: Verify user owns the broadcast before demoting
@@ -268,6 +311,12 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           return socket.emit('error', { message: 'No broadcast ID' });
         }
 
+        // CRITICAL FIX: Validate UUID formats to prevent DoS
+        if (!isValidUUID(participantId)) {
+          logger.warn(`Set volume rejected: Invalid participantId format: ${participantId}`);
+          return socket.emit('error', { message: 'Invalid participant ID' });
+        }
+
         // CRITICAL FIX: Verify user owns the broadcast
         const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
         if (!hasAccess) {
@@ -293,6 +342,12 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
 
         if (!broadcastId) {
           return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // CRITICAL FIX: Validate UUID formats to prevent DoS
+        if (!isValidUUID(participantId)) {
+          logger.warn(`Mute rejected: Invalid participantId format: ${participantId}`);
+          return socket.emit('error', { message: 'Invalid participant ID' });
         }
 
         // CRITICAL FIX: Verify user owns the broadcast
@@ -321,6 +376,12 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           return socket.emit('error', { message: 'No broadcast ID' });
         }
 
+        // CRITICAL FIX: Validate UUID formats to prevent DoS
+        if (!isValidUUID(participantId)) {
+          logger.warn(`Unmute rejected: Invalid participantId format: ${participantId}`);
+          return socket.emit('error', { message: 'Invalid participant ID' });
+        }
+
         // CRITICAL FIX: Verify user owns the broadcast
         const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
         if (!hasAccess) {
@@ -347,6 +408,12 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           return socket.emit('error', { message: 'No broadcast ID' });
         }
 
+        // CRITICAL FIX: Validate UUID formats to prevent DoS
+        if (!isValidUUID(participantId)) {
+          logger.warn(`Kick rejected: Invalid participantId format: ${participantId}`);
+          return socket.emit('error', { message: 'Invalid participant ID' });
+        }
+
         // CRITICAL FIX: Verify user owns the broadcast
         const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
         if (!hasAccess) {
@@ -371,6 +438,12 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
 
         if (!broadcastId) {
           return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // CRITICAL FIX: Validate UUID formats to prevent DoS
+        if (!isValidUUID(participantId)) {
+          logger.warn(`Ban rejected: Invalid participantId format: ${participantId}`);
+          return socket.emit('error', { message: 'Invalid participant ID' });
         }
 
         // CRITICAL FIX: Verify user owns the broadcast
