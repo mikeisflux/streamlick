@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate, AuthRequest } from '../auth/middleware';
 import { getDestinationsWithExpiringTokens, isTokenExpiringSoon } from '../services/facebook.service';
 import logger from '../utils/logger';
+import prisma from '../database/prisma';
 
 const router = Router();
 
@@ -19,13 +20,13 @@ router.get('/expiring-tokens', authenticate, async (req: AuthRequest, res) => {
       dest => dest.userId === req.user!.userId
     );
 
-    res.json({
+    return res.json({
       destinations: userDestinations,
       count: userDestinations.length,
     });
   } catch (error) {
     logger.error('Error getting expiring tokens:', error);
-    res.status(500).json({ error: 'Failed to check expiring tokens' });
+    return res.status(500).json({ error: 'Failed to check expiring tokens' });
   }
 });
 
@@ -37,12 +38,25 @@ router.get('/check-destination/:destinationId', authenticate, async (req: AuthRe
     const { destinationId } = req.params;
     const warningDays = parseInt(req.query.days as string) || 7;
 
+    // CRITICAL FIX: Verify ownership before checking (IDOR protection)
+    const destination = await prisma.destination.findUnique({
+      where: { id: destinationId },
+    });
+
+    if (!destination) {
+      return res.status(404).json({ error: 'Destination not found' });
+    }
+
+    if (destination.userId !== req.user!.userId) {
+      return res.status(404).json({ error: 'Destination not found' });
+    }
+
     const result = await isTokenExpiringSoon(destinationId, warningDays);
 
-    res.json(result);
+    return res.json(result);
   } catch (error) {
     logger.error('Error checking destination token:', error);
-    res.status(500).json({ error: 'Failed to check destination token' });
+    return res.status(500).json({ error: 'Failed to check destination token' });
   }
 });
 
