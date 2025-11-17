@@ -1,6 +1,16 @@
 import * as mediasoup from 'mediasoup';
 import { WorkerLogLevel, RtpCodecCapability } from 'mediasoup/node/lib/types';
 
+// CRITICAL FIX: Require MEDIASOUP_ANNOUNCED_IP to be set
+// WebRTC will fail for remote clients if this defaults to localhost
+if (!process.env.MEDIASOUP_ANNOUNCED_IP) {
+  throw new Error(
+    'CRITICAL: MEDIASOUP_ANNOUNCED_IP environment variable must be set.\n' +
+    'This should be the public IP address or domain of your media server.\n' +
+    'Example: MEDIASOUP_ANNOUNCED_IP=123.45.67.89 or MEDIASOUP_ANNOUNCED_IP=media.yourdomain.com'
+  );
+}
+
 export const mediasoupConfig = {
   worker: {
     logLevel: 'warn' as WorkerLogLevel,
@@ -12,8 +22,10 @@ export const mediasoupConfig = {
       'srtp',
       'rtcp',
     ] as any,
+    // CRITICAL FIX: Expanded port range from 100 to 10,000 ports
+    // Supports ~5,000 concurrent broadcasts (2 ports per participant)
     rtcMinPort: 40000,
-    rtcMaxPort: 40100,
+    rtcMaxPort: 49999,
   },
   router: {
     mediaCodecs: [
@@ -77,7 +89,8 @@ export const mediasoupConfig = {
     listenIps: [
       {
         ip: '0.0.0.0',
-        announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP || '127.0.0.1',
+        // CRITICAL FIX: No fallback to localhost - already validated above
+        announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP!,
       },
     ],
     // Optimized for HD live streaming (supports up to 1080p @ 60fps)
