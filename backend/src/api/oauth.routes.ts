@@ -2,8 +2,9 @@ import { Router } from 'express';
 import axios from 'axios';
 import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../auth/middleware';
-import { encrypt, decrypt } from '../utils/crypto';
+import { encrypt, decrypt, generateToken } from '../utils/crypto';
 import logger from '../utils/logger';
+import crypto from 'crypto';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -512,12 +513,28 @@ router.get('/x/authorize', authenticate, async (req, res) => {
       });
     }
 
-    // Generate PKCE code verifier and challenge
-    const codeVerifier = Buffer.from(Math.random().toString()).toString('base64').substring(0, 128);
-    const codeChallenge = Buffer.from(codeVerifier).toString('base64url');
+    // CRITICAL FIX: Generate cryptographically secure PKCE code verifier
+    // Must be 43-128 characters from unreserved charset [A-Z][a-z][0-9]-._~
+    const codeVerifier = crypto.randomBytes(32).toString('base64url'); // 43 chars
 
-    // Store code verifier in session/cache (in production, use Redis)
-    // For now, we'll include it in state (not secure for production)
+    // CRITICAL FIX: Compute SHA256 hash for code_challenge (not plain base64)
+    const hash = crypto.createHash('sha256').update(codeVerifier).digest();
+    const codeChallenge = hash.toString('base64url');
+
+    // CRITICAL FIX: Store code verifier securely in database
+    // Store with 10-minute expiration (OAuth flows should complete quickly)
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    await prisma.oAuthPKCE.create({
+      data: {
+        userId,
+        platform: 'x',
+        codeVerifier: encrypt(codeVerifier), // Encrypt for security
+        state,
+        expiresAt,
+      },
+    });
+
+    logger.info(`[OAuth] Generated PKCE for X/Twitter user ${userId}`);
 
     const params = new URLSearchParams({
       response_type: 'code',
@@ -548,6 +565,33 @@ router.get('/x/callback', async (req, res) => {
 
     const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
 
+    // CRITICAL FIX: Retrieve stored PKCE code_verifier from database
+    const pkceRecord = await prisma.oAuthPKCE.findFirst({
+      where: {
+        userId,
+        platform: 'x',
+        state: state as string,
+        expiresAt: {
+          gte: new Date(), // Not expired
+        },
+      },
+    });
+
+    if (!pkceRecord) {
+      logger.error(`[OAuth] PKCE record not found or expired for user ${userId}`);
+      return res.redirect(`${process.env.FRONTEND_URL}/oauth-success?error=x&reason=pkce_expired`);
+    }
+
+    // Decrypt code_verifier
+    const codeVerifier = decrypt(pkceRecord.codeVerifier);
+
+    // Delete PKCE record (one-time use)
+    await prisma.oAuthPKCE.delete({
+      where: { id: pkceRecord.id },
+    });
+
+    logger.info(`[OAuth] Retrieved and deleted PKCE for user ${userId}`);
+
     const credentials = await getOAuthCredentials('x');
 
     // Exchange code for token (with PKCE)
@@ -558,7 +602,7 @@ router.get('/x/callback', async (req, res) => {
         grant_type: 'authorization_code',
         client_id: credentials.clientId,
         redirect_uri: credentials.redirectUri,
-        code_verifier: 'STORED_CODE_VERIFIER', // Should retrieve from cache
+        code_verifier: codeVerifier, // CRITICAL FIX: Use stored code_verifier
       },
       {
         headers: {
