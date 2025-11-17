@@ -1,13 +1,12 @@
 import { Router } from 'express';
 import axios from 'axios';
-import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../auth/middleware';
 import { encrypt, decrypt, generateToken } from '../utils/crypto';
 import logger from '../utils/logger';
 import crypto from 'crypto';
+import prisma from '../database/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 /**
  * Get OAuth credentials from database (admin settings) or environment variables

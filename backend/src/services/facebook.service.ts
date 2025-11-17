@@ -1,9 +1,7 @@
 import axios from 'axios';
-import { PrismaClient } from '@prisma/client';
 import { decrypt, encrypt } from '../utils/crypto';
 import logger from '../utils/logger';
-
-const prisma = new PrismaClient();
+import prisma from '../database/prisma';
 const FACEBOOK_API_VERSION = 'v24.0';
 const FACEBOOK_GRAPH_URL = `https://graph.facebook.com/${FACEBOOK_API_VERSION}`;
 

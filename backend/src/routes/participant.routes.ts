@@ -1,10 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticate as authMiddleware } from '../auth/middleware';
 import logger from '../utils/logger';
+import prisma from '../database/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 /**
  * Ban a participant from a broadcast

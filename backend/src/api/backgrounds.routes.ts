@@ -1,14 +1,13 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { authenticate as authMiddleware } from '../auth/middleware';
 import logger from '../utils/logger';
+import prisma from '../database/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Create uploads directory if it doesn't exist
 const UPLOAD_DIR = path.join(__dirname, '../../uploads/backgrounds');

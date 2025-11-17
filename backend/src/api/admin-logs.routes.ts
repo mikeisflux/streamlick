@@ -1,14 +1,13 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import logger from '../utils/logger';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { authenticate, requireAdmin } from '../auth/middleware';
+import prisma from '../database/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
 const execAsync = promisify(exec);
 
 // Require authentication and admin privileges for all log routes

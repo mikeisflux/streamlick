@@ -1,10 +1,9 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticate, AuthRequest, requireAdmin } from '../auth/middleware';
 import logger from '../utils/logger';
+import prisma from '../database/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 /**
  * Get all page content (admin only)

@@ -12,11 +12,10 @@
  */
 
 import axios from 'axios';
-import { PrismaClient } from '@prisma/client';
 import { decrypt, encrypt } from '../utils/crypto';
 import logger from '../utils/logger';
+import prisma from '../database/prisma';
 
-const prisma = new PrismaClient();
 const RUMBLE_API_BASE = 'https://rumble.com/service.php';
 
 /**

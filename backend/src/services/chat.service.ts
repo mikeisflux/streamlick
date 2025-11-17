@@ -10,11 +10,9 @@
  */
 
 import axios from 'axios';
-import { PrismaClient } from '@prisma/client';
 import { decrypt } from '../utils/crypto';
 import logger from '../utils/logger';
-
-const prisma = new PrismaClient();
+import prisma from '../database/prisma';
 
 export interface ChatMessage {
   id: string;

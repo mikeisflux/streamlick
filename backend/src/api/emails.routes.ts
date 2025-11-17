@@ -1,13 +1,12 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticate, AuthRequest } from '../auth/middleware';
 import sgMail from '@sendgrid/mail';
 import multer from 'multer';
 import { encrypt, decrypt } from '../utils/crypto';
 import logger from '../utils/logger';
+import prisma from '../database/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Configure multer for file uploads
 const upload = multer({
