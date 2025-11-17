@@ -116,6 +116,10 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req: Reques
     const userId = req.user?.userId;
     const file = req.file;
 
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
     if (!file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
@@ -187,6 +191,10 @@ router.post('/link', authMiddleware, async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
     const { url, name, description, type, hotkey, volume } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
 
     if (!url || !name || !type) {
       return res.status(400).json({ error: 'URL, name, and type are required' });
