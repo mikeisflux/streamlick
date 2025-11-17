@@ -27,6 +27,29 @@ interface SocketData {
 // Store active chat managers
 const activeChatManagers = new Map<string, ChatManager>();
 
+/**
+ * CRITICAL: Verify broadcast ownership/permission
+ * Returns true if user is authorized to control this broadcast
+ */
+async function verifyBroadcastAccess(userId: string, broadcastId: string): Promise<boolean> {
+  try {
+    const broadcast = await prisma.broadcast.findUnique({
+      where: { id: broadcastId },
+      select: { userId: true },
+    });
+
+    if (!broadcast) {
+      return false;
+    }
+
+    // User must be the broadcast owner
+    return broadcast.userId === userId;
+  } catch (error) {
+    logger.error('Broadcast access verification error:', error);
+    return false;
+  }
+}
+
 export function initializeSocket(httpServer: HttpServer): SocketServer {
   const io = new SocketServer(httpServer, {
     cors: {
@@ -71,6 +94,33 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     // Join studio room
     socket.on('join-studio', async ({ broadcastId, participantId }) => {
       try {
+        const userId = socket.data.userId;
+
+        // CRITICAL FIX: Verify participant belongs to this user or user owns broadcast
+        const participant = await prisma.participant.findUnique({
+          where: { id: participantId },
+          include: { broadcast: true },
+        });
+
+        if (!participant) {
+          logger.warn(`Join studio rejected: Participant ${participantId} not found`);
+          return socket.emit('error', { message: 'Participant not found' });
+        }
+
+        if (participant.broadcastId !== broadcastId) {
+          logger.warn(`Join studio rejected: Participant ${participantId} not in broadcast ${broadcastId}`);
+          return socket.emit('error', { message: 'Participant not in this broadcast' });
+        }
+
+        // Verify user owns this participant OR owns the broadcast
+        const isOwner = participant.broadcast.userId === userId;
+        const isParticipant = participant.userId === userId;
+
+        if (!isOwner && !isParticipant) {
+          logger.warn(`Join studio rejected: User ${userId} not authorized for participant ${participantId}`);
+          return socket.emit('error', { message: 'Not authorized' });
+        }
+
         socket.data.broadcastId = broadcastId;
         socket.data.participantId = participantId;
 
@@ -141,9 +191,17 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     socket.on('promote-to-live', async ({ participantId }) => {
       try {
         const { broadcastId } = socket.data;
+        const userId = socket.data.userId;
+
         if (!broadcastId) {
-          socket.emit('error', { message: 'No broadcast ID' });
-          return;
+          return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // CRITICAL FIX: Verify user owns the broadcast before promoting
+        const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
+        if (!hasAccess) {
+          logger.warn(`Promote rejected: User ${userId} not authorized for broadcast ${broadcastId}`);
+          return socket.emit('error', { message: 'Not authorized' });
         }
 
         // Update participant role in database
@@ -169,9 +227,17 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     socket.on('demote-to-backstage', async ({ participantId }) => {
       try {
         const { broadcastId } = socket.data;
+        const userId = socket.data.userId;
+
         if (!broadcastId) {
-          socket.emit('error', { message: 'No broadcast ID' });
-          return;
+          return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // CRITICAL FIX: Verify user owns the broadcast before demoting
+        const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
+        if (!hasAccess) {
+          logger.warn(`Demote rejected: User ${userId} not authorized for broadcast ${broadcastId}`);
+          return socket.emit('error', { message: 'Not authorized' });
         }
 
         // Update participant role in database
@@ -194,53 +260,133 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     });
 
     // Set participant volume
-    socket.on('set-participant-volume', ({ broadcastId, participantId, volume }) => {
-      if (broadcastId) {
+    socket.on('set-participant-volume', async ({ broadcastId, participantId, volume }) => {
+      try {
+        const userId = socket.data.userId;
+
+        if (!broadcastId) {
+          return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // CRITICAL FIX: Verify user owns the broadcast
+        const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
+        if (!hasAccess) {
+          logger.warn(`Set volume rejected: User ${userId} not authorized for broadcast ${broadcastId}`);
+          return socket.emit('error', { message: 'Not authorized' });
+        }
+
         io.to(`broadcast:${broadcastId}`).emit('participant-volume-changed', {
           participantId,
           volume,
         });
         logger.info(`Participant ${participantId} volume set to ${volume}% in broadcast ${broadcastId}`);
+      } catch (error) {
+        logger.error('Set participant volume error:', error);
+        socket.emit('error', { message: 'Failed to set volume' });
       }
     });
 
     // Mute participant
-    socket.on('mute-participant', ({ broadcastId, participantId }) => {
-      if (broadcastId) {
+    socket.on('mute-participant', async ({ broadcastId, participantId }) => {
+      try {
+        const userId = socket.data.userId;
+
+        if (!broadcastId) {
+          return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // CRITICAL FIX: Verify user owns the broadcast
+        const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
+        if (!hasAccess) {
+          logger.warn(`Mute rejected: User ${userId} not authorized for broadcast ${broadcastId}`);
+          return socket.emit('error', { message: 'Not authorized' });
+        }
+
         io.to(`broadcast:${broadcastId}`).emit('participant-muted', {
           participantId,
         });
         logger.info(`Participant ${participantId} muted in broadcast ${broadcastId}`);
+      } catch (error) {
+        logger.error('Mute participant error:', error);
+        socket.emit('error', { message: 'Failed to mute participant' });
       }
     });
 
     // Unmute participant
-    socket.on('unmute-participant', ({ broadcastId, participantId }) => {
-      if (broadcastId) {
+    socket.on('unmute-participant', async ({ broadcastId, participantId }) => {
+      try {
+        const userId = socket.data.userId;
+
+        if (!broadcastId) {
+          return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // CRITICAL FIX: Verify user owns the broadcast
+        const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
+        if (!hasAccess) {
+          logger.warn(`Unmute rejected: User ${userId} not authorized for broadcast ${broadcastId}`);
+          return socket.emit('error', { message: 'Not authorized' });
+        }
+
         io.to(`broadcast:${broadcastId}`).emit('participant-unmuted', {
           participantId,
         });
         logger.info(`Participant ${participantId} unmuted in broadcast ${broadcastId}`);
+      } catch (error) {
+        logger.error('Unmute participant error:', error);
+        socket.emit('error', { message: 'Failed to unmute participant' });
       }
     });
 
     // Kick participant
-    socket.on('kick-participant', ({ broadcastId, participantId }) => {
-      if (broadcastId) {
+    socket.on('kick-participant', async ({ broadcastId, participantId }) => {
+      try {
+        const userId = socket.data.userId;
+
+        if (!broadcastId) {
+          return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // CRITICAL FIX: Verify user owns the broadcast
+        const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
+        if (!hasAccess) {
+          logger.warn(`Kick rejected: User ${userId} not authorized for broadcast ${broadcastId}`);
+          return socket.emit('error', { message: 'Not authorized' });
+        }
+
         io.to(`broadcast:${broadcastId}`).emit('participant-kicked', {
           participantId,
         });
         logger.info(`Participant ${participantId} kicked from broadcast ${broadcastId}`);
+      } catch (error) {
+        logger.error('Kick participant error:', error);
+        socket.emit('error', { message: 'Failed to kick participant' });
       }
     });
 
     // Ban participant
-    socket.on('ban-participant', ({ broadcastId, participantId }) => {
-      if (broadcastId) {
+    socket.on('ban-participant', async ({ broadcastId, participantId }) => {
+      try {
+        const userId = socket.data.userId;
+
+        if (!broadcastId) {
+          return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // CRITICAL FIX: Verify user owns the broadcast
+        const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
+        if (!hasAccess) {
+          logger.warn(`Ban rejected: User ${userId} not authorized for broadcast ${broadcastId}`);
+          return socket.emit('error', { message: 'Not authorized' });
+        }
+
         io.to(`broadcast:${broadcastId}`).emit('participant-banned', {
           participantId,
         });
         logger.info(`Participant ${participantId} banned from broadcast ${broadcastId}`);
+      } catch (error) {
+        logger.error('Ban participant error:', error);
+        socket.emit('error', { message: 'Failed to ban participant' });
       }
     });
 
@@ -266,7 +412,14 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         const userId = socket.data.userId;
         if (!userId) {
           logger.error('No userId found for start-chat');
-          return;
+          return socket.emit('chat-error', { error: 'Not authenticated' });
+        }
+
+        // CRITICAL FIX: Verify user owns the broadcast before starting chat
+        const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
+        if (!hasAccess) {
+          logger.warn(`Start chat rejected: User ${userId} not authorized for broadcast ${broadcastId}`);
+          return socket.emit('chat-error', { error: 'Not authorized' });
         }
 
         // Stop existing chat manager if any
@@ -293,8 +446,17 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     });
 
     // Stop chat polling
-    socket.on('stop-chat', ({ broadcastId }) => {
+    socket.on('stop-chat', async ({ broadcastId }) => {
       try {
+        const userId = socket.data.userId;
+
+        // CRITICAL FIX: Verify user owns the broadcast before stopping chat
+        const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
+        if (!hasAccess) {
+          logger.warn(`Stop chat rejected: User ${userId} not authorized for broadcast ${broadcastId}`);
+          return socket.emit('chat-error', { error: 'Not authorized' });
+        }
+
         const chatManager = activeChatManagers.get(broadcastId);
         if (chatManager) {
           chatManager.stopAll();
@@ -461,25 +623,57 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     });
 
     // Approve screen share (host approves participant's request)
-    socket.on('approve-screen-share', ({ participantId }) => {
-      const { broadcastId } = socket.data;
-      if (broadcastId) {
+    socket.on('approve-screen-share', async ({ participantId }) => {
+      try {
+        const { broadcastId } = socket.data;
+        const userId = socket.data.userId;
+
+        if (!broadcastId) {
+          return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // CRITICAL FIX: Verify user owns the broadcast before approving screen share
+        const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
+        if (!hasAccess) {
+          logger.warn(`Approve screen share rejected: User ${userId} not authorized for broadcast ${broadcastId}`);
+          return socket.emit('error', { message: 'Not authorized' });
+        }
+
         io.to(`broadcast:${broadcastId}`).emit('screen-share-approved', {
           participantId,
         });
         logger.info(`Screen share approved for participant ${participantId} in broadcast ${broadcastId}`);
+      } catch (error) {
+        logger.error('Approve screen share error:', error);
+        socket.emit('error', { message: 'Failed to approve screen share' });
       }
     });
 
     // Deny screen share (host denies participant's request)
-    socket.on('deny-screen-share', ({ participantId, reason }) => {
-      const { broadcastId } = socket.data;
-      if (broadcastId) {
+    socket.on('deny-screen-share', async ({ participantId, reason }) => {
+      try {
+        const { broadcastId } = socket.data;
+        const userId = socket.data.userId;
+
+        if (!broadcastId) {
+          return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // CRITICAL FIX: Verify user owns the broadcast before denying screen share
+        const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
+        if (!hasAccess) {
+          logger.warn(`Deny screen share rejected: User ${userId} not authorized for broadcast ${broadcastId}`);
+          return socket.emit('error', { message: 'Not authorized' });
+        }
+
         io.to(`broadcast:${broadcastId}`).emit('screen-share-denied', {
           participantId,
           reason,
         });
         logger.info(`Screen share denied for participant ${participantId} in broadcast ${broadcastId}`);
+      } catch (error) {
+        logger.error('Deny screen share error:', error);
+        socket.emit('error', { message: 'Failed to deny screen share' });
       }
     });
 
