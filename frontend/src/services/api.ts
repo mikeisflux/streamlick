@@ -39,6 +39,17 @@ api.interceptors.request.use((config) => {
   if (csrfToken && config.method && !['get', 'head', 'options'].includes(config.method.toLowerCase())) {
     config.headers['X-CSRF-Token'] = csrfToken;
   }
+
+  // Debug logging for broadcast start requests
+  if (config.url?.includes('/broadcasts/') && config.url?.includes('/start')) {
+    console.log('[API Interceptor] Broadcast start request:', {
+      url: config.url,
+      method: config.method,
+      data: config.data,
+      headers: config.headers,
+    });
+  }
+
   return config;
 });
 

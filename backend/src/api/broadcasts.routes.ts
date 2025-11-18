@@ -172,8 +172,9 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res) => {
 // Start broadcast
 router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
   try {
+    logger.info(`[DEBUG] Raw request body:`, JSON.stringify(req.body, null, 2));
     const { destinationIds, destinationSettings = {} } = req.body; // destinationSettings: { [destinationId]: { privacyStatus, scheduledStartTime } }
-    logger.info(`Broadcast start request received - broadcastId: ${req.params.id}, destinationIds:`, destinationIds);
+    logger.info(`Broadcast start request received - broadcastId: ${req.params.id}, destinationIds:`, destinationIds, `type: ${typeof destinationIds}, isArray: ${Array.isArray(destinationIds)}, length: ${destinationIds?.length}`);
 
     const broadcast = await prisma.broadcast.findFirst({
       where: {

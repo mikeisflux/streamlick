@@ -32,10 +32,18 @@ export const broadcastService = {
     destinationIds?: string[],
     destinationSettings?: Record<string, { privacyStatus?: string; scheduledStartTime?: string }>
   ): Promise<Broadcast> {
-    const response = await api.post(`/broadcasts/${id}/start`, {
+    const requestBody = {
       destinationIds,
       destinationSettings,
+    };
+    console.log('[BroadcastService] Sending start request:', {
+      broadcastId: id,
+      requestBody,
+      destinationIds,
+      destinationIdsLength: destinationIds?.length,
     });
+    const response = await api.post(`/broadcasts/${id}/start`, requestBody);
+    console.log('[BroadcastService] Start response:', response.data);
     return response.data;
   },
 
