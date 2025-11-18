@@ -477,31 +477,44 @@ io.on('connection', (socket) => {
   // Start RTMP streaming with compositor pipeline
   socket.on('start-rtmp', async ({ broadcastId, destinations, compositeProducers }) => {
     try {
-      logger.info(`Starting RTMP stream for broadcast ${broadcastId}`);
+      logger.info(`[RTMP] ========== START-RTMP EVENT RECEIVED ==========`);
+      logger.info(`[RTMP] Broadcast ID: ${broadcastId}`);
+      logger.info(`[RTMP] Destinations count: ${destinations?.length || 0}`);
+      logger.info(`[RTMP] Destinations:`, JSON.stringify(destinations, null, 2));
+      logger.info(`[RTMP] Composite producers:`, JSON.stringify(compositeProducers, null, 2));
 
       const broadcast = broadcasts.get(broadcastId);
       if (!broadcast) {
+        logger.error(`[RTMP] ❌ Broadcast ${broadcastId} not found in broadcasts map`);
         throw new Error('Broadcast not found');
       }
+      logger.info(`[RTMP] ✓ Broadcast found`);
 
       const router = getRouter(broadcastId);
       if (!router) {
+        logger.error(`[RTMP] ❌ Router not found for broadcast ${broadcastId}`);
         throw new Error('Router not found');
       }
+      logger.info(`[RTMP] ✓ Router found`);
 
       // If composite producers are specified, use compositor pipeline
       if (compositeProducers?.videoProducerId && compositeProducers?.audioProducerId) {
+        logger.info(`[RTMP] Using compositor pipeline mode`);
         const videoProducer = broadcast.producers.get(compositeProducers.videoProducerId);
         const audioProducer = broadcast.producers.get(compositeProducers.audioProducerId);
 
+        logger.info(`[RTMP] Video producer: ${videoProducer ? 'found' : 'NOT FOUND'}`);
+        logger.info(`[RTMP] Audio producer: ${audioProducer ? 'found' : 'NOT FOUND'}`);
+
         if (videoProducer && audioProducer) {
+          logger.info(`[RTMP] 🚀 Starting compositor pipeline...`);
           await createCompositorPipeline(router, broadcastId, videoProducer, audioProducer, destinations);
           if (socket.connected) {
             socket.emit('rtmp-started', { broadcastId, method: 'compositor-pipeline' });
           }
-          logger.info('RTMP started with compositor pipeline');
+          logger.info('[RTMP] ✅ RTMP started with compositor pipeline');
         } else {
-          logger.warn('Composite producers not found, falling back to legacy RTMP');
+          logger.warn('[RTMP] ⚠️ Composite producers not found, falling back to legacy RTMP');
           startRTMPStream(broadcastId, destinations);
           if (socket.connected) {
             socket.emit('rtmp-started', { broadcastId, method: 'legacy' });
@@ -509,7 +522,7 @@ io.on('connection', (socket) => {
         }
       } else {
         // Fallback to legacy RTMP (for backwards compatibility)
-        logger.info('Using legacy RTMP streaming');
+        logger.info('[RTMP] Using legacy RTMP streaming mode');
         startRTMPStream(broadcastId, destinations);
         if (socket.connected) {
           socket.emit('rtmp-started', { broadcastId, method: 'legacy' });

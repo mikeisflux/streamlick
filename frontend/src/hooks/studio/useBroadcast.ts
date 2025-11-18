@@ -210,23 +210,25 @@ export function useBroadcast({
       await broadcastService.start(broadcastId, selectedDestinations, apiDestinationSettings);
 
       // Wait for broadcast destinations to be created (retry with backoff)
-      console.log('[useBroadcast] Waiting for broadcast destinations to be created...');
+      console.log('[useBroadcast] ⏳ Waiting for broadcast destinations to be created...');
       let broadcastDestinations: any[] = [];
       for (let i = 0; i < 20; i++) {
         await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
         try {
           const result = await broadcastService.getDestinations(broadcastId);
+          console.log(`[useBroadcast] 🔍 Attempt ${i + 1}/20 - Got ${result?.length || 0} destinations`);
           if (result && result.length > 0) {
             broadcastDestinations = result;
-            console.log('[useBroadcast] Got broadcast destinations:', broadcastDestinations);
+            console.log('[useBroadcast] ✅ Got broadcast destinations:', JSON.stringify(broadcastDestinations, null, 2));
             break;
           }
-        } catch (error) {
-          console.log(`[useBroadcast] Retry ${i + 1}/20 - destinations not ready yet`);
+        } catch (error: any) {
+          console.log(`[useBroadcast] ⚠️ Retry ${i + 1}/20 - Error:`, error.message);
         }
       }
 
       if (!broadcastDestinations || broadcastDestinations.length === 0) {
+        console.error('[useBroadcast] ❌ Failed to get broadcast destinations after 20 seconds');
         throw new Error('Failed to get broadcast destinations after 20 seconds');
       }
 
@@ -239,7 +241,11 @@ export function useBroadcast({
         liveVideoId: bd.liveVideoId,
       }));
 
-      console.log('[useBroadcast] Starting RTMP with destinations:', destinationsToStream);
+      console.log('[useBroadcast] 📡 Starting RTMP with destinations:', JSON.stringify(destinationsToStream, null, 2));
+      console.log('[useBroadcast] 🎥 Composite producers:', {
+        videoProducerId: compositeVideoProducerId,
+        audioProducerId: compositeAudioProducerId,
+      });
 
       mediaServerSocketService.emit('start-rtmp', {
         broadcastId,
@@ -249,6 +255,8 @@ export function useBroadcast({
           audioProducerId: compositeAudioProducerId,
         },
       });
+
+      console.log('[useBroadcast] ✅ Emitted start-rtmp event to media server');
 
       // Start chat polling
       socketService.emit('start-chat', { broadcastId });
