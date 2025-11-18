@@ -50,7 +50,7 @@ export async function createCompositorPipeline(
     });
 
     // Add error handler for video transport (listenererror for listening socket errors)
-    videoTransport.on('listenererror', (error) => {
+    videoTransport.on('listenererror', (error: any) => {
       logger.error(`Video plain transport listener error for broadcast ${broadcastId}:`, error);
       diagnosticLogger.logError(
         'rtp-pipeline',
@@ -69,7 +69,7 @@ export async function createCompositorPipeline(
     });
 
     // Add error handler for audio transport (listenererror for listening socket errors)
-    audioTransport.on('listenererror', (error) => {
+    audioTransport.on('listenererror', (error: any) => {
       logger.error(`Audio plain transport listener error for broadcast ${broadcastId}:`, error);
       diagnosticLogger.logError(
         'rtp-pipeline',
