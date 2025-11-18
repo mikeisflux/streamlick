@@ -9,9 +9,10 @@ import prisma from '../database/prisma';
 const router = Router();
 
 /**
- * Get OAuth credentials from database (admin settings) or environment variables
+ * Get OAuth credentials for a platform from database or environment variables
+ * Handles decryption of encrypted credentials
  */
-async function getOAuthCredentials(platform: string): Promise<{
+export async function getOAuthCredentials(platform: string): Promise<{
   clientId: string;
   clientSecret: string;
   redirectUri: string;

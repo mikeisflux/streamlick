@@ -2,6 +2,8 @@ import axios from 'axios';
 import { decrypt, encrypt } from '../utils/crypto';
 import logger from '../utils/logger';
 import prisma from '../database/prisma';
+import { getOAuthCredentials } from '../api/oauth.routes';
+
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 const YOUTUBE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
@@ -89,20 +91,23 @@ export async function getValidYouTubeToken(destinationId: string): Promise<strin
 
       const refreshToken = decrypt(destination.refreshToken);
 
-      const clientId = process.env.YOUTUBE_CLIENT_ID;
-      const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
+      // Get OAuth credentials from database (admin settings) or environment variables
+      logger.info('[YouTube Token] Retrieving OAuth credentials from database...');
+      const credentials = await getOAuthCredentials('youtube');
 
-      if (!clientId || !clientSecret) {
-        logger.error('[YouTube Token] Missing OAuth credentials in environment variables');
-        logger.error(`[YouTube Token] YOUTUBE_CLIENT_ID present: ${!!clientId}`);
-        logger.error(`[YouTube Token] YOUTUBE_CLIENT_SECRET present: ${!!clientSecret}`);
-        throw new Error('YouTube OAuth credentials not configured');
+      if (!credentials.clientId || !credentials.clientSecret) {
+        logger.error('[YouTube Token] Missing OAuth credentials');
+        logger.error(`[YouTube Token] clientId present: ${!!credentials.clientId}`);
+        logger.error(`[YouTube Token] clientSecret present: ${!!credentials.clientSecret}`);
+        throw new Error('YouTube OAuth credentials not configured in admin settings');
       }
+
+      logger.info('[YouTube Token] Successfully retrieved OAuth credentials from database');
 
       const refreshed = await refreshYouTubeToken(
         refreshToken,
-        clientId,
-        clientSecret
+        credentials.clientId,
+        credentials.clientSecret
       );
 
       accessToken = refreshed.access_token;
