@@ -43,14 +43,15 @@ export async function createCompositorPipeline(
     );
 
     // Create Plain RTP transports for video and audio
-    // Bind to all interfaces (0.0.0.0) and announce public IP for external FFmpeg servers
+    // Support both single-server (FFmpeg on same machine) and multi-server (FFmpeg on different machine)
+    const useExternalFFmpeg = process.env.EXTERNAL_FFMPEG === 'true';
+
     const videoTransport = await router.createPlainTransport({
-      listenIp: {
-        ip: '0.0.0.0',
-        announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP
-      },
+      listenIp: useExternalFFmpeg
+        ? { ip: '0.0.0.0', announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP }
+        : { ip: '127.0.0.1', announcedIp: undefined },
       rtcpMux: false,
-      comedia: false, // Disable comedia for explicit remote connection
+      comedia: true, // Auto-learn FFmpeg address from first packet
     });
 
     // Add error handler for video transport (listenererror for listening socket errors)
@@ -67,12 +68,11 @@ export async function createCompositorPipeline(
     });
 
     const audioTransport = await router.createPlainTransport({
-      listenIp: {
-        ip: '0.0.0.0',
-        announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP
-      },
+      listenIp: useExternalFFmpeg
+        ? { ip: '0.0.0.0', announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP }
+        : { ip: '127.0.0.1', announcedIp: undefined },
       rtcpMux: false,
-      comedia: false, // Disable comedia for explicit remote connection
+      comedia: true, // Auto-learn FFmpeg address from first packet
     });
 
     // Add error handler for audio transport (listenererror for listening socket errors)
@@ -90,6 +90,9 @@ export async function createCompositorPipeline(
 
     logger.info(
       `Plain transports created - Video: ${videoTransport.tuple.localPort}, Audio: ${audioTransport.tuple.localPort}`
+    );
+    logger.info(
+      `FFmpeg deployment mode: ${useExternalFFmpeg ? 'EXTERNAL (multi-server)' : 'LOCAL (same server)'}`
     );
     diagnosticLogger.logRTPPipeline(
       'PlainTransport',
@@ -137,8 +140,10 @@ export async function createCompositorPipeline(
     const videoPayloadType = videoConsumer.rtpParameters.codecs[0].payloadType;
     const audioPayloadType = audioConsumer.rtpParameters.codecs[0].payloadType;
 
-    // Use media server's public IP for external FFmpeg servers
-    const mediaServerIp = process.env.MEDIASOUP_ANNOUNCED_IP || '127.0.0.1';
+    // Use appropriate IP based on deployment mode
+    const mediaServerIp = useExternalFFmpeg
+      ? (process.env.MEDIASOUP_ANNOUNCED_IP || 'localhost')
+      : '127.0.0.1';
 
     // Start FFmpeg for each destination
     const ffmpegProcesses = new Map<string, any>();
