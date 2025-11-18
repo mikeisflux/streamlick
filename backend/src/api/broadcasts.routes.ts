@@ -561,4 +561,48 @@ router.get('/:id/stats', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+// Get broadcast destinations with RTMP details for media server
+router.get('/:id/destinations', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const broadcast = await prisma.broadcast.findFirst({
+      where: {
+        id: req.params.id,
+        userId: req.user!.userId,
+      },
+    });
+
+    if (!broadcast) {
+      return res.status(404).json({ error: 'Broadcast not found' });
+    }
+
+    // Get broadcast destinations with decrypted stream keys
+    const broadcastDestinations = await prisma.broadcastDestination.findMany({
+      where: { broadcastId: req.params.id },
+      include: {
+        destination: {
+          select: {
+            id: true,
+            platform: true,
+          },
+        },
+      },
+    });
+
+    // Decrypt stream keys for media server
+    const destinationsForMediaServer = broadcastDestinations.map((bd) => ({
+      id: bd.destination.id,
+      platform: bd.destination.platform,
+      rtmpUrl: bd.streamUrl,
+      streamKey: bd.streamKey ? decrypt(bd.streamKey) : '',
+      liveVideoId: bd.liveVideoId,
+      status: bd.status,
+    }));
+
+    res.json(destinationsForMediaServer);
+  } catch (error) {
+    logger.error('Get broadcast destinations error:', error);
+    res.status(500).json({ error: 'Failed to get broadcast destinations' });
+  }
+});
+
 export default router;

@@ -209,15 +209,27 @@ export function useBroadcast({
       // Start broadcast with destination settings
       await broadcastService.start(broadcastId, selectedDestinations, apiDestinationSettings);
 
-      // Start RTMP streaming with composite producers
-      const destinationsToStream = destinations
-        .filter((d) => selectedDestinations.includes(d.id))
-        .map((d) => ({
-          id: d.id,
-          platform: d.platform,
-          rtmpUrl: d.rtmpUrl,
-          streamKey: 'encrypted-key', // In production, decrypt on backend
-        }));
+      // Wait for YouTube/Facebook broadcasts to be created (happens during countdown)
+      // Then fetch the actual RTMP URLs and stream keys
+      console.log('[useBroadcast] Waiting for broadcast destinations to be created...');
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds for async broadcast creation
+
+      // Fetch broadcast destinations with decrypted RTMP URLs and stream keys
+      const broadcastDestinationsResponse = await broadcastService.api.get(`/broadcasts/${broadcastId}/destinations`);
+      const broadcastDestinations = broadcastDestinationsResponse.data;
+
+      console.log('[useBroadcast] Fetched broadcast destinations:', broadcastDestinations);
+
+      // Start RTMP streaming with real RTMP URLs and stream keys
+      const destinationsToStream = broadcastDestinations.map((bd: any) => ({
+        id: bd.id,
+        platform: bd.platform,
+        rtmpUrl: bd.rtmpUrl,
+        streamKey: bd.streamKey, // Now contains the actual decrypted stream key
+      }));
+
+      console.log('[useBroadcast] Starting RTMP push to destinations:',
+        destinationsToStream.map((d: any) => ({ platform: d.platform, rtmpUrl: d.rtmpUrl })));
 
       mediaServerSocketService.emit('start-rtmp', {
         broadcastId,
