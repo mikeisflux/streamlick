@@ -164,7 +164,7 @@ export async function createCompositorPipeline(
           '-codec:a', 'opus',
         ])
         // Video encoding
-        .videoCodec('copy') // Copy H264 stream
+        .videoCodec('copy') // Copy H264 stream without re-encoding
         // Audio encoding
         .audioCodec('aac')
         .outputOptions([
@@ -175,13 +175,9 @@ export async function createCompositorPipeline(
         // Output format
         .format('flv')
         .output(rtmpUrl)
-        // FFmpeg options
+        // FLV muxer options (no encoding options when using copy)
         .outputOptions([
-          '-preset', 'veryfast',
-          '-tune', 'zerolatency',
-          '-g', '60',
-          '-profile:v', 'baseline',
-          '-level', '3.1',
+          '-flvflags', 'no_duration_filesize', // Optimize for live streaming
         ]);
 
       command
