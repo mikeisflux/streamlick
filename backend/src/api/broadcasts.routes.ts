@@ -172,9 +172,14 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res) => {
 // Start broadcast
 router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
   try {
-    logger.info(`[DEBUG] Raw request body:`, JSON.stringify(req.body, null, 2));
+    logger.info(`[DEBUG ROUTE] ========== ROUTE HANDLER START ==========`);
+    logger.info(`[DEBUG ROUTE] Raw request body: ${JSON.stringify(req.body)}`);
     const { destinationIds, destinationSettings = {} } = req.body; // destinationSettings: { [destinationId]: { privacyStatus, scheduledStartTime } }
-    logger.info(`Broadcast start request received - broadcastId: ${req.params.id}, destinationIds:`, destinationIds, `type: ${typeof destinationIds}, isArray: ${Array.isArray(destinationIds)}, length: ${destinationIds?.length}`);
+    logger.info(`[DEBUG ROUTE] Broadcast start request - broadcastId: ${req.params.id}`);
+    logger.info(`[DEBUG ROUTE] destinationIds: ${JSON.stringify(destinationIds)}`);
+    logger.info(`[DEBUG ROUTE] destinationIds type: ${typeof destinationIds}, isArray: ${Array.isArray(destinationIds)}, length: ${destinationIds?.length}`);
+    logger.info(`[DEBUG ROUTE] destinationSettings: ${JSON.stringify(destinationSettings)}`);
+    logger.info(`[DEBUG ROUTE] ==============================================`);
 
     const broadcast = await prisma.broadcast.findFirst({
       where: {

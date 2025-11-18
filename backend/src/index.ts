@@ -113,15 +113,18 @@ app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 
 // Debug middleware to log body after parsing
 app.use('/api/broadcasts/:id/start', (req, res, next) => {
-  logger.info('[DEBUG MIDDLEWARE] Request details:');
-  logger.info('  Content-Type:', req.headers['content-type']);
-  logger.info('  Content-Length:', req.headers['content-length']);
-  logger.info('  Body defined:', !!req.body);
-  logger.info('  Body type:', typeof req.body);
-  logger.info('  Body keys:', req.body ? Object.keys(req.body).join(', ') : 'none');
+  logger.info('[DEBUG MIDDLEWARE] ========== REQUEST DETAILS ==========');
+  logger.info(`[DEBUG MIDDLEWARE] Content-Type: ${req.headers['content-type']}`);
+  logger.info(`[DEBUG MIDDLEWARE] Content-Length: ${req.headers['content-length']}`);
+  logger.info(`[DEBUG MIDDLEWARE] Body defined: ${!!req.body}`);
+  logger.info(`[DEBUG MIDDLEWARE] Body type: ${typeof req.body}`);
+  logger.info(`[DEBUG MIDDLEWARE] Body keys: ${req.body ? Object.keys(req.body).join(', ') : 'NONE'}`);
   if (req.body) {
-    logger.info('  Body content:', JSON.stringify(req.body));
+    logger.info(`[DEBUG MIDDLEWARE] Body JSON: ${JSON.stringify(req.body)}`);
+  } else {
+    logger.info('[DEBUG MIDDLEWARE] Body is UNDEFINED or NULL!');
   }
+  logger.info('[DEBUG MIDDLEWARE] ========================================');
   next();
 });
 
