@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
+import axios from 'axios';
 import logger from '../utils/logger';
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug' | 'performance';
@@ -88,6 +89,9 @@ export class DiagnosticLoggerService extends EventEmitter {
   private logStream: fs.WriteStream | null = null;
   private currentDate: string = '';
   private rotationCheckInterval: NodeJS.Timeout | null = null;
+  private readonly BACKEND_API_URL = process.env.BACKEND_API_URL || 'http://localhost:3000';
+  private logQueue: DiagnosticLog[] = [];
+  private flushInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     super();
@@ -98,6 +102,11 @@ export class DiagnosticLoggerService extends EventEmitter {
     this.rotationCheckInterval = setInterval(() => {
       this.checkAndRotateIfNeeded();
     }, 3600000); // 1 hour
+
+    // Flush logs to backend every 2 seconds
+    this.flushInterval = setInterval(() => {
+      this.flushLogsToBackend();
+    }, 2000);
   }
 
   /**
@@ -137,6 +146,29 @@ export class DiagnosticLoggerService extends EventEmitter {
   }
 
   /**
+   * Flush queued logs to backend API
+   */
+  private async flushLogsToBackend(): Promise<void> {
+    if (this.logQueue.length === 0) return;
+
+    const logsToSend = [...this.logQueue];
+    this.logQueue = [];
+
+    try {
+      // Send logs to backend in batch
+      for (const log of logsToSend) {
+        await axios.post(`${this.BACKEND_API_URL}/api/logs/diagnostic`, log, {
+          timeout: 1000,
+        }).catch(err => {
+          // Silently fail - don't spam logs with backend connection errors
+        });
+      }
+    } catch (error) {
+      // Silently fail - backend may not be available
+    }
+  }
+
+  /**
    * Log a diagnostic entry
    */
   log(entry: Omit<DiagnosticLog, 'timestamp'>): void {
@@ -157,6 +189,9 @@ export class DiagnosticLoggerService extends EventEmitter {
     if (this.logStream) {
       this.logStream.write(JSON.stringify(log) + '\n');
     }
+
+    // Queue for sending to backend
+    this.logQueue.push(log);
 
     // Emit event for real-time monitoring
     this.emit('log', log);
@@ -445,6 +480,14 @@ export class DiagnosticLoggerService extends EventEmitter {
       clearInterval(this.rotationCheckInterval);
       this.rotationCheckInterval = null;
     }
+
+    if (this.flushInterval) {
+      clearInterval(this.flushInterval);
+      this.flushInterval = null;
+    }
+
+    // Flush any remaining logs
+    this.flushLogsToBackend();
 
     if (this.logStream) {
       this.logStream.end();

@@ -9,6 +9,7 @@ import { Router, PlainTransport, Producer } from 'mediasoup/node/lib/types';
 import ffmpeg from 'fluent-ffmpeg';
 import { RTMPDestination } from './streamer';
 import logger from '../utils/logger';
+import { diagnosticLogger } from '../services/diagnostic-logger.service';
 
 interface Pipeline {
   videoPlainTransport: PlainTransport | null;
@@ -33,6 +34,13 @@ export async function createCompositorPipeline(
 ): Promise<void> {
   try {
     logger.info(`Creating compositor pipeline for broadcast ${broadcastId}`);
+    diagnosticLogger.logRTPPipeline(
+      'CompositorPipeline',
+      'Starting compositor pipeline creation',
+      'info',
+      { broadcastId, destinationCount: destinations.length },
+      broadcastId
+    );
 
     // Create Plain RTP transports for video and audio
     const videoTransport = await router.createPlainTransport({
@@ -44,6 +52,14 @@ export async function createCompositorPipeline(
     // Add error handler for video transport (listenererror for listening socket errors)
     videoTransport.on('listenererror', (error) => {
       logger.error(`Video plain transport listener error for broadcast ${broadcastId}:`, error);
+      diagnosticLogger.logError(
+        'rtp-pipeline',
+        'PlainTransport',
+        'Video plain transport listener error',
+        error,
+        { transportId: videoTransport.id },
+        broadcastId
+      );
     });
 
     const audioTransport = await router.createPlainTransport({
@@ -55,10 +71,30 @@ export async function createCompositorPipeline(
     // Add error handler for audio transport (listenererror for listening socket errors)
     audioTransport.on('listenererror', (error) => {
       logger.error(`Audio plain transport listener error for broadcast ${broadcastId}:`, error);
+      diagnosticLogger.logError(
+        'rtp-pipeline',
+        'PlainTransport',
+        'Audio plain transport listener error',
+        error,
+        { transportId: audioTransport.id },
+        broadcastId
+      );
     });
 
     logger.info(
       `Plain transports created - Video: ${videoTransport.tuple.localPort}, Audio: ${audioTransport.tuple.localPort}`
+    );
+    diagnosticLogger.logRTPPipeline(
+      'PlainTransport',
+      'Plain RTP transports created',
+      'info',
+      {
+        videoPort: videoTransport.tuple.localPort,
+        audioPort: audioTransport.tuple.localPort,
+        videoTransportId: videoTransport.id,
+        audioTransportId: audioTransport.id,
+      },
+      broadcastId
     );
 
     // Create consumers on the plain transports
@@ -75,6 +111,18 @@ export async function createCompositorPipeline(
     });
 
     logger.info('Consumers created on plain transports');
+    diagnosticLogger.logRTPPipeline(
+      'Consumer',
+      'RTP consumers created on plain transports',
+      'info',
+      {
+        videoConsumerId: videoConsumer.id,
+        audioConsumerId: audioConsumer.id,
+        videoProducerId: videoProducer.id,
+        audioProducerId: audioProducer.id,
+      },
+      broadcastId
+    );
 
     // Get RTP parameters
     const videoPort = videoTransport.tuple.localPort;
@@ -129,16 +177,67 @@ export async function createCompositorPipeline(
         .on('start', (commandLine) => {
           logger.info(`FFmpeg started for ${dest.platform}:`);
           logger.debug(commandLine);
+          diagnosticLogger.logFFmpeg(
+            'CompositorPipeline',
+            `FFmpeg process started for ${dest.platform}`,
+            'info',
+            {
+              destination: dest.platform,
+              destinationId: dest.id,
+              videoPort,
+              audioPort,
+              rtmpUrl: dest.rtmpUrl,
+              commandLine: commandLine.substring(0, 500),
+            },
+            broadcastId
+          );
         })
         .on('error', (err, stdout, stderr) => {
           logger.error(`FFmpeg error for ${dest.platform}:`, err.message);
           logger.debug('FFmpeg stderr:', stderr);
+          diagnosticLogger.logError(
+            'ffmpeg',
+            'CompositorPipeline',
+            `FFmpeg process error for ${dest.platform}`,
+            err,
+            {
+              destination: dest.platform,
+              destinationId: dest.id,
+              stdout: stdout ? stdout.substring(0, 1000) : '',
+              stderr: stderr ? stderr.substring(0, 1000) : '',
+            },
+            broadcastId
+          );
         })
         .on('end', () => {
           logger.info(`FFmpeg ended for ${dest.platform}`);
+          diagnosticLogger.logFFmpeg(
+            'CompositorPipeline',
+            `FFmpeg process ended for ${dest.platform}`,
+            'info',
+            { destination: dest.platform, destinationId: dest.id },
+            broadcastId
+          );
         })
         .on('stderr', (stderrLine) => {
           logger.debug(`FFmpeg (${dest.platform}):`, stderrLine);
+          // Log bitrate and performance metrics from ffmpeg stderr
+          if (stderrLine.includes('bitrate=') || stderrLine.includes('fps=')) {
+            const bitrateMatch = stderrLine.match(/bitrate=\s*([\d.]+)kbits\/s/);
+            const fpsMatch = stderrLine.match(/fps=\s*([\d.]+)/);
+            if (bitrateMatch || fpsMatch) {
+              diagnosticLogger.logPerformance(
+                'ffmpeg',
+                'FFmpegMetrics',
+                `FFmpeg performance metrics for ${dest.platform}`,
+                {
+                  bitrate: bitrateMatch ? parseFloat(bitrateMatch[1]) : undefined,
+                  frameRate: fpsMatch ? parseFloat(fpsMatch[1]) : undefined,
+                },
+                broadcastId
+              );
+            }
+          }
         });
 
       try {
@@ -147,6 +246,14 @@ export async function createCompositorPipeline(
         logger.info(`FFmpeg process started for ${dest.platform}`);
       } catch (error) {
         logger.error(`Failed to start FFmpeg for ${dest.platform}:`, error);
+        diagnosticLogger.logError(
+          'ffmpeg',
+          'CompositorPipeline',
+          `Failed to start FFmpeg for ${dest.platform}`,
+          error as Error,
+          { destination: dest.platform, destinationId: dest.id },
+          broadcastId
+        );
       }
     }
 

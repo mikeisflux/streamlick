@@ -1,13 +1,30 @@
 import { Router, WebRtcTransport, Producer, Consumer } from 'mediasoup/node/lib/types';
 import { mediasoupConfig } from '../config/mediasoup';
 import logger from '../utils/logger';
+import { diagnosticLogger } from '../services/diagnostic-logger.service';
 
 export async function createWebRtcTransport(router: Router): Promise<WebRtcTransport> {
   const transport = await router.createWebRtcTransport(mediasoupConfig.webRtcTransport);
 
   logger.info(`WebRTC transport created [id:${transport.id}]`);
+  diagnosticLogger.logRTPPipeline(
+    'WebRtcTransport',
+    'WebRTC transport created',
+    'info',
+    {
+      transportId: transport.id,
+      iceParameters: transport.iceParameters,
+      dtlsParameters: transport.dtlsParameters,
+    }
+  );
 
   transport.on('dtlsstatechange', (dtlsState) => {
+    diagnosticLogger.logRTPPipeline(
+      'WebRtcTransport',
+      `DTLS state changed to ${dtlsState}`,
+      dtlsState === 'failed' ? 'error' : 'debug',
+      { transportId: transport.id, dtlsState }
+    );
     if (dtlsState === 'closed') {
       transport.close();
     }
@@ -15,6 +32,12 @@ export async function createWebRtcTransport(router: Router): Promise<WebRtcTrans
 
   transport.on('@close', () => {
     logger.info(`WebRTC transport closed [id:${transport.id}]`);
+    diagnosticLogger.logRTPPipeline(
+      'WebRtcTransport',
+      'WebRTC transport closed',
+      'info',
+      { transportId: transport.id }
+    );
   });
 
   return transport;
@@ -26,6 +49,12 @@ export async function connectTransport(
 ): Promise<void> {
   await transport.connect({ dtlsParameters });
   logger.info(`Transport connected [id:${transport.id}]`);
+  diagnosticLogger.logRTPPipeline(
+    'WebRtcTransport',
+    'Transport connected',
+    'info',
+    { transportId: transport.id }
+  );
 }
 
 export async function createProducer(
@@ -36,6 +65,16 @@ export async function createProducer(
   const producer = await transport.produce({ kind, rtpParameters });
 
   logger.info(`Producer created [id:${producer.id}, kind:${kind}]`);
+  diagnosticLogger.logRTPPipeline(
+    'Producer',
+    `Producer created for ${kind}`,
+    'info',
+    {
+      producerId: producer.id,
+      kind,
+      codec: rtpParameters.codecs?.[0]?.mimeType,
+    }
+  );
 
   producer.on('transportclose', () => {
     if (!producer.closed) {
@@ -58,6 +97,16 @@ export async function createConsumer(
   });
 
   logger.info(`Consumer created [id:${consumer.id}]`);
+  diagnosticLogger.logRTPPipeline(
+    'Consumer',
+    'Consumer created',
+    'info',
+    {
+      consumerId: consumer.id,
+      producerId: producer.id,
+      kind: producer.kind,
+    }
+  );
 
   consumer.on('transportclose', () => {
     if (!consumer.closed) {
