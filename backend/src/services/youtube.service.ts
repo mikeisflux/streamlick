@@ -14,6 +14,10 @@ export async function refreshYouTubeToken(
   clientSecret: string
 ): Promise<{ access_token: string; expires_in: number }> {
   try {
+    logger.info('[YouTube Token] Attempting to refresh token...');
+    logger.info(`[YouTube Token] Client ID: ${clientId?.substring(0, 20)}...`);
+    logger.info(`[YouTube Token] Refresh token present: ${!!refreshToken}`);
+
     const response = await axios.post(YOUTUBE_TOKEN_URL, {
       client_id: clientId,
       client_secret: clientSecret,
@@ -21,12 +25,17 @@ export async function refreshYouTubeToken(
       grant_type: 'refresh_token',
     });
 
+    logger.info('[YouTube Token] ✅ Token refreshed successfully');
+
     return {
       access_token: response.data.access_token,
       expires_in: response.data.expires_in || 3600,
     };
   } catch (error: any) {
-    logger.error('YouTube token refresh error:', error.response?.data || error.message);
+    logger.error('[YouTube Token] ❌ Token refresh failed');
+    logger.error(`[YouTube Token] Error: ${error.response?.data?.error || error.message}`);
+    logger.error(`[YouTube Token] Error description: ${error.response?.data?.error_description || 'N/A'}`);
+    logger.error(`[YouTube Token] Full response: ${JSON.stringify(error.response?.data)}`);
     throw new Error(`Failed to refresh YouTube token: ${error.response?.data?.error || error.message}`);
   }
 }
@@ -79,10 +88,21 @@ export async function getValidYouTubeToken(destinationId: string): Promise<strin
       }
 
       const refreshToken = decrypt(destination.refreshToken);
+
+      const clientId = process.env.YOUTUBE_CLIENT_ID;
+      const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
+
+      if (!clientId || !clientSecret) {
+        logger.error('[YouTube Token] Missing OAuth credentials in environment variables');
+        logger.error(`[YouTube Token] YOUTUBE_CLIENT_ID present: ${!!clientId}`);
+        logger.error(`[YouTube Token] YOUTUBE_CLIENT_SECRET present: ${!!clientSecret}`);
+        throw new Error('YouTube OAuth credentials not configured');
+      }
+
       const refreshed = await refreshYouTubeToken(
         refreshToken,
-        process.env.YOUTUBE_CLIENT_ID!,
-        process.env.YOUTUBE_CLIENT_SECRET!
+        clientId,
+        clientSecret
       );
 
       accessToken = refreshed.access_token;
