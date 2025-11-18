@@ -51,7 +51,7 @@ export function Studio() {
   const cameraButtonRef = useRef<HTMLDivElement>(null);
   const speakerButtonRef = useRef<HTMLDivElement>(null);
 
-  const { broadcast, isLive } = useStudioStore();
+  const { broadcast, isLive, setBroadcast } = useStudioStore();
   const { localStream, audioEnabled, videoEnabled, startCamera, stopCamera, toggleAudio, toggleVideo } = useMedia();
 
   // Feature toggles
