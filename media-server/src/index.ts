@@ -246,7 +246,7 @@ async function untrackSocketBroadcast(socketId: string): Promise<void> {
 }
 
 // Health check with server stats
-app.get('/health', (req, res) => {
+app.get('/health', (req: express.Request, res: express.Response) => {
   try {
     // Get active streams count
     const activeStreams = broadcasts.size;
@@ -291,7 +291,7 @@ app.get('/health', (req, res) => {
 });
 
 // Get router RTP capabilities
-app.get('/broadcasts/:broadcastId/rtp-capabilities', async (req, res) => {
+app.get('/broadcasts/:broadcastId/rtp-capabilities', async (req: express.Request, res: express.Response) => {
   try {
     const { broadcastId } = req.params;
 

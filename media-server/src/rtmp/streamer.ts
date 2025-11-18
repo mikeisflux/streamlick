@@ -101,7 +101,7 @@ function createStream(
     .output(rtmpUrl);
 
   command
-    .on('start', (commandLine) => {
+    .on('start', (commandLine: string) => {
       const startTime = Date.now();
       logger.info(`FFmpeg started for ${dest.platform} (attempt ${retryCount + 1})`);
 
@@ -133,7 +133,7 @@ function createStream(
         (state as any).startTime = startTime;
       }
     })
-    .on('error', (err, stdout, stderr) => {
+    .on('error', (err: Error, stdout: string, stderr: string) => {
       logger.error(`FFmpeg error for ${dest.platform}:`, err.message);
 
       const state = activeStreamers.get(streamKey);

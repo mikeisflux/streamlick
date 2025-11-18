@@ -174,7 +174,7 @@ export async function createCompositorPipeline(
         ]);
 
       command
-        .on('start', (commandLine) => {
+        .on('start', (commandLine: string) => {
           logger.info(`FFmpeg started for ${dest.platform}:`);
           logger.debug(commandLine);
           diagnosticLogger.logFFmpeg(
@@ -192,7 +192,7 @@ export async function createCompositorPipeline(
             broadcastId
           );
         })
-        .on('error', (err, stdout, stderr) => {
+        .on('error', (err: Error, stdout: string, stderr: string) => {
           logger.error(`FFmpeg error for ${dest.platform}:`, err.message);
           logger.debug('FFmpeg stderr:', stderr);
           diagnosticLogger.logError(
@@ -219,7 +219,7 @@ export async function createCompositorPipeline(
             broadcastId
           );
         })
-        .on('stderr', (stderrLine) => {
+        .on('stderr', (stderrLine: string) => {
           logger.debug(`FFmpeg (${dest.platform}):`, stderrLine);
           // Log bitrate and performance metrics from ffmpeg stderr
           if (stderrLine.includes('bitrate=') || stderrLine.includes('fps=')) {
