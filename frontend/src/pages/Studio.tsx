@@ -341,7 +341,7 @@ export function Studio() {
           <div className="flex justify-center px-6" style={{ flexShrink: 0, marginTop: '60px' }}>
             <LayoutSelector
               selectedLayout={selectedLayout}
-              onLayoutChange={setSelectedLayout}
+              onLayoutChange={handleLayoutChange}
               editMode={editMode}
               onEditModeToggle={handleEditModeToggle}
               onAddParticipant={handleAddParticipant}

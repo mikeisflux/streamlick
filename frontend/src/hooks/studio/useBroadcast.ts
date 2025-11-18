@@ -269,6 +269,9 @@ export function useBroadcast({
   }, [broadcastId, isRecording, handleStopRecording, setIsLive]);
 
   const handleLayoutChange = useCallback((layoutId: number) => {
+    // Update UI state
+    setSelectedLayout(layoutId);
+
     // Map numeric layout IDs to compositor layout types
     const layoutMap: { [key: number]: 'grid' | 'spotlight' | 'sidebar' | 'pip' } = {
       1: 'grid',      // Solo
@@ -297,7 +300,7 @@ export function useBroadcast({
     };
 
     toast.success(`Layout changed to ${layoutNames[layoutId] || 'Unknown'}`);
-  }, []);
+  }, [setSelectedLayout]);
 
   return {
     isRecording,
