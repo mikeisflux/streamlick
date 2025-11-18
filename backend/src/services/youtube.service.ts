@@ -148,6 +148,8 @@ export async function createYouTubeLiveBroadcast(
 
     // Step 1: Create liveBroadcast
     logger.info('[YouTube Step 1/4] Creating liveBroadcast...');
+    logger.info(`[YouTube Step 1/4] Request payload: title="${title}", description="${description || ''}", privacy=${privacyStatus}`);
+
     const broadcastResponse = await axios.post(
       `${YOUTUBE_API_BASE}/liveBroadcasts`,
       {
@@ -174,6 +176,8 @@ export async function createYouTubeLiveBroadcast(
         headers: { Authorization: `Bearer ${accessToken}` },
       }
     );
+
+    logger.info(`[YouTube Step 1/4] Response: broadcastId=${broadcastResponse.data.id}, title="${broadcastResponse.data.snippet?.title}"`);
 
     const broadcastId = broadcastResponse.data.id;
     logger.info(`[YouTube Step 1/4] ✓ LiveBroadcast created successfully`, {
@@ -298,7 +302,9 @@ export async function transitionYouTubeBroadcastToLive(
   accessToken: string
 ): Promise<void> {
   try {
-    logger.info(`[YouTube Transition] Transitioning broadcast to live`, { broadcastId });
+    logger.info(`[YouTube Transition] ========== TRANSITIONING TO LIVE ==========`);
+    logger.info(`[YouTube Transition] Broadcast ID: ${broadcastId}`);
+    logger.info(`[YouTube Transition] Calling liveBroadcasts.transition with broadcastStatus="live"`);
 
     const response = await axios.post(
       `${YOUTUBE_API_BASE}/liveBroadcasts/transition`,
@@ -313,10 +319,12 @@ export async function transitionYouTubeBroadcastToLive(
       }
     );
 
+    logger.info(`[YouTube Transition] ========== TRANSITION SUCCESSFUL ==========`);
     logger.info(`[YouTube Transition] ✓ Broadcast is now LIVE`, {
       broadcastId,
       lifeCycleStatus: response.data?.status?.lifeCycleStatus,
-      privacyStatus: response.data?.status?.privacyStatus
+      privacyStatus: response.data?.status?.privacyStatus,
+      recordingStatus: response.data?.status?.recordingStatus
     });
   } catch (error: any) {
     const errorDetails = {
@@ -324,10 +332,13 @@ export async function transitionYouTubeBroadcastToLive(
       status: error.response?.status,
       statusText: error.response?.statusText,
       apiError: error.response?.data?.error,
+      apiErrorMessage: error.response?.data?.error?.message,
+      apiErrorCode: error.response?.data?.error?.code,
       message: error.message
     };
 
-    logger.error('[YouTube Transition] ✗ Failed to transition to live', errorDetails);
+    logger.error('[YouTube Transition] ========== TRANSITION FAILED ==========', errorDetails);
+    logger.error(`[YouTube Transition] Full error response: ${JSON.stringify(error.response?.data)}`);
     throw new Error(
       `Failed to transition YouTube broadcast to live: ${error.response?.data?.error?.message || error.message}`
     );
@@ -486,28 +497,26 @@ export async function monitorAndTransitionYouTubeBroadcast(
       }
 
       const status = await getYouTubeBroadcastStatus(broadcastId, accessToken);
-      logger.info(`[YouTube Monitor] Status check ${attempt}/${maxAttempts}`, {
-        broadcastId,
-        lifeCycleStatus: status.lifeCycleStatus,
-        streamHealth: status.healthStatus?.status || 'unknown',
-        configurationIssues: status.healthStatus?.configurationIssues
-      });
+      logger.info(`[YouTube Monitor] ========== STATUS CHECK ${attempt}/${maxAttempts} ==========`);
+      logger.info(`[YouTube Monitor] Broadcast ID: ${broadcastId}`);
+      logger.info(`[YouTube Monitor] Lifecycle Status: ${status.lifeCycleStatus}`);
+      logger.info(`[YouTube Monitor] Stream Health: ${status.healthStatus?.status || 'unknown'}`);
+      if (status.healthStatus?.configurationIssues) {
+        logger.warn(`[YouTube Monitor] Configuration Issues:`, status.healthStatus.configurationIssues);
+      }
 
       // Check if stream is receiving data
       if (status.healthStatus?.status === 'good' || status.healthStatus?.status === 'ok') {
-        logger.info(`[YouTube Monitor] ✓ Stream detected! Initiating transition to live`, {
-          broadcastId,
-          attempt,
-          streamHealth: status.healthStatus.status
-        });
+        logger.info(`[YouTube Monitor] ========== STREAM DETECTED! ==========`);
+        logger.info(`[YouTube Monitor] ✓ Stream health is ${status.healthStatus.status.toUpperCase()}`);
+        logger.info(`[YouTube Monitor] Initiating transition to live after ${attempt} attempt(s)...`);
 
         try {
           await transitionYouTubeBroadcastToLive(broadcastId, accessToken);
-          logger.info(`[YouTube Monitor] ✓ Successfully transitioned to live!`, {
-            broadcastId,
-            totalAttempts: attempt,
-            totalWaitTime: `${(attempt * pollIntervalMs) / 1000}s`
-          });
+          logger.info(`[YouTube Monitor] ========== SUCCESS! ==========`);
+          logger.info(`[YouTube Monitor] ✓ Successfully transitioned to live!`);
+          logger.info(`[YouTube Monitor] Total attempts: ${attempt}`);
+          logger.info(`[YouTube Monitor] Total wait time: ${(attempt * pollIntervalMs) / 1000}s`);
           return;
         } catch (transitionError: any) {
           // Handle specific YouTube API errors
@@ -515,24 +524,21 @@ export async function monitorAndTransitionYouTubeBroadcast(
           const errorMessage = transitionError.response?.data?.error?.message || transitionError.message;
 
           // Error 400 with "transition" in message usually means invalid state transition
-          if (errorCode === 400 && errorMessage.includes('transition')) {
-            logger.warn(`[YouTube Monitor] Transition rejected, retrying...`, {
-              broadcastId,
-              attempt,
-              errorCode,
-              errorMessage
-            });
+          if (errorCode === 400 && errorMessage.toLowerCase().includes('transition')) {
+            logger.warn(`[YouTube Monitor] Transition rejected (attempt ${attempt}), will retry...`);
+            logger.warn(`[YouTube Monitor] Error: ${errorMessage}`);
             continue;
           }
 
           // Other errors are more serious
-          logger.error(`[YouTube Monitor] ✗ Transition failed with non-retryable error`, {
-            broadcastId,
-            errorCode,
-            errorMessage
-          });
+          logger.error(`[YouTube Monitor] ========== TRANSITION ERROR ==========`);
+          logger.error(`[YouTube Monitor] ✗ Non-retryable error on attempt ${attempt}`);
+          logger.error(`[YouTube Monitor] Error code: ${errorCode}`);
+          logger.error(`[YouTube Monitor] Error message: ${errorMessage}`);
           throw transitionError;
         }
+      } else {
+        logger.info(`[YouTube Monitor] Waiting for stream... (health: ${status.healthStatus?.status || 'unknown'})`);
       }
 
       // Check for error states

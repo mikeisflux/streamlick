@@ -181,9 +181,11 @@ async function cleanupExpiredOAuthStates(): Promise<number> {
 // OAuth URLs
 const YOUTUBE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const YOUTUBE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+// CRITICAL FIX: Use full YouTube scope to create/manage live broadcasts
+// youtube.readonly is READ ONLY - we need youtube or youtube.upload to create broadcasts
 const YOUTUBE_SCOPES = [
-  'https://www.googleapis.com/auth/youtube.readonly',
-  'https://www.googleapis.com/auth/youtube.force-ssl',
+  'https://www.googleapis.com/auth/youtube', // Full YouTube access (create/manage broadcasts)
+  'https://www.googleapis.com/auth/youtube.force-ssl', // Required for live streaming
 ].join(' ');
 
 const FACEBOOK_AUTH_URL = 'https://www.facebook.com/v24.0/dialog/oauth';
