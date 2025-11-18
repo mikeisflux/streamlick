@@ -134,38 +134,74 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           return socket.emit('error', { message: 'Invalid broadcast ID' });
         }
 
-        if (!isValidUUID(participantId)) {
-          logger.warn(`Join studio rejected: Invalid participantId format: ${participantId}`);
-          return socket.emit('error', { message: 'Invalid participant ID' });
-        }
-
-        // CRITICAL FIX: Verify participant belongs to this user or user owns broadcast
-        const participant = await prisma.participant.findUnique({
-          where: { id: participantId },
-          include: { broadcast: true },
+        // Get broadcast to verify ownership
+        const broadcast = await prisma.broadcast.findUnique({
+          where: { id: broadcastId },
         });
 
-        if (!participant) {
-          logger.warn(`Join studio rejected: Participant ${participantId} not found`);
-          return socket.emit('error', { message: 'Participant not found' });
+        if (!broadcast) {
+          logger.warn(`Join studio rejected: Broadcast ${broadcastId} not found`);
+          return socket.emit('error', { message: 'Broadcast not found' });
         }
 
-        if (participant.broadcastId !== broadcastId) {
-          logger.warn(`Join studio rejected: Participant ${participantId} not in broadcast ${broadcastId}`);
-          return socket.emit('error', { message: 'Participant not in this broadcast' });
-        }
+        const isOwner = broadcast.userId === userId;
 
-        // Verify user owns this participant OR owns the broadcast
-        const isOwner = participant.broadcast.userId === userId;
-        const isParticipant = participant.userId === userId;
+        // If participantId is not a valid UUID or is 'host-id', auto-create participant for owner
+        let participant;
+        if (!isValidUUID(participantId) || participantId === 'host-id') {
+          if (!isOwner) {
+            logger.warn(`Join studio rejected: Non-owner ${userId} trying to use invalid participant ID`);
+            return socket.emit('error', { message: 'Invalid participant ID' });
+          }
 
-        if (!isOwner && !isParticipant) {
-          logger.warn(`Join studio rejected: User ${userId} not authorized for participant ${participantId}`);
-          return socket.emit('error', { message: 'Not authorized' });
+          // Find or create participant for broadcast owner
+          participant = await prisma.participant.findFirst({
+            where: {
+              broadcastId,
+              userId,
+            },
+          });
+
+          if (!participant) {
+            // Create participant for owner
+            participant = await prisma.participant.create({
+              data: {
+                broadcastId,
+                userId,
+                name: socket.data.userEmail || 'Host',
+                role: 'host',
+              },
+            });
+            logger.info(`Created host participant ${participant.id} for broadcast ${broadcastId}`);
+          }
+        } else {
+          // Use provided participantId
+          participant = await prisma.participant.findUnique({
+            where: { id: participantId },
+            include: { broadcast: true },
+          });
+
+          if (!participant) {
+            logger.warn(`Join studio rejected: Participant ${participantId} not found`);
+            return socket.emit('error', { message: 'Participant not found' });
+          }
+
+          if (participant.broadcastId !== broadcastId) {
+            logger.warn(`Join studio rejected: Participant ${participantId} not in broadcast ${broadcastId}`);
+            return socket.emit('error', { message: 'Participant not in this broadcast' });
+          }
+
+          // Verify user owns this participant OR owns the broadcast
+          const isParticipant = participant.userId === userId;
+
+          if (!isOwner && !isParticipant) {
+            logger.warn(`Join studio rejected: User ${userId} not authorized for participant ${participantId}`);
+            return socket.emit('error', { message: 'Not authorized' });
+          }
         }
 
         socket.data.broadcastId = broadcastId;
-        socket.data.participantId = participantId;
+        socket.data.participantId = participant.id;
 
         await socket.join(`broadcast:${broadcastId}`);
 
