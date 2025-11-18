@@ -76,7 +76,8 @@ app.use(helmet({
     },
   },
   crossOriginEmbedderPolicy: true,
-  crossOriginOpenerPolicy: { policy: "same-origin" },
+  // Allow popups to maintain window.opener for OAuth flows
+  crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
   crossOriginResourcePolicy: { policy: "same-site" }, // Changed from cross-origin
   dnsPrefetchControl: { allow: false },
   frameguard: { action: "deny" },
