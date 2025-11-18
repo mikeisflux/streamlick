@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS "media_clips" (
   "user_id" VARCHAR(255) NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
   "type" VARCHAR(255) NOT NULL,
   "name" VARCHAR(255) NOT NULL,
+  "description" TEXT,
   "file_url" VARCHAR(255) NOT NULL,
   "thumbnail_url" VARCHAR(255),
   "file_size_bytes" BIGINT,
