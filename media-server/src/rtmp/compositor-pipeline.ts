@@ -218,8 +218,29 @@ export async function createCompositorPipeline(
           );
         })
         .on('error', (err: Error, stdout: string | null, stderr: string | null) => {
-          logger.error(`FFmpeg error for ${dest.platform}:`, err.message);
-          logger.debug('FFmpeg stderr:', stderr);
+          logger.error(`========== FFMPEG ERROR for ${dest.platform.toUpperCase()} ==========`);
+          logger.error(`Error Message: ${err.message}`);
+          logger.error(`Error Name: ${err.name}`);
+          logger.error(`Error Stack:`, err.stack);
+          logger.error(`Destination: ${dest.platform} (ID: ${dest.id})`);
+          logger.error(`RTMP URL: ${dest.rtmpUrl}`);
+
+          if (stdout) {
+            logger.error(`========== FFMPEG STDOUT ==========`);
+            logger.error(stdout);
+          } else {
+            logger.error(`STDOUT: (empty)`);
+          }
+
+          if (stderr) {
+            logger.error(`========== FFMPEG STDERR ==========`);
+            logger.error(stderr);
+          } else {
+            logger.error(`STDERR: (empty)`);
+          }
+
+          logger.error(`========== END FFMPEG ERROR ==========`);
+
           diagnosticLogger.logError(
             'ffmpeg',
             'CompositorPipeline',
@@ -245,9 +266,15 @@ export async function createCompositorPipeline(
           );
         })
         .on('stderr', (stderrLine: string) => {
-          logger.debug(`FFmpeg (${dest.platform}):`, stderrLine);
-          // Log bitrate and performance metrics from ffmpeg stderr
-          if (stderrLine.includes('bitrate=') || stderrLine.includes('fps=')) {
+          // Log ALL stderr output to help diagnose issues
+          // Use info level for errors/warnings, debug for regular output
+          if (stderrLine.includes('error') || stderrLine.includes('Error') ||
+              stderrLine.includes('warning') || stderrLine.includes('Warning') ||
+              stderrLine.includes('failed') || stderrLine.includes('Failed') ||
+              stderrLine.includes('Invalid') || stderrLine.includes('invalid')) {
+            logger.error(`[FFmpeg ${dest.platform}] ${stderrLine}`);
+          } else if (stderrLine.includes('bitrate=') || stderrLine.includes('fps=')) {
+            logger.info(`[FFmpeg ${dest.platform}] ${stderrLine}`);
             const bitrateMatch = stderrLine.match(/bitrate=\s*([\d.]+)kbits\/s/);
             const fpsMatch = stderrLine.match(/fps=\s*([\d.]+)/);
             if (bitrateMatch || fpsMatch) {
@@ -262,21 +289,39 @@ export async function createCompositorPipeline(
                 broadcastId
               );
             }
+          } else {
+            logger.debug(`[FFmpeg ${dest.platform}] ${stderrLine}`);
           }
         });
 
       try {
         command.run();
         ffmpegProcesses.set(dest.id, command);
-        logger.info(`FFmpeg process started for ${dest.platform}`);
+        logger.info(`✅ FFmpeg process started successfully for ${dest.platform}`);
       } catch (error) {
-        logger.error(`Failed to start FFmpeg for ${dest.platform}:`, error);
+        logger.error(`========== FAILED TO START FFMPEG for ${dest.platform.toUpperCase()} ==========`);
+        logger.error(`Exception during command.run():`);
+        logger.error(`Error:`, error);
+        logger.error(`Error message: ${(error as Error).message}`);
+        logger.error(`Error stack:`, (error as Error).stack);
+        logger.error(`Destination: ${dest.platform} (ID: ${dest.id})`);
+        logger.error(`RTMP URL: ${rtmpUrl}`);
+        logger.error(`Media Server IP: ${mediaServerIp}`);
+        logger.error(`Video Port: ${videoPort}, Audio Port: ${audioPort}`);
+        logger.error(`========== END FAILED TO START FFMPEG ==========`);
         diagnosticLogger.logError(
           'ffmpeg',
           'CompositorPipeline',
           `Failed to start FFmpeg for ${dest.platform}`,
           error as Error,
-          { destination: dest.platform, destinationId: dest.id },
+          {
+            destination: dest.platform,
+            destinationId: dest.id,
+            rtmpUrl,
+            mediaServerIp,
+            videoPort,
+            audioPort,
+          },
           broadcastId
         );
       }
