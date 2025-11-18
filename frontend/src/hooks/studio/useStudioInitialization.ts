@@ -47,14 +47,13 @@ export function useStudioInitialization({
         setBroadcast(broadcastData);
 
         console.log('[Studio Init] Loading destinations...');
-        // Load destinations
+        // Load destinations (connected destinations only)
         const destResponse = await api.get('/destinations');
         if (!isMounted) return;
-        const activeDestinations = destResponse.data.filter((d: any) => d.isActive);
-        setDestinations(activeDestinations);
-        // Auto-select all active destinations
-        setSelectedDestinations(activeDestinations.map((d: any) => d.id));
-        console.log('[Studio Init] Auto-selected destinations:', activeDestinations.map((d: any) => d.id));
+        const connectedDestinations = destResponse.data;
+        setDestinations(connectedDestinations);
+        // NOTE: Do NOT auto-select destinations - user chooses per broadcast via Destinations panel
+        console.log('[Studio Init] Loaded destinations:', connectedDestinations.length);
 
         console.log('[Studio Init] Starting camera...');
         // Start camera FIRST to request permissions

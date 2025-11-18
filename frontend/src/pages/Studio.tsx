@@ -431,6 +431,8 @@ export function Studio() {
         setShowBrandDrawer={setShowBrandDrawer}
         showRecordingDrawer={showRecordingDrawer}
         setShowRecordingDrawer={setShowRecordingDrawer}
+        selectedDestinations={selectedDestinations}
+        onDestinationSelectionChange={setSelectedDestinations}
       />
 
       {/* Modals */}

@@ -17,6 +17,8 @@ interface StudioDrawersProps {
   setShowBrandDrawer: (show: boolean) => void;
   showRecordingDrawer: boolean;
   setShowRecordingDrawer: (show: boolean) => void;
+  selectedDestinations: string[];
+  onDestinationSelectionChange: (selected: string[]) => void;
 }
 
 export function StudioDrawers({
@@ -31,6 +33,8 @@ export function StudioDrawers({
   setShowBrandDrawer,
   showRecordingDrawer,
   setShowRecordingDrawer,
+  selectedDestinations,
+  onDestinationSelectionChange,
 }: StudioDrawersProps) {
   return (
     <>
@@ -40,7 +44,11 @@ export function StudioDrawers({
         title="Streaming Destinations"
         size="lg"
       >
-        <DestinationsPanel broadcastId={broadcastId} />
+        <DestinationsPanel
+          broadcastId={broadcastId}
+          selectedDestinations={selectedDestinations}
+          onSelectionChange={onDestinationSelectionChange}
+        />
       </Drawer>
 
       <Drawer isOpen={showInviteDrawer} onClose={() => setShowInviteDrawer(false)} title="Invite Guests" size="md">

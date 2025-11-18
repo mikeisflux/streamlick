@@ -22,6 +22,8 @@ interface StreamDestination {
 
 interface DestinationsPanelProps {
   broadcastId?: string;
+  selectedDestinations?: string[];
+  onSelectionChange?: (selectedIds: string[]) => void;
 }
 
 // Available platforms that can be connected
@@ -34,7 +36,11 @@ const AVAILABLE_PLATFORMS = [
   { platform: 'linkedin', name: 'LinkedIn Live', comingSoon: true },
 ];
 
-export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
+export function DestinationsPanel({
+  broadcastId,
+  selectedDestinations = [],
+  onSelectionChange
+}: DestinationsPanelProps) {
   const [destinations, setDestinations] = useState<StreamDestination[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCustomRtmp, setShowCustomRtmp] = useState(false);
@@ -47,7 +53,8 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
   // Load user's connected destinations
   useEffect(() => {
     loadDestinations();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDestinations]); // Reload when selection changes to update UI
 
   const loadDestinations = async () => {
     try {
@@ -64,7 +71,7 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
           id: connected?.id || available.platform,
           name: connected?.displayName || available.name,
           platform: available.platform as any,
-          enabled: connected?.isActive || false,
+          enabled: connected ? selectedDestinations.includes(connected.id) : false,
           connected: !!connected,
           viewerCount: 0,
           rtmpUrl: connected?.rtmpUrl,
@@ -79,7 +86,7 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
           id: d.id,
           name: d.displayName || 'Custom RTMP',
           platform: 'custom' as any,
-          enabled: d.isActive,
+          enabled: selectedDestinations.includes(d.id),
           connected: true,
           viewerCount: 0,
           rtmpUrl: d.rtmpUrl,
@@ -105,30 +112,24 @@ export function DestinationsPanel({ broadcastId }: DestinationsPanelProps) {
 
   const toggleDestination = async (id: string) => {
     const destination = destinations.find(d => d.id === id);
-    if (!destination || !destination.connected) {
-      // If not connected, just toggle locally
-      setDestinations((prev) =>
-        prev.map((dest) =>
-          dest.id === id ? { ...dest, enabled: !dest.enabled } : dest
-        )
-      );
-      return;
+    if (!destination?.connected) {
+      return; // Can only select connected destinations
     }
 
-    try {
-      // Update on backend
-      await api.patch(`/destinations/${id}`, {
-        isActive: !destination.enabled,
-      });
-
+    // Update selection via callback
+    if (onSelectionChange) {
+      const isCurrentlySelected = selectedDestinations.includes(id);
+      const newSelection = isCurrentlySelected
+        ? selectedDestinations.filter(destId => destId !== id)
+        : [...selectedDestinations, id];
+      onSelectionChange(newSelection);
+    } else {
+      // Fallback to local state if no callback provided
       setDestinations((prev) =>
         prev.map((dest) =>
           dest.id === id ? { ...dest, enabled: !dest.enabled } : dest
         )
       );
-    } catch (error) {
-      console.error('Failed to toggle destination:', error);
-      alert('Failed to update destination status');
     }
   };
 
