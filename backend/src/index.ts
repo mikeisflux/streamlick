@@ -99,17 +99,17 @@ app.use(cors({
 }));
 app.use(cookieParser()); // Parse cookies
 
-// CRITICAL FIX: Input sanitization middleware (apply before parsing)
-app.use('/api/', sanitizeInput);
+// Increased limits for specific endpoints that need to handle larger payloads (MUST come before default parsers)
+app.use('/api/destinations/branding/upload', express.json({ limit: '10mb' }));
+app.use('/api/broadcasts/clips/upload', express.json({ limit: '50mb' }));
+app.use('/api/broadcasts/clips/upload', express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Default request size limit - small for security (DoS prevention)
 app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 
-// Increased limits for specific endpoints that need to handle larger payloads
-app.use('/api/destinations/branding/upload', express.json({ limit: '10mb' }));
-app.use('/api/broadcasts/clips/upload', express.json({ limit: '50mb' }));
-app.use('/api/broadcasts/clips/upload', express.urlencoded({ extended: true, limit: '50mb' }));
+// CRITICAL FIX: Input sanitization middleware (apply AFTER parsing so req.body exists)
+app.use('/api/', sanitizeInput);
 
 // Rate limiting - configurable via environment variables
 const limiter = rateLimit({
