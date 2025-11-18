@@ -114,9 +114,15 @@ export async function createYouTubeLiveBroadcast(
   privacyStatus: 'public' | 'unlisted' | 'private' = 'public'
 ): Promise<{ broadcastId: string; streamId: string; rtmpUrl: string; streamKey: string }> {
   try {
-    logger.info('Creating YouTube live broadcast');
+    logger.info('Creating YouTube live broadcast', {
+      title,
+      privacyStatus,
+      hasDescription: !!description,
+      hasSchedule: !!scheduledStartTime
+    });
 
     // Step 1: Create liveBroadcast
+    logger.info('[YouTube Step 1/4] Creating liveBroadcast...');
     const broadcastResponse = await axios.post(
       `${YOUTUBE_API_BASE}/liveBroadcasts`,
       {
@@ -145,9 +151,14 @@ export async function createYouTubeLiveBroadcast(
     );
 
     const broadcastId = broadcastResponse.data.id;
-    logger.info(`YouTube broadcast created: ${broadcastId}`);
+    logger.info(`[YouTube Step 1/4] ✓ LiveBroadcast created successfully`, {
+      broadcastId,
+      lifeCycleStatus: broadcastResponse.data.status?.lifeCycleStatus,
+      privacyStatus: broadcastResponse.data.status?.privacyStatus
+    });
 
     // Step 2: Create or get liveStream
+    logger.info('[YouTube Step 2/4] Creating liveStream...');
     const streamResponse = await axios.post(
       `${YOUTUBE_API_BASE}/liveStreams`,
       {
@@ -174,9 +185,16 @@ export async function createYouTubeLiveBroadcast(
     const rtmpUrl = ingestionInfo.ingestionAddress;
     const streamKey = ingestionInfo.streamName;
 
-    logger.info(`YouTube stream created: ${streamId}`);
+    logger.info(`[YouTube Step 2/4] ✓ LiveStream created successfully`, {
+      streamId,
+      rtmpUrl,
+      streamKeyLength: streamKey?.length,
+      resolution: streamResponse.data.cdn.resolution,
+      frameRate: streamResponse.data.cdn.frameRate
+    });
 
     // Step 3: Bind broadcast to stream
+    logger.info('[YouTube Step 3/4] Binding broadcast to stream...');
     await axios.post(
       `${YOUTUBE_API_BASE}/liveBroadcasts/bind`,
       null,
@@ -190,9 +208,13 @@ export async function createYouTubeLiveBroadcast(
       }
     );
 
-    logger.info(`YouTube broadcast ${broadcastId} bound to stream ${streamId}`);
+    logger.info(`[YouTube Step 3/4] ✓ Broadcast bound to stream successfully`, {
+      broadcastId,
+      streamId
+    });
 
     // Step 4: Transition to "ready" status
+    logger.info('[YouTube Step 4/4] Transitioning broadcast to ready...');
     await axios.post(
       `${YOUTUBE_API_BASE}/liveBroadcasts/transition`,
       null,
@@ -206,7 +228,18 @@ export async function createYouTubeLiveBroadcast(
       }
     );
 
-    logger.info(`YouTube broadcast ${broadcastId} transitioned to ready`);
+    logger.info(`[YouTube Step 4/4] ✓ Broadcast transitioned to ready`, {
+      broadcastId,
+      status: 'ready'
+    });
+
+    logger.info('✓ YouTube live broadcast created successfully', {
+      broadcastId,
+      streamId,
+      rtmpUrl,
+      privacyStatus,
+      title
+    });
 
     return {
       broadcastId,
@@ -215,7 +248,17 @@ export async function createYouTubeLiveBroadcast(
       streamKey,
     };
   } catch (error: any) {
-    logger.error('Error creating YouTube live broadcast:', error.response?.data || error.message);
+    const errorDetails = {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      apiError: error.response?.data?.error,
+      requestUrl: error.config?.url,
+      requestMethod: error.config?.method
+    };
+
+    logger.error('✗ Failed to create YouTube live broadcast', errorDetails);
+
     throw new Error(
       `Failed to create YouTube live broadcast: ${error.response?.data?.error?.message || error.message}`
     );
@@ -230,9 +273,9 @@ export async function transitionYouTubeBroadcastToLive(
   accessToken: string
 ): Promise<void> {
   try {
-    logger.info(`Transitioning YouTube broadcast ${broadcastId} to live`);
+    logger.info(`[YouTube Transition] Transitioning broadcast to live`, { broadcastId });
 
-    await axios.post(
+    const response = await axios.post(
       `${YOUTUBE_API_BASE}/liveBroadcasts/transition`,
       null,
       {
@@ -245,9 +288,21 @@ export async function transitionYouTubeBroadcastToLive(
       }
     );
 
-    logger.info(`YouTube broadcast ${broadcastId} is now live`);
+    logger.info(`[YouTube Transition] ✓ Broadcast is now LIVE`, {
+      broadcastId,
+      lifeCycleStatus: response.data?.status?.lifeCycleStatus,
+      privacyStatus: response.data?.status?.privacyStatus
+    });
   } catch (error: any) {
-    logger.error('Error transitioning YouTube broadcast to live:', error.response?.data || error.message);
+    const errorDetails = {
+      broadcastId,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      apiError: error.response?.data?.error,
+      message: error.message
+    };
+
+    logger.error('[YouTube Transition] ✗ Failed to transition to live', errorDetails);
     throw new Error(
       `Failed to transition YouTube broadcast to live: ${error.response?.data?.error?.message || error.message}`
     );
@@ -262,9 +317,9 @@ export async function endYouTubeLiveBroadcast(
   accessToken: string
 ): Promise<void> {
   try {
-    logger.info(`Ending YouTube live broadcast: ${broadcastId}`);
+    logger.info(`[YouTube End] Ending broadcast`, { broadcastId });
 
-    await axios.post(
+    const response = await axios.post(
       `${YOUTUBE_API_BASE}/liveBroadcasts/transition`,
       null,
       {
@@ -277,9 +332,16 @@ export async function endYouTubeLiveBroadcast(
       }
     );
 
-    logger.info(`YouTube broadcast ended: ${broadcastId}`);
+    logger.info(`[YouTube End] ✓ Broadcast ended successfully`, {
+      broadcastId,
+      finalStatus: response.data?.status?.lifeCycleStatus
+    });
   } catch (error: any) {
-    logger.error('Error ending YouTube live broadcast:', error.response?.data || error.message);
+    logger.warn(`[YouTube End] Failed to end broadcast (non-fatal)`, {
+      broadcastId,
+      status: error.response?.status,
+      message: error.message
+    });
     // Don't throw - ending might fail if already ended
   }
 }
@@ -384,7 +446,12 @@ export async function monitorAndTransitionYouTubeBroadcast(
   maxAttempts: number = 30,
   pollIntervalMs: number = 2000
 ): Promise<void> {
-  logger.info(`Starting YouTube broadcast monitoring for ${broadcastId}`);
+  logger.info(`[YouTube Monitor] Starting broadcast monitoring`, {
+    broadcastId,
+    maxAttempts,
+    pollIntervalMs,
+    maxWaitTime: `${(maxAttempts * pollIntervalMs) / 1000}s`
+  });
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -394,15 +461,28 @@ export async function monitorAndTransitionYouTubeBroadcast(
       }
 
       const status = await getYouTubeBroadcastStatus(broadcastId, accessToken);
-      logger.info(`YouTube broadcast ${broadcastId} status check ${attempt}/${maxAttempts}: ${status.lifeCycleStatus}, stream health: ${status.healthStatus?.status || 'unknown'}`);
+      logger.info(`[YouTube Monitor] Status check ${attempt}/${maxAttempts}`, {
+        broadcastId,
+        lifeCycleStatus: status.lifeCycleStatus,
+        streamHealth: status.healthStatus?.status || 'unknown',
+        configurationIssues: status.healthStatus?.configurationIssues
+      });
 
       // Check if stream is receiving data
       if (status.healthStatus?.status === 'good' || status.healthStatus?.status === 'ok') {
-        logger.info(`YouTube stream detected for broadcast ${broadcastId}, transitioning to live`);
+        logger.info(`[YouTube Monitor] ✓ Stream detected! Initiating transition to live`, {
+          broadcastId,
+          attempt,
+          streamHealth: status.healthStatus.status
+        });
 
         try {
           await transitionYouTubeBroadcastToLive(broadcastId, accessToken);
-          logger.info(`YouTube broadcast ${broadcastId} successfully transitioned to live`);
+          logger.info(`[YouTube Monitor] ✓ Successfully transitioned to live!`, {
+            broadcastId,
+            totalAttempts: attempt,
+            totalWaitTime: `${(attempt * pollIntervalMs) / 1000}s`
+          });
           return;
         } catch (transitionError: any) {
           // Handle specific YouTube API errors
@@ -411,11 +491,21 @@ export async function monitorAndTransitionYouTubeBroadcast(
 
           // Error 400 with "transition" in message usually means invalid state transition
           if (errorCode === 400 && errorMessage.includes('transition')) {
-            logger.warn(`YouTube broadcast ${broadcastId} transition failed (attempt ${attempt}): ${errorMessage}. Will retry.`);
+            logger.warn(`[YouTube Monitor] Transition rejected, retrying...`, {
+              broadcastId,
+              attempt,
+              errorCode,
+              errorMessage
+            });
             continue;
           }
 
           // Other errors are more serious
+          logger.error(`[YouTube Monitor] ✗ Transition failed with non-retryable error`, {
+            broadcastId,
+            errorCode,
+            errorMessage
+          });
           throw transitionError;
         }
       }
