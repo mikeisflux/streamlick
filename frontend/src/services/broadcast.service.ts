@@ -4,7 +4,8 @@ import { Broadcast } from '../types';
 export const broadcastService = {
   async getAll(): Promise<Broadcast[]> {
     const response = await api.get('/broadcasts');
-    return response.data;
+    // Handle paginated response from backend
+    return response.data.broadcasts || response.data;
   },
 
   async getById(id: string): Promise<Broadcast> {
