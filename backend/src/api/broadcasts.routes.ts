@@ -12,6 +12,7 @@ import {
   createYouTubeLiveBroadcast,
   endYouTubeLiveBroadcast,
   getValidYouTubeToken,
+  monitorAndTransitionYouTubeBroadcast,
 } from '../services/youtube.service';
 import { getIOInstance } from '../socket/io-instance';
 
@@ -294,6 +295,17 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
                   liveVideoId = ytBroadcast.broadcastId;
 
                   logger.info(`Created YouTube live broadcast: ${liveVideoId} (privacy: ${privacyStatus}${scheduledStartTime ? ', scheduled: ' + scheduledStartTime : ''})`);
+
+                  // Start monitoring and transitioning to live (non-blocking)
+                  // This runs in the background and transitions the broadcast when YouTube detects the stream
+                  monitorAndTransitionYouTubeBroadcast(ytBroadcast.broadcastId, accessToken)
+                    .then(() => {
+                      logger.info(`YouTube broadcast ${liveVideoId} monitoring completed successfully`);
+                    })
+                    .catch((error) => {
+                      logger.error(`YouTube broadcast ${liveVideoId} monitoring failed:`, error);
+                      // Don't fail the entire broadcast - it's already created
+                    });
                 } catch (error) {
                   logger.error(`Failed to create YouTube live broadcast for destination ${destination.id}:`, error);
                   continue; // Skip this destination

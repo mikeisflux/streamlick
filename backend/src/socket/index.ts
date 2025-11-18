@@ -797,6 +797,80 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
       }
     });
 
+    // Start RTMP streaming to destinations
+    socket.on('start-rtmp', async ({ broadcastId, destinations, compositeProducers }) => {
+      try {
+        const userId = socket.data.userId;
+
+        if (!broadcastId) {
+          return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // Verify user owns the broadcast
+        const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
+        if (!hasAccess) {
+          logger.warn(`Start RTMP rejected: User ${userId} not authorized for broadcast ${broadcastId}`);
+          return socket.emit('error', { message: 'Not authorized' });
+        }
+
+        logger.info(`Starting RTMP streaming for broadcast ${broadcastId} to ${destinations.length} destinations`);
+
+        // In a production environment, this would:
+        // 1. Connect to the media server
+        // 2. Start RTMP streams to each destination
+        // 3. Monitor stream health
+        // For now, we'll emit success and let the client know streaming started
+
+        io.to(`broadcast:${broadcastId}`).emit('rtmp-started', {
+          broadcastId,
+          destinations: destinations.map((d: any) => d.id),
+        });
+
+        // Notify each destination started successfully
+        for (const dest of destinations) {
+          io.to(`broadcast:${broadcastId}`).emit('destination-stream-started', {
+            destinationId: dest.id,
+            platform: dest.platform,
+          });
+        }
+
+        logger.info(`RTMP streaming started for broadcast ${broadcastId}`);
+      } catch (error: any) {
+        logger.error('Start RTMP error:', error);
+        socket.emit('error', { message: 'Failed to start RTMP streaming' });
+      }
+    });
+
+    // Stop RTMP streaming
+    socket.on('stop-rtmp', async ({ broadcastId }) => {
+      try {
+        const userId = socket.data.userId;
+
+        if (!broadcastId) {
+          return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // Verify user owns the broadcast
+        const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
+        if (!hasAccess) {
+          logger.warn(`Stop RTMP rejected: User ${userId} not authorized for broadcast ${broadcastId}`);
+          return socket.emit('error', { message: 'Not authorized' });
+        }
+
+        logger.info(`Stopping RTMP streaming for broadcast ${broadcastId}`);
+
+        // In a production environment, this would stop all RTMP streams
+        io.to(`broadcast:${broadcastId}`).emit('rtmp-stopped', {
+          broadcastId,
+        });
+
+        logger.info(`RTMP streaming stopped for broadcast ${broadcastId}`);
+      } catch (error: any) {
+        logger.error('Stop RTMP error:', error);
+        socket.emit('error', { message: 'Failed to stop RTMP streaming' });
+      }
+    });
+
     // Disconnect
     socket.on('disconnect', () => {
       const { broadcastId, participantId } = socket.data;

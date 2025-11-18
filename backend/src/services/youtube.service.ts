@@ -373,3 +373,78 @@ export async function getYouTubeDestinationsWithExpiringTokens(
     expiresAt: dest.tokenExpiresAt!,
   }));
 }
+
+/**
+ * Monitor YouTube broadcast status and transition to live when ready
+ * This function polls the broadcast status and transitions to live once YouTube detects the stream
+ */
+export async function monitorAndTransitionYouTubeBroadcast(
+  broadcastId: string,
+  accessToken: string,
+  maxAttempts: number = 30,
+  pollIntervalMs: number = 2000
+): Promise<void> {
+  logger.info(`Starting YouTube broadcast monitoring for ${broadcastId}`);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      // Wait before checking (except first attempt)
+      if (attempt > 1) {
+        await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+      }
+
+      const status = await getYouTubeBroadcastStatus(broadcastId, accessToken);
+      logger.info(`YouTube broadcast ${broadcastId} status check ${attempt}/${maxAttempts}: ${status.lifeCycleStatus}, stream health: ${status.healthStatus?.status || 'unknown'}`);
+
+      // Check if stream is receiving data
+      if (status.healthStatus?.status === 'good' || status.healthStatus?.status === 'ok') {
+        logger.info(`YouTube stream detected for broadcast ${broadcastId}, transitioning to live`);
+
+        try {
+          await transitionYouTubeBroadcastToLive(broadcastId, accessToken);
+          logger.info(`YouTube broadcast ${broadcastId} successfully transitioned to live`);
+          return;
+        } catch (transitionError: any) {
+          // Handle specific YouTube API errors
+          const errorCode = transitionError.response?.data?.error?.code;
+          const errorMessage = transitionError.response?.data?.error?.message || transitionError.message;
+
+          // Error 400 with "transition" in message usually means invalid state transition
+          if (errorCode === 400 && errorMessage.includes('transition')) {
+            logger.warn(`YouTube broadcast ${broadcastId} transition failed (attempt ${attempt}): ${errorMessage}. Will retry.`);
+            continue;
+          }
+
+          // Other errors are more serious
+          throw transitionError;
+        }
+      }
+
+      // Check for error states
+      if (status.healthStatus?.status === 'bad' || status.healthStatus?.status === 'noData') {
+        logger.warn(`YouTube stream health issue for broadcast ${broadcastId}: ${status.healthStatus.status}`);
+        // Continue monitoring - stream might recover
+      }
+
+      // If we're at max attempts, log warning but don't throw
+      if (attempt === maxAttempts) {
+        logger.warn(`YouTube broadcast ${broadcastId} did not transition to live after ${maxAttempts} attempts (${maxAttempts * pollIntervalMs / 1000}s). Final status: ${status.lifeCycleStatus}`);
+        // Don't throw - the broadcast was created successfully, just didn't auto-transition
+        return;
+      }
+
+    } catch (error: any) {
+      logger.error(`Error monitoring YouTube broadcast ${broadcastId} (attempt ${attempt}):`, error.response?.data || error.message);
+
+      // If it's a 404 or auth error, stop trying
+      if (error.response?.status === 404 || error.response?.status === 401 || error.response?.status === 403) {
+        throw error;
+      }
+
+      // For other errors, continue trying if we have attempts left
+      if (attempt === maxAttempts) {
+        throw error;
+      }
+    }
+  }
+}
