@@ -13,6 +13,7 @@ import axios from 'axios';
 import { decrypt } from '../utils/crypto';
 import logger from '../utils/logger';
 import prisma from '../database/prisma';
+import { getOAuthCredentials } from '../api/oauth.routes';
 
 export interface ChatMessage {
   id: string;
@@ -391,11 +392,14 @@ export class TwitchChatPoller {
 
       this.accessToken = decrypt(destination.accessToken);
 
+      // Get Twitch OAuth credentials from database
+      const oauthCreds = await getOAuthCredentials('twitch');
+
       // Get channel name
       const userResponse = await axios.get('https://api.twitch.tv/helix/users', {
         headers: {
           Authorization: `Bearer ${this.accessToken}`,
-          'Client-Id': process.env.TWITCH_CLIENT_ID || '',
+          'Client-Id': oauthCreds.clientId,
         },
       });
 

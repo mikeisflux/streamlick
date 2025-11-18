@@ -14,6 +14,7 @@ import { decrypt } from '../utils/crypto';
 import logger from '../utils/logger';
 import WebSocket from 'ws';
 import prisma from '../database/prisma';
+import { getOAuthCredentials } from '../api/oauth.routes';
 
 interface PostResult {
   platform: string;
@@ -270,11 +271,14 @@ class CommentPostingService {
 
       const accessToken = decrypt(destination.accessToken);
 
+      // Get Twitch OAuth credentials from database
+      const oauthCreds = await getOAuthCredentials('twitch');
+
       // Get channel name from Twitch API
       const userResponse = await axios.get('https://api.twitch.tv/helix/users', {
         headers: {
           Authorization: `Bearer ${accessToken}`,
-          'Client-Id': process.env.TWITCH_CLIENT_ID || '',
+          'Client-Id': oauthCreds.clientId,
         },
       });
 

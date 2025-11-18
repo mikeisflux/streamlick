@@ -14,6 +14,7 @@ import axios from 'axios';
 import prisma from '../database/prisma';
 import { decrypt } from '../utils/crypto';
 import logger from '../utils/logger';
+import { getOAuthCredentials } from '../api/oauth.routes';
 
 export interface ModerationAction {
   id: string;
@@ -511,6 +512,9 @@ export class ChatModerationService {
    */
   private async banTwitchUser(credentials: PlatformCredentials, username: string, reason: string): Promise<void> {
     try {
+      // Get Twitch OAuth credentials from database
+      const oauthCreds = await getOAuthCredentials('twitch');
+
       await axios.post(
         `https://api.twitch.tv/helix/moderation/bans`,
         {
@@ -522,7 +526,7 @@ export class ChatModerationService {
         {
           headers: {
             Authorization: `Bearer ${credentials.accessToken}`,
-            'Client-Id': process.env.TWITCH_CLIENT_ID || '',
+            'Client-Id': oauthCreds.clientId,
           },
           params: {
             broadcaster_id: credentials.channelId,
@@ -542,6 +546,9 @@ export class ChatModerationService {
    */
   private async timeoutTwitchUser(credentials: PlatformCredentials, username: string, duration: number, reason: string): Promise<void> {
     try {
+      // Get Twitch OAuth credentials from database
+      const oauthCreds = await getOAuthCredentials('twitch');
+
       await axios.post(
         `https://api.twitch.tv/helix/moderation/bans`,
         {
@@ -554,7 +561,7 @@ export class ChatModerationService {
         {
           headers: {
             Authorization: `Bearer ${credentials.accessToken}`,
-            'Client-Id': process.env.TWITCH_CLIENT_ID || '',
+            'Client-Id': oauthCreds.clientId,
           },
           params: {
             broadcaster_id: credentials.channelId,
@@ -574,10 +581,13 @@ export class ChatModerationService {
    */
   private async unbanTwitchUser(credentials: PlatformCredentials, username: string): Promise<void> {
     try {
+      // Get Twitch OAuth credentials from database
+      const oauthCreds = await getOAuthCredentials('twitch');
+
       await axios.delete(`https://api.twitch.tv/helix/moderation/bans`, {
         headers: {
           Authorization: `Bearer ${credentials.accessToken}`,
-          'Client-Id': process.env.TWITCH_CLIENT_ID || '',
+          'Client-Id': oauthCreds.clientId,
         },
         params: {
           broadcaster_id: credentials.channelId,
