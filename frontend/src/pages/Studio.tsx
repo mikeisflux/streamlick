@@ -109,13 +109,33 @@ export function Studio() {
     loadDevices,
   });
 
-  // Destination privacy and scheduling settings
+  // Destination privacy and scheduling settings - load from localStorage
   const [destinationSettings, setDestinationSettings] = useState<{
     privacy: Record<string, string>;
     schedule: Record<string, string>;
     title: Record<string, string>;
     description: Record<string, string>;
-  }>({ privacy: {}, schedule: {}, title: {}, description: {} });
+  }>(() => {
+    if (!broadcastId) return { privacy: {}, schedule: {}, title: {}, description: {} };
+    try {
+      const saved = localStorage.getItem(`destinationSettings_${broadcastId}`);
+      return saved ? JSON.parse(saved) : { privacy: {}, schedule: {}, title: {}, description: {} };
+    } catch (error) {
+      console.error('Failed to load destination settings from localStorage:', error);
+      return { privacy: {}, schedule: {}, title: {}, description: {} };
+    }
+  });
+
+  // Save destination settings to localStorage when they change
+  useEffect(() => {
+    if (!broadcastId) return;
+    try {
+      localStorage.setItem(`destinationSettings_${broadcastId}`, JSON.stringify(destinationSettings));
+      console.log('[Studio] Saved destination settings:', destinationSettings);
+    } catch (error) {
+      console.error('Failed to save destination settings to localStorage:', error);
+    }
+  }, [destinationSettings, broadcastId]);
 
   // Sidebar management
   const {
