@@ -1,3 +1,11 @@
+// STARTUP LOGGING - Log immediately before any imports fail
+console.log('========================================');
+console.log('MEDIA SERVER STARTING...');
+console.log('Time:', new Date().toISOString());
+console.log('Node version:', process.version);
+console.log('CWD:', process.cwd());
+console.log('========================================');
+
 import express from 'express';
 import http from 'http';
 import { Server as SocketServer } from 'socket.io';
@@ -12,16 +20,21 @@ import { diagnosticLogger } from './services/diagnostic-logger.service';
 import { adaptiveBitrateService } from './services/adaptive-bitrate.service';
 import logger from './utils/logger';
 
+console.log('[Startup] Loading .env configuration...');
 dotenv.config();
+console.log('[Startup] .env loaded successfully');
 
 // Validate critical environment variables at startup
 function validateEnvironment() {
+  console.log('[Startup] Validating environment variables...');
   const errors: string[] = [];
 
+  console.log('[Startup] Checking MEDIASOUP_ANNOUNCED_IP:', process.env.MEDIASOUP_ANNOUNCED_IP || 'NOT SET');
   if (!process.env.MEDIASOUP_ANNOUNCED_IP) {
     errors.push('MEDIASOUP_ANNOUNCED_IP must be set (your server\'s public IP address)');
   }
 
+  console.log('[Startup] Checking FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET');
   if (!process.env.FRONTEND_URL) {
     errors.push('FRONTEND_URL must be set (e.g., https://streamlick.com)');
   }
@@ -37,27 +50,35 @@ function validateEnvironment() {
   }
 
   if (errors.length > 0) {
+    console.error('[Startup] ❌ Environment validation FAILED:');
+    errors.forEach(error => console.error(`  - ${error}`));
     logger.error('Environment validation failed:');
     errors.forEach(error => logger.error(`  - ${error}`));
     process.exit(1);
   }
 
+  console.log('[Startup] ✓ Environment validation passed');
   logger.info('Environment validation passed');
   logger.info(`  MEDIASOUP_ANNOUNCED_IP: ${process.env.MEDIASOUP_ANNOUNCED_IP}`);
   logger.info(`  FRONTEND_URL: ${process.env.FRONTEND_URL}`);
   logger.info(`  NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
 }
 
+console.log('[Startup] Running environment validation...');
 validateEnvironment();
 
+console.log('[Startup] Creating Express app...');
 const app = express();
+console.log('[Startup] Creating HTTP server...');
 const server = http.createServer(app);
+console.log('[Startup] Creating Socket.IO server with CORS:', process.env.FRONTEND_URL || 'http://localhost:3002');
 const io = new SocketServer(server, {
   cors: {
     origin: process.env.FRONTEND_URL || 'http://localhost:3002',
     credentials: true,
   },
 });
+console.log('[Startup] ✓ Socket.IO server created');
 
 const PORT = process.env.MEDIA_SERVER_PORT || 3001;
 
@@ -308,7 +329,12 @@ app.get('/broadcasts/:broadcastId/rtp-capabilities', async (req: express.Request
 });
 
 // Socket.io handlers
+console.log('[Startup] Setting up Socket.IO connection handler...');
 io.on('connection', (socket) => {
+  console.log(`[Socket.IO] ========== NEW CONNECTION ==========`);
+  console.log(`[Socket.IO] Client connected: ${socket.id}`);
+  console.log(`[Socket.IO] Client address: ${socket.handshake.address}`);
+  console.log(`[Socket.IO] Client headers:`, JSON.stringify(socket.handshake.headers, null, 2));
   logger.info(`Media socket connected: ${socket.id}`);
 
   // Create transport
@@ -570,20 +596,31 @@ io.on('connection', (socket) => {
 // Initialize and start server
 async function start() {
   try {
+    console.log('[Startup] ========== STARTING MEDIA SERVER ==========');
     // Create mediasoup workers (at least 2 for redundancy)
     const numWorkers = parseInt(process.env.MEDIASOUP_WORKERS || '2');
+    console.log(`[Startup] Creating ${numWorkers} mediasoup workers...`);
     await createWorkers(numWorkers);
+    console.log('[Startup] ✓ Mediasoup workers created');
 
+    console.log(`[Startup] Starting HTTP server on port ${PORT}...`);
     server.listen(PORT, () => {
+      console.log(`[Startup] ========== ✅ SERVER LISTENING ON PORT ${PORT} ==========`);
+      console.log(`[Startup] Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`[Startup] FRONTEND_URL: ${process.env.FRONTEND_URL}`);
+      console.log(`[Startup] Time: ${new Date().toISOString()}`);
       logger.info(`🎥 Streamlick Media Server running on port ${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
     });
   } catch (error) {
+    console.error('[Startup] ❌ FAILED TO START MEDIA SERVER:');
+    console.error(error);
     logger.error('Failed to start media server:', error);
     process.exit(1);
   }
 }
 
+console.log('[Startup] Calling start() function...');
 start();
 
 // Force exit after timeout if graceful shutdown hangs (configurable, default 30 seconds)
