@@ -27,8 +27,15 @@ export const broadcastService = {
     await api.delete(`/broadcasts/${id}`);
   },
 
-  async start(id: string): Promise<Broadcast> {
-    const response = await api.post(`/broadcasts/${id}/start`);
+  async start(
+    id: string,
+    destinationIds?: string[],
+    destinationSettings?: Record<string, { privacyStatus?: string; scheduledStartTime?: string }>
+  ): Promise<Broadcast> {
+    const response = await api.post(`/broadcasts/${id}/start`, {
+      destinationIds,
+      destinationSettings,
+    });
     return response.data;
   },
 

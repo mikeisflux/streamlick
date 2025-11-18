@@ -171,7 +171,7 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res) => {
 // Start broadcast
 router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
   try {
-    const { destinationIds } = req.body; // Array of destination IDs to stream to
+    const { destinationIds, destinationSettings = {} } = req.body; // destinationSettings: { [destinationId]: { privacyStatus, scheduledStartTime } }
 
     const broadcast = await prisma.broadcast.findFirst({
       where: {
@@ -273,25 +273,33 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
                   // Get valid token (auto-refreshes if needed)
                   const accessToken = await getValidYouTubeToken(destination.id);
 
+                  // Get privacy and scheduling settings for this destination
+                  const settings = destinationSettings[destination.id] || {};
+                  const privacyStatus = settings.privacyStatus || 'public';
+                  const scheduledStartTime = settings.scheduledStartTime || undefined;
+
                   // Create YouTube live broadcast
                   const ytBroadcast = await createYouTubeLiveBroadcast(
                     accessToken,
                     broadcast.title,
                     broadcast.description || undefined,
-                    undefined, // scheduledStartTime (use current time)
-                    'public' // privacyStatus
+                    scheduledStartTime,
+                    privacyStatus
                   );
 
                   streamUrl = ytBroadcast.rtmpUrl;
                   streamKey = ytBroadcast.streamKey;
                   liveVideoId = ytBroadcast.broadcastId;
 
-                  logger.info(`Created YouTube live broadcast: ${liveVideoId}`);
+                  logger.info(`Created YouTube live broadcast: ${liveVideoId} (privacy: ${privacyStatus}${scheduledStartTime ? ', scheduled: ' + scheduledStartTime : ''})`);
                 } catch (error) {
                   logger.error(`Failed to create YouTube live broadcast for destination ${destination.id}:`, error);
                   continue; // Skip this destination
                 }
               }
+
+              // Get settings for this destination
+              const settings = destinationSettings[destination.id] || {};
 
               // Create broadcast destination record
               const broadcastDest = await prisma.broadcastDestination.create({
@@ -302,6 +310,8 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
                   streamKey: streamKey ? encrypt(streamKey) : null,
                   liveVideoId,
                   status: 'pending',
+                  privacyStatus: settings.privacyStatus || 'public',
+                  scheduledStartTime: settings.scheduledStartTime ? new Date(settings.scheduledStartTime) : null,
                 },
               });
 

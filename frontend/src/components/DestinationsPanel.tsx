@@ -18,12 +18,15 @@ interface StreamDestination {
   streamKey?: string;
   rtmpUrl?: string;
   comingSoon?: boolean;
+  privacyStatus?: 'public' | 'unlisted' | 'private' | 'members_only';
+  scheduledStartTime?: string;
 }
 
 interface DestinationsPanelProps {
   broadcastId?: string;
   selectedDestinations?: string[];
   onSelectionChange?: (selectedIds: string[]) => void;
+  onSettingsChange?: (settings: { privacy: Record<string, string>; schedule: Record<string, string> }) => void;
 }
 
 // Available platforms that can be connected
@@ -39,7 +42,8 @@ const AVAILABLE_PLATFORMS = [
 export function DestinationsPanel({
   broadcastId,
   selectedDestinations = [],
-  onSelectionChange
+  onSelectionChange,
+  onSettingsChange
 }: DestinationsPanelProps) {
   const [destinations, setDestinations] = useState<StreamDestination[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +53,16 @@ export function DestinationsPanel({
   const [showRumbleModal, setShowRumbleModal] = useState(false);
   const [rumbleApiKey, setRumbleApiKey] = useState('');
   const [rumbleChannelUrl, setRumbleChannelUrl] = useState('');
+  // Track privacy and scheduling settings per destination
+  const [privacySettings, setPrivacySettings] = useState<Record<string, string>>({});
+  const [scheduleSettings, setScheduleSettings] = useState<Record<string, string>>({});
+
+  // Notify parent of settings changes
+  useEffect(() => {
+    if (onSettingsChange) {
+      onSettingsChange({ privacy: privacySettings, schedule: scheduleSettings });
+    }
+  }, [privacySettings, scheduleSettings, onSettingsChange]);
 
   // Load user's connected destinations
   useEffect(() => {
@@ -76,6 +90,8 @@ export function DestinationsPanel({
           viewerCount: 0,
           rtmpUrl: connected?.rtmpUrl,
           comingSoon: available.comingSoon,
+          privacyStatus: (privacySettings[connected?.id || ''] as any) || 'public',
+          scheduledStartTime: scheduleSettings[connected?.id || ''],
         };
       });
 
@@ -378,19 +394,64 @@ export function DestinationsPanel({
 
             {/* Viewer Count and Remove Button */}
             {dest.enabled && (
-              <div className="flex items-center justify-between ml-8 mt-2">
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <EyeIcon className="w-4 h-4" />
-                  <span>{dest.viewerCount} viewers</span>
+              <div className="ml-8 mt-2 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-sm text-gray-600">
+                    <EyeIcon className="w-4 h-4" />
+                    <span>{dest.viewerCount} viewers</span>
+                  </div>
+                  {dest.platform === 'custom' && (
+                    <button
+                      onClick={() => removeDestination(dest.id)}
+                      className="text-sm text-red-600 hover:text-red-700"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </div>
-                {dest.platform === 'custom' && (
-                  <button
-                    onClick={() => removeDestination(dest.id)}
-                    className="text-sm text-red-600 hover:text-red-700"
-                  >
-                    Remove
-                  </button>
+
+                {/* Privacy Settings (YouTube & Facebook only) */}
+                {(dest.platform === 'youtube' || dest.platform === 'facebook') && (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Privacy
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={privacySettings[dest.id] || 'public'}
+                      onChange={(e) => setPrivacySettings({ ...privacySettings, [dest.id]: e.target.value })}
+                    >
+                      <option value="public">Public</option>
+                      <option value="unlisted">Unlisted</option>
+                      <option value="private">Private</option>
+                      {dest.platform === 'youtube' && (
+                        <option value="members_only">Members Only</option>
+                      )}
+                    </select>
+                    <p className="text-xs text-gray-500">
+                      {dest.platform === 'youtube'
+                        ? 'Public: Anyone can watch | Unlisted: Only with link | Private: Only you | Members Only: Channel members only'
+                        : 'Public: Anyone can watch | Unlisted: Only with link | Private: Only you'}
+                    </p>
+                  </div>
                 )}
+
+                {/* Scheduled Start Time */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Schedule Stream (Optional)
+                  </label>
+                  <input
+                    type="datetime-local"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    min={new Date().toISOString().slice(0, 16)}
+                    value={scheduleSettings[dest.id] || ''}
+                    onChange={(e) => setScheduleSettings({ ...scheduleSettings, [dest.id]: e.target.value })}
+                  />
+                  <p className="text-xs text-gray-500">
+                    Leave empty to start immediately when you go live
+                  </p>
+                </div>
               </div>
             )}
 

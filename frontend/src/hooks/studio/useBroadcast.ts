@@ -26,6 +26,7 @@ interface UseBroadcastProps {
   selectedDestinations: string[];
   showChatOnStream: boolean;
   initializeWebRTC: () => Promise<void>;
+  destinationSettings: { privacy: Record<string, string>; schedule: Record<string, string> };
 }
 
 export function useBroadcast({
@@ -38,6 +39,7 @@ export function useBroadcast({
   selectedDestinations,
   showChatOnStream,
   initializeWebRTC,
+  destinationSettings,
 }: UseBroadcastProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -119,8 +121,17 @@ export function useBroadcast({
         compositeAudioProducerId = await webrtcService.produceMedia(compositeAudioTrack);
       }
 
-      // Start broadcast
-      await broadcastService.start(broadcastId);
+      // Prepare destination settings for API
+      const apiDestinationSettings: Record<string, { privacyStatus?: string; scheduledStartTime?: string }> = {};
+      selectedDestinations.forEach((destId) => {
+        apiDestinationSettings[destId] = {
+          privacyStatus: destinationSettings.privacy[destId] || 'public',
+          scheduledStartTime: destinationSettings.schedule[destId] || undefined,
+        };
+      });
+
+      // Start broadcast with destination settings
+      await broadcastService.start(broadcastId, selectedDestinations, apiDestinationSettings);
 
       // Start RTMP streaming with composite producers
       const destinationsToStream = destinations

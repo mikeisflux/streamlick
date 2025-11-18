@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { compositorService } from '../services/compositor.service';
 import { broadcastService } from '../services/broadcast.service';
@@ -109,6 +109,12 @@ export function Studio() {
     loadDevices,
   });
 
+  // Destination privacy and scheduling settings
+  const [destinationSettings, setDestinationSettings] = useState<{
+    privacy: Record<string, string>;
+    schedule: Record<string, string>;
+  }>({ privacy: {}, schedule: {} });
+
   // Sidebar management
   const {
     leftSidebarOpen,
@@ -175,6 +181,7 @@ export function Studio() {
     selectedDestinations,
     showChatOnStream,
     initializeWebRTC,
+    destinationSettings,
   });
 
   const { currentCaption } = useCaptions(captionsEnabled, captionLanguage);
@@ -433,6 +440,7 @@ export function Studio() {
         setShowRecordingDrawer={setShowRecordingDrawer}
         selectedDestinations={selectedDestinations}
         onDestinationSelectionChange={setSelectedDestinations}
+        onDestinationSettingsChange={setDestinationSettings}
       />
 
       {/* Modals */}

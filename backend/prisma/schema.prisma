@@ -82,15 +82,17 @@ model Destination {
 }
 
 model BroadcastDestination {
-  id            String   @id @default(uuid())
-  broadcastId   String   @map("broadcast_id")
-  destinationId String   @map("destination_id")
-  streamUrl     String?  @map("stream_url")
-  streamKey     String?  @map("stream_key") // Encrypted
-  liveVideoId   String?  @map("live_video_id") // Platform-specific live video ID (Facebook, YouTube, etc.)
-  status        String?  // pending, streaming, ended, error
-  viewerCount   Int      @default(0) @map("viewer_count")
-  createdAt     DateTime @default(now()) @map("created_at")
+  id                  String    @id @default(uuid())
+  broadcastId         String    @map("broadcast_id")
+  destinationId       String    @map("destination_id")
+  streamUrl           String?   @map("stream_url")
+  streamKey           String?   @map("stream_key") // Encrypted
+  liveVideoId         String?   @map("live_video_id") // Platform-specific live video ID (Facebook, YouTube, etc.)
+  status              String?   // pending, streaming, ended, error
+  viewerCount         Int       @default(0) @map("viewer_count")
+  privacyStatus       String?   @default("public") @map("privacy_status") // public, unlisted, private, members_only (YouTube)
+  scheduledStartTime  DateTime? @map("scheduled_start_time") // When to start streaming
+  createdAt           DateTime  @default(now()) @map("created_at")
 
   broadcast   Broadcast   @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
   destination Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)

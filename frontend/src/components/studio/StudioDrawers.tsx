@@ -19,6 +19,7 @@ interface StudioDrawersProps {
   setShowRecordingDrawer: (show: boolean) => void;
   selectedDestinations: string[];
   onDestinationSelectionChange: (selected: string[]) => void;
+  onDestinationSettingsChange: (settings: { privacy: Record<string, string>; schedule: Record<string, string> }) => void;
 }
 
 export function StudioDrawers({
@@ -35,6 +36,7 @@ export function StudioDrawers({
   setShowRecordingDrawer,
   selectedDestinations,
   onDestinationSelectionChange,
+  onDestinationSettingsChange,
 }: StudioDrawersProps) {
   return (
     <>
@@ -48,6 +50,7 @@ export function StudioDrawers({
           broadcastId={broadcastId}
           selectedDestinations={selectedDestinations}
           onSelectionChange={onDestinationSelectionChange}
+          onSettingsChange={onDestinationSettingsChange}
         />
       </Drawer>
 
