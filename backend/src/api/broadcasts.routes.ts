@@ -214,9 +214,14 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
     // Use async IIFE instead of setImmediate to avoid race conditions
     (async () => {
       try {
+        logger.info(`[ASYNC IIFE] Starting async broadcast preparation for ${broadcast.id}`);
+        logger.info(`[ASYNC IIFE] destinationIds: ${JSON.stringify(destinationIds)}`);
+
         const io = getIOInstance();
         // Configurable countdown duration (default 15 seconds)
         let countdownSeconds = parseInt(process.env.BROADCAST_COUNTDOWN_SECONDS || '15', 10);
+
+        logger.info(`[ASYNC IIFE] Starting countdown: ${countdownSeconds} seconds`);
 
         // Emit countdown ticks
         const countdownInterval = setInterval(() => {
@@ -235,7 +240,7 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
 
         // If destinations are specified, create live videos for each platform
         if (destinationIds && destinationIds.length > 0) {
-          logger.info(`Starting broadcast with ${destinationIds.length} selected destinations:`, destinationIds);
+          logger.info(`[ASYNC IIFE] Processing ${destinationIds.length} selected destinations: ${JSON.stringify(destinationIds)}`);
 
           const destinations = await prisma.destination.findMany({
             where: {
@@ -245,10 +250,13 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
             },
           });
 
-          logger.info(`Found ${destinations.length} active destinations in database for user ${req.user!.userId}:`, destinations.map(d => ({ id: d.id, platform: d.platform })));
+          logger.info(`[ASYNC IIFE] Found ${destinations.length} active destinations in database for user ${req.user!.userId}`);
+          logger.info(`[ASYNC IIFE] Destinations: ${JSON.stringify(destinations.map(d => ({ id: d.id, platform: d.platform, channelId: d.channelId })))}`);
 
           for (const destination of destinations) {
             try {
+              logger.info(`[ASYNC IIFE] Processing destination ${destination.id} (${destination.platform})`);
+
               let streamUrl = destination.rtmpUrl;
               let streamKey = destination.streamKey ? decrypt(destination.streamKey) : '';
               let liveVideoId: string | null = null;
@@ -421,8 +429,9 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
             }
           }
         }, 15000); // 15 seconds
-      } catch (error) {
-        logger.error('Error preparing broadcast destinations:', error);
+      } catch (error: any) {
+        logger.error(`[ASYNC IIFE] ❌ Error preparing broadcast destinations: ${error.message}`);
+        logger.error(`[ASYNC IIFE] Stack: ${error.stack}`);
       }
     });
   } catch (error) {
