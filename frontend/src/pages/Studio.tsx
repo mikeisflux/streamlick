@@ -443,6 +443,7 @@ export function Studio() {
         selectedDestinations={selectedDestinations}
         onDestinationSelectionChange={setSelectedDestinations}
         onDestinationSettingsChange={setDestinationSettings}
+        currentDestinationSettings={destinationSettings}
       />
 
       {/* Modals */}

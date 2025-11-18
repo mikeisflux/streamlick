@@ -20,6 +20,7 @@ interface StudioDrawersProps {
   selectedDestinations: string[];
   onDestinationSelectionChange: (selected: string[]) => void;
   onDestinationSettingsChange: (settings: { privacy: Record<string, string>; schedule: Record<string, string>; title: Record<string, string>; description: Record<string, string> }) => void;
+  currentDestinationSettings: { privacy: Record<string, string>; schedule: Record<string, string>; title: Record<string, string>; description: Record<string, string> };
 }
 
 export function StudioDrawers({
@@ -37,6 +38,7 @@ export function StudioDrawers({
   selectedDestinations,
   onDestinationSelectionChange,
   onDestinationSettingsChange,
+  currentDestinationSettings,
 }: StudioDrawersProps) {
   return (
     <>
@@ -51,6 +53,7 @@ export function StudioDrawers({
           selectedDestinations={selectedDestinations}
           onSelectionChange={onDestinationSelectionChange}
           onSettingsChange={onDestinationSettingsChange}
+          currentSettings={currentDestinationSettings}
         />
       </Drawer>
 

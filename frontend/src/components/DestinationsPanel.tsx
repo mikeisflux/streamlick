@@ -27,6 +27,7 @@ interface DestinationsPanelProps {
   selectedDestinations?: string[];
   onSelectionChange?: (selectedIds: string[]) => void;
   onSettingsChange?: (settings: { privacy: Record<string, string>; schedule: Record<string, string>; title: Record<string, string>; description: Record<string, string> }) => void;
+  currentSettings?: { privacy: Record<string, string>; schedule: Record<string, string>; title: Record<string, string>; description: Record<string, string> };
 }
 
 // Available platforms that can be connected
@@ -43,7 +44,8 @@ export function DestinationsPanel({
   broadcastId,
   selectedDestinations = [],
   onSelectionChange,
-  onSettingsChange
+  onSettingsChange,
+  currentSettings
 }: DestinationsPanelProps) {
   const [destinations, setDestinations] = useState<StreamDestination[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,11 +55,11 @@ export function DestinationsPanel({
   const [showRumbleModal, setShowRumbleModal] = useState(false);
   const [rumbleApiKey, setRumbleApiKey] = useState('');
   const [rumbleChannelUrl, setRumbleChannelUrl] = useState('');
-  // Track privacy and scheduling settings per destination
-  const [privacySettings, setPrivacySettings] = useState<Record<string, string>>({});
-  const [scheduleSettings, setScheduleSettings] = useState<Record<string, string>>({});
-  const [titleSettings, setTitleSettings] = useState<Record<string, string>>({});
-  const [descriptionSettings, setDescriptionSettings] = useState<Record<string, string>>({});
+  // Track privacy and scheduling settings per destination - initialize from parent
+  const [privacySettings, setPrivacySettings] = useState<Record<string, string>>(currentSettings?.privacy || {});
+  const [scheduleSettings, setScheduleSettings] = useState<Record<string, string>>(currentSettings?.schedule || {});
+  const [titleSettings, setTitleSettings] = useState<Record<string, string>>(currentSettings?.title || {});
+  const [descriptionSettings, setDescriptionSettings] = useState<Record<string, string>>(currentSettings?.description || {});
 
   // Notify parent of settings changes
   useEffect(() => {
