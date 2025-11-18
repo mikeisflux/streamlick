@@ -103,6 +103,9 @@ app.use(cookieParser()); // Parse cookies
 app.use('/api/destinations/branding/upload', express.json({ limit: '10mb' }));
 app.use('/api/broadcasts/clips/upload', express.json({ limit: '50mb' }));
 app.use('/api/broadcasts/clips/upload', express.urlencoded({ extended: true, limit: '50mb' }));
+// Broadcasts may have large destinationSettings objects
+app.use('/api/broadcasts', express.json({ limit: '500kb' }));
+app.use('/api/broadcasts', express.urlencoded({ extended: true, limit: '500kb' }));
 
 // Default request size limit - small for security (DoS prevention)
 app.use(express.json({ limit: '100kb' }));
@@ -110,11 +113,14 @@ app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 
 // Debug middleware to log body after parsing
 app.use('/api/broadcasts/:id/start', (req, res, next) => {
+  const bodyStr = req.body ? JSON.stringify(req.body) : 'undefined';
   logger.info('[DEBUG MIDDLEWARE] After body parser:', {
-    body: req.body,
+    bodyDefined: !!req.body,
     bodyKeys: req.body ? Object.keys(req.body) : [],
+    bodySize: bodyStr.length,
     contentType: req.headers['content-type'],
-    method: req.method
+    method: req.method,
+    bodyPreview: bodyStr.substring(0, 200)
   });
   next();
 });
