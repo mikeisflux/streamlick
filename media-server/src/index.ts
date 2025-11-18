@@ -88,6 +88,7 @@ interface BroadcastData {
   sockets: Set<string>; // Track connected sockets
   createdAt: Date;
   lastActivity: Date;
+  isRtmpStreaming?: boolean; // Track if RTMP is currently active
 }
 
 // Store active rooms and their transports/producers/consumers
@@ -330,15 +331,14 @@ io.on('connection', (socket) => {
   logger.info(`Client IP: ${socket.handshake.address}`);
   logger.info(`Origin: ${socket.handshake.headers.origin}`);
 
-  // Wrap socket.on to log ALL incoming events
-  const originalOn = socket.on.bind(socket);
-  socket.on = function(event: string, handler: any) {
-    return originalOn(event, (...args: any[]) => {
-      logger.info(`[Event Received] "${event}" on socket ${socket.id}`);
-      logger.info(`[Event Data] ${JSON.stringify(args.length > 0 && typeof args[0] === 'object' ? args[0] : args).substring(0, 500)}`);
-      return handler(...args);
-    });
-  } as any;
+  // Log all incoming events using onAny
+  socket.onAny((eventName, ...args) => {
+    logger.info(`[Event Received] "${eventName}" on socket ${socket.id}`);
+    if (args.length > 0 && typeof args[0] === 'object') {
+      const data = JSON.stringify(args[0]).substring(0, 500);
+      logger.info(`[Event Data Preview] ${data}${args[0].length > 500 ? '...' : ''}`);
+    }
+  });
 
   // Create transport
   socket.on('create-transport', async ({ broadcastId, direction }, callback) => {
@@ -508,6 +508,7 @@ io.on('connection', (socket) => {
     try {
       logger.info(`========== START-RTMP EVENT RECEIVED ==========`);
       logger.info(`Broadcast ID: ${broadcastId}`);
+      logger.info(`Socket ID: ${socket.id}`);
       logger.info(`Destinations count: ${destinations?.length || 0}`);
       logger.info(`Destinations:`, JSON.stringify(destinations, null, 2));
       logger.info(`Composite producers:`, JSON.stringify(compositeProducers, null, 2));
@@ -518,6 +519,19 @@ io.on('connection', (socket) => {
         throw new Error('Broadcast not found');
       }
       logger.info(`✅ Broadcast found in map`);
+
+      // Guard against duplicate start-rtmp calls
+      if (broadcast.isRtmpStreaming) {
+        logger.warn(`⚠️  RTMP already streaming for broadcast ${broadcastId}, ignoring duplicate start-rtmp event`);
+        if (socket.connected) {
+          socket.emit('rtmp-started', { broadcastId, method: 'already-streaming', note: 'RTMP was already active' });
+        }
+        return;
+      }
+
+      // Mark as streaming immediately to prevent race conditions
+      broadcast.isRtmpStreaming = true;
+      logger.info(`✅ Marked broadcast as streaming`);
 
       const router = getRouter(broadcastId);
       if (!router) {
@@ -578,6 +592,14 @@ io.on('connection', (socket) => {
     } catch (error) {
       logger.error('❌ Start RTMP error:', error);
       logger.error('Error stack:', (error as Error).stack);
+
+      // Clear streaming flag on error
+      const broadcast = broadcasts.get(broadcastId);
+      if (broadcast) {
+        broadcast.isRtmpStreaming = false;
+        logger.info(`Cleared streaming flag due to error`);
+      }
+
       if (socket.connected) {
         socket.emit('rtmp-error', { error: 'Failed to start RTMP stream' });
       }
@@ -587,11 +609,20 @@ io.on('connection', (socket) => {
   // Stop RTMP streaming
   socket.on('stop-rtmp', async ({ broadcastId }) => {
     try {
+      logger.info(`Stop RTMP requested for broadcast ${broadcastId}`);
+
       // Stop compositor pipeline (if active)
       await stopCompositorPipeline(broadcastId);
 
       // Stop legacy RTMP (if active)
       stopRTMPStream(broadcastId);
+
+      // Clear streaming flag
+      const broadcast = broadcasts.get(broadcastId);
+      if (broadcast) {
+        broadcast.isRtmpStreaming = false;
+        logger.info(`Cleared streaming flag for broadcast ${broadcastId}`);
+      }
 
       if (socket.connected) {
         socket.emit('rtmp-stopped', { broadcastId });
