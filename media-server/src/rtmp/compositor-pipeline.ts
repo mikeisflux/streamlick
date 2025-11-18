@@ -56,7 +56,7 @@ export async function createCompositorPipeline(
         'rtp-pipeline',
         'PlainTransport',
         'Video plain transport listener error',
-        error,
+        new Error(String(error)),
         { transportId: videoTransport.id },
         broadcastId
       );
@@ -75,7 +75,7 @@ export async function createCompositorPipeline(
         'rtp-pipeline',
         'PlainTransport',
         'Audio plain transport listener error',
-        error,
+        new Error(String(error)),
         { transportId: audioTransport.id },
         broadcastId
       );
