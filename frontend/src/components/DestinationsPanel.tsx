@@ -202,6 +202,22 @@ export function DestinationsPanel({
     }
   };
 
+  const disconnectOAuthDestination = async (id: string, platform: string) => {
+    if (!confirm(`Are you sure you want to disconnect this ${platform} destination? You'll need to reconnect it to use it again.`)) {
+      return;
+    }
+
+    try {
+      await api.delete(`/oauth/disconnect/${id}`);
+      // Reload destinations to update UI
+      loadDestinations();
+      alert('Destination disconnected successfully');
+    } catch (error) {
+      console.error('Failed to disconnect destination:', error);
+      alert('Failed to disconnect destination');
+    }
+  };
+
   const getPlatformIcon = (platform: string) => {
     const iconClass = 'w-6 h-6';
     switch (platform) {
@@ -393,12 +409,26 @@ export function DestinationsPanel({
                     Connect
                   </button>
                 )}
-                {dest.connected ? (
+                {dest.connected && dest.platform !== 'custom' && (
+                  <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-1">
+                      <CheckCircleIcon className="w-5 h-5 text-green-600" />
+                      <span className="text-xs text-green-600">Connected</span>
+                    </div>
+                    <button
+                      onClick={() => disconnectOAuthDestination(dest.id, dest.name)}
+                      className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                )}
+                {dest.connected && dest.platform === 'custom' && (
                   <div className="flex items-center space-x-1">
                     <CheckCircleIcon className="w-5 h-5 text-green-600" />
                     <span className="text-xs text-green-600">Connected</span>
                   </div>
-                ) : null}
+                )}
               </div>
             </div>
 
