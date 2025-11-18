@@ -444,6 +444,46 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+// Get broadcast destinations with RTMP URLs
+router.get('/:id/destinations', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const broadcast = await prisma.broadcast.findFirst({
+      where: {
+        id: req.params.id,
+        userId: req.user!.userId,
+      },
+    });
+
+    if (!broadcast) {
+      return res.status(404).json({ error: 'Broadcast not found' });
+    }
+
+    const broadcastDestinations = await prisma.broadcastDestination.findMany({
+      where: {
+        broadcastId: req.params.id,
+      },
+      include: {
+        destination: true,
+      },
+    });
+
+    // Return destinations with decrypted stream keys
+    const destinations = broadcastDestinations.map((bd) => ({
+      id: bd.destination.id,
+      platform: bd.destination.platform,
+      streamUrl: bd.streamUrl,
+      streamKey: bd.streamKey ? decrypt(bd.streamKey) : '',
+      liveVideoId: bd.liveVideoId,
+      status: bd.status,
+    }));
+
+    res.json({ destinations });
+  } catch (error) {
+    logger.error('Get broadcast destinations error:', error);
+    res.status(500).json({ error: 'Failed to get broadcast destinations' });
+  }
+});
+
 // End broadcast
 router.post('/:id/end', authenticate, async (req: AuthRequest, res) => {
   try {

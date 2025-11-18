@@ -47,6 +47,11 @@ export const broadcastService = {
     return response.data;
   },
 
+  async getDestinations(id: string): Promise<any[]> {
+    const response = await api.get(`/broadcasts/${id}/destinations`);
+    return response.data.destinations;
+  },
+
   async end(id: string): Promise<Broadcast> {
     const response = await api.post(`/broadcasts/${id}/end`);
     return response.data;

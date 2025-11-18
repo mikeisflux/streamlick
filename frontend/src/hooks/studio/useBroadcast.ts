@@ -209,15 +209,37 @@ export function useBroadcast({
       // Start broadcast with destination settings
       await broadcastService.start(broadcastId, selectedDestinations, apiDestinationSettings);
 
-      // Start RTMP streaming with composite producers
-      const destinationsToStream = destinations
-        .filter((d) => selectedDestinations.includes(d.id))
-        .map((d) => ({
-          id: d.id,
-          platform: d.platform,
-          rtmpUrl: d.rtmpUrl,
-          streamKey: 'encrypted-key', // In production, decrypt on backend
-        }));
+      // Wait for broadcast destinations to be created (retry with backoff)
+      console.log('[useBroadcast] Waiting for broadcast destinations to be created...');
+      let broadcastDestinations: any[] = [];
+      for (let i = 0; i < 20; i++) {
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+        try {
+          const result = await broadcastService.getDestinations(broadcastId);
+          if (result && result.length > 0) {
+            broadcastDestinations = result;
+            console.log('[useBroadcast] Got broadcast destinations:', broadcastDestinations);
+            break;
+          }
+        } catch (error) {
+          console.log(`[useBroadcast] Retry ${i + 1}/20 - destinations not ready yet`);
+        }
+      }
+
+      if (!broadcastDestinations || broadcastDestinations.length === 0) {
+        throw new Error('Failed to get broadcast destinations after 20 seconds');
+      }
+
+      // Start RTMP streaming with composite producers using the actual broadcast RTMP URLs
+      const destinationsToStream = broadcastDestinations.map((bd: any) => ({
+        id: bd.id,
+        platform: bd.platform,
+        rtmpUrl: bd.streamUrl,
+        streamKey: bd.streamKey,
+        liveVideoId: bd.liveVideoId,
+      }));
+
+      console.log('[useBroadcast] Starting RTMP with destinations:', destinationsToStream);
 
       mediaServerSocketService.emit('start-rtmp', {
         broadcastId,
