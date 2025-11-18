@@ -173,6 +173,7 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res) => {
 router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
   try {
     const { destinationIds, destinationSettings = {} } = req.body; // destinationSettings: { [destinationId]: { privacyStatus, scheduledStartTime } }
+    logger.info(`Broadcast start request received - broadcastId: ${req.params.id}, destinationIds:`, destinationIds);
 
     const broadcast = await prisma.broadcast.findFirst({
       where: {
@@ -228,6 +229,8 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
 
         // If destinations are specified, create live videos for each platform
         if (destinationIds && destinationIds.length > 0) {
+          logger.info(`Starting broadcast with ${destinationIds.length} selected destinations:`, destinationIds);
+
           const destinations = await prisma.destination.findMany({
             where: {
               id: { in: destinationIds },
@@ -235,6 +238,8 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
               isActive: true,
             },
           });
+
+          logger.info(`Found ${destinations.length} active destinations in database for user ${req.user!.userId}:`, destinations.map(d => ({ id: d.id, platform: d.platform })));
 
           for (const destination of destinations) {
             try {
@@ -306,8 +311,12 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
                       logger.error(`YouTube broadcast ${liveVideoId} monitoring failed:`, error);
                       // Don't fail the entire broadcast - it's already created
                     });
-                } catch (error) {
-                  logger.error(`Failed to create YouTube live broadcast for destination ${destination.id}:`, error);
+                } catch (error: any) {
+                  logger.error(`Failed to create YouTube live broadcast for destination ${destination.id}:`, {
+                    error: error.message,
+                    response: error.response?.data,
+                    status: error.response?.status,
+                  });
                   continue; // Skip this destination
                 }
               }
@@ -360,6 +369,8 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
             logger.warn(`Broadcast ${broadcast.id} cancelled due to all destinations failing`);
             return; // Exit early, don't proceed to "live" status
           }
+        } else {
+          logger.warn(`Broadcast ${broadcast.id} started with NO destinations selected`);
         }
 
         // After countdown, update status to live
