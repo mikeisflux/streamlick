@@ -55,13 +55,14 @@ export function validateCsrfToken(req: Request, res: Response, next: NextFunctio
   // Exempt auth endpoints (login, register) - they occur before CSRF token can be obtained
   // Also exempt webhook endpoints (they use signature validation instead)
   // Exempt broadcast endpoints (they require authentication via JWT)
+  // Note: Paths don't include /api prefix because middleware is mounted at /api/
   const exemptPaths = [
-    '/api/auth/login',
-    '/api/auth/register',
-    '/api/auth/refresh',
-    '/api/webhooks/',
-    '/api/oauth/callback',
-    '/api/broadcasts/'
+    '/auth/login',
+    '/auth/register',
+    '/auth/refresh',
+    '/webhooks/',
+    '/oauth/callback',
+    '/broadcasts/'
   ];
   if (exemptPaths.some(path => req.path.startsWith(path) || req.path === path)) {
     return next();
