@@ -21,7 +21,31 @@ export function useStudioInitialization({
 }: UseStudioInitializationProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [destinations, setDestinations] = useState<any[]>([]);
-  const [selectedDestinations, setSelectedDestinations] = useState<string[]>([]);
+
+  // Load selected destinations from localStorage on mount
+  const getStorageKey = () => `selectedDestinations_${broadcastId}`;
+  const [selectedDestinations, setSelectedDestinations] = useState<string[]>(() => {
+    if (!broadcastId) return [];
+    try {
+      const saved = localStorage.getItem(getStorageKey());
+      return saved ? JSON.parse(saved) : [];
+    } catch (error) {
+      console.error('Failed to load selected destinations from localStorage:', error);
+      return [];
+    }
+  });
+
+  // Save selected destinations to localStorage whenever they change
+  useEffect(() => {
+    if (!broadcastId || selectedDestinations.length === 0) return;
+    try {
+      localStorage.setItem(getStorageKey(), JSON.stringify(selectedDestinations));
+      console.log('[Studio Init] Saved selected destinations:', selectedDestinations);
+    } catch (error) {
+      console.error('Failed to save selected destinations to localStorage:', error);
+    }
+  }, [selectedDestinations, broadcastId]);
+
   const [isInitialized, setIsInitialized] = useState(false);
   const { setBroadcast } = useStudioStore();
 

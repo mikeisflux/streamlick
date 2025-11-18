@@ -196,6 +196,12 @@ export function useBroadcast({
         };
       });
 
+      console.log('[useBroadcast] Starting broadcast with:', {
+        selectedDestinations,
+        destinationCount: selectedDestinations.length,
+        apiDestinationSettings
+      });
+
       // Start broadcast with destination settings
       await broadcastService.start(broadcastId, selectedDestinations, apiDestinationSettings);
 

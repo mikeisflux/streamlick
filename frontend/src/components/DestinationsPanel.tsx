@@ -142,6 +142,12 @@ export function DestinationsPanel({
       const newSelection = isCurrentlySelected
         ? selectedDestinations.filter(destId => destId !== id)
         : [...selectedDestinations, id];
+      console.log('[DestinationsPanel] Selection changed:', {
+        destination: destination.name,
+        id,
+        isCurrentlySelected,
+        newSelection
+      });
       onSelectionChange(newSelection);
     } else {
       // Fallback to local state if no callback provided
@@ -424,7 +430,7 @@ export function DestinationsPanel({
                       type="text"
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Enter stream title"
-                      value={titleSettings[dest.id] || ''}
+                      value={typeof titleSettings[dest.id] === 'string' ? titleSettings[dest.id] : ''}
                       onChange={(e) => setTitleSettings({ ...titleSettings, [dest.id]: e.target.value })}
                     />
                     <p className="text-xs text-gray-500">
@@ -443,7 +449,7 @@ export function DestinationsPanel({
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Enter stream description (optional)"
                       rows={3}
-                      value={descriptionSettings[dest.id] || ''}
+                      value={typeof descriptionSettings[dest.id] === 'string' ? descriptionSettings[dest.id] : ''}
                       onChange={(e) => setDescriptionSettings({ ...descriptionSettings, [dest.id]: e.target.value })}
                     />
                   </div>
