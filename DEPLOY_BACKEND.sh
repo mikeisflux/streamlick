@@ -7,7 +7,7 @@ echo "========================================="
 echo ""
 
 # Navigate to backend directory
-cd /home/user/streamlick/backend
+cd /home/streamlick/backend
 
 echo "1. Pulling latest code from git..."
 git pull origin claude/merge-prisma-fixes-01DvvjwMtZftt1Dt31jUjJ6r
@@ -35,7 +35,7 @@ echo "✅ Build complete"
 echo ""
 
 echo "6. Restarting PM2 process..."
-cd /home/user/streamlick
+cd /home/streamlick
 pm2 restart streamlick-backend
 echo "✅ Backend restarted"
 echo ""

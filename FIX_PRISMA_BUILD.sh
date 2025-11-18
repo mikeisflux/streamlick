@@ -6,7 +6,7 @@ echo "FIX PRISMA BUILD ERRORS"
 echo "========================================="
 echo ""
 
-cd /home/user/streamlick/backend
+cd /home/streamlick/backend
 
 echo "1. Running database migrations..."
 npx prisma migrate deploy
@@ -24,7 +24,7 @@ echo "✅ Backend built successfully"
 echo ""
 
 echo "4. Restarting PM2..."
-cd /home/user/streamlick
+cd /home/streamlick
 pm2 restart streamlick-backend
 echo "✅ Backend restarted"
 echo ""

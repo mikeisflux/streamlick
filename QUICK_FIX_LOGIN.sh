@@ -4,14 +4,14 @@
 echo "🔧 QUICK FIX: Restarting backend with CSRF fix..."
 echo ""
 
-cd /home/user/streamlick/backend
+cd /home/streamlick/backend
 
 # Quick build and restart
 echo "Building backend..."
 npm run build
 
 echo "Restarting PM2..."
-cd /home/user/streamlick
+cd /home/streamlick
 pm2 restart streamlick-backend
 
 echo "Waiting 3 seconds..."
