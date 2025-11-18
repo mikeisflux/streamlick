@@ -43,10 +43,14 @@ export async function createCompositorPipeline(
     );
 
     // Create Plain RTP transports for video and audio
+    // Bind to all interfaces (0.0.0.0) and announce public IP for external FFmpeg servers
     const videoTransport = await router.createPlainTransport({
-      listenIp: { ip: '127.0.0.1', announcedIp: undefined },
+      listenIp: {
+        ip: '0.0.0.0',
+        announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP
+      },
       rtcpMux: false,
-      comedia: true,
+      comedia: false, // Disable comedia for explicit remote connection
     });
 
     // Add error handler for video transport (listenererror for listening socket errors)
@@ -63,9 +67,12 @@ export async function createCompositorPipeline(
     });
 
     const audioTransport = await router.createPlainTransport({
-      listenIp: { ip: '127.0.0.1', announcedIp: undefined },
+      listenIp: {
+        ip: '0.0.0.0',
+        announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP
+      },
       rtcpMux: false,
-      comedia: true,
+      comedia: false, // Disable comedia for explicit remote connection
     });
 
     // Add error handler for audio transport (listenererror for listening socket errors)
@@ -130,6 +137,9 @@ export async function createCompositorPipeline(
     const videoPayloadType = videoConsumer.rtpParameters.codecs[0].payloadType;
     const audioPayloadType = audioConsumer.rtpParameters.codecs[0].payloadType;
 
+    // Use media server's public IP for external FFmpeg servers
+    const mediaServerIp = process.env.MEDIASOUP_ANNOUNCED_IP || '127.0.0.1';
+
     // Start FFmpeg for each destination
     const ffmpegProcesses = new Map<string, any>();
 
@@ -142,22 +152,23 @@ export async function createCompositorPipeline(
       logger.info(`[FFmpeg Setup] RTMP Base URL: ${dest.rtmpUrl}`);
       logger.info(`[FFmpeg Setup] Stream Key (first 20 chars): ${dest.streamKey?.substring(0, 20)}...`);
       logger.info(`[FFmpeg Setup] Full RTMP URL: ${rtmpUrl}`);
+      logger.info(`[FFmpeg Setup] Media Server IP: ${mediaServerIp}`);
       logger.info(`[FFmpeg Setup] Video RTP Port: ${videoPort}`);
       logger.info(`[FFmpeg Setup] Audio RTP Port: ${audioPort}`);
       logger.info(`[FFmpeg Setup] Video Payload Type: ${videoPayloadType}`);
       logger.info(`[FFmpeg Setup] Audio Payload Type: ${audioPayloadType}`);
 
-      // Create FFmpeg command that consumes RTP
+      // Create FFmpeg command that consumes RTP from media server's public IP
       const command = ffmpeg()
-        // Video input (RTP)
-        .input(`rtp://127.0.0.1:${videoPort}`)
+        // Video input (RTP) - connect to media server's public IP
+        .input(`rtp://${mediaServerIp}:${videoPort}`)
         .inputOptions([
           '-protocol_whitelist', 'file,rtp,udp',
           '-f', 'rtp',
           '-codec:v', 'h264',
         ])
-        // Audio input (RTP)
-        .input(`rtp://127.0.0.1:${audioPort}`)
+        // Audio input (RTP) - connect to media server's public IP
+        .input(`rtp://${mediaServerIp}:${audioPort}`)
         .inputOptions([
           '-protocol_whitelist', 'file,rtp,udp',
           '-f', 'rtp',

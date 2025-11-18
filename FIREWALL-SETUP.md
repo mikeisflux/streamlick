@@ -139,6 +139,17 @@ Source: 0.0.0.0/0
 Purpose: WebRTC media streams (audio/video data)
 Note: These MUST be UDP. TCP will NOT work for WebRTC.
 
+# IMPORTANT: RTP Ports for External FFmpeg Servers
+Ports: Dynamic (allocated from 40000-49999 range)
+Protocol: UDP
+Source: Your FFmpeg server IP (e.g., Server C)
+Purpose: PlainRTP transport for sending media to external FFmpeg servers
+Note: If FFmpeg runs on a separate server, mediasoup will use ports from the
+      40000-49999 range to send RTP streams. The exact ports are allocated
+      dynamically and logged when the stream starts. These are DIFFERENT from
+      the WebRTC ports above - WebRTC is for browser→media server, RTP is for
+      media server→FFmpeg server.
+
 # SSH (Optional - for administration)
 Port: 22
 Protocol: TCP
@@ -510,3 +521,122 @@ echo "Frontend/Backend server firewall configured!"
 - Internal only: 3000 (Backend), 3002 (Frontend), 5432 (DB), 6379 (Redis)
 
 **Most common issue:** Forgetting to open UDP ports 40000-49999 on media server!
+
+---
+
+## Multi-Server Architecture (External FFmpeg)
+
+### Architecture Overview
+
+If you're running FFmpeg on a separate server from mediasoup:
+
+```
+User Browser (WebRTC Client)
+    ↓ UDP 40000-49999 (WebRTC)
+Server B: media.streamlick.com (Media Server - mediasoup)
+    ↓ UDP dynamic ports (RTP)
+Server C: (FFmpeg Server)
+    ↓ TCP 1935 or RTMPS (RTMP)
+YouTube/Facebook/Twitch/etc
+```
+
+### Configuration Required
+
+#### 1. Media Server (Server B) - Environment Variables
+
+```bash
+# .env for media-server
+MEDIASOUP_ANNOUNCED_IP=<Server B Public IP or media.streamlick.com>
+MEDIASOUP_RTC_MIN_PORT=40000
+MEDIASOUP_RTC_MAX_PORT=49999
+```
+
+**CRITICAL:** Set `MEDIASOUP_ANNOUNCED_IP` to the public IP or domain name that FFmpeg server can reach!
+
+#### 2. Media Server (Server B) - Firewall Rules
+
+The media server needs to **ALLOW OUTBOUND** UDP connections to Server C:
+
+```bash
+# UFW (usually allows outbound by default, but verify)
+sudo ufw status verbose
+
+# If outbound is restricted, allow to Server C
+sudo ufw allow out to <Server C IP> port 40000:49999 proto udp
+```
+
+#### 3. FFmpeg Server (Server C) - Firewall Rules
+
+The FFmpeg server needs to **ALLOW INBOUND** UDP from Server B:
+
+```bash
+# UFW - Allow UDP from media server
+sudo ufw allow from <Server B IP> to any port 40000:49999 proto udp
+
+# Or if you want to allow from any source (less secure)
+sudo ufw allow 40000:49999/udp
+```
+
+#### 4. Network Routing
+
+Ensure both servers can reach each other:
+
+```bash
+# On Server C (FFmpeg), test connectivity to Server B
+ping media.streamlick.com
+
+# Test UDP connectivity (requires netcat)
+# On Server C:
+nc -ul 42000
+
+# On Server B:
+echo "test" | nc -u <Server C IP> 42000
+```
+
+### How It Works
+
+1. **Browser → Media Server (B):** WebRTC streams sent to UDP 40000-49999
+2. **Media Server creates PlainRTP transport:** Binds to 0.0.0.0 (all interfaces)
+3. **FFmpeg connects to Media Server:** `rtp://media.streamlick.com:<dynamic-port>`
+4. **Media Server logs the ports:** Check logs for "Video RTP Port" and "Audio RTP Port"
+5. **Firewall must allow:** UDP traffic from Server B → Server C on those ports
+
+### Troubleshooting Multi-Server Setup
+
+**Problem:** FFmpeg shows "Connection timed out" or "No route to host"
+
+**Solution:**
+1. Verify `MEDIASOUP_ANNOUNCED_IP` is set correctly on Server B
+2. Check Server C firewall allows UDP from Server B
+3. Test network connectivity: `ping` and `traceroute`
+4. Check logs for the allocated RTP ports
+5. Verify no NAT/firewall between servers blocking UDP
+
+**Problem:** FFmpeg connects but no video/audio
+
+**Solution:**
+1. Check the RTP ports in the logs match what firewall allows
+2. Verify Server B can send UDP to Server C: `nc -u <Server C IP> <port>`
+3. Check mediasoup logs for "Plain transports created"
+4. Ensure `comedia: false` in PlainTransport config (already set in latest code)
+
+### Important Notes
+
+- **Dynamic Port Allocation:** The exact ports used are logged when streaming starts
+- **Same Port Range:** Both WebRTC and RTP use 40000-49999, but for different purposes
+- **UDP Only:** RTP uses UDP, not TCP - firewall rules must specify UDP
+- **Security:** Consider restricting Server C to only allow UDP from Server B's IP
+
+### Example Log Output
+
+When configured correctly, you'll see:
+
+```
+[FFmpeg Setup] Media Server IP: media.streamlick.com
+[FFmpeg Setup] Video RTP Port: 42245
+[FFmpeg Setup] Audio RTP Port: 46708
+Plain transports created - Video: 42245, Audio: 46708
+FFmpeg started for youtube
+```
+
+These ports (42245, 46708) must be allowed through the firewall!
