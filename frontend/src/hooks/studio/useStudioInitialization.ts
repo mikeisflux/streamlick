@@ -66,12 +66,9 @@ export function useStudioInitialization({
         if (!isMounted) return;
 
         console.log('[Studio Init] Connecting socket...');
-        // Connect socket
-        const token = localStorage.getItem('accessToken');
-        if (token) {
-          socketService.connect(token);
-          socketService.joinStudio(broadcastId, 'host-id');
-        }
+        // Connect socket (uses httpOnly cookies for authentication)
+        socketService.connect();
+        socketService.joinStudio(broadcastId, 'host-id');
 
         // Set initialized flag BEFORE setting loading to false (atomic state update)
         isInitializedRef.current = true;

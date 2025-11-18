@@ -81,7 +81,19 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
   // Authentication middleware
   io.use((socket, next) => {
     try {
-      const token = socket.handshake.auth.token;
+      // Try to get token from auth object first (backward compatibility)
+      let token = socket.handshake.auth.token;
+
+      // If no auth token, try to get from cookies
+      if (!token) {
+        const cookies = socket.handshake.headers.cookie;
+        if (cookies) {
+          const cookieMatch = cookies.match(/accessToken=([^;]+)/);
+          if (cookieMatch) {
+            token = cookieMatch[1];
+          }
+        }
+      }
 
       // Require authentication - no token means no connection
       if (!token) {

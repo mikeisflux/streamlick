@@ -14,11 +14,10 @@ class SocketService {
   // CRITICAL FIX: Track event listeners for cleanup
   private eventListeners = new Map<string, Set<(...args: any[]) => void>>();
 
-  connect(token: string): void {
+  connect(token?: string): void {
     if (this.socket?.connected) return;
 
-    this.socket = io(API_URL, {
-      auth: { token },
+    const options: any = {
       transports: ['websocket'],
       reconnection: true,
       reconnectionAttempts: this.maxReconnectAttempts,
@@ -26,7 +25,16 @@ class SocketService {
       reconnectionDelayMax: this.maxReconnectDelay,
       randomizationFactor: 0.5, // Randomize delay to prevent thundering herd
       timeout: 20000, // Connection timeout
-    });
+      withCredentials: true, // Send cookies with socket connection
+    };
+
+    // Only include auth token if explicitly provided (backward compatibility)
+    // Otherwise, authentication will use httpOnly cookies
+    if (token) {
+      options.auth = { token };
+    }
+
+    this.socket = io(API_URL, options);
 
     this.socket.on('connect', () => {
       console.log('Socket connected');
