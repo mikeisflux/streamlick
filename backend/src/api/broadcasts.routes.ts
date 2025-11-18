@@ -212,7 +212,9 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
 
     // Asynchronously prepare destinations during countdown
     // Use async IIFE instead of setImmediate to avoid race conditions
+    logger.info(`[BEFORE IIFE] About to invoke async IIFE for broadcast ${broadcast.id}`);
     (async () => {
+      logger.info(`[ASYNC IIFE] ========== IIFE INVOKED ==========`);
       try {
         logger.info(`[ASYNC IIFE] Starting async broadcast preparation for ${broadcast.id}`);
         logger.info(`[ASYNC IIFE] destinationIds: ${JSON.stringify(destinationIds)}`);
@@ -433,7 +435,7 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
         logger.error(`[ASYNC IIFE] ❌ Error preparing broadcast destinations: ${error.message}`);
         logger.error(`[ASYNC IIFE] Stack: ${error.stack}`);
       }
-    });
+    })(); // CRITICAL: Invoke the IIFE!
   } catch (error) {
     logger.error('Start broadcast error:', error);
     res.status(500).json({ error: 'Failed to start broadcast' });
