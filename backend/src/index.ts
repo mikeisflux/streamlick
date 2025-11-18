@@ -113,15 +113,15 @@ app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 
 // Debug middleware to log body after parsing
 app.use('/api/broadcasts/:id/start', (req, res, next) => {
-  const bodyStr = req.body ? JSON.stringify(req.body) : 'undefined';
-  logger.info('[DEBUG MIDDLEWARE] After body parser:', {
-    bodyDefined: !!req.body,
-    bodyKeys: req.body ? Object.keys(req.body) : [],
-    bodySize: bodyStr.length,
-    contentType: req.headers['content-type'],
-    method: req.method,
-    bodyPreview: bodyStr.substring(0, 200)
-  });
+  logger.info('[DEBUG MIDDLEWARE] Request details:');
+  logger.info('  Content-Type:', req.headers['content-type']);
+  logger.info('  Content-Length:', req.headers['content-length']);
+  logger.info('  Body defined:', !!req.body);
+  logger.info('  Body type:', typeof req.body);
+  logger.info('  Body keys:', req.body ? Object.keys(req.body).join(', ') : 'none');
+  if (req.body) {
+    logger.info('  Body content:', JSON.stringify(req.body));
+  }
   next();
 });
 
