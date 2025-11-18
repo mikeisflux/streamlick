@@ -188,11 +188,15 @@ export function useBroadcast({
       // Prepare destination settings for API
       const apiDestinationSettings: Record<string, { privacyStatus?: string; scheduledStartTime?: string; title?: string; description?: string }> = {};
       selectedDestinations.forEach((destId) => {
+        const title = destinationSettings.title[destId];
+        const description = destinationSettings.description[destId];
+
         apiDestinationSettings[destId] = {
           privacyStatus: destinationSettings.privacy[destId] || 'public',
           scheduledStartTime: destinationSettings.schedule[destId] || undefined,
-          title: destinationSettings.title[destId] || undefined,
-          description: destinationSettings.description[destId] || undefined,
+          // Only include title/description if they're set and not placeholder values
+          title: (title && title !== 'Loading') ? title : undefined,
+          description: (description && description !== 'Loading') ? description : undefined,
         };
       });
 

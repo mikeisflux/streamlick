@@ -133,6 +133,17 @@ export function Studio() {
   // Save destination settings to localStorage when they change
   useEffect(() => {
     if (!broadcastId) return;
+
+    // Don't save if any values are still "Loading" placeholders
+    const hasLoadingPlaceholder =
+      Object.values(destinationSettings.title).some(v => v === 'Loading') ||
+      Object.values(destinationSettings.description).some(v => v === 'Loading');
+
+    if (hasLoadingPlaceholder) {
+      console.log('[Studio] Skipping save - settings contain Loading placeholders');
+      return;
+    }
+
     try {
       localStorage.setItem(`destinationSettings_${broadcastId}`, JSON.stringify(destinationSettings));
       console.log('[Studio] Saved destination settings:', destinationSettings);
