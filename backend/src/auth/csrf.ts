@@ -52,9 +52,16 @@ export function validateCsrfToken(req: Request, res: Response, next: NextFunctio
     return next();
   }
 
-  // Exempt webhook endpoints (they use signature validation instead)
-  const webhookPaths = ['/api/webhooks/', '/api/oauth/callback'];
-  if (webhookPaths.some(path => req.path.startsWith(path))) {
+  // Exempt auth endpoints (login, register) - they occur before CSRF token can be obtained
+  // Also exempt webhook endpoints (they use signature validation instead)
+  const exemptPaths = [
+    '/api/auth/login',
+    '/api/auth/register',
+    '/api/auth/refresh',
+    '/api/webhooks/',
+    '/api/oauth/callback'
+  ];
+  if (exemptPaths.some(path => req.path.startsWith(path) || req.path === path)) {
     return next();
   }
 
