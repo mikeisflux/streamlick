@@ -3,7 +3,7 @@ import { toast } from 'react-hot-toast';
 import screenShareService, {
   ScreenShareRequest,
   ScreenShareParticipant,
-} from '../services/screen-share-enhanced.service';
+} from '../services/screen-share.service';
 
 interface ScreenShareManagerProps {
   isHost: boolean;
