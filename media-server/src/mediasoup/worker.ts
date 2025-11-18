@@ -119,13 +119,22 @@ async function createSingleWorker(): Promise<Worker> {
 export async function createWorkers(numWorkers: number = 2): Promise<void> {
   // Ensure at least 2 workers for redundancy
   desiredWorkerCount = Math.max(numWorkers, 2);
-  logger.info(`Creating ${desiredWorkerCount} mediasoup workers...`);
+
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info(`🏗️  CREATING ${desiredWorkerCount} MEDIASOUP WORKERS...`);
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   for (let i = 0; i < desiredWorkerCount; i++) {
+    logger.info(`[Worker ${i + 1}/${desiredWorkerCount}] Starting worker creation...`);
     const worker = await createSingleWorker();
     workers.push(worker);
-    logger.info(`Mediasoup worker created [pid:${worker.pid}]`);
+    logger.info(`✅ [Worker ${i + 1}/${desiredWorkerCount}] Created successfully [PID: ${worker.pid}]`);
   }
+
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info(`🎉 ALL ${desiredWorkerCount} WORKERS CREATED SUCCESSFULLY!`);
+  logger.info(`📊 Active worker PIDs: [${workers.map(w => w.pid).join(', ')}]`);
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 }
 
 /**

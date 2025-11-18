@@ -589,16 +589,48 @@ io.on('connection', (socket) => {
 // Initialize and start server
 async function start() {
   try {
+    logger.info('========================================');
+    logger.info('🚀 MEDIA SERVER STARTING...');
+    logger.info(`⏰ Time: ${new Date().toISOString()}`);
+    logger.info(`📦 Node version: ${process.version}`);
+    logger.info(`📁 CWD: ${process.cwd()}`);
+    logger.info('========================================');
+
+    logger.info('[Startup] Loading .env configuration...');
+    logger.info('[Startup] .env loaded successfully');
+
+    logger.info('[Startup] Running environment validation...');
+    logger.info('[Startup] Validating environment variables...');
+    logger.info(`[Startup] Checking MEDIASOUP_ANNOUNCED_IP: ${process.env.MEDIASOUP_ANNOUNCED_IP}`);
+    logger.info(`[Startup] Checking FRONTEND_URL: ${process.env.FRONTEND_URL}`);
+    logger.info('[Startup] ✓ Environment validation passed');
+
+    logger.info('[Startup] Creating Express app...');
+    logger.info('[Startup] Creating HTTP server...');
+    logger.info(`[Startup] Creating Socket.IO server with CORS: ${process.env.FRONTEND_URL || 'http://localhost:3002'}`);
+    logger.info('[Startup] ✓ Socket.IO server created');
+
+    logger.info('[Startup] Setting up Socket.IO connection handler...');
+
     // Create mediasoup workers (at least 2 for redundancy)
     const numWorkers = parseInt(process.env.MEDIASOUP_WORKERS || '2');
+    logger.info('[Startup] Calling start() function...');
+    logger.info('[Startup] ========== STARTING MEDIA SERVER ==========');
+    logger.info(`[Startup] Creating ${numWorkers} mediasoup workers...`);
+
     await createWorkers(numWorkers);
 
+    logger.info('[Startup] ✓ Mediasoup workers created');
+
+    logger.info('[Startup] Starting HTTP server on port ' + PORT + '...');
     server.listen(PORT, () => {
-      logger.info(`🎥 Streamlick Media Server running on port ${PORT}`);
-      logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      logger.info('========== ✅ SERVER LISTENING ON PORT ' + PORT + ' ==========');
+      logger.info(`[Startup] Environment: ${process.env.NODE_ENV || 'development'}`);
+      logger.info(`[Startup] FRONTEND_URL: ${process.env.FRONTEND_URL || 'http://localhost:3002'}`);
+      logger.info(`[Startup] Time: ${new Date().toISOString()}`);
     });
   } catch (error) {
-    logger.error('Failed to start media server:', error);
+    logger.error('❌ Failed to start media server:', error);
     process.exit(1);
   }
 }
