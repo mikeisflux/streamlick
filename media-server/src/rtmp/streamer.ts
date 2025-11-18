@@ -133,7 +133,7 @@ function createStream(
         (state as any).startTime = startTime;
       }
     })
-    .on('error', (err: Error, stdout: string, stderr: string) => {
+    .on('error', (err: Error, stdout: string | null, stderr: string | null) => {
       logger.error(`FFmpeg error for ${dest.platform}:`, err.message);
 
       const state = activeStreamers.get(streamKey);
