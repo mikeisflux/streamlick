@@ -55,48 +55,42 @@ export function validateCsrfToken(req: Request, res: Response, next: NextFunctio
   // Exempt auth endpoints (login, register) - they occur before CSRF token can be obtained
   // Also exempt webhook endpoints (they use signature validation instead)
   // Exempt broadcast endpoints (they require authentication via JWT)
-  const exemptPaths = [
-    '/api/auth/login',
-    '/api/auth/register',
-    '/api/auth/refresh',
-    '/api/webhooks/',
-    '/api/oauth/callback',
-    '/api/broadcasts/',
+  const exemptPathPrefixes = [
     '/auth/login',
     '/auth/register',
     '/auth/refresh',
+    '/auth/csrf-token',
     '/webhooks/',
     '/oauth/callback',
-    '/broadcasts/'
+    '/broadcasts',  // Exempt ALL broadcast routes
   ];
 
   // Check both req.path and req.originalUrl to handle different mounting scenarios
   const pathToCheck = req.path || req.url;
   const fullPath = req.originalUrl || req.url;
 
-  // Check if this is a broadcast-related request
-  const isBroadcastRequest =
-    pathToCheck.includes('/broadcasts/') ||
-    fullPath.includes('/broadcasts/') ||
-    pathToCheck.startsWith('/broadcasts') ||
-    fullPath.startsWith('/api/broadcasts');
+  // Check if path should be exempted
+  const isExempt = exemptPathPrefixes.some(prefix => {
+    // Check if the path (without /api prefix) starts with the exempt prefix
+    const pathMatch = pathToCheck.startsWith(prefix) || pathToCheck.startsWith('/' + prefix);
+    // Also check full path in case of different mounting
+    const fullMatch = fullPath.includes(prefix);
+    return pathMatch || fullMatch;
+  });
 
-  // Debug logging
+  // Debug logging - always log non-safe method requests
   if (!safeMethods.includes(req.method)) {
-    logger.info(`CSRF check for ${req.method} request:`, {
-      path: req.path,
-      url: req.url,
-      originalUrl: req.originalUrl,
+    logger.info(`[CSRF] ${req.method} ${fullPath}`, {
       pathToCheck,
-      fullPath,
-      isBroadcastRequest,
-      isExempt: isBroadcastRequest || exemptPaths.some(path => pathToCheck.startsWith(path) || pathToCheck === path || fullPath.startsWith(path) || fullPath === path)
+      isExempt,
+      hasToken: !!req.cookies[COOKIE_NAMES.CSRF_TOKEN],
+      hasHeader: !!req.headers['x-csrf-token']
     });
   }
 
-  // Exempt broadcast requests or other exempt paths
-  if (isBroadcastRequest || exemptPaths.some(path => pathToCheck.startsWith(path) || pathToCheck === path || fullPath.startsWith(path) || fullPath === path)) {
-    logger.info(`✓ CSRF exemption applied for ${req.method} ${pathToCheck}`);
+  // Exempt matching requests
+  if (isExempt) {
+    logger.info(`[CSRF] ✓ Exemption applied for ${req.method} ${fullPath}`);
     return next();
   }
 
