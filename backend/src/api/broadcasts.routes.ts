@@ -461,11 +461,19 @@ router.get('/:id/destinations', authenticate, async (req: AuthRequest, res) => {
     const broadcastDestinations = await prisma.broadcastDestination.findMany({
       where: {
         broadcastId: req.params.id,
+        status: {
+          in: ['pending', 'active'], // Only return active/pending destinations, not ended ones
+        },
       },
       include: {
         destination: true,
       },
+      orderBy: {
+        createdAt: 'desc', // Get most recent first
+      },
     });
+
+    logger.info(`[Get Destinations] Found ${broadcastDestinations.length} active destinations for broadcast ${req.params.id}`);
 
     // Return destinations with decrypted stream keys
     const destinations = broadcastDestinations.map((bd) => ({
@@ -476,6 +484,14 @@ router.get('/:id/destinations', authenticate, async (req: AuthRequest, res) => {
       liveVideoId: bd.liveVideoId,
       status: bd.status,
     }));
+
+    logger.info(`[Get Destinations] Returning destinations:`, JSON.stringify(destinations.map(d => ({
+      platform: d.platform,
+      liveVideoId: d.liveVideoId,
+      status: d.status,
+      hasStreamUrl: !!d.streamUrl,
+      hasStreamKey: !!d.streamKey,
+    })), null, 2));
 
     res.json({ destinations });
   } catch (error) {
