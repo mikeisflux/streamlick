@@ -4,6 +4,8 @@
  * Records composite video stream to local files using MediaRecorder API
  */
 
+import { localRecordingsService } from './local-recordings.service';
+
 interface RecordingConfig {
   mimeType?: string;
   videoBitsPerSecond?: number;
@@ -164,9 +166,17 @@ class RecordingService {
   }
 
   /**
-   * Download the recorded blob as a file
+   * Download the recorded blob as a file and save metadata
    */
-  downloadRecording(blob: Blob, filename: string): void {
+  async downloadRecording(
+    blob: Blob,
+    filename: string,
+    options: {
+      title?: string;
+      broadcastId?: string;
+      duration?: number;
+    } = {}
+  ): Promise<void> {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.style.display = 'none';
@@ -181,6 +191,24 @@ class RecordingService {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }, 100);
+
+    // Save metadata to IndexedDB
+    try {
+      await localRecordingsService.saveRecording({
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        title: options.title || filename,
+        broadcastId: options.broadcastId,
+        filename,
+        size: blob.size,
+        duration: options.duration || 0,
+        mimeType: blob.type,
+        createdAt: new Date().toISOString(),
+      });
+
+      console.log('Recording metadata saved:', filename);
+    } catch (error) {
+      console.error('Failed to save recording metadata:', error);
+    }
 
     console.log('Recording download started:', filename);
   }

@@ -11,6 +11,7 @@ import { GuestJoin } from './pages/GuestJoin';
 import { Landing } from './pages/Landing';
 import { Billing } from './pages/Billing';
 import { Settings } from './pages/Settings';
+import { Recordings } from './pages/Recordings';
 import { AdminAssets } from './pages/AdminAssets';
 import { AdminLogs } from './pages/AdminLogs';
 import AdminSettings from './pages/AdminSettings';
@@ -85,6 +86,14 @@ function App() {
           element={
             <PrivateRoute>
               <Studio />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/recordings"
+          element={
+            <PrivateRoute>
+              <Recordings />
             </PrivateRoute>
           }
         />

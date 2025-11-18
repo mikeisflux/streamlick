@@ -216,6 +216,8 @@ export function useBroadcast({
   const handleStopRecording = useCallback(async () => {
     try {
       const blob = await recordingService.stopRecording();
+      const duration = recordingDuration;
+
       setIsRecording(false);
       setRecordingDuration(0);
 
@@ -225,21 +227,23 @@ export function useBroadcast({
         recordingIntervalRef.current = null;
       }
 
-      // Upload recording to backend
-      if (broadcast?.title) {
-        await recordingService.uploadRecording(blob, broadcastId!, broadcast.title);
-        toast.success('Recording saved successfully');
-      } else {
-        // Fallback to download
-        const filename = `broadcast-${broadcastId}-${Date.now()}.webm`;
-        recordingService.downloadRecording(blob, filename);
-        toast.success('Recording downloaded');
-      }
+      // Save recording locally to user's laptop
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const title = broadcast?.title || 'Untitled Broadcast';
+      const filename = `${title}-${timestamp}.webm`;
+
+      await recordingService.downloadRecording(blob, filename, {
+        title,
+        broadcastId,
+        duration,
+      });
+
+      toast.success(`Recording saved to Downloads: ${filename}`);
     } catch (error) {
       console.error('Recording stop error:', error);
       toast.error('Failed to stop recording');
     }
-  }, [broadcast, broadcastId]);
+  }, [broadcast, broadcastId, recordingDuration]);
 
   const handleEndBroadcast = useCallback(async () => {
     if (!broadcastId) return false;

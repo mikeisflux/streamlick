@@ -82,6 +82,12 @@ export function Dashboard() {
               Broadcasts
             </button>
             <button
+              onClick={() => navigate('/recordings')}
+              className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
+            >
+              Recordings
+            </button>
+            <button
               onClick={() => navigate('/analytics')}
               className="text-sm font-medium text-gray-600 hover:text-gray-900 pb-1"
             >
