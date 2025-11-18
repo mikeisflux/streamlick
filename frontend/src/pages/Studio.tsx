@@ -113,7 +113,9 @@ export function Studio() {
   const [destinationSettings, setDestinationSettings] = useState<{
     privacy: Record<string, string>;
     schedule: Record<string, string>;
-  }>({ privacy: {}, schedule: {} });
+    title: Record<string, string>;
+    description: Record<string, string>;
+  }>({ privacy: {}, schedule: {}, title: {}, description: {} });
 
   // Sidebar management
   const {
