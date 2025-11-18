@@ -45,10 +45,17 @@ export function Admin() {
           api.get('/admin/storage-stats').catch(() => ({ data: { configured: false, totalSize: 0, objectCount: 0, formattedSize: '0 B', bucketName: '' } })),
         ]);
 
-        // Handle paginated responses
-        const servers = Array.isArray(serversRes.data) ? serversRes.data : [];
-        const broadcasts = broadcastsRes.data.broadcasts || [];
-        const users = Array.isArray(usersRes.data) ? usersRes.data : [];
+        // Handle paginated responses - ensure all are arrays
+        const servers = Array.isArray(serversRes.data)
+          ? serversRes.data
+          : (serversRes.data?.servers && Array.isArray(serversRes.data.servers) ? serversRes.data.servers : []);
+
+        const broadcastsData = broadcastsRes.data.broadcasts || broadcastsRes.data;
+        const broadcasts = Array.isArray(broadcastsData) ? broadcastsData : [];
+
+        const users = Array.isArray(usersRes.data)
+          ? usersRes.data
+          : (usersRes.data?.users && Array.isArray(usersRes.data.users) ? usersRes.data.users : []);
 
         setStats({
           activeServers: servers.filter((s: any) => s.status === 'active').length || 0,

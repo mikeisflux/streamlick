@@ -22,9 +22,11 @@ export function Dashboard() {
   const loadBroadcasts = async () => {
     try {
       const data = await broadcastService.getAll();
-      setBroadcasts(data);
+      // Ensure data is always an array
+      setBroadcasts(Array.isArray(data) ? data : []);
     } catch (error) {
       toast.error('Failed to load broadcasts');
+      setBroadcasts([]); // Set empty array on error
     } finally {
       setIsLoading(false);
     }
