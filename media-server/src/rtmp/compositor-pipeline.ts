@@ -136,6 +136,17 @@ export async function createCompositorPipeline(
     for (const dest of destinations) {
       const rtmpUrl = `${dest.rtmpUrl}/${dest.streamKey}`;
 
+      logger.info(`========== FFMPEG SETUP FOR ${dest.platform.toUpperCase()} ==========`);
+      logger.info(`[FFmpeg Setup] Platform: ${dest.platform}`);
+      logger.info(`[FFmpeg Setup] Destination ID: ${dest.id}`);
+      logger.info(`[FFmpeg Setup] RTMP Base URL: ${dest.rtmpUrl}`);
+      logger.info(`[FFmpeg Setup] Stream Key (first 20 chars): ${dest.streamKey?.substring(0, 20)}...`);
+      logger.info(`[FFmpeg Setup] Full RTMP URL: ${rtmpUrl}`);
+      logger.info(`[FFmpeg Setup] Video RTP Port: ${videoPort}`);
+      logger.info(`[FFmpeg Setup] Audio RTP Port: ${audioPort}`);
+      logger.info(`[FFmpeg Setup] Video Payload Type: ${videoPayloadType}`);
+      logger.info(`[FFmpeg Setup] Audio Payload Type: ${audioPayloadType}`);
+
       // Create FFmpeg command that consumes RTP
       const command = ffmpeg()
         // Video input (RTP)
@@ -175,8 +186,10 @@ export async function createCompositorPipeline(
 
       command
         .on('start', (commandLine: string) => {
-          logger.info(`FFmpeg started for ${dest.platform}:`);
-          logger.debug(commandLine);
+          logger.info(`========== FFMPEG PROCESS STARTED ==========`);
+          logger.info(`🚀 FFmpeg started for ${dest.platform}`);
+          logger.info(`📺 Pushing to: ${rtmpUrl}`);
+          logger.info(`⚙️  Command: ${commandLine}`);
           diagnosticLogger.logFFmpeg(
             'CompositorPipeline',
             `FFmpeg process started for ${dest.platform}`,

@@ -477,31 +477,58 @@ io.on('connection', (socket) => {
   // Start RTMP streaming with compositor pipeline
   socket.on('start-rtmp', async ({ broadcastId, destinations, compositeProducers }) => {
     try {
-      logger.info(`Starting RTMP stream for broadcast ${broadcastId}`);
+      logger.info(`========== START-RTMP EVENT RECEIVED ==========`);
+      logger.info(`Broadcast ID: ${broadcastId}`);
+      logger.info(`Destinations count: ${destinations?.length || 0}`);
+      logger.info(`Destinations:`, JSON.stringify(destinations, null, 2));
+      logger.info(`Composite producers:`, JSON.stringify(compositeProducers, null, 2));
 
       const broadcast = broadcasts.get(broadcastId);
       if (!broadcast) {
+        logger.error(`❌ Broadcast ${broadcastId} not found in broadcasts map`);
         throw new Error('Broadcast not found');
       }
+      logger.info(`✅ Broadcast found in map`);
 
       const router = getRouter(broadcastId);
       if (!router) {
+        logger.error(`❌ Router not found for broadcast ${broadcastId}`);
         throw new Error('Router not found');
       }
+      logger.info(`✅ Router found`);
 
       // If composite producers are specified, use compositor pipeline
       if (compositeProducers?.videoProducerId && compositeProducers?.audioProducerId) {
+        logger.info(`[Compositor Pipeline] Video producer ID: ${compositeProducers.videoProducerId}`);
+        logger.info(`[Compositor Pipeline] Audio producer ID: ${compositeProducers.audioProducerId}`);
+
         const videoProducer = broadcast.producers.get(compositeProducers.videoProducerId);
         const audioProducer = broadcast.producers.get(compositeProducers.audioProducerId);
 
+        logger.info(`[Compositor Pipeline] Video producer found: ${!!videoProducer}`);
+        logger.info(`[Compositor Pipeline] Audio producer found: ${!!audioProducer}`);
+        logger.info(`[Compositor Pipeline] Available producers in map: ${Array.from(broadcast.producers.keys()).join(', ')}`);
+
         if (videoProducer && audioProducer) {
+          logger.info(`🚀 Starting compositor pipeline for ${destinations.length} destination(s)...`);
+
+          // Log each destination details
+          destinations.forEach((dest: any, index: number) => {
+            logger.info(`[Destination ${index + 1}] Platform: ${dest.platform}`);
+            logger.info(`[Destination ${index + 1}] RTMP URL: ${dest.rtmpUrl}`);
+            logger.info(`[Destination ${index + 1}] Stream Key length: ${dest.streamKey?.length || 0}`);
+            logger.info(`[Destination ${index + 1}] Full RTMP: ${dest.rtmpUrl}/${dest.streamKey?.substring(0, 10)}...`);
+          });
+
           await createCompositorPipeline(router, broadcastId, videoProducer, audioProducer, destinations);
+
           if (socket.connected) {
             socket.emit('rtmp-started', { broadcastId, method: 'compositor-pipeline' });
           }
-          logger.info('RTMP started with compositor pipeline');
+          logger.info('✅ RTMP started with compositor pipeline');
         } else {
-          logger.warn('Composite producers not found, falling back to legacy RTMP');
+          logger.warn('⚠️  Composite producers not found, falling back to legacy RTMP');
+          logger.warn(`Available producers: ${Array.from(broadcast.producers.keys()).join(', ')}`);
           startRTMPStream(broadcastId, destinations);
           if (socket.connected) {
             socket.emit('rtmp-started', { broadcastId, method: 'legacy' });
@@ -509,14 +536,19 @@ io.on('connection', (socket) => {
         }
       } else {
         // Fallback to legacy RTMP (for backwards compatibility)
-        logger.info('Using legacy RTMP streaming');
+        logger.info('⚠️  No composite producers specified, using legacy RTMP streaming');
+        logger.info(`Video producer ID: ${compositeProducers?.videoProducerId || 'undefined'}`);
+        logger.info(`Audio producer ID: ${compositeProducers?.audioProducerId || 'undefined'}`);
         startRTMPStream(broadcastId, destinations);
         if (socket.connected) {
           socket.emit('rtmp-started', { broadcastId, method: 'legacy' });
         }
       }
+
+      logger.info(`========== START-RTMP COMPLETED ==========`);
     } catch (error) {
-      logger.error('Start RTMP error:', error);
+      logger.error('❌ Start RTMP error:', error);
+      logger.error('Error stack:', (error as Error).stack);
       if (socket.connected) {
         socket.emit('rtmp-error', { error: 'Failed to start RTMP stream' });
       }
