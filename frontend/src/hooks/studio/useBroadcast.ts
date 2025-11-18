@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { broadcastService } from '../../services/broadcast.service';
 import { socketService } from '../../services/socket.service';
+import { mediaServerSocketService } from '../../services/media-server-socket.service';
 import { webrtcService } from '../../services/webrtc.service';
 import { compositorService } from '../../services/compositor.service';
 import { recordingService } from '../../services/recording.service';
@@ -60,6 +61,69 @@ export function useBroadcast({
       }
     };
   }, []);
+
+  // Recording functions defined first to avoid circular dependency
+  const handleStartRecording = useCallback(async () => {
+    try {
+      const compositeStream = compositorService.getOutputStream();
+      if (!compositeStream) {
+        toast.error('No composite stream available');
+        return;
+      }
+
+      await recordingService.startRecording(compositeStream);
+      setIsRecording(true);
+      toast.success('Recording started');
+
+      // Clear any existing interval
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+      }
+
+      // Update duration every second
+      const interval = setInterval(() => {
+        setRecordingDuration(recordingService.getDuration());
+      }, 1000);
+
+      // Store interval in ref for cleanup
+      recordingIntervalRef.current = interval;
+    } catch (error) {
+      console.error('Recording start error:', error);
+      toast.error('Failed to start recording');
+    }
+  }, []);
+
+  const handleStopRecording = useCallback(async () => {
+    try {
+      const blob = await recordingService.stopRecording();
+      const duration = recordingDuration;
+
+      setIsRecording(false);
+      setRecordingDuration(0);
+
+      // Clear interval
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+
+      // Save recording locally to user's laptop
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const title = broadcast?.title || 'Untitled Broadcast';
+      const filename = `${title}-${timestamp}.webm`;
+
+      await recordingService.downloadRecording(blob, filename, {
+        title,
+        broadcastId,
+        duration,
+      });
+
+      toast.success(`Recording saved to Downloads: ${filename}`);
+    } catch (error) {
+      console.error('Recording stop error:', error);
+      toast.error('Failed to stop recording');
+    }
+  }, [broadcast, broadcastId, recordingDuration]);
 
   const handleGoLive = useCallback(async () => {
     if (!broadcastId) return false;
@@ -145,7 +209,7 @@ export function useBroadcast({
           streamKey: 'encrypted-key', // In production, decrypt on backend
         }));
 
-      socketService.emit('start-rtmp', {
+      mediaServerSocketService.emit('start-rtmp', {
         broadcastId,
         destinations: destinationsToStream,
         compositeProducers: {
@@ -159,6 +223,15 @@ export function useBroadcast({
 
       // Enable chat display on compositor
       compositorService.setShowChat(showChatOnStream);
+
+      // Automatically start recording
+      try {
+        await handleStartRecording();
+        console.log('Auto-recording started');
+      } catch (error) {
+        console.error('Failed to auto-start recording:', error);
+        // Don't fail the broadcast if recording fails
+      }
 
       toast.success('You are now live!');
       setIsLive(true);
@@ -180,76 +253,15 @@ export function useBroadcast({
     showChatOnStream,
     initializeWebRTC,
     setIsLive,
+    handleStartRecording,
+    destinationSettings,
   ]);
-
-  // Recording functions defined first to avoid circular dependency
-  const handleStartRecording = useCallback(async () => {
-    try {
-      const compositeStream = compositorService.getOutputStream();
-      if (!compositeStream) {
-        toast.error('No composite stream available');
-        return;
-      }
-
-      await recordingService.startRecording(compositeStream);
-      setIsRecording(true);
-      toast.success('Recording started');
-
-      // Clear any existing interval
-      if (recordingIntervalRef.current) {
-        clearInterval(recordingIntervalRef.current);
-      }
-
-      // Update duration every second
-      const interval = setInterval(() => {
-        setRecordingDuration(recordingService.getDuration());
-      }, 1000);
-
-      // Store interval in ref for cleanup
-      recordingIntervalRef.current = interval;
-    } catch (error) {
-      console.error('Recording start error:', error);
-      toast.error('Failed to start recording');
-    }
-  }, []);
-
-  const handleStopRecording = useCallback(async () => {
-    try {
-      const blob = await recordingService.stopRecording();
-      const duration = recordingDuration;
-
-      setIsRecording(false);
-      setRecordingDuration(0);
-
-      // Clear interval
-      if (recordingIntervalRef.current) {
-        clearInterval(recordingIntervalRef.current);
-        recordingIntervalRef.current = null;
-      }
-
-      // Save recording locally to user's laptop
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-      const title = broadcast?.title || 'Untitled Broadcast';
-      const filename = `${title}-${timestamp}.webm`;
-
-      await recordingService.downloadRecording(blob, filename, {
-        title,
-        broadcastId,
-        duration,
-      });
-
-      toast.success(`Recording saved to Downloads: ${filename}`);
-    } catch (error) {
-      console.error('Recording stop error:', error);
-      toast.error('Failed to stop recording');
-    }
-  }, [broadcast, broadcastId, recordingDuration]);
 
   const handleEndBroadcast = useCallback(async () => {
     if (!broadcastId) return false;
 
     try {
-      // Stop recording if active
+      // Always stop recording if active (auto-recording should be running)
       if (isRecording) {
         await handleStopRecording();
       }
@@ -261,7 +273,7 @@ export function useBroadcast({
       compositorService.stop();
 
       // Stop RTMP streaming
-      socketService.emit('stop-rtmp', { broadcastId });
+      mediaServerSocketService.emit('stop-rtmp', { broadcastId });
       await broadcastService.end(broadcastId);
       toast.success('Broadcast ended');
       setIsLive(false);
