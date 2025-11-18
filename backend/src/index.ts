@@ -108,6 +108,17 @@ app.use('/api/broadcasts/clips/upload', express.urlencoded({ extended: true, lim
 app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 
+// Debug middleware to log body after parsing
+app.use('/api/broadcasts/:id/start', (req, res, next) => {
+  logger.info('[DEBUG MIDDLEWARE] After body parser:', {
+    body: req.body,
+    bodyKeys: req.body ? Object.keys(req.body) : [],
+    contentType: req.headers['content-type'],
+    method: req.method
+  });
+  next();
+});
+
 // CRITICAL FIX: Input sanitization middleware (apply AFTER parsing so req.body exists)
 app.use('/api/', sanitizeInput);
 

@@ -46,7 +46,9 @@ api.interceptors.request.use((config) => {
       url: config.url,
       method: config.method,
       data: config.data,
+      dataStringified: JSON.stringify(config.data),
       headers: config.headers,
+      contentType: config.headers['Content-Type'],
     });
   }
 
