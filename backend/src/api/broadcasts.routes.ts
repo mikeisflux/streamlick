@@ -277,12 +277,14 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
                   const settings = destinationSettings[destination.id] || {};
                   const privacyStatus = settings.privacyStatus || 'public';
                   const scheduledStartTime = settings.scheduledStartTime || undefined;
+                  const title = settings.title || broadcast.title || 'Live Stream';
+                  const description = settings.description || broadcast.description || '';
 
                   // Create YouTube live broadcast
                   const ytBroadcast = await createYouTubeLiveBroadcast(
                     accessToken,
-                    broadcast.title,
-                    broadcast.description || undefined,
+                    title,
+                    description,
                     scheduledStartTime,
                     privacyStatus
                   );

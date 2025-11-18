@@ -26,7 +26,7 @@ interface DestinationsPanelProps {
   broadcastId?: string;
   selectedDestinations?: string[];
   onSelectionChange?: (selectedIds: string[]) => void;
-  onSettingsChange?: (settings: { privacy: Record<string, string>; schedule: Record<string, string> }) => void;
+  onSettingsChange?: (settings: { privacy: Record<string, string>; schedule: Record<string, string>; title: Record<string, string>; description: Record<string, string> }) => void;
 }
 
 // Available platforms that can be connected
@@ -56,13 +56,15 @@ export function DestinationsPanel({
   // Track privacy and scheduling settings per destination
   const [privacySettings, setPrivacySettings] = useState<Record<string, string>>({});
   const [scheduleSettings, setScheduleSettings] = useState<Record<string, string>>({});
+  const [titleSettings, setTitleSettings] = useState<Record<string, string>>({});
+  const [descriptionSettings, setDescriptionSettings] = useState<Record<string, string>>({});
 
   // Notify parent of settings changes
   useEffect(() => {
     if (onSettingsChange) {
-      onSettingsChange({ privacy: privacySettings, schedule: scheduleSettings });
+      onSettingsChange({ privacy: privacySettings, schedule: scheduleSettings, title: titleSettings, description: descriptionSettings });
     }
-  }, [privacySettings, scheduleSettings, onSettingsChange]);
+  }, [privacySettings, scheduleSettings, titleSettings, descriptionSettings, onSettingsChange]);
 
   // Load user's connected destinations
   useEffect(() => {
@@ -409,6 +411,41 @@ export function DestinationsPanel({
                     </button>
                   )}
                 </div>
+
+                {/* Title (Required for YouTube, Facebook, X) */}
+                {(dest.platform === 'youtube' || dest.platform === 'facebook' || dest.platform === 'x') && (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Title <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter stream title"
+                      value={titleSettings[dest.id] || ''}
+                      onChange={(e) => setTitleSettings({ ...titleSettings, [dest.id]: e.target.value })}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Required by {dest.platform === 'youtube' ? 'YouTube' : dest.platform === 'facebook' ? 'Facebook' : 'X'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Description (Required for YouTube, Facebook) */}
+                {(dest.platform === 'youtube' || dest.platform === 'facebook') && (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Description
+                    </label>
+                    <textarea
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter stream description (optional)"
+                      rows={3}
+                      value={descriptionSettings[dest.id] || ''}
+                      onChange={(e) => setDescriptionSettings({ ...descriptionSettings, [dest.id]: e.target.value })}
+                    />
+                  </div>
+                )}
 
                 {/* Privacy Settings (YouTube & Facebook only) */}
                 {(dest.platform === 'youtube' || dest.platform === 'facebook') && (

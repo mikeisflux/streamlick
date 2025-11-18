@@ -26,7 +26,7 @@ interface UseBroadcastProps {
   selectedDestinations: string[];
   showChatOnStream: boolean;
   initializeWebRTC: () => Promise<void>;
-  destinationSettings: { privacy: Record<string, string>; schedule: Record<string, string> };
+  destinationSettings: { privacy: Record<string, string>; schedule: Record<string, string>; title: Record<string, string>; description: Record<string, string> };
 }
 
 export function useBroadcast({
@@ -122,11 +122,13 @@ export function useBroadcast({
       }
 
       // Prepare destination settings for API
-      const apiDestinationSettings: Record<string, { privacyStatus?: string; scheduledStartTime?: string }> = {};
+      const apiDestinationSettings: Record<string, { privacyStatus?: string; scheduledStartTime?: string; title?: string; description?: string }> = {};
       selectedDestinations.forEach((destId) => {
         apiDestinationSettings[destId] = {
           privacyStatus: destinationSettings.privacy[destId] || 'public',
           scheduledStartTime: destinationSettings.schedule[destId] || undefined,
+          title: destinationSettings.title[destId] || undefined,
+          description: destinationSettings.description[destId] || undefined,
         };
       });
 
