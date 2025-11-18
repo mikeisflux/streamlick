@@ -50,7 +50,11 @@ export function useStudioInitialization({
         // Load destinations
         const destResponse = await api.get('/destinations');
         if (!isMounted) return;
-        setDestinations(destResponse.data.filter((d: any) => d.isActive));
+        const activeDestinations = destResponse.data.filter((d: any) => d.isActive);
+        setDestinations(activeDestinations);
+        // Auto-select all active destinations
+        setSelectedDestinations(activeDestinations.map((d: any) => d.id));
+        console.log('[Studio Init] Auto-selected destinations:', activeDestinations.map((d: any) => d.id));
 
         console.log('[Studio Init] Starting camera...');
         // Start camera FIRST to request permissions

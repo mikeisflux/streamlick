@@ -1,8 +1,10 @@
 import { useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { compositorService } from '../services/compositor.service';
+import { broadcastService } from '../services/broadcast.service';
 import { useMedia } from '../hooks/useMedia';
 import { useStudioStore } from '../store/studioStore';
+import toast from 'react-hot-toast';
 import { HotkeyReference } from '../components/HotkeyReference';
 import { HotkeyFeedback, useHotkeyFeedback } from '../components/HotkeyFeedback';
 import { LeftSidebar } from '../components/studio/LeftSidebar';
@@ -197,6 +199,21 @@ export function Studio() {
   // Canvas Settings (persisted to localStorage)
   const canvasSettings = useCanvasSettings();
 
+  // Broadcast title update handler
+  const handleTitleChange = async (newTitle: string) => {
+    if (!broadcastId) return;
+    try {
+      await broadcastService.update(broadcastId, { title: newTitle });
+      // Update local broadcast state
+      const updatedBroadcast = await broadcastService.getById(broadcastId);
+      setBroadcast(updatedBroadcast);
+      toast.success('Broadcast title updated');
+    } catch (error) {
+      console.error('Failed to update title:', error);
+      toast.error('Failed to update title');
+    }
+  };
+
   // Studio handlers (event handlers, state, and effects)
   const {
     editMode,
@@ -234,6 +251,7 @@ export function Studio() {
       {/* Top Bar */}
       <StudioHeader
         broadcastTitle={broadcast?.title || 'Untitled Broadcast'}
+        broadcastId={broadcastId || ''}
         isLive={isLive}
         onProducerModeClick={() => setShowProducerMode(true)}
         onResetStackClick={() => setShowResetConfirmation(true)}
@@ -243,6 +261,7 @@ export function Studio() {
         onGoLive={handleGoLive}
         onEndBroadcast={handleEndBroadcast}
         isInitializing={isInitializing}
+        onTitleChange={handleTitleChange}
       />
 
       {/* Body Container */}

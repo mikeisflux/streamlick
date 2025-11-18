@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { Button } from '../Button';
 
 interface StudioHeaderProps {
   broadcastTitle: string;
+  broadcastId: string;
   isLive: boolean;
   onProducerModeClick: () => void;
   onResetStackClick: () => void;
@@ -11,10 +13,12 @@ interface StudioHeaderProps {
   onGoLive: () => void;
   onEndBroadcast: () => void;
   isInitializing: boolean;
+  onTitleChange: (title: string) => void;
 }
 
 export function StudioHeader({
   broadcastTitle,
+  broadcastId,
   isLive,
   onProducerModeClick,
   onResetStackClick,
@@ -24,7 +28,27 @@ export function StudioHeader({
   onGoLive,
   onEndBroadcast,
   isInitializing,
+  onTitleChange,
 }: StudioHeaderProps) {
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState(broadcastTitle);
+
+  const handleTitleSubmit = () => {
+    if (editedTitle.trim() && editedTitle !== broadcastTitle) {
+      onTitleChange(editedTitle.trim());
+    }
+    setIsEditingTitle(false);
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleTitleSubmit();
+    } else if (e.key === 'Escape') {
+      setEditedTitle(broadcastTitle);
+      setIsEditingTitle(false);
+    }
+  };
+
   return (
     <header
       style={{
@@ -53,7 +77,36 @@ export function StudioHeader({
           )}
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-white text-sm">{broadcastTitle}</span>
+          {isEditingTitle ? (
+            <input
+              type="text"
+              value={editedTitle}
+              onChange={(e) => setEditedTitle(e.target.value)}
+              onBlur={handleTitleSubmit}
+              onKeyDown={handleTitleKeyDown}
+              className="px-3 py-1 bg-gray-700 text-white text-sm rounded border border-gray-600 focus:outline-none focus:border-blue-500"
+              autoFocus
+              placeholder="Broadcast title..."
+              style={{ minWidth: '200px' }}
+            />
+          ) : (
+            <button
+              onClick={() => {
+                setIsEditingTitle(true);
+                setEditedTitle(broadcastTitle);
+              }}
+              className="text-white text-sm hover:bg-gray-700 px-3 py-1 rounded transition-colors"
+              title="Click to edit title"
+              disabled={isLive}
+            >
+              {broadcastTitle || 'Untitled Broadcast'}
+              {!isLive && (
+                <svg className="w-3 h-3 inline ml-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              )}
+            </button>
+          )}
           <button
             onClick={onProducerModeClick}
             className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold transition-colors"
