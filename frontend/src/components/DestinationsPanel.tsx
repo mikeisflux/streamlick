@@ -142,13 +142,25 @@ export function DestinationsPanel({
       const newSelection = isCurrentlySelected
         ? selectedDestinations.filter(destId => destId !== id)
         : [...selectedDestinations, id];
+
+      // CRITICAL: Deduplicate to ensure no duplicates are ever added
+      const deduplicatedSelection = Array.from(new Set(newSelection));
+
+      if (deduplicatedSelection.length !== newSelection.length) {
+        console.warn('[DestinationsPanel] Prevented duplicate destination IDs:', {
+          original: newSelection,
+          deduplicated: deduplicatedSelection,
+          duplicateCount: newSelection.length - deduplicatedSelection.length,
+        });
+      }
+
       console.log('[DestinationsPanel] Selection changed:', {
         destination: destination.name,
         id,
         isCurrentlySelected,
-        newSelection
+        newSelection: deduplicatedSelection
       });
-      onSelectionChange(newSelection);
+      onSelectionChange(deduplicatedSelection);
     } else {
       // Fallback to local state if no callback provided
       setDestinations((prev) =>

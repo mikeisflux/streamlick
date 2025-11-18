@@ -129,7 +129,18 @@ export function useBroadcast({
   const handleGoLive = useCallback(async () => {
     if (!broadcastId) return false;
 
-    if (selectedDestinations.length === 0) {
+    // CRITICAL: Deduplicate selected destinations before processing
+    const deduplicatedDestinations = Array.from(new Set(selectedDestinations));
+
+    if (deduplicatedDestinations.length !== selectedDestinations.length) {
+      console.warn('[useBroadcast] Found duplicate destination IDs before going live:', {
+        original: selectedDestinations,
+        deduplicated: deduplicatedDestinations,
+        duplicateCount: selectedDestinations.length - deduplicatedDestinations.length,
+      });
+    }
+
+    if (deduplicatedDestinations.length === 0) {
       toast.error('Please select at least one destination');
       return false;
     }
@@ -188,7 +199,7 @@ export function useBroadcast({
 
       // Prepare destination settings for API
       const apiDestinationSettings: Record<string, { privacyStatus?: string; scheduledStartTime?: string; title?: string; description?: string }> = {};
-      selectedDestinations.forEach((destId) => {
+      deduplicatedDestinations.forEach((destId) => {
         const destTitle = destinationSettings.title[destId];
         const destDescription = destinationSettings.description[destId];
 
@@ -205,13 +216,13 @@ export function useBroadcast({
       });
 
       console.log('[useBroadcast] Starting broadcast with:', {
-        selectedDestinations,
-        destinationCount: selectedDestinations.length,
+        selectedDestinations: deduplicatedDestinations,
+        destinationCount: deduplicatedDestinations.length,
         apiDestinationSettings
       });
 
-      // Start broadcast with destination settings
-      await broadcastService.start(broadcastId, selectedDestinations, apiDestinationSettings);
+      // Start broadcast with destination settings (using deduplicated array)
+      await broadcastService.start(broadcastId, deduplicatedDestinations, apiDestinationSettings);
 
       // Wait for YouTube/Facebook broadcasts to be created (happens during countdown)
       // Then fetch the actual RTMP URLs and stream keys
