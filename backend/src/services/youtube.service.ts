@@ -238,24 +238,24 @@ export async function createYouTubeLiveBroadcast(
       streamId
     });
 
-    // Step 4: Transition to "ready" status
-    logger.info('[YouTube Step 4/4] Transitioning broadcast to ready...');
+    // Step 4: Transition to "testing" status (allows RTMP stream to connect)
+    logger.info('[YouTube Step 4/4] Transitioning broadcast to testing...');
     await axios.post(
       `${YOUTUBE_API_BASE}/liveBroadcasts/transition`,
       null,
       {
         params: {
           id: broadcastId,
-          broadcastStatus: 'ready',
+          broadcastStatus: 'testing',
           part: 'status',
         },
         headers: { Authorization: `Bearer ${accessToken}` },
       }
     );
 
-    logger.info(`[YouTube Step 4/4] ✓ Broadcast transitioned to ready`, {
+    logger.info(`[YouTube Step 4/4] ✓ Broadcast transitioned to testing`, {
       broadcastId,
-      status: 'ready'
+      status: 'testing'
     });
 
     logger.info('✓ YouTube live broadcast created successfully', {
