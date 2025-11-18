@@ -8,6 +8,72 @@ const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 const YOUTUBE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
 /**
+ * Wait for YouTube stream to become active by polling the stream status
+ * YouTube requires the RTMP stream to be actively receiving video before allowing broadcast transitions
+ *
+ * @param streamId - The YouTube stream ID to poll
+ * @param accessToken - Valid YouTube access token
+ * @param maxAttempts - Maximum number of polling attempts (default: 12 = 60 seconds)
+ * @param delayMs - Delay between polling attempts in milliseconds (default: 5000 = 5 seconds)
+ * @returns true if stream becomes active, false if timeout reached
+ */
+async function waitForStreamActive(
+  streamId: string,
+  accessToken: string,
+  maxAttempts: number = 12,
+  delayMs: number = 5000
+): Promise<boolean> {
+  logger.info(`[YouTube Stream Poll] Starting to poll stream ${streamId} (max ${maxAttempts * delayMs / 1000}s)`);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      logger.info(`[YouTube Stream Poll] Attempt ${attempt}/${maxAttempts} - Checking stream status...`);
+
+      const response = await axios.get(`${YOUTUBE_API_BASE}/liveStreams`, {
+        params: {
+          part: 'status',
+          id: streamId,
+        },
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      const stream = response.data.items?.[0];
+      if (!stream) {
+        logger.error(`[YouTube Stream Poll] Stream ${streamId} not found`);
+        return false;
+      }
+
+      const streamStatus = stream.status?.streamStatus;
+      const healthStatus = stream.status?.healthStatus?.status;
+
+      logger.info(`[YouTube Stream Poll] Stream status: ${streamStatus}, Health: ${healthStatus || 'N/A'}`);
+
+      // Stream is active when it's receiving video data
+      if (streamStatus === 'active') {
+        logger.info(`[YouTube Stream Poll] ✅ Stream is ACTIVE after ${attempt} attempts (${attempt * delayMs / 1000}s)`);
+        return true;
+      }
+
+      // If not active yet, wait before next poll
+      if (attempt < maxAttempts) {
+        logger.info(`[YouTube Stream Poll] ⏳ Stream not active yet, waiting ${delayMs / 1000}s before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    } catch (error: any) {
+      logger.error(`[YouTube Stream Poll] Error checking stream status:`, error.response?.data || error.message);
+
+      // If we can't check status, wait and retry
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  logger.warn(`[YouTube Stream Poll] ⏱️  Timeout reached after ${maxAttempts} attempts (${maxAttempts * delayMs / 1000}s)`);
+  return false;
+}
+
+/**
  * Refresh YouTube access token using refresh token
  */
 export async function refreshYouTubeToken(
@@ -242,32 +308,52 @@ export async function createYouTubeLiveBroadcast(
       streamId
     });
 
-    // Step 4: Transition to "testing" status (allows RTMP stream to connect)
-    logger.info('[YouTube Step 4/4] Transitioning broadcast to testing...');
-    await axios.post(
-      `${YOUTUBE_API_BASE}/liveBroadcasts/transition`,
-      null,
-      {
-        params: {
-          id: broadcastId,
-          broadcastStatus: 'testing',
-          part: 'status',
-        },
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
-    );
+    // Step 4: Wait for stream to become active, then transition
+    // YouTube requires the RTMP stream to be actively sending video before allowing transitions
+    logger.info('[YouTube Step 4/4] Waiting for RTMP stream to become active...');
+    logger.info('[YouTube Step 4/4] ⏳ Stream must receive video input before broadcast can go live');
 
-    logger.info(`[YouTube Step 4/4] ✓ Broadcast transitioned to testing`, {
-      broadcastId,
-      status: 'testing'
-    });
+    // Poll stream status until it's active (max 60 seconds)
+    const streamActive = await waitForStreamActive(streamId, accessToken);
+
+    if (!streamActive) {
+      logger.warn('[YouTube Step 4/4] ⚠️  Stream did not become active within timeout');
+      logger.warn('[YouTube Step 4/4] Broadcast created but NOT transitioned to testing/live');
+      logger.warn('[YouTube Step 4/4] Start sending video via RTMP, then manually transition');
+    } else {
+      logger.info('[YouTube Step 4/4] ✓ Stream is active, transitioning to testing...');
+
+      try {
+        await axios.post(
+          `${YOUTUBE_API_BASE}/liveBroadcasts/transition`,
+          null,
+          {
+            params: {
+              id: broadcastId,
+              broadcastStatus: 'testing',
+              part: 'status',
+            },
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }
+        );
+
+        logger.info(`[YouTube Step 4/4] ✓ Broadcast transitioned to testing`, {
+          broadcastId,
+          status: 'testing'
+        });
+      } catch (transitionError: any) {
+        logger.error('[YouTube Step 4/4] Failed to transition to testing:', transitionError.response?.data);
+        // Don't throw - broadcast is created, just not transitioned
+      }
+    }
 
     logger.info('✓ YouTube live broadcast created successfully', {
       broadcastId,
       streamId,
       rtmpUrl,
       privacyStatus,
-      title
+      title,
+      streamActive
     });
 
     return {
