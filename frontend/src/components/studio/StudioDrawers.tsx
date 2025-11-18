@@ -19,7 +19,7 @@ interface StudioDrawersProps {
   setShowRecordingDrawer: (show: boolean) => void;
   selectedDestinations: string[];
   onDestinationSelectionChange: (selected: string[]) => void;
-  onDestinationSettingsChange: (settings: { privacy: Record<string, string>; schedule: Record<string, string> }) => void;
+  onDestinationSettingsChange: (settings: { privacy: Record<string, string>; schedule: Record<string, string>; title: Record<string, string>; description: Record<string, string> }) => void;
 }
 
 export function StudioDrawers({
