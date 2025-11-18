@@ -74,7 +74,14 @@ export function validateCsrfToken(req: Request, res: Response, next: NextFunctio
   const pathToCheck = req.path || req.url;
   const fullPath = req.originalUrl || req.url;
 
-  // Debug logging - remove after fixing
+  // Check if this is a broadcast-related request
+  const isBroadcastRequest =
+    pathToCheck.includes('/broadcasts/') ||
+    fullPath.includes('/broadcasts/') ||
+    pathToCheck.startsWith('/broadcasts') ||
+    fullPath.startsWith('/api/broadcasts');
+
+  // Debug logging
   if (!safeMethods.includes(req.method)) {
     logger.info(`CSRF check for ${req.method} request:`, {
       path: req.path,
@@ -82,11 +89,14 @@ export function validateCsrfToken(req: Request, res: Response, next: NextFunctio
       originalUrl: req.originalUrl,
       pathToCheck,
       fullPath,
-      isExempt: exemptPaths.some(path => pathToCheck.startsWith(path) || pathToCheck === path || fullPath.startsWith(path) || fullPath === path)
+      isBroadcastRequest,
+      isExempt: isBroadcastRequest || exemptPaths.some(path => pathToCheck.startsWith(path) || pathToCheck === path || fullPath.startsWith(path) || fullPath === path)
     });
   }
 
-  if (exemptPaths.some(path => pathToCheck.startsWith(path) || pathToCheck === path || fullPath.startsWith(path) || fullPath === path)) {
+  // Exempt broadcast requests or other exempt paths
+  if (isBroadcastRequest || exemptPaths.some(path => pathToCheck.startsWith(path) || pathToCheck === path || fullPath.startsWith(path) || fullPath === path)) {
+    logger.info(`✓ CSRF exemption applied for ${req.method} ${pathToCheck}`);
     return next();
   }
 
