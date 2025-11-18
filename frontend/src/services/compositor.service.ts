@@ -141,30 +141,38 @@ class CompositorService {
     // Check if stream has video tracks
     const hasVideoTracks = participant.stream && participant.stream.getVideoTracks().length > 0;
 
+    // Set the stream source
+    video.srcObject = participant.stream;
+
     // Only wait for metadata if video is enabled and has video tracks
     if (participant.videoEnabled && hasVideoTracks) {
-      // Set up event listener before assigning srcObject to avoid missing the event
-      const metadataPromise = new Promise<void>((resolve) => {
-        video.onloadedmetadata = () => {
-          video.play().catch(err => logger.error('Failed to play video:', err));
-          resolve();
-        };
-      });
-
-      video.srcObject = participant.stream;
-
-      // Wait for video to be ready with 5 second timeout
-      await Promise.race([
-        metadataPromise,
-        new Promise<void>((_, reject) => setTimeout(() => {
-          const error = new Error(`Video metadata load timeout for participant ${participant.id}`);
-          logger.error(error.message);
-          reject(error);
-        }, 5000))
-      ]);
+      try {
+        // Wait for video to be ready with 2 second timeout (reduced from 5s)
+        await Promise.race([
+          new Promise<void>((resolve) => {
+            // If already loaded, resolve immediately
+            if (video.readyState >= 1) {
+              video.play().catch(err => logger.error('Failed to play video:', err));
+              resolve();
+              return;
+            }
+            video.onloadedmetadata = () => {
+              video.play().catch(err => logger.error('Failed to play video:', err));
+              resolve();
+            };
+          }),
+          new Promise<void>((resolve) => setTimeout(() => {
+            logger.warn(`Video metadata load timeout for participant ${participant.id} - continuing anyway`);
+            // Try to play anyway
+            video.play().catch(err => logger.error('Failed to play video after timeout:', err));
+            resolve();
+          }, 2000))
+        ]);
+      } catch (error) {
+        logger.error(`Error loading video for participant ${participant.id}:`, error);
+        // Continue anyway - don't fail the whole broadcast
+      }
     } else {
-      // No video or video disabled - just set the stream without waiting
-      video.srcObject = participant.stream;
       logger.info(`Skipping video metadata wait for participant ${participant.id} (videoEnabled: ${participant.videoEnabled}, hasVideoTracks: ${hasVideoTracks})`);
     }
 
