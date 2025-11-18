@@ -302,7 +302,9 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
                   const settings = destinationSettings[destination.id] || {};
                   const privacyStatus = settings.privacyStatus || 'public';
                   const scheduledStartTime = settings.scheduledStartTime || undefined;
-                  const title = settings.title || broadcast.title || 'Live Stream';
+
+                  // Use per-destination title/description if provided, otherwise fallback to broadcast defaults
+                  const title = settings.title || broadcast.title || 'New Broadcast';
                   const description = settings.description || broadcast.description || '';
 
                   logger.info(`[YouTube] Creating broadcast with settings: title="${title}", description="${description}", privacy=${privacyStatus}`);
