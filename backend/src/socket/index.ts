@@ -207,16 +207,16 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
 
         // Notify others in the room
         socket.to(`broadcast:${broadcastId}`).emit('participant-joined', {
-          participantId,
+          participantId: participant.id,
           socketId: socket.id,
         });
 
         socket.emit('studio-joined', {
           broadcastId,
-          participantId,
+          participantId: participant.id,
         });
 
-        logger.info(`Participant ${participantId} joined broadcast ${broadcastId}`);
+        logger.info(`Participant ${participant.id} joined broadcast ${broadcastId}`);
       } catch (error) {
         logger.error('Join studio error:', error);
         socket.emit('error', { message: 'Failed to join studio' });
