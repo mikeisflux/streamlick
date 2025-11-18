@@ -145,186 +145,184 @@ export async function createCompositorPipeline(
       ? (process.env.MEDIASOUP_ANNOUNCED_IP || 'localhost')
       : '127.0.0.1';
 
-    // Start FFmpeg for each destination
+    logger.info(`========== FFMPEG MULTI-DESTINATION SETUP ==========`);
+    logger.info(`Total destinations: ${destinations.length}`);
+    logger.info(`Media Server IP: ${mediaServerIp}`);
+    logger.info(`Video RTP Port: ${videoPort}`);
+    logger.info(`Audio RTP Port: ${audioPort}`);
+    logger.info(`Destinations:`);
+    destinations.forEach((dest, index) => {
+      logger.info(`  [${index + 1}] ${dest.platform}: ${dest.rtmpUrl}/${dest.streamKey?.substring(0, 20)}...`);
+    });
+
+    // Build tee output for multiple RTMP destinations
+    // Format: [f=flv:flvflags=no_duration_filesize]rtmp://url1|[f=flv:flvflags=no_duration_filesize]rtmp://url2
+    const teeOutputs = destinations.map(dest => {
+      const rtmpUrl = `${dest.rtmpUrl}/${dest.streamKey}`;
+      return `[f=flv:flvflags=no_duration_filesize]${rtmpUrl}`;
+    }).join('|');
+
+    logger.info(`========== STARTING SINGLE FFMPEG PROCESS ==========`);
+    logger.info(`Using tee muxer for ${destinations.length} destinations`);
+
+    // Start FFmpeg for all destinations using tee muxer
     const ffmpegProcesses = new Map<string, any>();
 
-    for (const dest of destinations) {
-      const rtmpUrl = `${dest.rtmpUrl}/${dest.streamKey}`;
+    // Create a single FFmpeg command that outputs to multiple destinations
+    const command = ffmpeg()
+      // Video input (RTP)
+      .input(`rtp://${mediaServerIp}:${videoPort}`)
+      .inputOptions([
+        '-protocol_whitelist', 'file,rtp,udp',
+        '-f', 'rtp',
+        '-codec:v', 'h264',
+      ])
+      // Audio input (RTP)
+      .input(`rtp://${mediaServerIp}:${audioPort}`)
+      .inputOptions([
+        '-protocol_whitelist', 'file,rtp,udp',
+        '-f', 'rtp',
+        '-codec:a', 'opus',
+      ])
+      // Video encoding
+      .videoCodec('copy') // Copy H264 stream without re-encoding
+      // Audio encoding
+      .audioCodec('aac')
+      .outputOptions([
+        '-b:a', '160k',
+        '-ar', '48000',
+        '-ac', '2',
+      ])
+      // Use tee muxer to output to multiple destinations
+      .format('tee')
+      .output(teeOutputs)
+      .outputOptions([
+        '-map', '0:v',
+        '-map', '1:a',
+      ]);
 
-      logger.info(`========== FFMPEG SETUP FOR ${dest.platform.toUpperCase()} ==========`);
-      logger.info(`[FFmpeg Setup] Platform: ${dest.platform}`);
-      logger.info(`[FFmpeg Setup] Destination ID: ${dest.id}`);
-      logger.info(`[FFmpeg Setup] RTMP Base URL: ${dest.rtmpUrl}`);
-      logger.info(`[FFmpeg Setup] Stream Key (first 20 chars): ${dest.streamKey?.substring(0, 20)}...`);
-      logger.info(`[FFmpeg Setup] Full RTMP URL: ${rtmpUrl}`);
-      logger.info(`[FFmpeg Setup] Media Server IP: ${mediaServerIp}`);
-      logger.info(`[FFmpeg Setup] Video RTP Port: ${videoPort}`);
-      logger.info(`[FFmpeg Setup] Audio RTP Port: ${audioPort}`);
-      logger.info(`[FFmpeg Setup] Video Payload Type: ${videoPayloadType}`);
-      logger.info(`[FFmpeg Setup] Audio Payload Type: ${audioPayloadType}`);
-
-      // Create FFmpeg command that consumes RTP from media server's public IP
-      const command = ffmpeg()
-        // Video input (RTP) - connect to media server's public IP
-        .input(`rtp://${mediaServerIp}:${videoPort}`)
-        .inputOptions([
-          '-protocol_whitelist', 'file,rtp,udp',
-          '-f', 'rtp',
-          '-codec:v', 'h264',
-        ])
-        // Audio input (RTP) - connect to media server's public IP
-        .input(`rtp://${mediaServerIp}:${audioPort}`)
-        .inputOptions([
-          '-protocol_whitelist', 'file,rtp,udp',
-          '-f', 'rtp',
-          '-codec:a', 'opus',
-        ])
-        // Video encoding
-        .videoCodec('copy') // Copy H264 stream without re-encoding
-        // Audio encoding
-        .audioCodec('aac')
-        .outputOptions([
-          '-b:a', '160k',
-          '-ar', '48000',
-          '-ac', '2',
-        ])
-        // Output format
-        .format('flv')
-        .output(rtmpUrl)
-        // FLV muxer options (no encoding options when using copy)
-        .outputOptions([
-          '-flvflags', 'no_duration_filesize', // Optimize for live streaming
-        ]);
-
-      command
-        .on('start', (commandLine: string) => {
-          logger.info(`========== FFMPEG PROCESS STARTED ==========`);
-          logger.info(`🚀 FFmpeg started for ${dest.platform}`);
-          logger.info(`📺 Pushing to: ${rtmpUrl}`);
-          logger.info(`⚙️  Command: ${commandLine}`);
-          diagnosticLogger.logFFmpeg(
-            'CompositorPipeline',
-            `FFmpeg process started for ${dest.platform}`,
-            'info',
-            {
-              destination: dest.platform,
-              destinationId: dest.id,
-              videoPort,
-              audioPort,
-              rtmpUrl: dest.rtmpUrl,
-              commandLine: commandLine.substring(0, 500),
-            },
-            broadcastId
-          );
-        })
-        .on('error', (err: Error, stdout: string | null, stderr: string | null) => {
-          logger.error(`========== FFMPEG ERROR for ${dest.platform.toUpperCase()} ==========`);
-          logger.error(`Error Message: ${err.message}`);
-          logger.error(`Error Name: ${err.name}`);
-          logger.error(`Error Stack:`, err.stack);
-          logger.error(`Destination: ${dest.platform} (ID: ${dest.id})`);
-          logger.error(`RTMP URL: ${dest.rtmpUrl}`);
-
-          if (stdout) {
-            logger.error(`========== FFMPEG STDOUT ==========`);
-            logger.error(stdout);
-          } else {
-            logger.error(`STDOUT: (empty)`);
-          }
-
-          if (stderr) {
-            logger.error(`========== FFMPEG STDERR ==========`);
-            logger.error(stderr);
-          } else {
-            logger.error(`STDERR: (empty)`);
-          }
-
-          logger.error(`========== END FFMPEG ERROR ==========`);
-
-          diagnosticLogger.logError(
-            'ffmpeg',
-            'CompositorPipeline',
-            `FFmpeg process error for ${dest.platform}`,
-            err,
-            {
-              destination: dest.platform,
-              destinationId: dest.id,
-              stdout: stdout ? stdout.substring(0, 1000) : '',
-              stderr: stderr ? stderr.substring(0, 1000) : '',
-            },
-            broadcastId
-          );
-        })
-        .on('end', () => {
-          logger.info(`FFmpeg ended for ${dest.platform}`);
-          diagnosticLogger.logFFmpeg(
-            'CompositorPipeline',
-            `FFmpeg process ended for ${dest.platform}`,
-            'info',
-            { destination: dest.platform, destinationId: dest.id },
-            broadcastId
-          );
-        })
-        .on('stderr', (stderrLine: string) => {
-          // Log ALL stderr output to help diagnose issues
-          // Use info level for errors/warnings, debug for regular output
-          if (stderrLine.includes('error') || stderrLine.includes('Error') ||
-              stderrLine.includes('warning') || stderrLine.includes('Warning') ||
-              stderrLine.includes('failed') || stderrLine.includes('Failed') ||
-              stderrLine.includes('Invalid') || stderrLine.includes('invalid')) {
-            logger.error(`[FFmpeg ${dest.platform}] ${stderrLine}`);
-          } else if (stderrLine.includes('bitrate=') || stderrLine.includes('fps=')) {
-            logger.info(`[FFmpeg ${dest.platform}] ${stderrLine}`);
-            const bitrateMatch = stderrLine.match(/bitrate=\s*([\d.]+)kbits\/s/);
-            const fpsMatch = stderrLine.match(/fps=\s*([\d.]+)/);
-            if (bitrateMatch || fpsMatch) {
-              diagnosticLogger.logPerformance(
-                'ffmpeg',
-                'FFmpegMetrics',
-                `FFmpeg performance metrics for ${dest.platform}`,
-                {
-                  bitrate: bitrateMatch ? parseFloat(bitrateMatch[1]) : undefined,
-                  frameRate: fpsMatch ? parseFloat(fpsMatch[1]) : undefined,
-                },
-                broadcastId
-              );
-            }
-          } else {
-            logger.debug(`[FFmpeg ${dest.platform}] ${stderrLine}`);
-          }
+    command
+      .on('start', (commandLine: string) => {
+        logger.info(`========== FFMPEG MULTI-STREAM PROCESS STARTED ==========`);
+        logger.info(`🚀 FFmpeg started for ${destinations.length} destination(s)`);
+        logger.info(`⚙️  Command: ${commandLine}`);
+        destinations.forEach((dest, index) => {
+          logger.info(`  📺 [${index + 1}] ${dest.platform}: ${dest.rtmpUrl}`);
         });
-
-      try {
-        command.run();
-        ffmpegProcesses.set(dest.id, command);
-        logger.info(`✅ FFmpeg process started successfully for ${dest.platform}`);
-      } catch (error) {
-        logger.error(`========== FAILED TO START FFMPEG for ${dest.platform.toUpperCase()} ==========`);
-        logger.error(`Exception during command.run():`);
-        logger.error(`Error:`, error);
-        logger.error(`Error message: ${(error as Error).message}`);
-        logger.error(`Error stack:`, (error as Error).stack);
-        logger.error(`Destination: ${dest.platform} (ID: ${dest.id})`);
-        logger.error(`RTMP URL: ${rtmpUrl}`);
-        logger.error(`Media Server IP: ${mediaServerIp}`);
-        logger.error(`Video Port: ${videoPort}, Audio Port: ${audioPort}`);
-        logger.error(`========== END FAILED TO START FFMPEG ==========`);
-        diagnosticLogger.logError(
-          'ffmpeg',
+        diagnosticLogger.logFFmpeg(
           'CompositorPipeline',
-          `Failed to start FFmpeg for ${dest.platform}`,
-          error as Error,
+          `FFmpeg multi-stream process started for ${destinations.length} destinations`,
+          'info',
           {
-            destination: dest.platform,
-            destinationId: dest.id,
-            rtmpUrl,
-            mediaServerIp,
+            destinationCount: destinations.length,
             videoPort,
             audioPort,
+            commandLine: commandLine.substring(0, 500),
           },
           broadcastId
         );
-      }
+      })
+      .on('error', (err: Error, stdout: string | null, stderr: string | null) => {
+        logger.error(`========== FFMPEG MULTI-STREAM ERROR ==========`);
+        logger.error(`Error Message: ${err.message}`);
+        logger.error(`Error Name: ${err.name}`);
+        logger.error(`Error Stack:`, err.stack);
+        logger.error(`Destinations: ${destinations.length} streams`);
+
+        if (stdout) {
+          logger.error(`========== FFMPEG STDOUT ==========`);
+          logger.error(stdout);
+        } else {
+          logger.error(`STDOUT: (empty)`);
+        }
+
+        if (stderr) {
+          logger.error(`========== FFMPEG STDERR ==========`);
+          logger.error(stderr);
+        } else {
+          logger.error(`STDERR: (empty)`);
+        }
+
+        logger.error(`========== END FFMPEG ERROR ==========`);
+
+        diagnosticLogger.logError(
+          'ffmpeg',
+          'CompositorPipeline',
+          `FFmpeg multi-stream process error`,
+          err,
+          {
+            destinationCount: destinations.length,
+            stdout: stdout ? stdout.substring(0, 1000) : '',
+            stderr: stderr ? stderr.substring(0, 1000) : '',
+          },
+          broadcastId
+        );
+      })
+      .on('end', () => {
+        logger.info(`FFmpeg multi-stream process ended for ${destinations.length} destination(s)`);
+        diagnosticLogger.logFFmpeg(
+          'CompositorPipeline',
+          `FFmpeg multi-stream process ended`,
+          'info',
+          { destinationCount: destinations.length },
+          broadcastId
+        );
+      })
+      .on('stderr', (stderrLine: string) => {
+        // Log ALL stderr output to help diagnose issues
+        if (stderrLine.includes('error') || stderrLine.includes('Error') ||
+            stderrLine.includes('warning') || stderrLine.includes('Warning') ||
+            stderrLine.includes('failed') || stderrLine.includes('Failed') ||
+            stderrLine.includes('Invalid') || stderrLine.includes('invalid')) {
+          logger.error(`[FFmpeg Multi-Stream] ${stderrLine}`);
+        } else if (stderrLine.includes('bitrate=') || stderrLine.includes('fps=')) {
+          logger.info(`[FFmpeg Multi-Stream] ${stderrLine}`);
+          const bitrateMatch = stderrLine.match(/bitrate=\s*([\d.]+)kbits\/s/);
+          const fpsMatch = stderrLine.match(/fps=\s*([\d.]+)/);
+          if (bitrateMatch || fpsMatch) {
+            diagnosticLogger.logPerformance(
+              'ffmpeg',
+              'FFmpegMetrics',
+              `FFmpeg multi-stream performance metrics`,
+              {
+                bitrate: bitrateMatch ? parseFloat(bitrateMatch[1]) : undefined,
+                frameRate: fpsMatch ? parseFloat(fpsMatch[1]) : undefined,
+              },
+              broadcastId
+            );
+          }
+        } else {
+          logger.debug(`[FFmpeg Multi-Stream] ${stderrLine}`);
+        }
+      });
+
+    try {
+      command.run();
+      ffmpegProcesses.set(broadcastId, command); // Store single process by broadcast ID
+      logger.info(`✅ FFmpeg multi-stream process started successfully for ${destinations.length} destination(s)`);
+    } catch (error) {
+      logger.error(`========== FAILED TO START FFMPEG MULTI-STREAM ==========`);
+      logger.error(`Exception during command.run():`);
+      logger.error(`Error:`, error);
+      logger.error(`Error message: ${(error as Error).message}`);
+      logger.error(`Error stack:`, (error as Error).stack);
+      logger.error(`Destination count: ${destinations.length}`);
+      logger.error(`Media Server IP: ${mediaServerIp}`);
+      logger.error(`Video Port: ${videoPort}, Audio Port: ${audioPort}`);
+      logger.error(`========== END FAILED TO START FFMPEG ==========`);
+      diagnosticLogger.logError(
+        'ffmpeg',
+        'CompositorPipeline',
+        `Failed to start FFmpeg multi-stream process`,
+        error as Error,
+        {
+          destinationCount: destinations.length,
+          mediaServerIp,
+          videoPort,
+          audioPort,
+        },
+        broadcastId
+      );
     }
 
     // Store pipeline
