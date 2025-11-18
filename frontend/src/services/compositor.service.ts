@@ -134,25 +134,39 @@ class CompositorService {
     logger.info('Adding participant to compositor:', participant.id);
 
     const video = document.createElement('video');
-    video.srcObject = participant.stream;
     video.autoplay = true;
     video.playsInline = true;
     video.muted = true; // Mute for composition (audio handled separately)
 
-    // Wait for video to be ready with 5 second timeout
-    await Promise.race([
-      new Promise<void>((resolve) => {
+    // Check if stream has video tracks
+    const hasVideoTracks = participant.stream && participant.stream.getVideoTracks().length > 0;
+
+    // Only wait for metadata if video is enabled and has video tracks
+    if (participant.videoEnabled && hasVideoTracks) {
+      // Set up event listener before assigning srcObject to avoid missing the event
+      const metadataPromise = new Promise<void>((resolve) => {
         video.onloadedmetadata = () => {
           video.play().catch(err => logger.error('Failed to play video:', err));
           resolve();
         };
-      }),
-      new Promise<void>((_, reject) => setTimeout(() => {
-        const error = new Error(`Video metadata load timeout for participant ${participant.id}`);
-        logger.error(error.message);
-        reject(error);
-      }, 5000))
-    ]);
+      });
+
+      video.srcObject = participant.stream;
+
+      // Wait for video to be ready with 5 second timeout
+      await Promise.race([
+        metadataPromise,
+        new Promise<void>((_, reject) => setTimeout(() => {
+          const error = new Error(`Video metadata load timeout for participant ${participant.id}`);
+          logger.error(error.message);
+          reject(error);
+        }, 5000))
+      ]);
+    } else {
+      // No video or video disabled - just set the stream without waiting
+      video.srcObject = participant.stream;
+      logger.info(`Skipping video metadata wait for participant ${participant.id} (videoEnabled: ${participant.videoEnabled}, hasVideoTracks: ${hasVideoTracks})`);
+    }
 
     this.videoElements.set(participant.id, video);
     this.participants.set(participant.id, participant);
