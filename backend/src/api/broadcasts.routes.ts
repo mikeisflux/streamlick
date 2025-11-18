@@ -282,8 +282,11 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
               // Handle YouTube live broadcast creation
               if (destination.platform === 'youtube' && destination.channelId) {
                 try {
+                  logger.info(`[YouTube] Starting broadcast creation for destination ${destination.id}`);
+
                   // Get valid token (auto-refreshes if needed)
                   const accessToken = await getValidYouTubeToken(destination.id);
+                  logger.info(`[YouTube] Got valid access token for destination ${destination.id}`);
 
                   // Get privacy and scheduling settings for this destination
                   const settings = destinationSettings[destination.id] || {};
@@ -291,6 +294,8 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
                   const scheduledStartTime = settings.scheduledStartTime || undefined;
                   const title = settings.title || broadcast.title || 'Live Stream';
                   const description = settings.description || broadcast.description || '';
+
+                  logger.info(`[YouTube] Creating broadcast with settings: title="${title}", description="${description}", privacy=${privacyStatus}`);
 
                   // Create YouTube live broadcast
                   const ytBroadcast = await createYouTubeLiveBroadcast(
@@ -305,24 +310,24 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
                   streamKey = ytBroadcast.streamKey;
                   liveVideoId = ytBroadcast.broadcastId;
 
-                  logger.info(`Created YouTube live broadcast: ${liveVideoId} (privacy: ${privacyStatus}${scheduledStartTime ? ', scheduled: ' + scheduledStartTime : ''})`);
+                  logger.info(`[YouTube] ✅ Created broadcast ${liveVideoId} - RTMP URL: ${streamUrl}`);
+                  logger.info(`[YouTube] Privacy: ${privacyStatus}${scheduledStartTime ? ', scheduled: ' + scheduledStartTime : ''}`);
 
                   // Start monitoring and transitioning to live (non-blocking)
                   // This runs in the background and transitions the broadcast when YouTube detects the stream
                   monitorAndTransitionYouTubeBroadcast(ytBroadcast.broadcastId, accessToken)
                     .then(() => {
-                      logger.info(`YouTube broadcast ${liveVideoId} monitoring completed successfully`);
+                      logger.info(`[YouTube] ✅ Broadcast ${liveVideoId} monitoring completed successfully`);
                     })
                     .catch((error) => {
-                      logger.error(`YouTube broadcast ${liveVideoId} monitoring failed:`, error);
+                      logger.error(`[YouTube] ❌ Broadcast ${liveVideoId} monitoring failed: ${error.message}`);
                       // Don't fail the entire broadcast - it's already created
                     });
                 } catch (error: any) {
-                  logger.error(`Failed to create YouTube live broadcast for destination ${destination.id}:`, {
-                    error: error.message,
-                    response: error.response?.data,
-                    status: error.response?.status,
-                  });
+                  logger.error(`[YouTube] ❌ Failed to create broadcast for destination ${destination.id}: ${error.message}`);
+                  if (error.response?.data) {
+                    logger.error(`[YouTube] Error response: ${JSON.stringify(error.response.data)}`);
+                  }
                   continue; // Skip this destination
                 }
               }
