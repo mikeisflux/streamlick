@@ -52,11 +52,27 @@ validateEnvironment();
 
 const app = express();
 const server = http.createServer(app);
+
+logger.info('========== SOCKET.IO INITIALIZATION ==========');
+logger.info(`CORS origin: ${process.env.FRONTEND_URL || 'http://localhost:3002'}`);
+
 const io = new SocketServer(server, {
   cors: {
     origin: process.env.FRONTEND_URL || 'http://localhost:3002',
     credentials: true,
   },
+});
+
+logger.info('✅ Socket.io server created');
+
+// Debug middleware to log ALL incoming connection attempts
+io.use((socket, next) => {
+  logger.info(`[Socket.io Middleware] ========== NEW CONNECTION ATTEMPT ==========`);
+  logger.info(`[Socket.io Middleware] Socket ID: ${socket.id}`);
+  logger.info(`[Socket.io Middleware] Origin: ${socket.handshake.headers.origin}`);
+  logger.info(`[Socket.io Middleware] Referer: ${socket.handshake.headers.referer}`);
+  logger.info(`[Socket.io Middleware] User-Agent: ${socket.handshake.headers['user-agent']}`);
+  next();
 });
 
 const PORT = process.env.MEDIA_SERVER_PORT || 3001;
@@ -309,7 +325,20 @@ app.get('/broadcasts/:broadcastId/rtp-capabilities', async (req: express.Request
 
 // Socket.io handlers
 io.on('connection', (socket) => {
-  logger.info(`Media socket connected: ${socket.id}`);
+  logger.info(`========== SOCKET CONNECTION ESTABLISHED ==========`);
+  logger.info(`Socket ID: ${socket.id}`);
+  logger.info(`Client IP: ${socket.handshake.address}`);
+  logger.info(`Origin: ${socket.handshake.headers.origin}`);
+
+  // Wrap socket.on to log ALL incoming events
+  const originalOn = socket.on.bind(socket);
+  socket.on = function(event: string, handler: any) {
+    return originalOn(event, (...args: any[]) => {
+      logger.info(`[Event Received] "${event}" on socket ${socket.id}`);
+      logger.info(`[Event Data] ${JSON.stringify(args.length > 0 && typeof args[0] === 'object' ? args[0] : args).substring(0, 500)}`);
+      return handler(...args);
+    });
+  } as any;
 
   // Create transport
   socket.on('create-transport', async ({ broadcastId, direction }, callback) => {
