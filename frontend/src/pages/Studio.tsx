@@ -11,7 +11,7 @@ import { LeftSidebar } from '../components/studio/LeftSidebar';
 import { RightSidebar } from '../components/studio/RightSidebar';
 import { BottomControlBar } from '../components/studio/BottomControlBar';
 import { DeviceSelectors } from '../components/studio/DeviceSelectors';
-import { StudioCanvas, LayoutSelector, PreviewArea, CanvasSettingsModal } from '../components/studio/canvas';
+import { StudioCanvas, LayoutSelector, PreviewArea, CanvasSettingsModal, CountdownOverlay } from '../components/studio/canvas';
 import { StudioHeader } from '../components/studio/StudioHeader';
 import { StudioDrawers } from '../components/studio/StudioDrawers';
 import { StudioModals } from '../components/studio/StudioModals';
@@ -41,10 +41,14 @@ import {
   useStudioHandlers,
 } from '../hooks/studio';
 import { useCanvasSettings } from '../hooks/studio/useCanvasSettings';
+import { socketService } from '../services/socket.service';
 
 export function Studio() {
   const { broadcastId } = useParams<{ broadcastId: string }>();
   const { messages: hotkeyMessages } = useHotkeyFeedback();
+
+  // Countdown state
+  const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
 
   // Refs
   const micButtonRef = useRef<HTMLDivElement>(null);
@@ -136,6 +140,27 @@ export function Studio() {
       console.error('Failed to save destination settings to localStorage:', error);
     }
   }, [destinationSettings, broadcastId]);
+
+  // Countdown socket listeners
+  useEffect(() => {
+    const handleCountdownTick = (data: { secondsRemaining: number }) => {
+      console.log('[Studio] Countdown tick:', data.secondsRemaining);
+      setCountdownSeconds(data.secondsRemaining);
+    };
+
+    const handleCountdownComplete = () => {
+      console.log('[Studio] Countdown complete');
+      setCountdownSeconds(null);
+    };
+
+    socketService.on('countdown-tick', handleCountdownTick);
+    socketService.on('countdown-complete', handleCountdownComplete);
+
+    return () => {
+      socketService.off('countdown-tick', handleCountdownTick);
+      socketService.off('countdown-complete', handleCountdownComplete);
+    };
+  }, []);
 
   // Sidebar management
   const {
@@ -317,7 +342,7 @@ export function Studio() {
         {/* Main Canvas Area */}
         <main className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#F5F5F5' }}>
           {/* Canvas Container - constrained to leave room for Layout Selector and Preview Area */}
-          <div className="flex items-center justify-center px-6 pb-20" style={{ minHeight: 0, maxHeight: 'calc(100% - 350px)', flexShrink: 1, paddingTop: '144px' }}>
+          <div className="flex items-center justify-center px-6 pb-20 relative" style={{ minHeight: 0, maxHeight: 'calc(100% - 350px)', flexShrink: 1, paddingTop: '144px' }}>
             <StudioCanvas
               localStream={processedStream || localStream}
               videoEnabled={videoEnabled}
@@ -355,6 +380,8 @@ export function Studio() {
               displayedComment={displayedComment}
               onDismissComment={() => setDisplayedComment(null)}
             />
+            {/* Countdown Overlay */}
+            <CountdownOverlay seconds={countdownSeconds} />
           </div>
 
           {/* Layout Selector - Always visible below canvas */}

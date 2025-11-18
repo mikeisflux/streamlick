@@ -39,3 +39,27 @@ export const CaptionOverlay = memo(({ caption }: { caption: Caption | null }) =>
 });
 
 CaptionOverlay.displayName = 'CaptionOverlay';
+
+// Countdown Overlay Component
+export const CountdownOverlay = memo(({ seconds }: { seconds: number | null }) => {
+  if (seconds === null || seconds <= 0) return null;
+
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm pointer-events-none z-50">
+      <div className="text-center">
+        <div className="text-9xl font-bold text-white mb-4 animate-pulse" style={{
+          textShadow: '0 0 30px rgba(255, 255, 255, 0.5), 0 0 60px rgba(59, 130, 246, 0.5)',
+        }}>
+          {seconds}
+        </div>
+        <div className="text-2xl font-semibold text-white/90" style={{
+          textShadow: '2px 2px 4px rgba(0, 0, 0, 0.8)',
+        }}>
+          Going live in...
+        </div>
+      </div>
+    </div>
+  );
+});
+
+CountdownOverlay.displayName = 'CountdownOverlay';
