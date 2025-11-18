@@ -147,7 +147,7 @@ export async function createYouTubeLiveBroadcast(
     });
 
     // Step 1: Create liveBroadcast
-    logger.info('[YouTube Step 1/4] Creating liveBroadcast...');
+    logger.info('[YouTube Step 1/3] Creating liveBroadcast...');
     const broadcastResponse = await axios.post(
       `${YOUTUBE_API_BASE}/liveBroadcasts`,
       {
@@ -176,14 +176,14 @@ export async function createYouTubeLiveBroadcast(
     );
 
     const broadcastId = broadcastResponse.data.id;
-    logger.info(`[YouTube Step 1/4] ✓ LiveBroadcast created successfully`, {
+    logger.info(`[YouTube Step 1/3] ✓ LiveBroadcast created successfully`, {
       broadcastId,
       lifeCycleStatus: broadcastResponse.data.status?.lifeCycleStatus,
       privacyStatus: broadcastResponse.data.status?.privacyStatus
     });
 
     // Step 2: Create or get liveStream
-    logger.info('[YouTube Step 2/4] Creating liveStream...');
+    logger.info('[YouTube Step 2/3] Creating liveStream...');
     const streamResponse = await axios.post(
       `${YOUTUBE_API_BASE}/liveStreams`,
       {
@@ -210,7 +210,7 @@ export async function createYouTubeLiveBroadcast(
     const rtmpUrl = ingestionInfo.ingestionAddress;
     const streamKey = ingestionInfo.streamName;
 
-    logger.info(`[YouTube Step 2/4] ✓ LiveStream created successfully`, {
+    logger.info(`[YouTube Step 2/3] ✓ LiveStream created successfully`, {
       streamId,
       rtmpUrl,
       streamKeyLength: streamKey?.length,
@@ -219,7 +219,7 @@ export async function createYouTubeLiveBroadcast(
     });
 
     // Step 3: Bind broadcast to stream
-    logger.info('[YouTube Step 3/4] Binding broadcast to stream...');
+    logger.info('[YouTube Step 3/3] Binding broadcast to stream...');
     await axios.post(
       `${YOUTUBE_API_BASE}/liveBroadcasts/bind`,
       null,
@@ -233,30 +233,14 @@ export async function createYouTubeLiveBroadcast(
       }
     );
 
-    logger.info(`[YouTube Step 3/4] ✓ Broadcast bound to stream successfully`, {
+    logger.info(`[YouTube Step 3/3] ✓ Broadcast bound to stream successfully`, {
       broadcastId,
       streamId
     });
 
-    // Step 4: Transition to "ready" status
-    logger.info('[YouTube Step 4/4] Transitioning broadcast to ready...');
-    await axios.post(
-      `${YOUTUBE_API_BASE}/liveBroadcasts/transition`,
-      null,
-      {
-        params: {
-          id: broadcastId,
-          broadcastStatus: 'ready',
-          part: 'status',
-        },
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
-    );
-
-    logger.info(`[YouTube Step 4/4] ✓ Broadcast transitioned to ready`, {
-      broadcastId,
-      status: 'ready'
-    });
+    // Broadcast is now in "ready" status automatically after binding
+    // No need to transition - it's ready to go live
+    logger.info('[YouTube] ✓ Broadcast is ready - can transition to "testing" or "live" when needed');
 
     logger.info('✓ YouTube live broadcast created successfully', {
       broadcastId,
