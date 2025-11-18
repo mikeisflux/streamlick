@@ -40,15 +40,20 @@ export function Admin() {
         // Fetch all stats in parallel
         const [serversRes, broadcastsRes, usersRes, storageRes] = await Promise.all([
           api.get('/media-servers').catch(() => ({ data: [] })),
-          api.get('/broadcasts').catch(() => ({ data: [] })),
+          api.get('/broadcasts').catch(() => ({ data: { broadcasts: [] } })),
           api.get('/admin/users').catch(() => ({ data: [] })),
           api.get('/admin/storage-stats').catch(() => ({ data: { configured: false, totalSize: 0, objectCount: 0, formattedSize: '0 B', bucketName: '' } })),
         ]);
 
+        // Handle paginated responses
+        const servers = Array.isArray(serversRes.data) ? serversRes.data : [];
+        const broadcasts = broadcastsRes.data.broadcasts || [];
+        const users = Array.isArray(usersRes.data) ? usersRes.data : [];
+
         setStats({
-          activeServers: serversRes.data.filter((s: any) => s.status === 'active').length || 0,
-          activeBroadcasts: broadcastsRes.data.filter((b: any) => b.status === 'live').length || 0,
-          totalUsers: usersRes.data.length || 0,
+          activeServers: servers.filter((s: any) => s.status === 'active').length || 0,
+          activeBroadcasts: broadcasts.filter((b: any) => b.status === 'live').length || 0,
+          totalUsers: users.length || 0,
           systemStatus: 'Online',
         });
 
