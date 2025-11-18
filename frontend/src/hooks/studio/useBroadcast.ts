@@ -6,6 +6,7 @@ import { webrtcService } from '../../services/webrtc.service';
 import { compositorService } from '../../services/compositor.service';
 import { recordingService } from '../../services/recording.service';
 import { useStudioStore } from '../../store/studioStore';
+import api from '../../services/api';
 import toast from 'react-hot-toast';
 
 interface RemoteParticipant {
@@ -215,7 +216,7 @@ export function useBroadcast({
       await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds for async broadcast creation
 
       // Fetch broadcast destinations with decrypted RTMP URLs and stream keys
-      const broadcastDestinationsResponse = await broadcastService.api.get(`/broadcasts/${broadcastId}/destinations`);
+      const broadcastDestinationsResponse = await api.get(`/broadcasts/${broadcastId}/destinations`);
       const broadcastDestinations = broadcastDestinationsResponse.data;
 
       console.log('[useBroadcast] Fetched broadcast destinations:', broadcastDestinations);
