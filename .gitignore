@@ -402,3 +402,13 @@ local-settings.json
 .vscode/launch.json
 .idea/workspace.xml
 .idea/tasks.xml
+
+# Permanently block "enhanced" files
+*Enhanced.tsx
+*Enhanced.ts
+*Enhanced.jsx
+*Enhanced.js
+*enhanced*.tsx
+*enhanced*.ts
+**/*Enhanced*
+**/*enhanced*
