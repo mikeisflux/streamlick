@@ -177,18 +177,26 @@ a=recvonly`;
       // Global options - verbose logging for debugging
       .addOptions([
         '-loglevel', 'verbose',
+        '-fflags', '+genpts',           // Generate presentation timestamps to handle packet reordering
+        '-max_delay', '5000000',        // Increase max delay tolerance to 5 seconds (helps with RTP jitter)
       ])
       // Video input - SDP file describes the H.264 stream on port 40200
       .input(videoSdpPath)
       .inputOptions([
         '-protocol_whitelist', 'file,rtp,udp',
         '-f', 'sdp',
+        '-analyzeduration', '10000000', // Increase analysis duration (10s) for better RTP stream detection
+        '-probesize', '10000000',       // Increase probe size (10MB) to buffer more RTP packets
+        '-reorder_queue_size', '5000',  // Increase reorder queue to handle out-of-order RTP packets
       ])
       // Audio input - SDP file describes the Opus stream on port 40202
       .input(audioSdpPath)
       .inputOptions([
         '-protocol_whitelist', 'file,rtp,udp',
         '-f', 'sdp',
+        '-analyzeduration', '10000000',
+        '-probesize', '10000000',
+        '-reorder_queue_size', '5000',
       ])
       // Video encoding - copy H.264 stream (no transcoding needed!)
       // Browser now produces H.264 directly, which RTMP supports natively
