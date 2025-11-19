@@ -540,6 +540,28 @@ io.on('connection', (socket) => {
       }
       logger.info(`✅ Router found`);
 
+      // CRITICAL: Deduplicate destinations to prevent multiple stream keys for the same broadcast
+      // Deduplicate based on unique combination of rtmpUrl + streamKey
+      const destinationKeys = new Set();
+      const deduplicatedDestinations = destinations.filter((dest: any) => {
+        const key = `${dest.platform}:${dest.rtmpUrl}:${dest.streamKey}`;
+        if (destinationKeys.has(key)) {
+          logger.warn(`⚠️  [Media Server] Duplicate destination detected: ${dest.platform} - ${dest.rtmpUrl} (stream key: ${dest.streamKey?.substring(0, 10)}...)`);
+          return false;
+        }
+        destinationKeys.add(key);
+        return true;
+      });
+
+      if (deduplicatedDestinations.length !== destinations.length) {
+        logger.warn(`⚠️  [Media Server] Deduplicated ${destinations.length} destinations to ${deduplicatedDestinations.length} (removed ${destinations.length - deduplicatedDestinations.length} duplicates)`);
+        logger.warn(`⚠️  [Media Server] Original destinations: ${JSON.stringify(destinations.map((d: any) => ({ platform: d.platform, streamKey: d.streamKey?.substring(0, 10) })))}`);
+        logger.warn(`⚠️  [Media Server] Deduplicated destinations: ${JSON.stringify(deduplicatedDestinations.map((d: any) => ({ platform: d.platform, streamKey: d.streamKey?.substring(0, 10) })))}`);
+      }
+
+      // Use deduplicated array for the rest of the function
+      const finalDestinations = deduplicatedDestinations;
+
       // If composite producers are specified, use compositor pipeline
       if (compositeProducers?.videoProducerId && compositeProducers?.audioProducerId) {
         logger.info(`[Compositor Pipeline] Video producer ID: ${compositeProducers.videoProducerId}`);
@@ -553,17 +575,17 @@ io.on('connection', (socket) => {
         logger.info(`[Compositor Pipeline] Available producers in map: ${Array.from(broadcast.producers.keys()).join(', ')}`);
 
         if (videoProducer && audioProducer) {
-          logger.info(`🚀 Starting compositor pipeline for ${destinations.length} destination(s)...`);
+          logger.info(`🚀 Starting compositor pipeline for ${finalDestinations.length} destination(s)...`);
 
           // Log each destination details
-          destinations.forEach((dest: any, index: number) => {
+          finalDestinations.forEach((dest: any, index: number) => {
             logger.info(`[Destination ${index + 1}] Platform: ${dest.platform}`);
             logger.info(`[Destination ${index + 1}] RTMP URL: ${dest.rtmpUrl}`);
             logger.info(`[Destination ${index + 1}] Stream Key length: ${dest.streamKey?.length || 0}`);
             logger.info(`[Destination ${index + 1}] Full RTMP: ${dest.rtmpUrl}/${dest.streamKey?.substring(0, 10)}...`);
           });
 
-          await createCompositorPipeline(router, broadcastId, videoProducer, audioProducer, destinations);
+          await createCompositorPipeline(router, broadcastId, videoProducer, audioProducer, finalDestinations);
 
           if (socket.connected) {
             socket.emit('rtmp-started', { broadcastId, method: 'compositor-pipeline' });
@@ -572,7 +594,7 @@ io.on('connection', (socket) => {
         } else {
           logger.warn('⚠️  Composite producers not found, falling back to legacy RTMP');
           logger.warn(`Available producers: ${Array.from(broadcast.producers.keys()).join(', ')}`);
-          startRTMPStream(broadcastId, destinations);
+          startRTMPStream(broadcastId, finalDestinations);
           if (socket.connected) {
             socket.emit('rtmp-started', { broadcastId, method: 'legacy' });
           }
@@ -582,7 +604,7 @@ io.on('connection', (socket) => {
         logger.info('⚠️  No composite producers specified, using legacy RTMP streaming');
         logger.info(`Video producer ID: ${compositeProducers?.videoProducerId || 'undefined'}`);
         logger.info(`Audio producer ID: ${compositeProducers?.audioProducerId || 'undefined'}`);
-        startRTMPStream(broadcastId, destinations);
+        startRTMPStream(broadcastId, finalDestinations);
         if (socket.connected) {
           socket.emit('rtmp-started', { broadcastId, method: 'legacy' });
         }

@@ -156,25 +156,29 @@ export async function createCompositorPipeline(
     });
 
     // FFmpeg will listen on different ports to avoid binding conflicts
-    // MediaSoup uses ports 40000-40100 for WebRTC, FFmpeg uses 40200-40201
+    // MediaSoup uses ports 40000-40100 for WebRTC, FFmpeg uses 40200-40203 (RTP + RTCP for video and audio)
     // Available range: 40000-49999
-    const ffmpegVideoPort = 40200;
-    const ffmpegAudioPort = 40201;
+    const ffmpegVideoPort = 40200;      // Video RTP
+    const ffmpegVideoRtcpPort = 40201;  // Video RTCP
+    const ffmpegAudioPort = 40202;      // Audio RTP
+    const ffmpegAudioRtcpPort = 40203;  // Audio RTCP
     const ffmpegIp = '127.0.0.1';
 
-    // Connect plain transports to tell MediaSoup where to send RTP
+    // Connect plain transports to tell MediaSoup where to send RTP/RTCP
     // MediaSoup will send RTP packets TO FFmpeg's listening ports
     await videoTransport.connect({
       ip: ffmpegIp,
       port: ffmpegVideoPort,
+      rtcpPort: ffmpegVideoRtcpPort,
     });
-    logger.info(`Video transport connected - MediaSoup will send RTP to ${ffmpegIp}:${ffmpegVideoPort}`);
+    logger.info(`Video transport connected - MediaSoup will send RTP to ${ffmpegIp}:${ffmpegVideoPort}, RTCP to ${ffmpegIp}:${ffmpegVideoRtcpPort}`);
 
     await audioTransport.connect({
       ip: ffmpegIp,
       port: ffmpegAudioPort,
+      rtcpPort: ffmpegAudioRtcpPort,
     });
-    logger.info(`Audio transport connected - MediaSoup will send RTP to ${ffmpegIp}:${ffmpegAudioPort}`);
+    logger.info(`Audio transport connected - MediaSoup will send RTP to ${ffmpegIp}:${ffmpegAudioPort}, RTCP to ${ffmpegIp}:${ffmpegAudioRtcpPort}`);
 
     // Build tee output for multiple RTMP destinations
     // Format: [f=flv:flvflags=no_duration_filesize]rtmp://url1|[f=flv:flvflags=no_duration_filesize]rtmp://url2
