@@ -209,9 +209,9 @@ a=recvonly`;
         .inputOptions([
           '-protocol_whitelist', 'file,rtp,udp',
           '-f', 'sdp',
-          '-analyzeduration', '10000000', // Increase analysis duration (10s) for better RTP stream detection
-          '-probesize', '10000000',       // Increase probe size (10MB) to buffer more RTP packets
-          '-reorder_queue_size', '5000',  // Increase reorder queue to handle out-of-order RTP packets
+          '-analyzeduration', '2000000',  // 2s analysis (reduced from 10s to save memory)
+          '-probesize', '2000000',        // 2MB probe size (reduced from 10MB to save memory)
+          '-reorder_queue_size', '500',   // Reduced from 5000 to prevent OOM (still handles packet reordering)
         ])
         // Video encoding - copy H.264 stream (no transcoding needed!)
         .videoCodec('copy')
@@ -229,6 +229,7 @@ a=recvonly`;
           '-map', '0:v',    // Video from unified input
           '-map', '0:a',    // Audio from unified input
           '-flvflags', 'no_duration_filesize',
+          '-max_muxing_queue_size', '1024',  // Limit muxing queue to prevent memory overflow
         ]);
     } else {
       // MULTIPLE DESTINATIONS: Use tee muxer
@@ -254,9 +255,9 @@ a=recvonly`;
         .inputOptions([
           '-protocol_whitelist', 'file,rtp,udp',
           '-f', 'sdp',
-          '-analyzeduration', '10000000', // Increase analysis duration (10s) for better RTP stream detection
-          '-probesize', '10000000',       // Increase probe size (10MB) to buffer more RTP packets
-          '-reorder_queue_size', '5000',  // Increase reorder queue to handle out-of-order RTP packets
+          '-analyzeduration', '2000000',  // 2s analysis (reduced from 10s to save memory)
+          '-probesize', '2000000',        // 2MB probe size (reduced from 10MB to save memory)
+          '-reorder_queue_size', '500',   // Reduced from 5000 to prevent OOM (still handles packet reordering)
         ])
         // Video encoding - copy H.264 stream (no transcoding needed!)
         .videoCodec('copy')
@@ -273,6 +274,7 @@ a=recvonly`;
         .outputOptions([
           '-map', '0:v',    // Video from unified input
           '-map', '0:a',    // Audio from unified input
+          '-max_muxing_queue_size', '1024',  // Limit muxing queue to prevent memory overflow
         ]);
     }
 
