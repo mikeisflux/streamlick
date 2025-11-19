@@ -225,8 +225,13 @@ export function useBroadcast({
       // This triggers the 10-second countdown on the backend
       await broadcastService.start(broadcastId, deduplicatedDestinations, apiDestinationSettings);
 
+      // CRITICAL: Set isLive=true NOW so countdown is visible!
+      console.log('[useBroadcast] Setting isLive=true to show countdown and CompositorPreview...');
+      setIsLive(true);
+      toast.success('Starting broadcast...');
+
       // FLOW: 10-second countdown → intro video → user stream
-      // Step 1: Display 10-second countdown on canvas
+      // Step 1: Display 10-second countdown on canvas (NOW VISIBLE because isLive=true)
       console.log('[useBroadcast] Starting 10-second countdown on canvas...');
       await compositorService.startCountdown(10);
       console.log('[useBroadcast] Countdown finished!');
@@ -261,9 +266,8 @@ export function useBroadcast({
         },
       });
 
-      // CRITICAL: Set isLive=true NOW so CompositorPreview shows during intro video!
-      console.log('[useBroadcast] RTMP streaming started! Setting isLive=true to show CompositorPreview...');
-      setIsLive(true);
+      // isLive was already set to true before countdown (see above)
+      console.log('[useBroadcast] RTMP streaming started! Now live...');
       toast.success('You are now live!');
 
       // Step 3: Play intro video WHILE STREAMING (after going live)
