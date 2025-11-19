@@ -76,6 +76,33 @@ export async function createCompositorPipeline(
 
     logger.info('Consumers created on plain transports');
 
+    // DEBUG: Log producer and consumer stats to verify video is flowing
+    const videoProducerStats = await videoProducer.getStats();
+    const audioProducerStats = await audioProducer.getStats();
+    const videoConsumerStats = await videoConsumer.getStats();
+    const audioConsumerStats = await audioConsumer.getStats();
+
+    logger.info('========== PRODUCER/CONSUMER STATS ==========');
+    logger.info(`Video Producer Stats: ${JSON.stringify(Array.from(videoProducerStats.values()), null, 2)}`);
+    logger.info(`Audio Producer Stats: ${JSON.stringify(Array.from(audioProducerStats.values()), null, 2)}`);
+    logger.info(`Video Consumer Stats: ${JSON.stringify(Array.from(videoConsumerStats.values()), null, 2)}`);
+    logger.info(`Audio Consumer Stats: ${JSON.stringify(Array.from(audioConsumerStats.values()), null, 2)}`);
+    logger.info('================================================');
+
+    // Verify video producer is actually producing
+    if (videoProducer.paused) {
+      logger.error(`❌ VIDEO PRODUCER IS PAUSED! This will cause no video packets to be sent.`);
+    } else {
+      logger.info(`✅ Video producer is active (not paused)`);
+    }
+
+    // Verify video consumer is actually consuming
+    if (videoConsumer.paused) {
+      logger.error(`❌ VIDEO CONSUMER IS PAUSED! This will cause no video packets to be received.`);
+    } else {
+      logger.info(`✅ Video consumer is active (not paused)`);
+    }
+
     // Get RTP parameters
     const videoPort = videoTransport.tuple.localPort;
     const audioPort = audioTransport.tuple.localPort;
@@ -158,63 +185,117 @@ a=recvonly`;
     logger.info(`  Video SDP: ${videoSdpPath} (listening on ${ffmpegVideoPort})`);
     logger.info(`  Audio SDP: ${audioSdpPath} (listening on ${ffmpegAudioPort})`);
 
-    // Build tee output for multiple RTMP destinations
-    // Format: [f=flv:flvflags=no_duration_filesize]rtmp://url1|[f=flv:flvflags=no_duration_filesize]rtmp://url2
-    const teeOutputs = destinations.map(dest => {
-      const rtmpUrl = `${dest.rtmpUrl}/${dest.streamKey}`;
-      return `[f=flv:flvflags=no_duration_filesize]${rtmpUrl}`;
-    }).join('|');
-
-    logger.info(`========== STARTING SINGLE FFMPEG PROCESS ==========`);
-    logger.info(`Using tee muxer for ${destinations.length} destinations`);
-
-    // Start FFmpeg for all destinations using tee muxer
+    // Start FFmpeg for destinations
     const ffmpegProcesses = new Map<string, any>();
 
-    // Create a single FFmpeg command that outputs to multiple destinations
-    // FFmpeg uses SDP files to understand the RTP stream from MediaSoup
-    const command = ffmpeg()
-      // Global options - verbose logging for debugging
-      .addOptions([
-        '-loglevel', 'verbose',
-        '-fflags', '+genpts',           // Generate presentation timestamps to handle packet reordering
-        '-max_delay', '5000000',        // Increase max delay tolerance to 5 seconds (helps with RTP jitter)
-      ])
-      // Video input - SDP file describes the H.264 stream on port 40200
-      .input(videoSdpPath)
-      .inputOptions([
-        '-protocol_whitelist', 'file,rtp,udp',
-        '-f', 'sdp',
-        '-analyzeduration', '10000000', // Increase analysis duration (10s) for better RTP stream detection
-        '-probesize', '10000000',       // Increase probe size (10MB) to buffer more RTP packets
-        '-reorder_queue_size', '5000',  // Increase reorder queue to handle out-of-order RTP packets
-      ])
-      // Audio input - SDP file describes the Opus stream on port 40202
-      .input(audioSdpPath)
-      .inputOptions([
-        '-protocol_whitelist', 'file,rtp,udp',
-        '-f', 'sdp',
-        '-analyzeduration', '10000000',
-        '-probesize', '10000000',
-        '-reorder_queue_size', '5000',
-      ])
-      // Video encoding - copy H.264 stream (no transcoding needed!)
-      // Browser now produces H.264 directly, which RTMP supports natively
-      .videoCodec('copy')
-      // Audio encoding - transcode Opus to AAC for RTMP
-      .audioCodec('aac')
-      .outputOptions([
-        '-b:a', '160k',
-        '-ar', '48000',
-        '-ac', '2',
-      ])
-      // Use tee muxer to output to multiple destinations
-      .format('tee')
-      .output(teeOutputs)
-      .outputOptions([
-        '-map', '0:v',
-        '-map', '1:a',
-      ]);
+    // Build output based on number of destinations
+    let command: any;
+
+    if (destinations.length === 1) {
+      // SINGLE DESTINATION: Output directly to RTMP (no tee muxer)
+      const dest = destinations[0];
+      const rtmpUrl = `${dest.rtmpUrl}/${dest.streamKey}`;
+
+      logger.info(`========== STARTING SINGLE FFMPEG PROCESS (DIRECT OUTPUT) ==========`);
+      logger.info(`Destination: ${dest.platform} - ${dest.rtmpUrl}`);
+
+      command = ffmpeg()
+        // Global options - debug logging with detailed reports
+        .addOptions([
+          '-loglevel', 'debug',           // More detailed logging than verbose
+          '-report',                      // Generate detailed log file (ffmpeg-YYYYMMDD-HHMMSS.log)
+          '-fflags', '+genpts',           // Generate presentation timestamps to handle packet reordering
+          '-max_delay', '5000000',        // Increase max delay tolerance to 5 seconds (helps with RTP jitter)
+        ])
+        // Video input - SDP file describes the H.264 stream on port 40200
+        .input(videoSdpPath)
+        .inputOptions([
+          '-protocol_whitelist', 'file,rtp,udp',
+          '-f', 'sdp',
+          '-analyzeduration', '10000000', // Increase analysis duration (10s) for better RTP stream detection
+          '-probesize', '10000000',       // Increase probe size (10MB) to buffer more RTP packets
+          '-reorder_queue_size', '5000',  // Increase reorder queue to handle out-of-order RTP packets
+        ])
+        // Audio input - SDP file describes the Opus stream on port 40202
+        .input(audioSdpPath)
+        .inputOptions([
+          '-protocol_whitelist', 'file,rtp,udp',
+          '-f', 'sdp',
+          '-analyzeduration', '10000000',
+          '-probesize', '10000000',
+          '-reorder_queue_size', '5000',
+        ])
+        // Video encoding - copy H.264 stream (no transcoding needed!)
+        .videoCodec('copy')
+        // Audio encoding - transcode Opus to AAC for RTMP
+        .audioCodec('aac')
+        .outputOptions([
+          '-b:a', '160k',
+          '-ar', '48000',
+          '-ac', '2',
+        ])
+        // Output directly to single RTMP destination
+        .format('flv')
+        .output(rtmpUrl)
+        .outputOptions([
+          '-map', '0:v',
+          '-map', '1:a',
+          '-flvflags', 'no_duration_filesize',
+        ]);
+    } else {
+      // MULTIPLE DESTINATIONS: Use tee muxer
+      // Format: [f=flv:flvflags=no_duration_filesize]rtmp://url1|[f=flv:flvflags=no_duration_filesize]rtmp://url2
+      const teeOutputs = destinations.map(dest => {
+        const rtmpUrl = `${dest.rtmpUrl}/${dest.streamKey}`;
+        return `[f=flv:flvflags=no_duration_filesize]${rtmpUrl}`;
+      }).join('|');
+
+      logger.info(`========== STARTING SINGLE FFMPEG PROCESS (TEE MUXER) ==========`);
+      logger.info(`Using tee muxer for ${destinations.length} destinations`);
+
+      command = ffmpeg()
+        // Global options - debug logging with detailed reports
+        .addOptions([
+          '-loglevel', 'debug',           // More detailed logging than verbose
+          '-report',                      // Generate detailed log file (ffmpeg-YYYYMMDD-HHMMSS.log)
+          '-fflags', '+genpts',           // Generate presentation timestamps to handle packet reordering
+          '-max_delay', '5000000',        // Increase max delay tolerance to 5 seconds (helps with RTP jitter)
+        ])
+        // Video input - SDP file describes the H.264 stream on port 40200
+        .input(videoSdpPath)
+        .inputOptions([
+          '-protocol_whitelist', 'file,rtp,udp',
+          '-f', 'sdp',
+          '-analyzeduration', '10000000', // Increase analysis duration (10s) for better RTP stream detection
+          '-probesize', '10000000',       // Increase probe size (10MB) to buffer more RTP packets
+          '-reorder_queue_size', '5000',  // Increase reorder queue to handle out-of-order RTP packets
+        ])
+        // Audio input - SDP file describes the Opus stream on port 40202
+        .input(audioSdpPath)
+        .inputOptions([
+          '-protocol_whitelist', 'file,rtp,udp',
+          '-f', 'sdp',
+          '-analyzeduration', '10000000',
+          '-probesize', '10000000',
+          '-reorder_queue_size', '5000',
+        ])
+        // Video encoding - copy H.264 stream (no transcoding needed!)
+        .videoCodec('copy')
+        // Audio encoding - transcode Opus to AAC for RTMP
+        .audioCodec('aac')
+        .outputOptions([
+          '-b:a', '160k',
+          '-ar', '48000',
+          '-ac', '2',
+        ])
+        // Use tee muxer to output to multiple destinations
+        .format('tee')
+        .output(teeOutputs)
+        .outputOptions([
+          '-map', '0:v',
+          '-map', '1:a',
+        ]);
+    }
 
     command
       .on('start', (commandLine: string) => {
@@ -279,6 +360,48 @@ a=recvonly`;
       ffmpegProcesses,
     });
 
+    // DEBUG: Monitor video/audio packet flow every 5 seconds
+    const monitorInterval = setInterval(async () => {
+      try {
+        const vProducerStats = await videoProducer.getStats();
+        const aProducerStats = await audioProducer.getStats();
+        const vConsumerStats = await videoConsumer.getStats();
+        const aConsumerStats = await audioConsumer.getStats();
+
+        // Extract packet counts from stats
+        const videoProducerPackets = Array.from(vProducerStats.values())
+          .filter((s: any) => s.type === 'outbound-rtp')
+          .map((s: any) => s.packetCount)[0] || 0;
+
+        const audioProducerPackets = Array.from(aProducerStats.values())
+          .filter((s: any) => s.type === 'outbound-rtp')
+          .map((s: any) => s.packetCount)[0] || 0;
+
+        const videoConsumerPackets = Array.from(vConsumerStats.values())
+          .filter((s: any) => s.type === 'inbound-rtp')
+          .map((s: any) => s.packetCount)[0] || 0;
+
+        const audioConsumerPackets = Array.from(aConsumerStats.values())
+          .filter((s: any) => s.type === 'inbound-rtp')
+          .map((s: any) => s.packetCount)[0] || 0;
+
+        logger.info(`[Monitor] Broadcast ${broadcastId} - Video: Producer=${videoProducerPackets} pkts, Consumer=${videoConsumerPackets} pkts | Audio: Producer=${audioProducerPackets} pkts, Consumer=${audioConsumerPackets} pkts`);
+
+        if (videoProducerPackets === 0) {
+          logger.error(`❌ VIDEO PRODUCER HAS SENT 0 PACKETS! Compositor may not be generating video frames.`);
+        }
+        if (videoConsumerPackets === 0) {
+          logger.error(`❌ VIDEO CONSUMER HAS RECEIVED 0 PACKETS! RTP video stream is not reaching FFmpeg.`);
+        }
+      } catch (error) {
+        logger.error('Error monitoring packet stats:', error);
+        clearInterval(monitorInterval);
+      }
+    }, 5000);
+
+    // Store interval for cleanup
+    (activePipelines.get(broadcastId) as any).monitorInterval = monitorInterval;
+
     logger.info(`Compositor pipeline created for broadcast ${broadcastId}`);
   } catch (error) {
     logger.error('Failed to create compositor pipeline:', error);
@@ -296,6 +419,12 @@ export async function stopCompositorPipeline(broadcastId: string): Promise<void>
   if (!pipeline) {
     logger.warn(`No pipeline found for broadcast ${broadcastId}`);
     return;
+  }
+
+  // Stop monitoring interval
+  if ((pipeline as any).monitorInterval) {
+    clearInterval((pipeline as any).monitorInterval);
+    logger.info('Monitor interval stopped');
   }
 
   // Stop FFmpeg processes
