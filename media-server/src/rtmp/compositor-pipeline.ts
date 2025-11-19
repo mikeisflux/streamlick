@@ -216,7 +216,8 @@ s=Video Stream
 c=IN IP4 ${ffmpegIp}
 t=0 0
 m=video ${ffmpegVideoPort} RTP/AVP ${videoPayloadType}
-a=rtpmap:${videoPayloadType} VP8/90000
+a=rtpmap:${videoPayloadType} H264/90000
+a=fmtp:${videoPayloadType} level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f
 a=recvonly`;
 
     const audioSdp = `v=0
@@ -261,7 +262,7 @@ a=recvonly`;
       .addOptions([
         '-loglevel', 'verbose',
       ])
-      // Video input - SDP file describes the VP8 stream on port 40200
+      // Video input - SDP file describes the H.264 stream on port 40200
       .input(videoSdpPath)
       .inputOptions([
         '-protocol_whitelist', 'file,rtp,udp',
@@ -273,18 +274,9 @@ a=recvonly`;
         '-protocol_whitelist', 'file,rtp,udp',
         '-f', 'sdp',
       ])
-      // Video encoding - transcode VP8 to H.264 for RTMP
-      .videoCodec('libx264')
-      .outputOptions([
-        '-preset', 'veryfast',  // Fast encoding
-        '-tune', 'zerolatency', // Low latency for live streaming
-        '-b:v', '4500k',        // 4.5 Mbps video bitrate for 4K
-        '-maxrate', '4500k',
-        '-bufsize', '9000k',
-        '-pix_fmt', 'yuv420p',  // Compatibility
-        '-g', '30',             // Keyframe every 1 second at 30fps (reduced from 60)
-        '-force_key_frames', 'expr:gte(t,n_forced*1)', // Force keyframe every 1 second
-      ])
+      // Video encoding - copy H.264 stream (no transcoding needed!)
+      // Browser now produces H.264 directly, which RTMP supports natively
+      .videoCodec('copy')
       // Audio encoding - transcode Opus to AAC for RTMP
       .audioCodec('aac')
       .outputOptions([
