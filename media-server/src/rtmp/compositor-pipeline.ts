@@ -155,6 +155,39 @@ export async function createCompositorPipeline(
       logger.info(`  [${index + 1}] ${dest.platform}: ${dest.rtmpUrl}/${dest.streamKey?.substring(0, 20)}...`);
     });
 
+    // Create SDP files for video and audio to avoid port binding conflicts
+    // SDP allows FFmpeg to receive RTP without binding to mediasoup's ports
+    const videoSdp = `v=0
+o=- 0 0 IN IP4 ${mediaServerIp}
+s=Video Stream
+c=IN IP4 ${mediaServerIp}
+t=0 0
+m=video ${videoPort} RTP/AVP ${videoPayloadType}
+a=rtpmap:${videoPayloadType} H264/90000
+a=recvonly`;
+
+    const audioSdp = `v=0
+o=- 0 0 IN IP4 ${mediaServerIp}
+s=Audio Stream
+c=IN IP4 ${mediaServerIp}
+t=0 0
+m=audio ${audioPort} RTP/AVP ${audioPayloadType}
+a=rtpmap:${audioPayloadType} opus/48000/2
+a=recvonly`;
+
+    // Write SDP files to /tmp
+    const fs = require('fs');
+    const path = require('path');
+    const videoSdpPath = path.join('/tmp', `video_${broadcastId}.sdp`);
+    const audioSdpPath = path.join('/tmp', `audio_${broadcastId}.sdp`);
+
+    fs.writeFileSync(videoSdpPath, videoSdp);
+    fs.writeFileSync(audioSdpPath, audioSdp);
+
+    logger.info(`SDP files created:`);
+    logger.info(`  Video SDP: ${videoSdpPath}`);
+    logger.info(`  Audio SDP: ${audioSdpPath}`);
+
     // Build tee output for multiple RTMP destinations
     // Format: [f=flv:flvflags=no_duration_filesize]rtmp://url1|[f=flv:flvflags=no_duration_filesize]rtmp://url2
     const teeOutputs = destinations.map(dest => {
@@ -169,20 +202,19 @@ export async function createCompositorPipeline(
     const ffmpegProcesses = new Map<string, any>();
 
     // Create a single FFmpeg command that outputs to multiple destinations
+    // Use SDP files as input to avoid port binding conflicts
     const command = ffmpeg()
-      // Video input (RTP)
-      .input(`rtp://${mediaServerIp}:${videoPort}`)
+      // Video input (SDP file)
+      .input(videoSdpPath)
       .inputOptions([
         '-protocol_whitelist', 'file,rtp,udp',
-        '-f', 'rtp',
-        '-codec:v', 'h264',
+        '-f', 'sdp',
       ])
-      // Audio input (RTP)
-      .input(`rtp://${mediaServerIp}:${audioPort}`)
+      // Audio input (SDP file)
+      .input(audioSdpPath)
       .inputOptions([
         '-protocol_whitelist', 'file,rtp,udp',
-        '-f', 'rtp',
-        '-codec:a', 'opus',
+        '-f', 'sdp',
       ])
       // Video encoding
       .videoCodec('copy') // Copy H264 stream without re-encoding
@@ -362,6 +394,25 @@ export async function stopCompositorPipeline(broadcastId: string): Promise<void>
       logger.error(`Error stopping FFmpeg for destination ${destId}:`, error);
     }
   });
+
+  // Clean up SDP files
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const videoSdpPath = path.join('/tmp', `video_${broadcastId}.sdp`);
+    const audioSdpPath = path.join('/tmp', `audio_${broadcastId}.sdp`);
+
+    if (fs.existsSync(videoSdpPath)) {
+      fs.unlinkSync(videoSdpPath);
+      logger.info('Video SDP file deleted');
+    }
+    if (fs.existsSync(audioSdpPath)) {
+      fs.unlinkSync(audioSdpPath);
+      logger.info('Audio SDP file deleted');
+    }
+  } catch (error) {
+    logger.error('Error deleting SDP files:', error);
+  }
 
   // Close consumers
   try {
