@@ -150,17 +150,21 @@ export async function createCompositorPipeline(
 
     // Create unified SDP file with separate ports for video and audio
     // CRITICAL: Profile must match mediasoup codec config (4d001f = Constrained Baseline Level 3.1)
+    // Added media IDs (mid) and LS group for explicit audio/video synchronization
     const unifiedSdp = `v=0
 o=- 0 0 IN IP4 ${ffmpegIp}
 s=Combined Stream
 c=IN IP4 ${ffmpegIp}
 t=0 0
+a=group:LS video audio
 m=video ${ffmpegVideoPort} RTP/AVP ${videoPayloadType}
+a=mid:video
 a=rtpmap:${videoPayloadType} H264/90000
 a=fmtp:${videoPayloadType} level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f
 a=ssrc:${videoSsrc} cname:video
 a=recvonly
 m=audio ${ffmpegAudioPort} RTP/AVP ${audioPayloadType}
+a=mid:audio
 a=rtpmap:${audioPayloadType} opus/48000/2
 a=ssrc:${audioSsrc} cname:audio
 a=recvonly`;
