@@ -383,7 +383,7 @@ class CompositorService {
       videoElement.src = videoUrl;
       videoElement.muted = false; // Enable audio for intro video
       videoElement.autoplay = false;
-      videoElement.preload = 'metadata'; // Load metadata first to get dimensions
+      videoElement.preload = 'auto'; // FIX FLICKERING: Preload entire video for smooth playback
       videoElement.crossOrigin = 'anonymous'; // Allow CORS for local files
 
       logger.info(`Loading intro video: ${videoUrl}`);
@@ -399,13 +399,15 @@ class CompositorService {
           return;
         }
 
-        // Set as media clip overlay BEFORE playing
-        this.setMediaClipOverlay(videoElement);
-        logger.info('Intro video set as media clip overlay');
+        // FIX FLICKERING: Wait for video to have buffered data BEFORE setting as overlay
+        // This prevents flickering caused by drawing frames before they're ready
+        const setOverlayAndPlay = () => {
+          logger.info('Intro video has enough buffered data, setting as overlay...');
 
-        // Now wait for enough data to play
-        const playWhenReady = () => {
-          logger.info('Intro video ready to play, starting playback...');
+          // Set as media clip overlay AFTER enough data is buffered
+          this.setMediaClipOverlay(videoElement);
+          logger.info('Intro video set as media clip overlay, starting playback...');
+
           videoElement.play().catch((error) => {
             logger.error('Failed to play intro video:', error);
             this.clearMediaClipOverlay();
@@ -414,10 +416,11 @@ class CompositorService {
         };
 
         if (videoElement.readyState >= 3) {
-          // HAVE_FUTURE_DATA or better - can play
-          playWhenReady();
+          // HAVE_FUTURE_DATA or better - can play smoothly
+          setOverlayAndPlay();
         } else {
-          videoElement.addEventListener('canplay', playWhenReady, { once: true });
+          // Wait for enough buffered data before showing video
+          videoElement.addEventListener('canplaythrough', setOverlayAndPlay, { once: true });
         }
       });
 
