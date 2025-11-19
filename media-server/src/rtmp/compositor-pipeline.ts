@@ -160,15 +160,6 @@ export async function createCompositorPipeline(
     });
     logger.info(`Audio transport connected - MediaSoup will send RTP to ${ffmpegIp}:${ffmpegAudioPort}, RTCP to ${ffmpegIp}:${ffmpegAudioRtcpPort}`);
 
-    // Request a keyframe from the video producer to ensure FFmpeg gets SPS/PPS
-    // This is critical for H.264 streams as FFmpeg needs these to decode the video
-    try {
-      await videoProducer.requestKeyFrame();
-      logger.info('Requested keyframe from video producer for FFmpeg initialization');
-    } catch (error) {
-      logger.warn('Could not request keyframe:', error);
-    }
-
     // Create unified SDP file with separate ports for video and audio
     // CRITICAL: Include sprop-parameter-sets for H.264 SPS/PPS so FFmpeg can decode the stream
     // Added media IDs (mid) and LS group for explicit audio/video synchronization
