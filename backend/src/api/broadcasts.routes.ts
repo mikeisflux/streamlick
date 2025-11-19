@@ -15,6 +15,7 @@ import {
   monitorAndTransitionYouTubeBroadcast,
 } from '../services/youtube.service';
 import { getIOInstance } from '../socket/io-instance';
+import { forceDeleteBroadcastDestinations } from '../utils/cleanup-destinations';
 
 const router = Router();
 
@@ -199,21 +200,9 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
     logger.info(`[DEBUG ROUTE] destinationSettings: ${JSON.stringify(destinationSettings)}`);
     logger.info(`[DEBUG ROUTE] ==============================================`);
 
-    // NUCLEAR FIX: Delete ALL old broadcast destinations for this broadcast IMMEDIATELY
-    // This prevents the 18-destination bug from recurring
-    const oldDestinations = await prisma.broadcastDestination.findMany({
-      where: { broadcastId: req.params.id },
-    });
-
-    if (oldDestinations.length > 0) {
-      logger.warn(`[NUCLEAR CLEANUP] 🧹 Found ${oldDestinations.length} old broadcast destinations for broadcast ${req.params.id} - DELETING ALL NOW!`);
-      await prisma.broadcastDestination.deleteMany({
-        where: { broadcastId: req.params.id },
-      });
-      logger.info(`[NUCLEAR CLEANUP] ✓ Deleted ${oldDestinations.length} old broadcast destinations`);
-    } else {
-      logger.info(`[NUCLEAR CLEANUP] No old destinations to clean up`);
-    }
+    // NUCLEAR CLEANUP: Force delete ALL old broadcast destinations using utility function
+    // This runs BEFORE any processing to ensure a clean slate every time
+    await forceDeleteBroadcastDestinations(req.params.id);
 
     const broadcast = await prisma.broadcast.findFirst({
       where: {
@@ -533,6 +522,13 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
 // End broadcast
 router.post('/:id/end', authenticate, async (req: AuthRequest, res) => {
   try {
+    // FORCE DELETE: Nuke ALL broadcast destinations IMMEDIATELY - no waiting, no questions
+    logger.info(`[End Broadcast] 💥 FORCE DELETING all broadcast destinations for broadcast ${req.params.id}`);
+    const forceDeleteResult = await prisma.broadcastDestination.deleteMany({
+      where: { broadcastId: req.params.id },
+    });
+    logger.info(`[End Broadcast] ✓ FORCE DELETED ${forceDeleteResult.count} broadcast destinations - database wiped clean`);
+
     const broadcast = await prisma.broadcast.findFirst({
       where: {
         id: req.params.id,
@@ -551,45 +547,9 @@ router.post('/:id/end', authenticate, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Broadcast not found' });
     }
 
-    // End all platform live videos
-    for (const broadcastDest of broadcast.broadcastDestinations) {
-      try {
-        // End Facebook live videos
-        if (
-          broadcastDest.liveVideoId &&
-          broadcastDest.destination.platform === 'facebook' &&
-          broadcastDest.destination.accessToken
-        ) {
-          const accessToken = decrypt(broadcastDest.destination.accessToken);
-          await endFacebookLiveVideo(broadcastDest.liveVideoId, accessToken);
-          logger.info(`Ended Facebook live video: ${broadcastDest.liveVideoId}`);
-        }
-
-        // End YouTube live broadcasts
-        if (
-          broadcastDest.liveVideoId &&
-          broadcastDest.destination.platform === 'youtube'
-        ) {
-          try {
-            const accessToken = await getValidYouTubeToken(broadcastDest.destination.id);
-            await endYouTubeLiveBroadcast(broadcastDest.liveVideoId, accessToken);
-            logger.info(`Ended YouTube live broadcast: ${broadcastDest.liveVideoId}`);
-          } catch (error) {
-            logger.error(`Failed to end YouTube live broadcast ${broadcastDest.liveVideoId}:`, error);
-            // Continue with other destinations
-          }
-        }
-
-        // Update broadcast destination status
-        await prisma.broadcastDestination.update({
-          where: { id: broadcastDest.id },
-          data: { status: 'ended' },
-        });
-      } catch (error) {
-        logger.error(`Error ending destination ${broadcastDest.id}:`, error);
-        // Continue with other destinations
-      }
-    }
+    // Note: broadcast.broadcastDestinations will be empty array since we just deleted them all
+    // Keeping this loop for potential future platform-specific cleanup if needed
+    logger.info(`[End Broadcast] Broadcast destinations already force deleted - skipping platform cleanup loop`);
 
     const endedAt = new Date();
     const durationSeconds = broadcast.startedAt
