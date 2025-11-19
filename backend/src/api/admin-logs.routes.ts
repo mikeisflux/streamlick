@@ -21,6 +21,12 @@ router.get('/application', async (req: Request, res: Response) => {
   try {
     const { limit = 500, level, search, startDate, endDate } = req.query;
 
+    // CRITICAL FIX: Validate and sanitize limit to prevent command injection
+    const sanitizedLimit = Math.min(Math.max(parseInt(String(limit), 10) || 500, 1), 10000);
+    if (isNaN(sanitizedLimit)) {
+      return res.status(400).json({ error: 'Invalid limit parameter' });
+    }
+
     // Try to read Winston log files
     const logsDir = path.join(process.cwd(), 'logs');
     let logLines: any[] = [];
@@ -40,7 +46,7 @@ router.get('/application', async (req: Request, res: Response) => {
         const lines = combinedLog.split('\n').filter(line => line.trim());
 
         logLines = lines
-          .slice(-Number(limit))
+          .slice(-sanitizedLimit)
           .map((line: string) => {
             try {
               return JSON.parse(line);
@@ -72,7 +78,8 @@ router.get('/application', async (req: Request, res: Response) => {
       // If no Winston logs, try PM2 logs
       if (logLines.length === 0) {
         try {
-          const { stdout } = await execAsync(`pm2 logs --lines ${limit} --nostream --raw`);
+          // CRITICAL FIX: Use sanitized limit to prevent command injection
+          const { stdout } = await execAsync(`pm2 logs --lines ${sanitizedLimit} --nostream --raw`);
           logLines = stdout.split('\n')
             .filter(line => line.trim())
             .map(line => ({

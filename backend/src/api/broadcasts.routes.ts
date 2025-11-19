@@ -181,42 +181,61 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
     logger.info(`[DEBUG ROUTE] destinationSettings: ${JSON.stringify(destinationSettings)}`);
     logger.info(`[DEBUG ROUTE] ==============================================`);
 
-    const broadcast = await prisma.broadcast.findFirst({
+    // CRITICAL FIX: Use atomic update to prevent race condition
+    // Only update if status is 'idle' or 'ready', preventing duplicate starts
+    const broadcast = await prisma.broadcast.updateMany({
       where: {
         id: req.params.id,
         userId: req.user!.userId,
+        status: { in: ['idle', 'ready'] }, // Only allow starting from these states
       },
-    });
-
-    if (!broadcast) {
-      return res.status(404).json({ error: 'Broadcast not found' });
-    }
-
-    // Set broadcast to countdown status
-    await prisma.broadcast.update({
-      where: { id: req.params.id },
       data: {
         status: 'countdown',
         startedAt: new Date(),
       },
     });
 
+    // If no rows were updated, broadcast is either not found or already starting
+    if (broadcast.count === 0) {
+      const existingBroadcast = await prisma.broadcast.findFirst({
+        where: {
+          id: req.params.id,
+          userId: req.user!.userId,
+        },
+      });
+
+      if (!existingBroadcast) {
+        return res.status(404).json({ error: 'Broadcast not found' });
+      }
+
+      // Broadcast exists but is in wrong state (already starting/live)
+      return res.status(409).json({
+        error: 'Broadcast is already starting or live',
+        status: existingBroadcast.status,
+      });
+    }
+
+    // Fetch the updated broadcast to return its data
+    const updatedBroadcast = await prisma.broadcast.findUnique({
+      where: { id: req.params.id },
+    });
+
     // Return immediately to start countdown on frontend
     const countdownDuration = parseInt(process.env.BROADCAST_COUNTDOWN_SECONDS || '15', 10);
     res.json({
       message: 'Countdown started',
-      broadcastId: broadcast.id,
+      broadcastId: updatedBroadcast!.id,
       countdown: countdownDuration,
       status: 'countdown'
     });
 
     // Asynchronously prepare destinations during countdown
     // Use async IIFE instead of setImmediate to avoid race conditions
-    logger.info(`[BEFORE IIFE] About to invoke async IIFE for broadcast ${broadcast.id}`);
+    logger.info(`[BEFORE IIFE] About to invoke async IIFE for broadcast ${updatedBroadcast!.id}`);
     (async () => {
       logger.info(`[ASYNC IIFE] ========== IIFE INVOKED ==========`);
       try {
-        logger.info(`[ASYNC IIFE] Starting async broadcast preparation for ${broadcast.id}`);
+        logger.info(`[ASYNC IIFE] Starting async broadcast preparation for ${updatedBroadcast!.id}`);
         logger.info(`[ASYNC IIFE] destinationIds: ${JSON.stringify(destinationIds)}`);
 
         const io = getIOInstance();
@@ -228,8 +247,8 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
         // Emit countdown ticks
         const countdownInterval = setInterval(() => {
           countdownSeconds--;
-          io.to(`broadcast:${broadcast.id}`).emit('countdown-tick', {
-            broadcastId: broadcast.id,
+          io.to(`broadcast:${updatedBroadcast!.id}`).emit('countdown-tick', {
+            broadcastId: updatedBroadcast!.id,
             secondsRemaining: countdownSeconds,
           });
 
@@ -286,8 +305,8 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
                 const liveVideo = await createFacebookLiveVideo(
                   destination.pageId,
                   accessToken,
-                  broadcast.title,
-                  broadcast.description || undefined
+                  updatedBroadcast!.title,
+                  updatedBroadcast!.description || undefined
                 );
 
                 streamUrl = liveVideo.rtmpUrl;
@@ -310,8 +329,8 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
                   const settings = destinationSettings[destination.id] || {};
                   const privacyStatus = settings.privacyStatus || 'public';
                   const scheduledStartTime = settings.scheduledStartTime || undefined;
-                  const title = settings.title || broadcast.title || 'Live Stream';
-                  const description = settings.description || broadcast.description || '';
+                  const title = settings.title || updatedBroadcast!.title || 'Live Stream';
+                  const description = settings.description || updatedBroadcast!.description || '';
 
                   logger.info(`[YouTube] Creating broadcast with settings: title="${title}", description="${description}", privacy=${privacyStatus}`);
 
@@ -356,7 +375,7 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
               // Create broadcast destination record
               const broadcastDest = await prisma.broadcastDestination.create({
                 data: {
-                  broadcastId: broadcast.id,
+                  broadcastId: updatedBroadcast!.id,
                   destinationId: destination.id,
                   streamUrl,
                   streamKey: streamKey ? encrypt(streamKey) : null,
@@ -378,11 +397,11 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
 
           // Roll back broadcast if all destination setups failed
           if (destinations.length > 0 && broadcastDestinations.length === 0) {
-            logger.error(`All ${destinations.length} destination(s) failed to set up for broadcast ${broadcast.id}`);
+            logger.error(`All ${destinations.length} destination(s) failed to set up for broadcast ${updatedBroadcast!.id}`);
 
             // Update broadcast status to error
             await prisma.broadcast.update({
-              where: { id: broadcast.id },
+              where: { id: updatedBroadcast!.id },
               data: {
                 status: 'error',
                 endedAt: new Date()
@@ -390,16 +409,16 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
             });
 
             // Notify user via Socket.IO
-            io.to(`broadcast:${broadcast.id}`).emit('broadcast-error', {
-              broadcastId: broadcast.id,
+            io.to(`broadcast:${updatedBroadcast!.id}`).emit('broadcast-error', {
+              broadcastId: updatedBroadcast!.id,
               message: 'All streaming destinations failed to set up. Please check your destination configurations and try again.'
             });
 
-            logger.warn(`Broadcast ${broadcast.id} cancelled due to all destinations failing`);
+            logger.warn(`Broadcast ${updatedBroadcast!.id} cancelled due to all destinations failing`);
             return; // Exit early, don't proceed to "live" status
           }
         } else {
-          logger.warn(`Broadcast ${broadcast.id} started with NO destinations selected`);
+          logger.warn(`Broadcast ${updatedBroadcast!.id} started with NO destinations selected`);
         }
 
         // After countdown, update status to live
@@ -413,8 +432,8 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
             });
 
             // Emit countdown complete event
-            io.to(`broadcast:${broadcast.id}`).emit('countdown-complete', {
-              broadcastId: broadcast.id,
+            io.to(`broadcast:${updatedBroadcast!.id}`).emit('countdown-complete', {
+              broadcastId: updatedBroadcast!.id,
               status: 'live',
             });
 
@@ -423,8 +442,8 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
             logger.error('Error updating broadcast to live after countdown:', error);
 
             // Notify connected clients via socket about the error
-            io.to(`broadcast:${broadcast.id}`).emit('broadcast-error', {
-              broadcastId: broadcast.id,
+            io.to(`broadcast:${updatedBroadcast!.id}`).emit('broadcast-error', {
+              broadcastId: updatedBroadcast!.id,
               error: 'Failed to transition broadcast to live status',
             });
 
@@ -442,8 +461,33 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
       } catch (error: any) {
         logger.error(`[ASYNC IIFE] ❌ Error preparing broadcast destinations: ${error.message}`);
         logger.error(`[ASYNC IIFE] Stack: ${error.stack}`);
+
+        // CRITICAL FIX: Clear countdown interval on error to prevent memory leak
+        if (countdownInterval) {
+          clearInterval(countdownInterval);
+        }
+
+        // Update broadcast status to error on failure
+        try {
+          await prisma.broadcast.update({
+            where: { id: updatedBroadcast!.id },
+            data: { status: 'error' },
+          });
+
+          // Notify clients via Socket.IO
+          io.to(`broadcast:${updatedBroadcast!.id}`).emit('broadcast-error', {
+            broadcastId: updatedBroadcast!.id,
+            error: 'Failed to prepare broadcast destinations',
+          });
+        } catch (updateError) {
+          logger.error(`[ASYNC IIFE] Failed to update broadcast to error status:`, updateError);
+        }
       }
-    })(); // CRITICAL: Invoke the IIFE!
+    })().catch((err) => {
+      // CRITICAL FIX: Catch any unhandled promise rejections from the IIFE
+      logger.error(`[ASYNC IIFE] Unhandled promise rejection:`, err);
+      logger.error(`[ASYNC IIFE] Stack:`, err.stack);
+    }); // CRITICAL: Invoke the IIFE and catch unhandled rejections!
   } catch (error) {
     logger.error('Start broadcast error:', error);
     res.status(500).json({ error: 'Failed to start broadcast' });

@@ -401,9 +401,42 @@ router.get('/system-config', async (req, res) => {
 // Update system configuration
 router.post('/system-config', async (req, res) => {
   try {
+    // CRITICAL FIX: Whitelist allowed system setting keys to prevent arbitrary setting injection
+    const ALLOWED_SYSTEM_SETTINGS = [
+      'default_broadcast_privacy',
+      'max_broadcast_duration_hours',
+      'enable_user_registration',
+      'enable_email_verification',
+      'sendgrid_api_key',
+      'smtp_host',
+      'smtp_port',
+      'smtp_user',
+      'smtp_password',
+      'r2_account_id',
+      'r2_access_key_id',
+      'r2_secret_access_key',
+      'r2_bucket_name',
+      'r2_public_url',
+      'max_participants_per_broadcast',
+      'enable_chat_moderation',
+      'broadcast_countdown_seconds',
+    ];
+
     const updates: any[] = [];
 
     for (const [key, value] of Object.entries(req.body)) {
+      // CRITICAL FIX: Validate key against whitelist to prevent injection attacks
+      if (!ALLOWED_SYSTEM_SETTINGS.includes(key)) {
+        logger.warn(`Rejected attempt to set non-whitelisted system setting: ${key}`);
+        continue;
+      }
+
+      // CRITICAL FIX: Prevent prototype pollution
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+        logger.warn(`Rejected attempt at prototype pollution: ${key}`);
+        continue;
+      }
+
       // Skip undefined, null, or empty string values to avoid overwriting existing settings
       if (value === undefined || value === null || value === '') {
         continue;

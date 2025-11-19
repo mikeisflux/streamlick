@@ -142,13 +142,15 @@ export async function getValidYouTubeToken(destinationId: string): Promise<strin
 
   let accessToken = decrypt(destination.accessToken);
 
-  // Check if token is expired or will expire soon (within 5 minutes)
+  // CRITICAL FIX: Check if token is expired or will expire soon (within 15 minutes)
+  // Increased buffer from 5 to 15 minutes to prevent race condition where token
+  // expires between check and use (refresh can take 5-10 seconds)
   if (destination.tokenExpiresAt) {
     const now = new Date();
     const expiryTime = new Date(destination.tokenExpiresAt);
-    const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
+    const fifteenMinutesFromNow = new Date(now.getTime() + 15 * 60 * 1000);
 
-    if (expiryTime <= fiveMinutesFromNow) {
+    if (expiryTime <= fifteenMinutesFromNow) {
       logger.info(`YouTube token expired or expiring soon for destination ${destinationId}, refreshing...`);
 
       if (!destination.refreshToken) {

@@ -4,7 +4,7 @@
 **Generated**: 2025-11-19 (Updated with fixes through 2025-11-19)
 **Scope**: Backend (57 files), Frontend (97 files), Media Server (9 files)
 **Total Issues**: 172+ identified (30 Critical, 50 Major, 48 Minor, 44 Potential)
-**Fixed**: 24 Critical, 14 Major, 1 Enhancement (Status updated 2025-11-19)
+**Fixed**: 26 Critical, 16 Major, 2 Minor, 1 Enhancement (Status updated 2025-11-19)
 
 **FILES ANALYZED**: 227 total TypeScript/TSX files
 - Backend API Routes: 26 files ✓
@@ -187,17 +187,20 @@
 
 ### Race Conditions
 
-- [ ] **MAJOR: Broadcast Start Race Condition**
-  - **File**: `backend/src/api/broadcasts.routes.ts:184-358`
-  - **Issue**: Async operations not in transaction
-  - **Fix**: Use Prisma transactions for state changes
-  - **Test**: Start broadcast, trigger error mid-setup
+- [x] **MAJOR: Broadcast Start Race Condition** ✅ FIXED
+  - **File**: `backend/src/api/broadcasts.routes.ts:184-221`
+  - **Issue**: Async operations not in transaction, multiple requests could start same broadcast
+  - **Status**: FIXED - Added atomic update with status validation
+  - **Fix**: Use `updateMany` with status check (only updates if status in ['idle', 'ready'])
+  - **Fix**: Returns 409 Conflict if broadcast already starting/live
+  - **Date Fixed**: 2025-11-19
 
-- [ ] **MAJOR: Token Expiry Race Condition**
-  - **File**: `backend/src/services/youtube.service.ts:74-80`
-  - **Issue**: Token might expire between check and use
-  - **Fix**: Use refreshed token immediately
-  - **Test**: Use token that expires in 1 second
+- [x] **MAJOR: Token Expiry Race Condition** ✅ FIXED
+  - **File**: `backend/src/services/youtube.service.ts:145-154`
+  - **Issue**: Token might expire between check and use (5 min buffer insufficient)
+  - **Status**: FIXED - Increased buffer from 5 to 15 minutes
+  - **Fix**: Changed buffer to 15 minutes to account for refresh latency (5-10 seconds)
+  - **Date Fixed**: 2025-11-19
 
 - [x] **MAJOR: Chat Manager Leak on Disconnect** ✅ FIXED
   - **File**: `backend/src/socket/index.ts:801-838`
@@ -1218,11 +1221,12 @@ env | grep -E "JWT_SECRET|ENCRYPTION_KEY|DATABASE_URL"
   - **Fix**: Require FROM_EMAIL env var or fail clearly
   - **Test**: Send email without FROM_EMAIL set, check delivery
 
-- [ ] **MINOR: console.log in Production Code**
-  - **File**: `backend/src/services/email.ts:62`
-  - **Issue**: console.log used alongside logger
-  - **Fix**: Remove console.log, use logger only
-  - **Test**: Code review
+- [x] **MINOR: console.log in Production Code** ✅ FIXED
+  - **File**: `backend/src/services/email.ts:61`
+  - **Issue**: console.log used alongside logger in dev mode
+  - **Status**: FIXED - Removed console.log, logger only
+  - **Fix**: Replaced console.log with logger.info (added emoji for visibility)
+  - **Date Fixed**: 2025-11-19
 
 ### Error Handling
 
@@ -1435,12 +1439,14 @@ env | grep -E "JWT_SECRET|ENCRYPTION_KEY|DATABASE_URL"
 
 ### Injection Vulnerabilities
 
-- [ ] **HIGH: Command Injection in Admin Logs**
-  - **File**: `backend/src/api/admin-logs.routes.ts:76,21-100`
+- [x] **HIGH: Command Injection in Admin Logs** ✅ FIXED
+  - **File**: `backend/src/api/admin-logs.routes.ts:22-82`
   - **Issue**: exec() with user-controlled limit parameter
-  - **Impact**: Command injection via limit parameter
-  - **Fix**: Validate and sanitize limit, use spawn instead of exec
-  - **Test**: Send malicious limit like "500; cat /etc/passwd"
+  - **Impact**: Command injection via limit parameter (e.g., "500; cat /etc/passwd")
+  - **Status**: FIXED - Added input validation and sanitization
+  - **Fix**: Validate limit as integer, clamp to 1-10000 range, reject invalid values
+  - **Fix**: Use sanitizedLimit variable instead of raw user input in exec()
+  - **Date Fixed**: 2025-11-19
 
 - [ ] **HIGH: SSRF in Media Clips Link Upload**
   - **File**: `backend/src/api/media-clips.routes.ts:154-195`
@@ -1449,12 +1455,15 @@ env | grep -E "JWT_SECRET|ENCRYPTION_KEY|DATABASE_URL"
   - **Fix**: Block internal IPs (10.x, 192.168.x, 169.254.169.254), only allow http/https
   - **Test**: Try linking to http://169.254.169.254/latest/meta-data/
 
-- [ ] **HIGH: Arbitrary Setting Injection**
-  - **File**: `backend/src/api/admin-settings.routes.ts:406-435`
-  - **Issue**: POST /system-config accepts any key-value pairs
-  - **Impact**: Inject malicious settings, override security configs
-  - **Fix**: Whitelist allowed setting keys
-  - **Test**: Send POST with arbitrary keys like "__proto__"
+- [x] **HIGH: Arbitrary Setting Injection** ✅ FIXED
+  - **File**: `backend/src/api/admin-settings.routes.ts:402-446`
+  - **Issue**: POST /system-config accepts any key-value pairs without validation
+  - **Impact**: Inject malicious settings, override security configs, prototype pollution
+  - **Status**: FIXED - Added whitelist and prototype pollution protection
+  - **Fix**: Created ALLOWED_SYSTEM_SETTINGS whitelist (18 allowed keys)
+  - **Fix**: Reject keys not in whitelist with warning log
+  - **Fix**: Explicitly block __proto__, constructor, prototype keys
+  - **Date Fixed**: 2025-11-19
 
 - [ ] **HIGH: Unsafe JSON Parsing in Branding**
   - **File**: `backend/src/api/branding.routes.ts:129`

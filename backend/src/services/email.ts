@@ -57,9 +57,8 @@ export async function sendVerificationEmail(email: string, token: string): Promi
       await sgMail.send(msg);
       logger.info(`Verification email sent to ${email}`);
     } else {
-      // Development mode: log the verification link
-      logger.info(`Verification link (dev mode): ${verificationLink}`);
-      console.log('\n📧 Email Verification Link:', verificationLink, '\n');
+      // CRITICAL FIX: Development mode - log the verification link (removed console.log)
+      logger.info(`📧 Verification link (dev mode): ${verificationLink}`);
     }
   } catch (error) {
     logger.error('Error sending verification email:', error);
