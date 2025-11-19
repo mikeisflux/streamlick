@@ -107,6 +107,16 @@ export async function createCompositorPipeline(
     const videoPayloadType = videoConsumer.rtpParameters.codecs[0].payloadType;
     const audioPayloadType = audioConsumer.rtpParameters.codecs[0].payloadType;
 
+    // Get H.264 parameters including SPS/PPS
+    const videoCodecParameters = videoConsumer.rtpParameters.codecs[0].parameters || {};
+    const profileLevelId = videoCodecParameters['profile-level-id'] || '4d001f';
+    const packetizationMode = videoCodecParameters['packetization-mode'] || '1';
+    const levelAsymmetryAllowed = videoCodecParameters['level-asymmetry-allowed'] || '1';
+
+    // CRITICAL: Extract sprop-parameter-sets for H.264 SPS/PPS
+    // These are required for FFmpeg to decode the video stream
+    const spropParameterSets = videoCodecParameters['sprop-parameter-sets'] || '';
+
     // Get SSRC values for proper stream identification
     const videoSsrc = videoConsumer.rtpParameters.encodings?.[0]?.ssrc || 0;
     const audioSsrc = audioConsumer.rtpParameters.encodings?.[0]?.ssrc || 0;
@@ -120,6 +130,8 @@ export async function createCompositorPipeline(
     logger.info(`Total destinations: ${destinations.length}`);
     logger.info(`Media Server IP: ${mediaServerIp}`);
     logger.info(`Video SSRC: ${videoSsrc}, Audio SSRC: ${audioSsrc}`);
+    logger.info(`Video codec parameters:`, JSON.stringify(videoCodecParameters));
+    logger.info(`Has sprop-parameter-sets: ${!!spropParameterSets}`);
     logger.info(`Destinations:`);
     destinations.forEach((dest, index) => {
       logger.info(`  [${index + 1}] ${dest.platform}: ${dest.rtmpUrl}/${dest.streamKey?.substring(0, 20)}...`);
@@ -148,9 +160,26 @@ export async function createCompositorPipeline(
     });
     logger.info(`Audio transport connected - MediaSoup will send RTP to ${ffmpegIp}:${ffmpegAudioPort}, RTCP to ${ffmpegIp}:${ffmpegAudioRtcpPort}`);
 
+    // Request a keyframe from the video producer to ensure FFmpeg gets SPS/PPS
+    // This is critical for H.264 streams as FFmpeg needs these to decode the video
+    try {
+      await videoProducer.requestKeyFrame();
+      logger.info('Requested keyframe from video producer for FFmpeg initialization');
+    } catch (error) {
+      logger.warn('Could not request keyframe:', error);
+    }
+
     // Create unified SDP file with separate ports for video and audio
-    // CRITICAL: Profile must match mediasoup codec config (4d001f = Constrained Baseline Level 3.1)
+    // CRITICAL: Include sprop-parameter-sets for H.264 SPS/PPS so FFmpeg can decode the stream
     // Added media IDs (mid) and LS group for explicit audio/video synchronization
+
+    // Build fmtp line with all H.264 parameters
+    let fmtpParams = `level-asymmetry-allowed=${levelAsymmetryAllowed};packetization-mode=${packetizationMode};profile-level-id=${profileLevelId}`;
+    if (spropParameterSets) {
+      // Include SPS/PPS if available - critical for FFmpeg to know video dimensions/profile
+      fmtpParams += `;sprop-parameter-sets=${spropParameterSets}`;
+    }
+
     const unifiedSdp = `v=0
 o=- 0 0 IN IP4 ${ffmpegIp}
 s=Combined Stream
@@ -160,7 +189,7 @@ a=group:LS video audio
 m=video ${ffmpegVideoPort} RTP/AVP ${videoPayloadType}
 a=mid:video
 a=rtpmap:${videoPayloadType} H264/90000
-a=fmtp:${videoPayloadType} level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f
+a=fmtp:${videoPayloadType} ${fmtpParams}
 a=ssrc:${videoSsrc} cname:video
 a=recvonly
 m=audio ${ffmpegAudioPort} RTP/AVP ${audioPayloadType}
