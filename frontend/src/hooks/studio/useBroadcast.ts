@@ -176,14 +176,6 @@ export function useBroadcast({
       await compositorService.initialize(participantStreams);
       compositorService.setLayout({ type: currentLayout });
 
-      // Play intro video (StreamLick intro) - this will overlay on the composite stream
-      // The intro video plays for exactly 10 seconds to match the countdown
-      console.log('[useBroadcast] Starting intro video playback...');
-      compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4', 10).catch((error) => {
-        console.error('Intro video failed to play:', error);
-        // Continue even if intro video fails
-      });
-
       // Get composite stream and produce it via WebRTC
       const compositeStream = compositorService.getOutputStream();
       if (!compositeStream) {
@@ -230,14 +222,29 @@ export function useBroadcast({
       });
 
       // Start broadcast with destination settings (using deduplicated array)
+      // This triggers the 10-second countdown on the backend
       await broadcastService.start(broadcastId, deduplicatedDestinations, apiDestinationSettings);
 
-      // Wait for YouTube/Facebook broadcasts to be created (happens during countdown)
-      // Then fetch the actual RTMP URLs and stream keys
-      console.log('[useBroadcast] Waiting for broadcast destinations to be created...');
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds for async broadcast creation
+      // FLOW: 10-second countdown → intro video → user stream
+      // Step 1: Wait for 10-second countdown to finish
+      console.log('[useBroadcast] Waiting for 10-second countdown...');
+      await new Promise(resolve => setTimeout(resolve, 10000)); // 10 seconds for countdown
 
-      // Fetch broadcast destinations with decrypted RTMP URLs and stream keys
+      // Wait a bit more for YouTube/Facebook broadcasts to be created during countdown
+      console.log('[useBroadcast] Waiting for broadcast destinations to be created...');
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Additional 2 seconds
+
+      // Step 2: Play intro video AFTER countdown finishes
+      console.log('[useBroadcast] Countdown finished! Starting intro video...');
+      try {
+        await compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
+        console.log('[useBroadcast] Intro video finished, transitioning to user stream');
+      } catch (error) {
+        console.error('Intro video failed to play:', error);
+        // Continue even if intro video fails
+      }
+
+      // Step 3: Fetch broadcast destinations with decrypted RTMP URLs and stream keys
       const broadcastDestinationsResponse = await api.get(`/broadcasts/${broadcastId}/destinations`);
       const broadcastDestinations = broadcastDestinationsResponse.data;
 
@@ -251,7 +258,7 @@ export function useBroadcast({
         streamKey: bd.streamKey, // Now contains the actual decrypted stream key
       }));
 
-      console.log('[useBroadcast] Starting RTMP push to destinations:',
+      console.log('[useBroadcast] Starting RTMP push to destinations (user stream):',
         destinationsToStream.map((d: any) => ({ platform: d.platform, rtmpUrl: d.rtmpUrl })));
 
       mediaServerSocketService.emit('start-rtmp', {
