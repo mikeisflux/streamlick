@@ -46,6 +46,13 @@ export async function createCompositorPipeline(
     // Support both single-server (FFmpeg on same machine) and multi-server (FFmpeg on different machine)
     const useExternalFFmpeg = process.env.EXTERNAL_FFMPEG === 'true';
 
+    logger.info(`========== CREATING VIDEO PLAIN TRANSPORT ==========`);
+    logger.info(`Deployment mode: ${useExternalFFmpeg ? 'EXTERNAL (multi-server)' : 'LOCAL (same server)'}`);
+    logger.info(`Listen IP: ${useExternalFFmpeg ? '0.0.0.0' : '127.0.0.1'}`);
+    logger.info(`Announced IP: ${useExternalFFmpeg ? process.env.MEDIASOUP_ANNOUNCED_IP : 'undefined'}`);
+    logger.info(`RTCP Mux: false (separate RTCP port)`);
+    logger.info(`Comedia: true (auto-learn FFmpeg address)`);
+
     const videoTransport = await router.createPlainTransport({
       listenIp: useExternalFFmpeg
         ? { ip: '0.0.0.0', announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP }
@@ -53,6 +60,14 @@ export async function createCompositorPipeline(
       rtcpMux: false,
       comedia: true, // Auto-learn FFmpeg address from first packet
     });
+
+    logger.info(`✅ Video Plain Transport Created`);
+    logger.info(`  Transport ID: ${videoTransport.id}`);
+    logger.info(`  RTP Port: ${videoTransport.tuple.localPort}`);
+    logger.info(`  RTCP Port: ${videoTransport.rtcpTuple?.localPort || 'N/A'}`);
+    logger.info(`  Protocol: ${videoTransport.tuple.protocol}`);
+    logger.info(`  Local IP: ${videoTransport.tuple.localIp}`);
+    logger.info(`  SCTP State: ${videoTransport.sctpState || 'N/A'}`);
 
     // Add error handler for video transport (listenererror for listening socket errors)
     videoTransport.on('listenererror', (error: any) => {
@@ -67,6 +82,7 @@ export async function createCompositorPipeline(
       );
     });
 
+    logger.info(`========== CREATING AUDIO PLAIN TRANSPORT ==========`);
     const audioTransport = await router.createPlainTransport({
       listenIp: useExternalFFmpeg
         ? { ip: '0.0.0.0', announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP }
@@ -74,6 +90,14 @@ export async function createCompositorPipeline(
       rtcpMux: false,
       comedia: true, // Auto-learn FFmpeg address from first packet
     });
+
+    logger.info(`✅ Audio Plain Transport Created`);
+    logger.info(`  Transport ID: ${audioTransport.id}`);
+    logger.info(`  RTP Port: ${audioTransport.tuple.localPort}`);
+    logger.info(`  RTCP Port: ${audioTransport.rtcpTuple?.localPort || 'N/A'}`);
+    logger.info(`  Protocol: ${audioTransport.tuple.protocol}`);
+    logger.info(`  Local IP: ${audioTransport.tuple.localIp}`);
+    logger.info(`  SCTP State: ${audioTransport.sctpState || 'N/A'}`);
 
     // Add error handler for audio transport (listenererror for listening socket errors)
     audioTransport.on('listenererror', (error: any) => {
@@ -108,11 +132,37 @@ export async function createCompositorPipeline(
     );
 
     // Create consumers on the plain transports
+    logger.info(`========== CREATING VIDEO CONSUMER ==========`);
+    logger.info(`  Producer ID: ${videoProducer.id}`);
+    logger.info(`  Producer Kind: ${videoProducer.kind}`);
+    logger.info(`  Producer Type: ${videoProducer.type}`);
+    logger.info(`  Producer Paused: ${videoProducer.paused}`);
+    logger.info(`  Transport ID: ${videoTransport.id}`);
+
     const videoConsumer = await videoTransport.consume({
       producerId: videoProducer.id,
       rtpCapabilities: router.rtpCapabilities,
       paused: false,
     });
+
+    logger.info(`✅ Video Consumer Created`);
+    logger.info(`  Consumer ID: ${videoConsumer.id}`);
+    logger.info(`  Consumer Kind: ${videoConsumer.kind}`);
+    logger.info(`  Consumer Type: ${videoConsumer.type}`);
+    logger.info(`  RTP Parameters:`);
+    logger.info(`    Codecs: ${JSON.stringify(videoConsumer.rtpParameters.codecs)}`);
+    logger.info(`    Encodings: ${JSON.stringify(videoConsumer.rtpParameters.encodings)}`);
+    logger.info(`    Header Extensions: ${JSON.stringify(videoConsumer.rtpParameters.headerExtensions)}`);
+    logger.info(`  SSRC: ${videoConsumer.rtpParameters.encodings?.[0]?.ssrc || 'N/A'}`);
+    logger.info(`  Payload Type: ${videoConsumer.rtpParameters.codecs[0].payloadType}`);
+    logger.info(`  Codec Name: ${videoConsumer.rtpParameters.codecs[0].mimeType}`);
+
+    logger.info(`========== CREATING AUDIO CONSUMER ==========`);
+    logger.info(`  Producer ID: ${audioProducer.id}`);
+    logger.info(`  Producer Kind: ${audioProducer.kind}`);
+    logger.info(`  Producer Type: ${audioProducer.type}`);
+    logger.info(`  Producer Paused: ${audioProducer.paused}`);
+    logger.info(`  Transport ID: ${audioTransport.id}`);
 
     const audioConsumer = await audioTransport.consume({
       producerId: audioProducer.id,
@@ -120,7 +170,19 @@ export async function createCompositorPipeline(
       paused: false,
     });
 
-    logger.info('Consumers created on plain transports');
+    logger.info(`✅ Audio Consumer Created`);
+    logger.info(`  Consumer ID: ${audioConsumer.id}`);
+    logger.info(`  Consumer Kind: ${audioConsumer.kind}`);
+    logger.info(`  Consumer Type: ${audioConsumer.type}`);
+    logger.info(`  RTP Parameters:`);
+    logger.info(`    Codecs: ${JSON.stringify(audioConsumer.rtpParameters.codecs)}`);
+    logger.info(`    Encodings: ${JSON.stringify(audioConsumer.rtpParameters.encodings)}`);
+    logger.info(`    Header Extensions: ${JSON.stringify(audioConsumer.rtpParameters.headerExtensions)}`);
+    logger.info(`  SSRC: ${audioConsumer.rtpParameters.encodings?.[0]?.ssrc || 'N/A'}`);
+    logger.info(`  Payload Type: ${audioConsumer.rtpParameters.codecs[0].payloadType}`);
+    logger.info(`  Codec Name: ${audioConsumer.rtpParameters.codecs[0].mimeType}`);
+
+    logger.info(`========== CONSUMERS CREATED SUCCESSFULLY ==========`);
     diagnosticLogger.logRTPPipeline(
       'Consumer',
       'RTP consumers created on plain transports',
@@ -144,6 +206,24 @@ export async function createCompositorPipeline(
     const mediaServerIp = useExternalFFmpeg
       ? (process.env.MEDIASOUP_ANNOUNCED_IP || 'localhost')
       : '127.0.0.1';
+
+    logger.info(`========== RTP STREAM PARAMETERS ==========`);
+    logger.info(`Media Server IP: ${mediaServerIp}`);
+    logger.info(`Video:`);
+    logger.info(`  RTP Port: ${videoPort}`);
+    logger.info(`  RTCP Port: ${videoTransport.rtcpTuple?.localPort || 'N/A'}`);
+    logger.info(`  Payload Type: ${videoPayloadType}`);
+    logger.info(`  Codec: ${videoConsumer.rtpParameters.codecs[0].mimeType}`);
+    logger.info(`  Clock Rate: ${videoConsumer.rtpParameters.codecs[0].clockRate}`);
+    logger.info(`  Parameters: ${JSON.stringify(videoConsumer.rtpParameters.codecs[0].parameters || {})}`);
+    logger.info(`Audio:`);
+    logger.info(`  RTP Port: ${audioPort}`);
+    logger.info(`  RTCP Port: ${audioTransport.rtcpTuple?.localPort || 'N/A'}`);
+    logger.info(`  Payload Type: ${audioPayloadType}`);
+    logger.info(`  Codec: ${audioConsumer.rtpParameters.codecs[0].mimeType}`);
+    logger.info(`  Clock Rate: ${audioConsumer.rtpParameters.codecs[0].clockRate}`);
+    logger.info(`  Channels: ${audioConsumer.rtpParameters.codecs[0].channels || 'N/A'}`);
+    logger.info(`  Parameters: ${JSON.stringify(audioConsumer.rtpParameters.codecs[0].parameters || {})}`);
 
     logger.info(`========== FFMPEG MULTI-DESTINATION SETUP ==========`);
     logger.info(`Total destinations: ${destinations.length}`);
