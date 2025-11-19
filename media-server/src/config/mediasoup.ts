@@ -46,13 +46,25 @@ export const mediasoupConfig = {
       },
       // CRITICAL FIX: H.264 MUST be first in the list so browsers select it
       // This prevents codec mismatch where FFmpeg expects H.264 but receives VP8
+      // BEST PRACTICE: YouTube recommends High Profile for better quality
       {
         kind: 'video',
         mimeType: 'video/h264',
         clockRate: 90000,
         parameters: {
           'packetization-mode': 1,
-          'profile-level-id': '4d001f',    // Constrained Baseline Profile Level 3.1 (best compatibility)
+          'profile-level-id': '640033',    // High Profile Level 5.1 (YouTube recommended, best quality)
+          'level-asymmetry-allowed': 1,
+          'x-google-start-bitrate': 3000,  // 3 Mbps start bitrate for HD streaming
+        },
+      },
+      {
+        kind: 'video',
+        mimeType: 'video/h264',
+        clockRate: 90000,
+        parameters: {
+          'packetization-mode': 1,
+          'profile-level-id': '4d001f',    // Constrained Baseline Profile Level 3.1 (fallback for compatibility)
           'level-asymmetry-allowed': 1,
           'x-google-start-bitrate': 3000,  // 3 Mbps start bitrate for HD streaming
         },
