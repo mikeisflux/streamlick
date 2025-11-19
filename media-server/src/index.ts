@@ -513,6 +513,14 @@ io.on('connection', (socket) => {
       logger.info(`Destinations:`, JSON.stringify(destinations, null, 2));
       logger.info(`Composite producers:`, JSON.stringify(compositeProducers, null, 2));
 
+      // VALIDATION: Ensure at least one destination is provided
+      if (!destinations || destinations.length === 0) {
+        logger.error(`❌ VALIDATION FAILED: No RTMP destinations provided`);
+        logger.error(`Cannot start FFmpeg with empty destinations - would result in "Invalid output" error`);
+        throw new Error('Invalid output: No RTMP destinations provided. At least one destination is required.');
+      }
+      logger.info(`✅ VALIDATION PASSED: ${destinations.length} destination(s) provided`);
+
       const broadcast = broadcasts.get(broadcastId);
       if (!broadcast) {
         logger.error(`❌ Broadcast ${broadcastId} not found in broadcasts map`);
