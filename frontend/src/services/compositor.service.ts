@@ -404,6 +404,20 @@ class CompositorService {
       this.outputStream = null;
     }
 
+    // CRITICAL FIX: Clean up video elements to prevent DOM memory leaks
+    this.videoElements.forEach((video, participantId) => {
+      // Stop video and clear srcObject
+      video.pause();
+      video.srcObject = null;
+      video.load(); // Force cleanup
+      // Remove from DOM if attached
+      if (video.parentNode) {
+        video.parentNode.removeChild(video);
+      }
+      logger.debug(`Cleaned up video element for participant ${participantId}`);
+    });
+    this.videoElements.clear();
+
     // Clean up cached images
     this.backgroundImage = null;
     this.overlayImages.clear();

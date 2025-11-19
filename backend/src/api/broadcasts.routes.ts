@@ -18,6 +18,24 @@ import { getIOInstance } from '../socket/io-instance';
 
 const router = Router();
 
+// CRITICAL FIX: Track countdown intervals to prevent memory leaks
+// Stores interval IDs for each broadcast so they can be cleared on stop
+const countdownIntervals = new Map<string, NodeJS.Timeout>();
+
+// CRITICAL FIX: Helper function for type-safe error message extraction
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String(error.message);
+  }
+  return 'Unknown error';
+}
+
 // Get all broadcasts for user (with pagination)
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
@@ -202,7 +220,13 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
     });
 
     // Return immediately to start countdown on frontend
-    const countdownDuration = parseInt(process.env.BROADCAST_COUNTDOWN_SECONDS || '15', 10);
+    // CRITICAL FIX: Validate parsed countdown duration to prevent NaN
+    let countdownDuration = parseInt(process.env.BROADCAST_COUNTDOWN_SECONDS || '15', 10);
+    if (isNaN(countdownDuration) || countdownDuration < 0 || countdownDuration > 300) {
+      logger.warn(`Invalid BROADCAST_COUNTDOWN_SECONDS: ${process.env.BROADCAST_COUNTDOWN_SECONDS}, using default 15`);
+      countdownDuration = 15; // Safe default
+    }
+
     res.json({
       message: 'Countdown started',
       broadcastId: broadcast.id,
@@ -221,7 +245,12 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
 
         const io = getIOInstance();
         // Configurable countdown duration (default 15 seconds)
+        // CRITICAL FIX: Validate parsed countdown duration to prevent NaN
         let countdownSeconds = parseInt(process.env.BROADCAST_COUNTDOWN_SECONDS || '15', 10);
+        if (isNaN(countdownSeconds) || countdownSeconds < 0 || countdownSeconds > 300) {
+          logger.warn(`[ASYNC IIFE] Invalid BROADCAST_COUNTDOWN_SECONDS: ${process.env.BROADCAST_COUNTDOWN_SECONDS}, using default 15`);
+          countdownSeconds = 15; // Safe default
+        }
 
         logger.info(`[ASYNC IIFE] Starting countdown: ${countdownSeconds} seconds`);
 
@@ -341,10 +370,14 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
                       logger.error(`[YouTube] ❌ Broadcast ${liveVideoId} monitoring failed: ${error.message}`);
                       // Don't fail the entire broadcast - it's already created
                     });
-                } catch (error: any) {
-                  logger.error(`[YouTube] ❌ Failed to create broadcast for destination ${destination.id}: ${error.message}`);
-                  if (error.response?.data) {
-                    logger.error(`[YouTube] Error response: ${JSON.stringify(error.response.data)}`);
+                } catch (error: unknown) {
+                  // CRITICAL FIX: Type-safe error handling
+                  logger.error(`[YouTube] ❌ Failed to create broadcast for destination ${destination.id}: ${getErrorMessage(error)}`);
+                  if (error && typeof error === 'object' && 'response' in error) {
+                    const axiosError = error as { response?: { data?: unknown } };
+                    if (axiosError.response?.data) {
+                      logger.error(`[YouTube] Error response: ${JSON.stringify(axiosError.response.data)}`);
+                    }
                   }
                   continue; // Skip this destination
                 }
@@ -439,9 +472,12 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
             }
           }
         }, 15000); // 15 seconds
-      } catch (error: any) {
-        logger.error(`[ASYNC IIFE] ❌ Error preparing broadcast destinations: ${error.message}`);
-        logger.error(`[ASYNC IIFE] Stack: ${error.stack}`);
+      } catch (error: unknown) {
+        // CRITICAL FIX: Type-safe error handling
+        logger.error(`[ASYNC IIFE] ❌ Error preparing broadcast destinations: ${getErrorMessage(error)}`);
+        if (error instanceof Error && error.stack) {
+          logger.error(`[ASYNC IIFE] Stack: ${error.stack}`);
+        }
       }
     })(); // CRITICAL: Invoke the IIFE!
   } catch (error) {

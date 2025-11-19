@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios';
+import crypto from 'crypto';
 import logger from '../utils/logger';
 import prisma from '../database/prisma';
 import { decrypt } from '../utils/crypto';
@@ -82,6 +83,14 @@ class HetznerService {
   }
 
   /**
+   * CRITICAL FIX: Generate secure random password for database/Redis
+   * Prevents using hardcoded default passwords in production
+   */
+  private generateSecurePassword(length: number = 32): string {
+    return crypto.randomBytes(length).toString('base64').substring(0, length);
+  }
+
+  /**
    * Get API client with auth
    */
   private async getClient() {
@@ -97,12 +106,14 @@ class HetznerService {
       keyPrefix: apiKey.substring(0, 20) + '...',
     });
 
+    // MINOR FIX: Add timeout to prevent hanging on slow Hetzner API responses
     return axios.create({
       baseURL: this.baseURL,
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
+      timeout: 30000, // 30 second timeout
     });
   }
 
@@ -304,9 +315,13 @@ echo "✅ Media server deployed successfully"
     redisUrl?: string;
     frontendUrl?: string;
   }): string {
+    // CRITICAL FIX: Generate secure random passwords instead of hardcoded defaults
+    const dbPassword = this.generateSecurePassword(32);
+    const redisPassword = this.generateSecurePassword(32);
+
     // Use provided URLs or default to localhost (will create local DB/Redis)
-    const dbUrl = options.databaseUrl || 'postgresql://streamlick:streamlick_prod_password@localhost:5432/streamlick_prod';
-    const redisUrl = options.redisUrl || 'redis://localhost:6379';
+    const dbUrl = options.databaseUrl || `postgresql://streamlick:${dbPassword}@localhost:5432/streamlick_prod`;
+    const redisUrl = options.redisUrl || `redis://:${redisPassword}@localhost:6379`;
     const frontendUrl = options.frontendUrl || 'https://streamlick.yourdomain.com';
 
     // Determine if we need to install DB/Redis locally
@@ -324,7 +339,8 @@ apt-get update
 apt-get install -y postgresql-16
 
 # Configure PostgreSQL
-sudo -u postgres psql -c "CREATE USER streamlick WITH PASSWORD 'streamlick_prod_password';"
+# CRITICAL FIX: Use generated secure password instead of hardcoded default
+sudo -u postgres psql -c "CREATE USER streamlick WITH PASSWORD '${dbPassword}';"
 sudo -u postgres psql -c "CREATE DATABASE streamlick_prod OWNER streamlick;"
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE streamlick_prod TO streamlick;"
 `;
@@ -610,8 +626,12 @@ echo "   2. Install SSL certificates with: certbot --nginx -d ${apiDomain} -d ${
 
   /**
    * Database Server cloud-init script
+   * CRITICAL FIX: Accept password parameter instead of using hardcoded default
    */
-  private getDatabaseServerScript(): string {
+  private getDatabaseServerScript(dbPassword?: string): string {
+    // Generate secure password if not provided
+    const password = dbPassword || this.generateSecurePassword(32);
+
     return `#!/bin/bash
 set -e
 
@@ -636,7 +656,8 @@ echo "host    all             all             0.0.0.0/0               md5" >> /e
 systemctl restart postgresql
 
 # Create database and user
-sudo -u postgres psql -c "CREATE USER streamlick WITH PASSWORD 'streamlick_prod_password';"
+# CRITICAL FIX: Use generated secure password instead of hardcoded default
+sudo -u postgres psql -c "CREATE USER streamlick WITH PASSWORD '${password}';"
 sudo -u postgres psql -c "CREATE DATABASE streamlick_prod OWNER streamlick;"
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE streamlick_prod TO streamlick;"
 
@@ -652,8 +673,12 @@ echo "⚠️  Remember to change the default password and restrict IP access!"
 
   /**
    * Redis Server cloud-init script
+   * CRITICAL FIX: Accept password parameter instead of using hardcoded default
    */
-  private getRedisServerScript(): string {
+  private getRedisServerScript(redisPassword?: string): string {
+    // Generate secure password if not provided
+    const password = redisPassword || this.generateSecurePassword(32);
+
     return `#!/bin/bash
 set -e
 
@@ -668,8 +693,9 @@ apt-get install -y redis-server
 sed -i 's/bind 127.0.0.1 ::1/bind 0.0.0.0/' /etc/redis/redis.conf
 sed -i 's/protected-mode yes/protected-mode no/' /etc/redis/redis.conf
 
-# Set password (update this for production!)
-echo "requirepass streamlick_redis_password" >> /etc/redis/redis.conf
+# Set password
+# CRITICAL FIX: Use generated secure password instead of hardcoded default
+echo "requirepass ${password}" >> /etc/redis/redis.conf
 
 # Restart Redis
 systemctl enable redis-server
