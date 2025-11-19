@@ -165,6 +165,11 @@ export async function createCompositorPipeline(
     try {
       await videoConsumer.requestKeyFrame();
       logger.info('Requested keyframe from video producer via consumer for FFmpeg initialization');
+
+      // Wait for keyframe to be generated and sent before starting FFmpeg
+      // This gives the browser time to encode and send the keyframe with SPS/PPS NAL units
+      await new Promise(resolve => setTimeout(resolve, 500));
+      logger.info('Waited 500ms for keyframe to arrive');
     } catch (error) {
       logger.warn('Could not request keyframe:', error);
     }
@@ -238,8 +243,8 @@ a=recvonly`;
         .inputOptions([
           '-protocol_whitelist', 'file,rtp,udp',
           '-f', 'sdp',
-          '-analyzeduration', '2000000',  // 2s analysis (reduced from 10s to save memory)
-          '-probesize', '2000000',        // 2MB probe size (reduced from 10MB to save memory)
+          '-analyzeduration', '5000000',  // 5s analysis to wait for keyframe with SPS/PPS
+          '-probesize', '5000000',        // 5MB probe size to buffer enough packets
           '-reorder_queue_size', '500',   // Reduced from 5000 to prevent OOM (still handles packet reordering)
         ])
         // Video encoding - copy H.264 stream (no transcoding needed!)
@@ -257,6 +262,7 @@ a=recvonly`;
         .outputOptions([
           '-map', '0:v',    // Video from unified input
           '-map', '0:a',    // Audio from unified input
+          '-bsf:v', 'dump_extra',  // Extract SPS/PPS from stream and inject into every keyframe
           '-flvflags', 'no_duration_filesize',
           '-max_muxing_queue_size', '1024',  // Limit muxing queue to prevent memory overflow
         ]);
@@ -284,8 +290,8 @@ a=recvonly`;
         .inputOptions([
           '-protocol_whitelist', 'file,rtp,udp',
           '-f', 'sdp',
-          '-analyzeduration', '2000000',  // 2s analysis (reduced from 10s to save memory)
-          '-probesize', '2000000',        // 2MB probe size (reduced from 10MB to save memory)
+          '-analyzeduration', '5000000',  // 5s analysis to wait for keyframe with SPS/PPS
+          '-probesize', '5000000',        // 5MB probe size to buffer enough packets
           '-reorder_queue_size', '500',   // Reduced from 5000 to prevent OOM (still handles packet reordering)
         ])
         // Video encoding - copy H.264 stream (no transcoding needed!)
@@ -303,6 +309,7 @@ a=recvonly`;
         .outputOptions([
           '-map', '0:v',    // Video from unified input
           '-map', '0:a',    // Audio from unified input
+          '-bsf:v', 'dump_extra',  // Extract SPS/PPS from stream and inject into every keyframe
           '-max_muxing_queue_size', '1024',  // Limit muxing queue to prevent memory overflow
         ]);
     }
