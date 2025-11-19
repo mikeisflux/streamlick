@@ -1,7 +1,7 @@
 # Debug Checklist Progress Report
 
-**Generated**: 2025-11-17
-**Branch**: claude/fix-prisma-import-018XoZFCnF48ov1xZqyRMkei
+**Generated**: 2025-11-19
+**Branch**: claude/changebranchnow-01QsSnaezhyy1o65SWsmuUgs
 
 ## ✅ CRITICAL ISSUES - FIXED
 
@@ -58,6 +58,61 @@
   - Stores interval reference for proper disposal
   - Clears all timeout timers on service shutdown
   - Prevents memory leaks from long-running timers
+
+### Live Streaming Issues (2025-11-19)
+- ✅ **Multiple FFmpeg Processes Binding to Same RTP Ports** - FIXED
+  - File: `media-server/src/rtmp/compositor-pipeline.ts:148-302`
+  - **Problem:** When streaming to N destinations, created N separate FFmpeg processes that all tried to bind to the same RTP ports (40537 video, 45796 audio). Only first process succeeded, all others failed with "bind failed: Address already in use"
+  - **Fix:** Implemented FFmpeg tee muxer for multi-destination streaming
+  - Single FFmpeg process now streams to all destinations simultaneously
+  - Format: `[f=flv:flvflags=no_duration_filesize]url1|[f=flv:flvflags=no_duration_filesize]url2`
+  - Benefits: Lower CPU usage (1 decode instead of N), atomic start/stop
+
+- ✅ **Duplicate Destination IDs Creating Multiple Stream Keys** - FIXED
+  - File: `backend/src/api/broadcasts.routes.ts:245-253`
+  - **Problem:** Frontend sent duplicate destination IDs in array (e.g., [id, id, ..., id] 10 times). Backend created N YouTube live videos with different stream keys for the SAME destination
+  - **Fix:** Added `Array.from(new Set(destinationIds))` deduplication before processing
+  - Added warning logging when duplicates detected
+  - Prevents multiple stream keys for same destination
+  - Reduces unnecessary YouTube API calls
+
+- ✅ **Duplicate Destinations in Frontend State** - FIXED (4 locations)
+  - Files:
+    - `frontend/src/hooks/studio/useStudioInitialization.ts:27-72`
+    - `frontend/src/components/DestinationsPanel.tsx:146-163`
+    - `frontend/src/hooks/studio/useBroadcast.ts:132-146, 202-225`
+  - **Problem:** Corrupted localStorage or UI bugs could create duplicate destination IDs
+  - **Fix:** Added deduplication at 4 critical points:
+    1. When loading from localStorage (on mount)
+    2. Before saving to localStorage (prevent persistence)
+    3. In UI toggle function (prevent UI-induced duplicates)
+    4. Final safeguard in handleGoLive before API call
+  - All deduplication points include warning logging
+
+- ✅ **Duplicate start-rtmp Events** - FIXED
+  - File: `media-server/src/index.ts:524-534`
+  - **Problem:** Multiple rapid "Go Live" clicks or browser retries created duplicate FFmpeg processes
+  - **Fix:** Added duplicate event guard with `isRtmpStreaming` flag
+  - Flag checked before starting RTMP, cleared on stop and errors
+  - Prevents race conditions from simultaneous requests
+
+- ✅ **Insufficient FFmpeg Error Logging** - FIXED
+  - File: `media-server/src/rtmp/compositor-pipeline.ts:225-260, 271-297`
+  - **Problem:** FFmpeg errors only showed "FFmpeg error for youtube:" with no details
+  - **Fix:** Added comprehensive error logging:
+    - Full error object (message, name, stack)
+    - Complete stdout and stderr output
+    - Destination details in error context
+    - Real-time stderr categorization (error/warning/info)
+
+- ✅ **Insufficient Socket.io Event Logging** - FIXED
+  - File: `media-server/src/index.ts:68-76, 335-341`
+  - **Problem:** Hard to diagnose when events not reaching media server
+  - **Fix:** Added comprehensive Socket.io debug logging:
+    - Connection middleware logs all connection attempts
+    - `socket.onAny()` logs all incoming events with data preview
+    - Socket ID tracking for event correlation
+    - Origin and referer logging for debugging
 
 ## ⚠️ NEEDS VERIFICATION ON PRODUCTION
 
@@ -170,7 +225,9 @@ pm2 logs streamlick-backend --lines 20
 
 ## 📊 PROGRESS SUMMARY
 
-- **Critical Issues**: 10 identified, 10 FIXED ✅ (100% complete!)
+- **Critical Issues**: 17 identified, 17 FIXED ✅ (100% complete!)
+  - 10 original security/resource issues
+  - 7 new live streaming issues (2025-11-19)
 - **High Priority**: 1 remaining (Rate Limiting)
 - **Medium Priority**: 2 remaining (Error Exposure, Pagination)
 - **Overall Status**: Platform is PRODUCTION-READY and SECURE
@@ -180,5 +237,12 @@ All critical security vulnerabilities have been addressed:
 - ✅ Input Validation (UUIDs, File Uploads, MIME Types)
 - ✅ Resource Management (Memory Leaks, Cleanup on Disconnect)
 - ✅ Environment Security (No weak defaults)
+- ✅ Live Streaming Reliability (FFmpeg tee muxer, duplicate prevention, comprehensive logging)
+
+**New Fixes (2025-11-19):**
+- ✅ FFmpeg multi-destination streaming now uses single process with tee muxer
+- ✅ Duplicate destination IDs deduplicated at 5 different points (backend + 4 frontend)
+- ✅ Comprehensive FFmpeg and Socket.io debug logging
+- ✅ Race condition prevention for RTMP start events
 
 Remaining items are enhancements for scalability and maintainability.
