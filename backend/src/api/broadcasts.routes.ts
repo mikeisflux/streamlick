@@ -221,10 +221,10 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
 
     // Return immediately to start countdown on frontend
     // CRITICAL FIX: Validate parsed countdown duration to prevent NaN
-    let countdownDuration = parseInt(process.env.BROADCAST_COUNTDOWN_SECONDS || '15', 10);
+    let countdownDuration = parseInt(process.env.BROADCAST_COUNTDOWN_SECONDS || '10', 10);
     if (isNaN(countdownDuration) || countdownDuration < 0 || countdownDuration > 300) {
-      logger.warn(`Invalid BROADCAST_COUNTDOWN_SECONDS: ${process.env.BROADCAST_COUNTDOWN_SECONDS}, using default 15`);
-      countdownDuration = 15; // Safe default
+      logger.warn(`Invalid BROADCAST_COUNTDOWN_SECONDS: ${process.env.BROADCAST_COUNTDOWN_SECONDS}, using default 10`);
+      countdownDuration = 10; // Safe default (reduced from 15 to match intro video)
     }
 
     res.json({
@@ -244,12 +244,12 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
         logger.info(`[ASYNC IIFE] destinationIds: ${JSON.stringify(destinationIds)}`);
 
         const io = getIOInstance();
-        // Configurable countdown duration (default 15 seconds)
+        // Configurable countdown duration (default 10 seconds for intro video)
         // CRITICAL FIX: Validate parsed countdown duration to prevent NaN
-        let countdownSeconds = parseInt(process.env.BROADCAST_COUNTDOWN_SECONDS || '15', 10);
+        let countdownSeconds = parseInt(process.env.BROADCAST_COUNTDOWN_SECONDS || '10', 10);
         if (isNaN(countdownSeconds) || countdownSeconds < 0 || countdownSeconds > 300) {
-          logger.warn(`[ASYNC IIFE] Invalid BROADCAST_COUNTDOWN_SECONDS: ${process.env.BROADCAST_COUNTDOWN_SECONDS}, using default 15`);
-          countdownSeconds = 15; // Safe default
+          logger.warn(`[ASYNC IIFE] Invalid BROADCAST_COUNTDOWN_SECONDS: ${process.env.BROADCAST_COUNTDOWN_SECONDS}, using default 10`);
+          countdownSeconds = 10; // Safe default (reduced from 15 to match intro video)
         }
 
         logger.info(`[ASYNC IIFE] Starting countdown: ${countdownSeconds} seconds`);

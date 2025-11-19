@@ -371,6 +371,60 @@ class CompositorService {
   }
 
   /**
+   * Play intro video
+   * @param videoUrl - URL of the intro video (defaults to StreamLick intro)
+   * @param duration - Optional duration in seconds (defaults to video duration)
+   * @returns Promise that resolves when video finishes
+   */
+  async playIntroVideo(videoUrl: string = '/backgrounds/videos/StreamLick.mp4', duration?: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const videoElement = document.createElement('video');
+      videoElement.src = videoUrl;
+      videoElement.muted = false; // Enable audio for intro video
+      videoElement.autoplay = false;
+      videoElement.preload = 'auto';
+
+      // Load video
+      videoElement.addEventListener('loadeddata', () => {
+        logger.info(`Intro video loaded: ${videoUrl}, duration: ${videoElement.duration}s`);
+
+        // Set as media clip overlay
+        this.setMediaClipOverlay(videoElement);
+
+        // Play the video
+        videoElement.play().catch((error) => {
+          logger.error('Failed to play intro video:', error);
+          reject(error);
+        });
+      });
+
+      // Clear overlay when video ends
+      videoElement.addEventListener('ended', () => {
+        logger.info('Intro video ended, clearing overlay');
+        this.clearMediaClipOverlay();
+        resolve();
+      });
+
+      // Handle errors
+      videoElement.addEventListener('error', (error) => {
+        logger.error('Intro video error:', error);
+        this.clearMediaClipOverlay();
+        reject(error);
+      });
+
+      // If duration is specified, stop video after that duration
+      if (duration) {
+        setTimeout(() => {
+          logger.info(`Intro video duration limit reached (${duration}s), clearing overlay`);
+          videoElement.pause();
+          this.clearMediaClipOverlay();
+          resolve();
+        }, duration * 1000);
+      }
+    });
+  }
+
+  /**
    * Start compositing loop
    */
   start(): void {

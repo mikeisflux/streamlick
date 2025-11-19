@@ -176,6 +176,14 @@ export function useBroadcast({
       await compositorService.initialize(participantStreams);
       compositorService.setLayout({ type: currentLayout });
 
+      // Play intro video (StreamLick intro) - this will overlay on the composite stream
+      // The intro video plays for exactly 10 seconds to match the countdown
+      console.log('[useBroadcast] Starting intro video playback...');
+      compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4', 10).catch((error) => {
+        console.error('Intro video failed to play:', error);
+        // Continue even if intro video fails
+      });
+
       // Get composite stream and produce it via WebRTC
       const compositeStream = compositorService.getOutputStream();
       if (!compositeStream) {
