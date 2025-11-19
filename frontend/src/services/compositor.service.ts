@@ -631,7 +631,15 @@ class CompositorService {
    * Main animation loop
    */
   private animate = (): void => {
-    if (!this.isCompositing || !this.ctx) return;
+    if (!this.isCompositing) {
+      logger.error('❌ Animation loop stopped: isCompositing = false');
+      return;
+    }
+
+    if (!this.ctx) {
+      logger.error('❌ Animation loop stopped: ctx is null');
+      return;
+    }
 
     const frameStartTime = performance.now();
 

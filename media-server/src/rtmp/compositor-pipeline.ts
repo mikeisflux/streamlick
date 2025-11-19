@@ -11,7 +11,8 @@ import { RTMPDestination } from './streamer';
 import logger from '../utils/logger';
 
 interface Pipeline {
-  plainTransport: PlainTransport | null;  // Unified transport for both video and audio
+  videoPlainTransport: PlainTransport | null;
+  audioPlainTransport: PlainTransport | null;
   videoConsumer: any | null;
   audioConsumer: any | null;
   ffmpegProcesses: Map<string, any>;
@@ -33,42 +34,47 @@ export async function createCompositorPipeline(
   try {
     logger.info(`Creating compositor pipeline for broadcast ${broadcastId}`);
 
-    // UNIFIED APPROACH: Create ONE Plain RTP transport for both video and audio
-    // This improves A/V sync and simplifies the pipeline
-    // Support both single-server (FFmpeg on same machine) and multi-server (FFmpeg on different machine)
+    // Create separate Plain RTP transports for video and audio
+    // This is required because FFmpeg cannot bind to the same port twice
     const useExternalFFmpeg = process.env.EXTERNAL_FFMPEG === 'true';
 
-    const plainTransport = await router.createPlainTransport({
+    const videoTransport = await router.createPlainTransport({
       listenIp: useExternalFFmpeg
         ? { ip: '0.0.0.0', announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP }
         : { ip: '127.0.0.1', announcedIp: undefined },
       rtcpMux: false,
       comedia: false, // MediaSoup will send to FFmpeg's listening address
-      enableSctp: false,
-      enableSrtp: false,
+    });
+
+    const audioTransport = await router.createPlainTransport({
+      listenIp: useExternalFFmpeg
+        ? { ip: '0.0.0.0', announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP }
+        : { ip: '127.0.0.1', announcedIp: undefined },
+      rtcpMux: false,
+      comedia: false, // MediaSoup will send to FFmpeg's listening address
     });
 
     logger.info(
-      `Plain transport created - Port: ${plainTransport.tuple.localPort}`
+      `Plain transports created - Video: ${videoTransport.tuple.localPort}, Audio: ${audioTransport.tuple.localPort}`
     );
     logger.info(
       `FFmpeg deployment mode: ${useExternalFFmpeg ? 'EXTERNAL (multi-server)' : 'LOCAL (same server)'}`
     );
 
-    // Create both video and audio consumers on the SAME transport
-    const videoConsumer = await plainTransport.consume({
+    // Create consumers on their respective transports
+    const videoConsumer = await videoTransport.consume({
       producerId: videoProducer.id,
       rtpCapabilities: router.rtpCapabilities,
       paused: false,
     });
 
-    const audioConsumer = await plainTransport.consume({
+    const audioConsumer = await audioTransport.consume({
       producerId: audioProducer.id,
       rtpCapabilities: router.rtpCapabilities,
       paused: false,
     });
 
-    logger.info('Video and audio consumers created on unified plain transport');
+    logger.info('Video and audio consumers created on separate plain transports');
 
     // DEBUG: Log producer and consumer stats to verify video is flowing
     const videoProducerStats = await videoProducer.getStats();
@@ -110,45 +116,51 @@ export async function createCompositorPipeline(
       ? (process.env.MEDIASOUP_ANNOUNCED_IP || 'localhost')
       : '127.0.0.1';
 
-    logger.info(`========== FFMPEG UNIFIED TRANSPORT SETUP ==========`);
+    logger.info(`========== FFMPEG SEPARATE TRANSPORT SETUP ==========`);
     logger.info(`Total destinations: ${destinations.length}`);
     logger.info(`Media Server IP: ${mediaServerIp}`);
-    logger.info(`MediaSoup Transport Port: ${plainTransport.tuple.localPort}`);
     logger.info(`Video SSRC: ${videoSsrc}, Audio SSRC: ${audioSsrc}`);
     logger.info(`Destinations:`);
     destinations.forEach((dest, index) => {
       logger.info(`  [${index + 1}] ${dest.platform}: ${dest.rtmpUrl}/${dest.streamKey?.substring(0, 20)}...`);
     });
 
-    // FFmpeg will listen on these ports
-    // MediaSoup uses ports 40000-40100 for WebRTC, FFmpeg uses 40200-40201 (RTP + RTCP for combined stream)
-    const ffmpegRtpPort = 40200;      // Combined RTP (video + audio)
-    const ffmpegRtcpPort = 40201;     // Combined RTCP
+    // FFmpeg will listen on separate ports for video and audio
+    // MediaSoup uses ports 40000-40100 for WebRTC, FFmpeg uses 40200-40203
+    const ffmpegVideoPort = 40200;      // Video RTP
+    const ffmpegVideoRtcpPort = 40201;  // Video RTCP
+    const ffmpegAudioPort = 40202;      // Audio RTP
+    const ffmpegAudioRtcpPort = 40203;  // Audio RTCP
     const ffmpegIp = '127.0.0.1';
 
-    // Connect plain transport to tell MediaSoup where to send RTP/RTCP
-    // MediaSoup will send BOTH video and audio RTP packets TO FFmpeg's listening port
-    await plainTransport.connect({
+    // Connect both plain transports to their respective FFmpeg ports
+    await videoTransport.connect({
       ip: ffmpegIp,
-      port: ffmpegRtpPort,
-      rtcpPort: ffmpegRtcpPort,
+      port: ffmpegVideoPort,
+      rtcpPort: ffmpegVideoRtcpPort,
     });
-    logger.info(`Unified transport connected - MediaSoup will send video+audio RTP to ${ffmpegIp}:${ffmpegRtpPort}, RTCP to ${ffmpegIp}:${ffmpegRtcpPort}`);
+    logger.info(`Video transport connected - MediaSoup will send RTP to ${ffmpegIp}:${ffmpegVideoPort}, RTCP to ${ffmpegIp}:${ffmpegVideoRtcpPort}`);
 
-    // Create ONE unified SDP file with both video and audio streams
-    // This ensures proper A/V sync and simplifies the FFmpeg input
+    await audioTransport.connect({
+      ip: ffmpegIp,
+      port: ffmpegAudioPort,
+      rtcpPort: ffmpegAudioRtcpPort,
+    });
+    logger.info(`Audio transport connected - MediaSoup will send RTP to ${ffmpegIp}:${ffmpegAudioPort}, RTCP to ${ffmpegIp}:${ffmpegAudioRtcpPort}`);
+
+    // Create unified SDP file with separate ports for video and audio
     // CRITICAL: Profile must match mediasoup codec config (4d001f = Constrained Baseline Level 3.1)
     const unifiedSdp = `v=0
 o=- 0 0 IN IP4 ${ffmpegIp}
-s=Unified Stream
+s=Combined Stream
 c=IN IP4 ${ffmpegIp}
 t=0 0
-m=video ${ffmpegRtpPort} RTP/AVP ${videoPayloadType}
+m=video ${ffmpegVideoPort} RTP/AVP ${videoPayloadType}
 a=rtpmap:${videoPayloadType} H264/90000
 a=fmtp:${videoPayloadType} level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f
 a=ssrc:${videoSsrc} cname:video
 a=recvonly
-m=audio ${ffmpegRtpPort} RTP/AVP ${audioPayloadType}
+m=audio ${ffmpegAudioPort} RTP/AVP ${audioPayloadType}
 a=rtpmap:${audioPayloadType} opus/48000/2
 a=ssrc:${audioSsrc} cname:audio
 a=recvonly`;
@@ -161,7 +173,7 @@ a=recvonly`;
     fs.writeFileSync(sdpPath, unifiedSdp);
 
     logger.info(`Unified SDP file created for FFmpeg:`);
-    logger.info(`  SDP: ${sdpPath} (listening on ${ffmpegRtpPort})`);
+    logger.info(`  SDP: ${sdpPath} (video port: ${ffmpegVideoPort}, audio port: ${ffmpegAudioPort})`);
     logger.info(`========== SDP CONTENT (VERIFY VIDEO STREAM) ==========`);
     logger.info(unifiedSdp);
     logger.info(`========== END SDP CONTENT ==========`);
@@ -338,7 +350,8 @@ a=recvonly`;
 
     // Store pipeline
     activePipelines.set(broadcastId, {
-      plainTransport: plainTransport,  // Unified transport
+      videoPlainTransport: videoTransport,
+      audioPlainTransport: audioTransport,
       videoConsumer,
       audioConsumer,
       ffmpegProcesses,
@@ -449,14 +462,18 @@ export async function stopCompositorPipeline(broadcastId: string): Promise<void>
     logger.error('Error closing consumers:', error);
   }
 
-  // Close unified plain transport
+  // Close both plain transports
   try {
-    if (pipeline.plainTransport && !pipeline.plainTransport.closed) {
-      pipeline.plainTransport.close();
-      logger.info('Unified plain transport closed');
+    if (pipeline.videoPlainTransport && !pipeline.videoPlainTransport.closed) {
+      pipeline.videoPlainTransport.close();
+      logger.info('Video plain transport closed');
+    }
+    if (pipeline.audioPlainTransport && !pipeline.audioPlainTransport.closed) {
+      pipeline.audioPlainTransport.close();
+      logger.info('Audio plain transport closed');
     }
   } catch (error) {
-    logger.error('Error closing plain transport:', error);
+    logger.error('Error closing plain transports:', error);
   }
 
   activePipelines.delete(broadcastId);
