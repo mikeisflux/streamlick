@@ -17,7 +17,6 @@ interface Pipeline {
   videoConsumer: any | null;
   audioConsumer: any | null;
   ffmpegProcesses: Map<string, any>;
-  keyframeInterval: NodeJS.Timeout | null;
 }
 
 const activePipelines = new Map<string, Pipeline>();
@@ -123,31 +122,6 @@ export async function createCompositorPipeline(
 
     logger.info('Consumers created on plain transports');
 
-    // Request keyframe from video producer to help FFmpeg start decoding
-    let keyframeInterval: NodeJS.Timeout | null = null;
-    try {
-      await videoProducer.requestKeyFrame();
-      logger.info('Requested initial keyframe from video producer');
-
-      // Set up periodic keyframe requests (every 2 seconds)
-      // This ensures FFmpeg always has fresh keyframes for encoding
-      keyframeInterval = setInterval(async () => {
-        try {
-          await videoProducer.requestKeyFrame();
-          logger.debug('Requested periodic keyframe from video producer');
-        } catch (error) {
-          logger.warn('Failed to request periodic keyframe:', error);
-        }
-      }, 2000);
-      logger.info('Started periodic keyframe requests (every 2 seconds)');
-
-      // Wait 1 second for keyframes to arrive before starting FFmpeg
-      logger.info('Waiting 1 second for keyframes to arrive...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      logger.info('Keyframe wait complete, starting FFmpeg');
-    } catch (error) {
-      logger.warn('Failed to request keyframe:', error);
-    }
     diagnosticLogger.logRTPPipeline(
       'Consumer',
       'RTP consumers created on plain transports',
@@ -423,7 +397,6 @@ a=recvonly`;
       videoConsumer,
       audioConsumer,
       ffmpegProcesses,
-      keyframeInterval,
     });
 
     logger.info(`Compositor pipeline created for broadcast ${broadcastId}`);
@@ -454,12 +427,6 @@ export async function stopCompositorPipeline(broadcastId: string): Promise<void>
       logger.error(`Error stopping FFmpeg for destination ${destId}:`, error);
     }
   });
-
-  // Stop keyframe interval
-  if (pipeline.keyframeInterval) {
-    clearInterval(pipeline.keyframeInterval);
-    logger.info('Stopped periodic keyframe requests');
-  }
 
   // Clean up SDP files
   try {
