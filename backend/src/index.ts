@@ -162,6 +162,19 @@ app.use('/uploads', (req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff'); // Prevent MIME sniffing
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin'); // Limit referrer leakage
 
+  // CRITICAL FIX: Set Content-Disposition to prevent XSS execution in user uploads
+  // SVG files and HTML files could contain malicious scripts
+  const filename = path.basename(req.path);
+  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+
+  // For potentially dangerous file types, force download instead of inline display
+  const dangerousExtensions = ['.html', '.htm', '.svg', '.xml'];
+  const ext = path.extname(filename).toLowerCase();
+  if (dangerousExtensions.includes(ext)) {
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    logger.warn(`Forcing download for potentially dangerous file: ${filename}`);
+  }
+
   next();
 }, express.static(path.join(__dirname, '../uploads')));
 

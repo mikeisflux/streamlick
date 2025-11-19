@@ -102,6 +102,19 @@ router.get('/:type', authMiddleware, adminMiddleware, async (req: Request, res: 
 router.post('/:type/upload', authMiddleware, adminMiddleware, (req: Request, res: Response, next: any) => {
   const { type } = req.params;
 
+  // CRITICAL FIX: Whitelist valid asset types to prevent path traversal
+  const VALID_ASSET_TYPES = ['backgrounds', 'images', 'sounds', 'overlays'];
+  if (!VALID_ASSET_TYPES.includes(type)) {
+    logger.warn(`Invalid asset type attempted: ${type}`);
+    return res.status(400).json({ error: 'Invalid asset type' });
+  }
+
+  // Additional validation: ensure type contains no path traversal characters
+  if (type.includes('..') || type.includes('/') || type.includes('\\')) {
+    logger.error(`Path traversal attempt detected in asset type: ${type}`);
+    return res.status(400).json({ error: 'Invalid asset type format' });
+  }
+
   let mimeTypes: string[] = [];
   if (type === 'backgrounds' || type === 'images') {
     mimeTypes = ['image/'];
@@ -109,8 +122,6 @@ router.post('/:type/upload', authMiddleware, adminMiddleware, (req: Request, res
     mimeTypes = ['audio/'];
   } else if (type === 'overlays') {
     mimeTypes = ['image/', 'video/'];
-  } else {
-    return res.status(400).json({ error: 'Invalid asset type' });
   }
 
   const upload = createUploadMiddleware(type, mimeTypes);

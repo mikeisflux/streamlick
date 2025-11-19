@@ -27,6 +27,21 @@ router.get('/application', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid limit parameter' });
     }
 
+    // CRITICAL FIX: Validate and sanitize search parameter to prevent log injection and DoS
+    let sanitizedSearch: string | null = null;
+    if (search) {
+      const searchString = String(search);
+
+      // Limit search length to prevent DoS
+      const MAX_SEARCH_LENGTH = 200;
+      if (searchString.length > MAX_SEARCH_LENGTH) {
+        return res.status(400).json({ error: `Search term too long (max ${MAX_SEARCH_LENGTH} characters)` });
+      }
+
+      // Escape special regex characters to prevent regex DoS
+      sanitizedSearch = searchString.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
     // Try to read Winston log files
     const logsDir = path.join(process.cwd(), 'logs');
     let logLines: any[] = [];
@@ -62,8 +77,8 @@ router.get('/application', async (req: Request, res: Response) => {
             // Filter by level
             if (level && log.level !== level) return false;
 
-            // Filter by search
-            if (search && !JSON.stringify(log).toLowerCase().includes(String(search).toLowerCase())) {
+            // Filter by search (using sanitized search term)
+            if (sanitizedSearch && !JSON.stringify(log).toLowerCase().includes(sanitizedSearch.toLowerCase())) {
               return false;
             }
 

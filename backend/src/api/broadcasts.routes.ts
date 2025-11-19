@@ -68,12 +68,56 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
   try {
     const { title, description, scheduledAt, studioConfig } = req.body;
 
+    // CRITICAL FIX: Input validation to prevent DoS and data corruption
+    // Validate title
+    if (!title || typeof title !== 'string') {
+      return res.status(400).json({ error: 'Title is required and must be a string' });
+    }
+    if (title.length > 200) {
+      return res.status(400).json({ error: 'Title must be 200 characters or less' });
+    }
+    if (title.trim().length === 0) {
+      return res.status(400).json({ error: 'Title cannot be empty' });
+    }
+
+    // Validate description (optional)
+    if (description !== undefined && description !== null) {
+      if (typeof description !== 'string') {
+        return res.status(400).json({ error: 'Description must be a string' });
+      }
+      if (description.length > 5000) {
+        return res.status(400).json({ error: 'Description must be 5000 characters or less' });
+      }
+    }
+
+    // Validate studioConfig (optional)
+    if (studioConfig !== undefined && studioConfig !== null) {
+      if (typeof studioConfig !== 'object' || Array.isArray(studioConfig)) {
+        return res.status(400).json({ error: 'Studio config must be an object' });
+      }
+
+      // Prevent excessively large configs (DoS prevention)
+      const configString = JSON.stringify(studioConfig);
+      if (configString.length > 100000) { // 100KB limit
+        return res.status(400).json({ error: 'Studio config is too large (max 100KB)' });
+      }
+    }
+
+    // Validate scheduledAt (optional)
+    let scheduledAtDate: Date | null = null;
+    if (scheduledAt) {
+      scheduledAtDate = new Date(scheduledAt);
+      if (isNaN(scheduledAtDate.getTime())) {
+        return res.status(400).json({ error: 'Invalid scheduled date format' });
+      }
+    }
+
     const broadcast = await prisma.broadcast.create({
       data: {
         userId: req.user!.userId,
-        title,
-        description,
-        scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+        title: title.trim(),
+        description: description ? description.trim() : null,
+        scheduledAt: scheduledAtDate,
         studioConfig: studioConfig || {},
         status: 'scheduled',
       },

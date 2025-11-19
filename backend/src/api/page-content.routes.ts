@@ -65,11 +65,28 @@ router.put('/:page', authenticate, requireAdmin, async (req: AuthRequest, res) =
       return res.status(400).json({ error: 'Content is required' });
     }
 
+    // CRITICAL FIX: Input validation to prevent XSS and DoS
+    // Validate content is a string
+    if (typeof content !== 'string') {
+      return res.status(400).json({ error: 'Content must be a string' });
+    }
+
+    // Validate content length (max 1MB)
+    const MAX_CONTENT_LENGTH = 1024 * 1024; // 1MB
+    if (content.length > MAX_CONTENT_LENGTH) {
+      logger.warn(`Page content too large: ${content.length} bytes (max ${MAX_CONTENT_LENGTH})`);
+      return res.status(400).json({ error: `Content too large (max ${MAX_CONTENT_LENGTH} bytes)` });
+    }
+
     // Validate page type
     const validPages = ['privacy', 'terms', 'dataDeletion'];
     if (!validPages.includes(page)) {
       return res.status(400).json({ error: 'Invalid page type' });
     }
+
+    // SECURITY NOTE: Content is stored as-is since this is admin-controlled.
+    // Frontend MUST sanitize this content before rendering to prevent XSS.
+    // Use DOMPurify or similar on the client side when displaying.
 
     // Upsert page content
     const updated = await prisma.systemSetting.upsert({

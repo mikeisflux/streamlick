@@ -235,6 +235,53 @@ router.post('/', authenticate, upload.array('attachments', 10), async (req: Auth
       return res.status(400).json({ error: 'To and subject are required' });
     }
 
+    // CRITICAL FIX: Validate and sanitize email addresses to prevent injection
+    const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    const MAX_RECIPIENTS = 50; // Prevent spam relay attacks
+
+    // Helper function to validate and parse email list
+    const parseAndValidateEmails = (emailString: string, fieldName: string): string[] => {
+      const emails = emailString.split(',').map((e: string) => e.trim()).filter(e => e.length > 0);
+
+      if (emails.length > MAX_RECIPIENTS) {
+        throw new Error(`${fieldName}: Too many recipients (max ${MAX_RECIPIENTS})`);
+      }
+
+      for (const email of emails) {
+        if (!EMAIL_REGEX.test(email)) {
+          throw new Error(`${fieldName}: Invalid email address: ${email}`);
+        }
+      }
+
+      return emails;
+    };
+
+    // Validate all email fields
+    let toEmails: string[];
+    let ccEmails: string[] = [];
+    let bccEmails: string[] = [];
+
+    try {
+      toEmails = parseAndValidateEmails(to, 'To');
+      if (cc) {
+        ccEmails = parseAndValidateEmails(cc, 'CC');
+      }
+      if (bcc) {
+        bccEmails = parseAndValidateEmails(bcc, 'BCC');
+      }
+
+      // Check total recipient count
+      const totalRecipients = toEmails.length + ccEmails.length + bccEmails.length;
+      if (totalRecipients > MAX_RECIPIENTS) {
+        return res.status(400).json({
+          error: `Total recipient count (${totalRecipients}) exceeds maximum (${MAX_RECIPIENTS})`
+        });
+      }
+    } catch (validationError: any) {
+      logger.warn('Email validation failed:', validationError.message);
+      return res.status(400).json({ error: validationError.message });
+    }
+
     // Get SendGrid API key
     const apiKey = await getSendGridApiKey();
     if (!apiKey) {
@@ -256,9 +303,9 @@ router.post('/', authenticate, upload.array('attachments', 10), async (req: Auth
       }
     }
 
-    // Send email via SendGrid
+    // Send email via SendGrid (using validated email addresses)
     const msg: any = {
-      to: to.split(',').map((e: string) => e.trim()),
+      to: toEmails,
       from: from || process.env.DEFAULT_FROM_EMAIL || 'noreply@streamlick.com',
       subject,
       text: bodyText,
@@ -266,12 +313,12 @@ router.post('/', authenticate, upload.array('attachments', 10), async (req: Auth
       attachments: attachments.length > 0 ? attachments : undefined,
     };
 
-    if (cc) {
-      msg.cc = cc.split(',').map((e: string) => e.trim());
+    if (ccEmails.length > 0) {
+      msg.cc = ccEmails;
     }
 
-    if (bcc) {
-      msg.bcc = bcc.split(',').map((e: string) => e.trim());
+    if (bccEmails.length > 0) {
+      msg.bcc = bccEmails;
     }
 
     if (inReplyTo) {

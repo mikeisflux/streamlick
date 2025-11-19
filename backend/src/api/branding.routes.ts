@@ -129,7 +129,23 @@ router.post(
   async (req, res) => {
     try {
       const files = req.files as any;
-      const config = req.body.config ? JSON.parse(req.body.config) : {};
+
+      // CRITICAL FIX: Safe JSON parsing with error handling to prevent DoS
+      let config = {};
+      if (req.body.config) {
+        try {
+          config = JSON.parse(req.body.config);
+
+          // Validate that parsed config is an object
+          if (typeof config !== 'object' || Array.isArray(config)) {
+            logger.warn('Invalid branding config format: expected object');
+            return res.status(400).json({ error: 'Invalid config format: expected JSON object' });
+          }
+        } catch (parseError) {
+          logger.error('Failed to parse branding config:', parseError);
+          return res.status(400).json({ error: 'Invalid JSON in config field' });
+        }
+      }
 
       logger.info('Saving branding settings:', {
         logo: files?.logo?.[0]?.filename,
