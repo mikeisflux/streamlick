@@ -272,7 +272,7 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
         // If destinations are specified, create live videos for each platform
         if (destinationIds && destinationIds.length > 0) {
           // CRITICAL: Deduplicate destination IDs to prevent creating multiple stream keys for the same destination
-          const uniqueDestinationIds = Array.from(new Set(destinationIds));
+          const uniqueDestinationIds = Array.from(new Set(destinationIds as string[])) as string[];
 
           logger.info(`[ASYNC IIFE] Processing ${destinationIds.length} selected destinations: ${JSON.stringify(destinationIds)}`);
           if (uniqueDestinationIds.length !== destinationIds.length) {
