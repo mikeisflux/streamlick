@@ -235,17 +235,7 @@ export function useBroadcast({
       console.log('[useBroadcast] Waiting for broadcast destinations to be created...');
       await new Promise(resolve => setTimeout(resolve, 2000)); // Additional 2 seconds
 
-      // Step 2: Play intro video AFTER countdown finishes
-      console.log('[useBroadcast] Countdown finished! Starting intro video...');
-      try {
-        await compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
-        console.log('[useBroadcast] Intro video finished, transitioning to user stream');
-      } catch (error) {
-        console.error('Intro video failed to play:', error);
-        // Continue even if intro video fails
-      }
-
-      // Step 3: Fetch broadcast destinations with decrypted RTMP URLs and stream keys
+      // Step 2: Fetch broadcast destinations with decrypted RTMP URLs and stream keys
       const broadcastDestinationsResponse = await api.get(`/broadcasts/${broadcastId}/destinations`);
       const broadcastDestinations = broadcastDestinationsResponse.data;
 
@@ -271,8 +261,19 @@ export function useBroadcast({
         },
       });
 
+      console.log('[useBroadcast] RTMP streaming started! Now playing intro video WHILE LIVE...');
+
+      // Step 3: Play intro video WHILE STREAMING (after going live)
+      try {
+        await compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
+        console.log('[useBroadcast] Intro video finished, showing user stream');
+      } catch (error) {
+        console.error('Intro video failed to play:', error);
+        // Continue even if intro video fails - user stream will show immediately
+      }
+
       // Start chat polling
-      socketService.emit('start-chat', { broadcastId });
+      socketService.emit('start-chat', { broadcastId});
 
       // Enable chat display on compositor
       compositorService.setShowChat(showChatOnStream);
