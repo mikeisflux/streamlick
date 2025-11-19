@@ -199,6 +199,22 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
     logger.info(`[DEBUG ROUTE] destinationSettings: ${JSON.stringify(destinationSettings)}`);
     logger.info(`[DEBUG ROUTE] ==============================================`);
 
+    // NUCLEAR FIX: Delete ALL old broadcast destinations for this broadcast IMMEDIATELY
+    // This prevents the 18-destination bug from recurring
+    const oldDestinations = await prisma.broadcastDestination.findMany({
+      where: { broadcastId: req.params.id },
+    });
+
+    if (oldDestinations.length > 0) {
+      logger.warn(`[NUCLEAR CLEANUP] 🧹 Found ${oldDestinations.length} old broadcast destinations for broadcast ${req.params.id} - DELETING ALL NOW!`);
+      await prisma.broadcastDestination.deleteMany({
+        where: { broadcastId: req.params.id },
+      });
+      logger.info(`[NUCLEAR CLEANUP] ✓ Deleted ${oldDestinations.length} old broadcast destinations`);
+    } else {
+      logger.info(`[NUCLEAR CLEANUP] No old destinations to clean up`);
+    }
+
     const broadcast = await prisma.broadcast.findFirst({
       where: {
         id: req.params.id,
@@ -306,9 +322,19 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
           logger.info(`[ASYNC IIFE] Found ${destinations.length} active destinations in database for user ${req.user!.userId}`);
           logger.info(`[ASYNC IIFE] Destinations: ${JSON.stringify(destinations.map(d => ({ id: d.id, platform: d.platform, channelId: d.channelId })))}`);
 
+          // CRITICAL FIX: Track processed destination IDs to prevent creating multiple broadcasts for same destination
+          const processedDestinationIds = new Set<string>();
+
           for (const destination of destinations) {
             try {
-              logger.info(`[ASYNC IIFE] Processing destination ${destination.id} (${destination.platform})`);
+              // SAFETY CHECK: Skip if already processed (should never happen, but prevents disaster)
+              if (processedDestinationIds.has(destination.id)) {
+                logger.error(`[ASYNC IIFE] ⚠️ CRITICAL: Destination ${destination.id} already processed - SKIPPING to prevent duplicate!`);
+                continue;
+              }
+
+              processedDestinationIds.add(destination.id);
+              logger.info(`[ASYNC IIFE] Processing destination ${destination.id} (${destination.platform}) [${processedDestinationIds.size}/${destinations.length}]`);
 
               let streamUrl = destination.rtmpUrl;
               let streamKey = destination.streamKey ? decrypt(destination.streamKey) : '';
@@ -676,6 +702,14 @@ router.get('/:id/destinations', authenticate, async (req: AuthRequest, res) => {
       liveVideoId: bd.liveVideoId,
       status: bd.status,
     }));
+
+    // CRITICAL LOGGING: Log EXACTLY what we're returning to catch any duplication
+    logger.info(`[Get Destinations] ========== RETURNING TO FRONTEND ==========`);
+    logger.info(`[Get Destinations] Total count: ${destinationsForMediaServer.length}`);
+    destinationsForMediaServer.forEach((dest, index) => {
+      logger.info(`[Get Destinations] [${index + 1}/${destinationsForMediaServer.length}] ID: ${dest.id}, Platform: ${dest.platform}, StreamKey: ${dest.streamKey?.substring(0, 8)}...`);
+    });
+    logger.info(`[Get Destinations] ========== END RETURN DATA ==========`);
 
     res.json(destinationsForMediaServer);
   } catch (error) {
