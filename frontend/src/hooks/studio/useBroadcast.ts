@@ -261,9 +261,13 @@ export function useBroadcast({
         },
       });
 
-      console.log('[useBroadcast] RTMP streaming started! Now playing intro video WHILE LIVE...');
+      // CRITICAL: Set isLive=true NOW so CompositorPreview shows during intro video!
+      console.log('[useBroadcast] RTMP streaming started! Setting isLive=true to show CompositorPreview...');
+      setIsLive(true);
+      toast.success('You are now live!');
 
       // Step 3: Play intro video WHILE STREAMING (after going live)
+      console.log('[useBroadcast] Now playing intro video on live stream...');
       try {
         await compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
         console.log('[useBroadcast] Intro video finished, showing user stream');
@@ -287,8 +291,7 @@ export function useBroadcast({
         // Don't fail the broadcast if recording fails
       }
 
-      toast.success('You are now live!');
-      setIsLive(true);
+      // isLive already set to true above (before intro video)
       return true;
     } catch (error) {
       console.error('Go live error:', error);
