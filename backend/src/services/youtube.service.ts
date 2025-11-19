@@ -557,10 +557,29 @@ export async function monitorAndTransitionYouTubeBroadcast(
         logger.warn(`[YouTube Monitor] Configuration Issues:`, status.healthStatus.configurationIssues);
       }
 
-      // Check if stream is receiving data
-      if (status.healthStatus?.status === 'good' || status.healthStatus?.status === 'ok') {
+      // Check if we should transition to live:
+      // 1. Health status is good/ok (YouTube explicitly validated stream), OR
+      // 2. Lifecycle status is liveStarting (YouTube detected stream and is ready to go live), OR
+      // 3. Health status is unknown but we've waited at least 10 seconds (YouTube might not report health immediately)
+      const healthIsGood = status.healthStatus?.status === 'good' || status.healthStatus?.status === 'ok';
+      const lifecycleIsReady = status.lifeCycleStatus === 'liveStarting';
+      const healthIsUnknownButWaited = (status.healthStatus?.status === 'unknown' || !status.healthStatus?.status) &&
+                                        attempt >= 5; // 5 attempts * 2s = 10 seconds
+
+      const shouldTransition = healthIsGood || lifecycleIsReady || healthIsUnknownButWaited;
+
+      if (shouldTransition) {
+        let reason = '';
+        if (healthIsGood) {
+          reason = `Stream health is ${status.healthStatus.status.toUpperCase()}`;
+        } else if (lifecycleIsReady) {
+          reason = 'Lifecycle status is liveStarting';
+        } else if (healthIsUnknownButWaited) {
+          reason = 'Health unknown but stream has been running for 10+ seconds';
+        }
+
         logger.info(`[YouTube Monitor] ========== STREAM DETECTED! ==========`);
-        logger.info(`[YouTube Monitor] ✓ Stream health is ${status.healthStatus.status.toUpperCase()}`);
+        logger.info(`[YouTube Monitor] ✓ ${reason}`);
         logger.info(`[YouTube Monitor] Initiating transition to live after ${attempt} attempt(s)...`);
 
         try {
@@ -590,7 +609,7 @@ export async function monitorAndTransitionYouTubeBroadcast(
           throw transitionError;
         }
       } else {
-        logger.info(`[YouTube Monitor] Waiting for stream... (health: ${status.healthStatus?.status || 'unknown'})`);
+        logger.info(`[YouTube Monitor] Waiting for stream... (health: ${status.healthStatus?.status || 'unknown'}, lifecycle: ${status.lifeCycleStatus})`);
       }
 
       // Check for error states
