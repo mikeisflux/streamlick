@@ -18,6 +18,10 @@ import { getIOInstance } from '../socket/io-instance';
 
 const router = Router();
 
+// CRITICAL FIX: Track countdown intervals to prevent memory leaks
+// Stores interval IDs for each broadcast so they can be cleared on stop
+const countdownIntervals = new Map<string, NodeJS.Timeout>();
+
 // Get all broadcasts for user (with pagination)
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
@@ -195,9 +199,18 @@ router.patch('/:id', authenticate, async (req: AuthRequest, res) => {
 // Delete broadcast
 router.delete('/:id', authenticate, async (req: AuthRequest, res) => {
   try {
+    // CRITICAL FIX: Clear countdown interval if broadcast is deleted during countdown
+    const broadcastId = req.params.id;
+    const interval = countdownIntervals.get(broadcastId);
+    if (interval) {
+      clearInterval(interval);
+      countdownIntervals.delete(broadcastId);
+      logger.info(`Cleared countdown interval for deleted broadcast ${broadcastId}`);
+    }
+
     const deleted = await prisma.broadcast.deleteMany({
       where: {
-        id: req.params.id,
+        id: broadcastId,
         userId: req.user!.userId,
       },
     });
@@ -298,8 +311,13 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
 
           if (countdownSeconds <= 0) {
             clearInterval(countdownInterval);
+            // CRITICAL FIX: Remove from tracking Map when countdown completes
+            countdownIntervals.delete(updatedBroadcast!.id);
           }
         }, 1000);
+
+        // CRITICAL FIX: Store interval in Map so it can be cleared on broadcast stop
+        countdownIntervals.set(updatedBroadcast!.id, countdownInterval);
 
         const broadcastDestinations: any[] = [];
 
@@ -509,6 +527,7 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
         // CRITICAL FIX: Clear countdown interval on error to prevent memory leak
         if (countdownInterval) {
           clearInterval(countdownInterval);
+          countdownIntervals.delete(updatedBroadcast!.id);
         }
 
         // Update broadcast status to error on failure
@@ -541,6 +560,15 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
 // End broadcast
 router.post('/:id/end', authenticate, async (req: AuthRequest, res) => {
   try {
+    // CRITICAL FIX: Clear countdown interval if broadcast is ended during countdown
+    const broadcastId = req.params.id;
+    const interval = countdownIntervals.get(broadcastId);
+    if (interval) {
+      clearInterval(interval);
+      countdownIntervals.delete(broadcastId);
+      logger.info(`Cleared countdown interval for ended broadcast ${broadcastId}`);
+    }
+
     const broadcast = await prisma.broadcast.findFirst({
       where: {
         id: req.params.id,

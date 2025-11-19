@@ -78,7 +78,9 @@ io.use((socket, next) => {
 const PORT = process.env.MEDIA_SERVER_PORT || 3001;
 
 app.use(cors());
-app.use(express.json());
+// CRITICAL FIX: Add request size limit to prevent DoS attacks
+// Media server only receives metadata (RTP params, transport info), not media streams
+app.use(express.json({ limit: '100kb' })); // 100KB limit for JSON payloads
 
 // Define broadcast data structure
 interface BroadcastData {

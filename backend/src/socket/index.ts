@@ -238,6 +238,19 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     // Media state changed (mute/unmute)
     socket.on('media-state-changed', ({ audio, video }) => {
       const { broadcastId, participantId } = socket.data;
+
+      // CRITICAL FIX: Validate socket data and parameters
+      if (!isValidUUID(broadcastId) || !isValidUUID(participantId)) {
+        logger.warn(`Invalid IDs in media-state-changed: broadcast=${broadcastId}, participant=${participantId}`);
+        return socket.emit('error', { message: 'Invalid broadcast or participant ID' });
+      }
+
+      // Validate audio/video parameters
+      if (typeof audio !== 'boolean' || typeof video !== 'boolean') {
+        logger.warn(`Invalid media state parameters: audio=${audio}, video=${video}`);
+        return socket.emit('error', { message: 'Invalid media state parameters' });
+      }
+
       if (broadcastId && participantId) {
         socket.to(`broadcast:${broadcastId}`).emit('media-state-changed', {
           participantId,
@@ -250,6 +263,19 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     // Layout updated
     socket.on('layout-updated', (layout) => {
       const { broadcastId } = socket.data;
+
+      // CRITICAL FIX: Validate broadcast ID
+      if (!isValidUUID(broadcastId)) {
+        logger.warn(`Invalid broadcast ID in layout-updated: ${broadcastId}`);
+        return socket.emit('error', { message: 'Invalid broadcast ID' });
+      }
+
+      // Validate layout parameter
+      if (!layout || typeof layout !== 'object') {
+        logger.warn('Invalid layout parameter in layout-updated');
+        return socket.emit('error', { message: 'Invalid layout parameter' });
+      }
+
       if (broadcastId) {
         socket.to(`broadcast:${broadcastId}`).emit('layout-updated', layout);
       }
@@ -258,6 +284,23 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     // Participant position changed
     socket.on('participant-position-changed', ({ participantId, position }) => {
       const { broadcastId } = socket.data;
+
+      // CRITICAL FIX: Validate IDs and parameters
+      if (!isValidUUID(broadcastId)) {
+        logger.warn(`Invalid broadcast ID in participant-position-changed: ${broadcastId}`);
+        return socket.emit('error', { message: 'Invalid broadcast ID' });
+      }
+
+      if (!isValidUUID(participantId)) {
+        logger.warn(`Invalid participant ID in participant-position-changed: ${participantId}`);
+        return socket.emit('error', { message: 'Invalid participant ID' });
+      }
+
+      if (!position || typeof position !== 'object') {
+        logger.warn('Invalid position parameter in participant-position-changed');
+        return socket.emit('error', { message: 'Invalid position parameter' });
+      }
+
       if (broadcastId) {
         socket.to(`broadcast:${broadcastId}`).emit('participant-position-changed', {
           participantId,

@@ -4,7 +4,8 @@
 **Generated**: 2025-11-19 (Updated with fixes through 2025-11-19)
 **Scope**: Backend (57 files), Frontend (97 files), Media Server (9 files)
 **Total Issues**: 172+ identified (30 Critical, 50 Major, 48 Minor, 44 Potential)
-**Fixed**: 26 Critical, 20 Major, 4 Minor, 1 Enhancement (Status updated 2025-11-19)
+**Fixed**: 26 Critical, 25 Major, 5 Minor, 1 Enhancement (Status updated 2025-11-19)
+**Session 3**: +5 new fixes, +6 verified as already fixed
 
 **FILES ANALYZED**: 227 total TypeScript/TSX files
 - Backend API Routes: 26 files ✓
@@ -1647,3 +1648,118 @@ This checklist is complete when:
   - Media Server: 9 TypeScript files
   - Total: 163+ files
 **Next Review**: After Phase 1 completion
+
+## Session 3 Fixes (2025-11-19)
+
+### Socket.IO Security
+
+- [x] **MAJOR: Missing Validation on Socket Event Params** ✅ FIXED
+  - **File**: `backend/src/socket/index.ts:239-310`
+  - **Issue**: broadcastId, participantId, audio/video, layout, position not validated
+  - **Impact**: DoS attacks, invalid data propagation
+  - **Status**: FIXED - Added comprehensive parameter validation
+  - **Fix**: media-state-changed: Validates UUIDs and boolean parameters (lines 242-252)
+  - **Fix**: layout-updated: Validates UUID and object type (lines 267-277)
+  - **Fix**: participant-position-changed: Validates UUIDs and position object (lines 288-302)
+  - **Date Fixed**: 2025-11-19
+
+### Media Server Security
+
+- [x] **MAJOR: No Request Size Limit on Media Server** ✅ FIXED
+  - **File**: `media-server/src/index.ts:83`
+  - **Issue**: No request body size limit, vulnerable to DoS
+  - **Impact**: Memory exhaustion attacks via large JSON payloads
+  - **Status**: FIXED - Added 100KB limit
+  - **Fix**: Added express.json({ limit: '100kb' }) to prevent DoS attacks
+  - **Note**: Media server only receives metadata (RTP params, transport info), not media streams
+  - **Date Fixed**: 2025-11-19
+
+### Memory Leaks
+
+- [x] **MAJOR: setInterval Not Cleared on Early Stop** ✅ FIXED
+  - **File**: `backend/src/api/broadcasts.routes.ts:23,296-311,519-522,563-570,202-209`
+  - **Issue**: Countdown interval continues if broadcast cancelled/deleted/ended early
+  - **Impact**: Memory leak from orphaned intervals
+  - **Status**: FIXED - Added interval tracking Map and cleanup
+  - **Fix**: Created countdownIntervals Map to track all active intervals (line 23)
+  - **Fix**: Store interval when created (line 311)
+  - **Fix**: Delete from Map when countdown completes (line 306)
+  - **Fix**: Clear and delete on error (lines 519-522)
+  - **Fix**: Clear and delete when broadcast ended (lines 563-570)
+  - **Fix**: Clear and delete when broadcast deleted (lines 202-209)
+  - **Date Fixed**: 2025-11-19
+
+### Frontend Validation
+
+- [x] **MAJOR: Canvas Dimension Parsing Without Validation** ✅ FIXED
+  - **File**: `frontend/src/services/compositor.service.ts:77-88`
+  - **Issue**: parseInt() can return NaN if env var is invalid, causing canvas creation to fail
+  - **Impact**: Compositor breaks with invalid configuration
+  - **Status**: FIXED - Added NaN handling with safe defaults
+  - **Fix**: WIDTH: isNaN check, defaults to 3840 if invalid (lines 77-80)
+  - **Fix**: HEIGHT: isNaN check, defaults to 2160 if invalid (lines 81-84)
+  - **Fix**: FPS: isNaN check, defaults to 30 if invalid (lines 85-88)
+  - **Date Fixed**: 2025-11-19
+
+### Code Quality
+
+- [x] **MAJOR: Duplicate Route Definition** ✅ FIXED
+  - **File**: `backend/src/api/oauth.routes.ts`
+  - **Issue**: /rumble/setup route defined twice (lines 757-830 AND 920+)
+  - **Impact**: Second definition overwrites first, confusion in codebase
+  - **Status**: FIXED - Removed first duplicate
+  - **Fix**: Kept second definition (line 846+) which uses Rumble service and has better error handling
+  - **Date Fixed**: 2025-11-19
+
+### Verified As Already Fixed
+
+- [x] **CRITICAL: CSRF Protection Bypass on OAuth** ✅ VERIFIED ALREADY FIXED
+  - **File**: `backend/src/api/oauth.routes.ts:137,274,395,526,662,857`
+  - **Issue**: OAuth callback vulnerable to CSRF
+  - **Status**: ALREADY FIXED (verified 2025-11-19)
+  - **Fix**: verifyOAuthState() function validates state parameter for all platforms
+  - **Fix**: State validated for YouTube (line 274), Facebook (line 395), Twitch (line 526), X (line 662), LinkedIn (line 857)
+  - **Note**: OAuth routes exempted from CSRF middleware because they use state parameter validation (proper OAuth CSRF protection)
+
+- [x] **MAJOR: Duplicate Prisma Client - Facebook Service** ✅ VERIFIED ALREADY FIXED
+  - **File**: `backend/src/services/facebook.service.ts:4`
+  - **Issue**: Creates new PrismaClient instance
+  - **Status**: ALREADY FIXED (verified 2025-11-19)
+  - **Fix**: Imports singleton: `import prisma from '../database/prisma';`
+
+- [x] **MAJOR: Duplicate Prisma Client - Chat Service** ✅ VERIFIED ALREADY FIXED
+  - **File**: `backend/src/services/chat.service.ts:16`
+  - **Issue**: Creates new PrismaClient instance
+  - **Status**: ALREADY FIXED (verified 2025-11-19)
+  - **Fix**: Imports singleton: `import prisma from '../database/prisma';`
+
+- [x] **MAJOR: Database Error Exposure** ✅ VERIFIED ALREADY FIXED
+  - **File**: `backend/src/index.ts:219-230`
+  - **Issue**: Detailed errors logged, could expose schema
+  - **Status**: ALREADY FIXED (verified 2025-11-19)
+  - **Fix**: Error handler sanitizes errors before logging
+  - **Fix**: Only logs message, stack (dev only), code, and statusCode
+  - **Fix**: Returns generic "Internal server error" to client
+
+- [x] **MAJOR: No Pagination on Broadcast List** ✅ VERIFIED ALREADY FIXED
+  - **File**: `backend/src/api/broadcasts.routes.ts:26-64`
+  - **Issue**: Fetches all broadcasts with all participants/recordings
+  - **Status**: ALREADY FIXED (verified 2025-11-19)
+  - **Fix**: Pagination with page and limit parameters (max 100 per page)
+  - **Fix**: Returns total count and pagination metadata
+  - **Fix**: Uses skip/take for efficient queries
+
+- [x] **MAJOR: WebRTC Resources Not Cleaned Up** ✅ VERIFIED ALREADY FIXED
+  - **File**: `frontend/src/services/webrtc.service.ts:278-341`
+  - **Issue**: No destructor to close transports/producers/consumers
+  - **Status**: ALREADY FIXED (verified 2025-11-19)
+  - **Fix**: close() method properly cleans up all resources
+  - **Fix**: Closes all producers, consumers, and transports
+  - **Fix**: Disconnects from media server socket
+  - **Fix**: Removes all event listeners to prevent memory leaks
+
+- [x] **MAJOR: Missing X-Content-Type-Options Header** ✅ VERIFIED ALREADY FIXED
+  - **File**: `backend/src/index.ts:162`
+  - **Issue**: Browser could MIME-sniff uploads as executable
+  - **Status**: ALREADY FIXED (verified 2025-11-19)
+  - **Fix**: Sets X-Content-Type-Options: nosniff on /uploads endpoint

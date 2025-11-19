@@ -73,10 +73,19 @@ class CompositorService {
   private overlayImages: Map<string, HTMLImageElement> = new Map();
 
   // Canvas dimensions - configurable via environment or defaults to 4K UHD (3840x2160)
-  // CRITICAL FIX: Validate dimensions to prevent memory exhaustion attacks
-  private readonly WIDTH = Math.min(Math.max(parseInt(import.meta.env.VITE_CANVAS_WIDTH || '3840'), 640), 7680); // Min 640px, Max 8K (7680px)
-  private readonly HEIGHT = Math.min(Math.max(parseInt(import.meta.env.VITE_CANVAS_HEIGHT || '2160'), 480), 4320); // Min 480px, Max 8K (4320px)
-  private readonly FPS = Math.min(Math.max(parseInt(import.meta.env.VITE_CANVAS_FPS || '30'), 15), 60); // Min 15fps, Max 60fps
+  // CRITICAL FIX: Validate dimensions to prevent memory exhaustion attacks and NaN
+  private readonly WIDTH = (() => {
+    const parsed = parseInt(import.meta.env.VITE_CANVAS_WIDTH || '3840');
+    return isNaN(parsed) ? 3840 : Math.min(Math.max(parsed, 640), 7680); // Default 3840, Min 640px, Max 8K (7680px)
+  })();
+  private readonly HEIGHT = (() => {
+    const parsed = parseInt(import.meta.env.VITE_CANVAS_HEIGHT || '2160');
+    return isNaN(parsed) ? 2160 : Math.min(Math.max(parsed, 480), 4320); // Default 2160, Min 480px, Max 8K (4320px)
+  })();
+  private readonly FPS = (() => {
+    const parsed = parseInt(import.meta.env.VITE_CANVAS_FPS || '30');
+    return isNaN(parsed) ? 30 : Math.min(Math.max(parsed, 15), 60); // Default 30, Min 15fps, Max 60fps
+  })();
 
   // Performance tracking
   private frameCount = 0;
