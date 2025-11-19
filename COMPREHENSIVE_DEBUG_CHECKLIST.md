@@ -4,7 +4,7 @@
 **Generated**: 2025-11-19 (Updated with fixes through 2025-11-19)
 **Scope**: Backend (57 files), Frontend (97 files), Media Server (9 files)
 **Total Issues**: 172+ identified (30 Critical, 50 Major, 48 Minor, 44 Potential)
-**Fixed**: 24 Critical, 12 Major (Status updated 2025-11-19)
+**Fixed**: 24 Critical, 14 Major, 1 Enhancement (Status updated 2025-11-19)
 
 **FILES ANALYZED**: 227 total TypeScript/TSX files
 - Backend API Routes: 26 files ✓
@@ -216,17 +216,26 @@
     - Validates URL formats for uploaded assets
     - Allowed types: images, videos, audio, PDFs (with strict validation)
 
-- [ ] **MAJOR: Missing Media Server Broadcast Validation**
-  - **File**: `media-server/src/index.ts:315`
+- [x] **MAJOR: Missing Media Server Broadcast Validation** ✅ FIXED
+  - **File**: `media-server/src/index.ts`
   - **Issue**: Arbitrary router creation with any string ID
-  - **Fix**: Validate broadcastId format and existence
-  - **Test**: Send create-transport with invalid ID
+  - **Status**: FIXED (2025-11-19) - Added UUID validation to 5 handlers:
+    - `isValidUUID()` helper function (line 311-313)
+    - RTP capabilities endpoint (line 322-325)
+    - create-transport handler (line 359-362)
+    - consume handler (line 476-479)
+    - start-rtmp handler (line 541-545)
+    - stop-rtmp handler (line 644-647)
+  - **Fix**: Validates broadcastId format before creating resources, prevents resource exhaustion from malformed IDs
 
-- [ ] **MAJOR: Canvas Dimension Validation Missing**
-  - **File**: `frontend/src/services/compositor.service.ts:76-78`
+- [x] **MAJOR: Canvas Dimension Validation Missing** ✅ FIXED
+  - **File**: `frontend/src/services/compositor.service.ts:77-79`
   - **Issue**: Invalid dimensions can crash compositor
-  - **Fix**: Validate and clamp dimensions
-  - **Test**: Set VITE_CANVAS_WIDTH to "invalid"
+  - **Status**: FIXED (2025-11-19) - Added min/max validation with clamping:
+    - WIDTH: Min 640px, Max 8K (7680px)
+    - HEIGHT: Min 480px, Max 8K (4320px)
+    - FPS: Min 15fps, Max 60fps
+  - **Fix**: Prevents memory exhaustion attacks via invalid canvas sizes
 
 ---
 
@@ -1565,8 +1574,30 @@ This checklist is complete when:
 
 ---
 
-**Last Updated**: 2025-11-17
-**Version**: 2.0 (Comprehensive line-by-line review)
+## 🎯 ENHANCEMENTS (2025-11-19)
+
+### Debugging & Diagnostics
+
+- [x] **ENHANCEMENT: Extensive Stream Transport Logging** ✅ ADDED
+  - **File**: `media-server/src/rtmp/compositor-pipeline.ts`
+  - **Enhancement**: Added comprehensive logging throughout mediasoup→FFmpeg pipeline:
+    - Plain transport creation (video & audio) with full configuration details
+    - Transport state (IP, ports, protocol, RTCP configuration, SCTP state)
+    - Consumer creation with complete RTP parameters
+    - Codec details (payload type, clock rate, MIME type, parameters, SSRC)
+    - Encoding information and header extensions
+    - RTP stream parameters before FFmpeg startup
+  - **Benefits**:
+    - Easier diagnosis of port binding issues
+    - Track codec negotiation problems
+    - Detect RTP parameter mismatches
+    - Debug stream synchronization issues
+    - Monitor transport state changes
+
+---
+
+**Last Updated**: 2025-11-19
+**Version**: 2.1 (Updated with 2025-11-19 fixes)
 **Reviewed By**: Claude Code Analysis Agent (Deep Dive)
 **Files Analyzed**:
   - Backend: 57 TypeScript files
