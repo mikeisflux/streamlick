@@ -13,6 +13,7 @@ import {
   endYouTubeLiveBroadcast,
   getValidYouTubeToken,
   monitorAndTransitionYouTubeBroadcast,
+  transitionYouTubeBroadcastToLive,
 } from '../services/youtube.service';
 import { getIOInstance } from '../socket/io-instance';
 import { forceDeleteBroadcastDestinations } from '../utils/cleanup-destinations';
@@ -380,17 +381,13 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
 
                   logger.info(`[YouTube] ✅ Created broadcast ${liveVideoId} - RTMP URL: ${streamUrl}`);
                   logger.info(`[YouTube] Privacy: ${privacyStatus}${scheduledStartTime ? ', scheduled: ' + scheduledStartTime : ''}`);
+                  logger.info(`[YouTube] Broadcast created in TESTING state - will transition to LIVE after countdown`);
 
-                  // Start monitoring and transitioning to live (non-blocking)
-                  // This runs in the background and transitions the broadcast when YouTube detects the stream
-                  monitorAndTransitionYouTubeBroadcast(ytBroadcast.broadcastId, accessToken)
-                    .then(() => {
-                      logger.info(`[YouTube] ✅ Broadcast ${liveVideoId} monitoring completed successfully`);
-                    })
-                    .catch((error) => {
-                      logger.error(`[YouTube] ❌ Broadcast ${liveVideoId} monitoring failed: ${error.message}`);
-                      // Don't fail the entire broadcast - it's already created
-                    });
+                  // NOTE: We do NOT auto-transition to live here anymore!
+                  // The frontend will call /broadcasts/:id/transition-youtube-to-live after:
+                  // 1. 30-second countdown completes
+                  // 2. RTMP stream is connected and healthy
+                  // 3. Ready to play intro video to viewers
                 } catch (error: unknown) {
                   // CRITICAL FIX: Type-safe error handling
                   logger.error(`[YouTube] ❌ Failed to create broadcast for destination ${destination.id}: ${getErrorMessage(error)}`);
@@ -504,6 +501,91 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
   } catch (error) {
     logger.error('Start broadcast error:', error);
     res.status(500).json({ error: 'Failed to start broadcast' });
+  }
+});
+
+// Transition YouTube broadcasts to live
+// Called by frontend after countdown ends and stream is ready
+router.post('/:id/transition-youtube-to-live', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const broadcastId = req.params.id;
+    logger.info(`[YouTube Transition] ========== MANUAL TRANSITION REQUEST ==========`);
+    logger.info(`[YouTube Transition] Broadcast ID: ${broadcastId}`);
+
+    // Find all YouTube broadcast destinations for this broadcast
+    const broadcastDestinations = await prisma.broadcastDestination.findMany({
+      where: {
+        broadcastId,
+        destination: {
+          platform: 'youtube',
+        },
+      },
+      include: {
+        destination: true,
+      },
+    });
+
+    logger.info(`[YouTube Transition] Found ${broadcastDestinations.length} YouTube destinations`);
+
+    if (broadcastDestinations.length === 0) {
+      logger.warn(`[YouTube Transition] No YouTube destinations found for broadcast ${broadcastId}`);
+      return res.json({ message: 'No YouTube destinations to transition', transitioned: [] });
+    }
+
+    const results = [];
+
+    // Transition each YouTube broadcast
+    for (const broadcastDest of broadcastDestinations) {
+      const { liveVideoId, destination } = broadcastDest;
+
+      if (!liveVideoId) {
+        logger.warn(`[YouTube Transition] No liveVideoId for destination ${destination.id}, skipping`);
+        continue;
+      }
+
+      try {
+        logger.info(`[YouTube Transition] Transitioning broadcast ${liveVideoId} for destination ${destination.id}`);
+
+        // Get valid access token (auto-refreshes if needed)
+        const accessToken = await getValidYouTubeToken(destination.id);
+
+        // Transition to live
+        await transitionYouTubeBroadcastToLive(liveVideoId, accessToken);
+
+        logger.info(`[YouTube Transition] ✅ Successfully transitioned ${liveVideoId} to LIVE`);
+
+        // Update status in database
+        await prisma.broadcastDestination.update({
+          where: { id: broadcastDest.id },
+          data: { status: 'live' },
+        });
+
+        results.push({
+          destinationId: destination.id,
+          liveVideoId,
+          status: 'success',
+        });
+      } catch (error: any) {
+        logger.error(`[YouTube Transition] ❌ Failed to transition ${liveVideoId}:`, error.message);
+        results.push({
+          destinationId: destination.id,
+          liveVideoId,
+          status: 'error',
+          error: error.message,
+        });
+      }
+    }
+
+    logger.info(`[YouTube Transition] ========== TRANSITION COMPLETE ==========`);
+    logger.info(`[YouTube Transition] Total: ${results.length}, Successful: ${results.filter(r => r.status === 'success').length}`);
+
+    res.json({
+      message: 'YouTube transition completed',
+      transitioned: results,
+    });
+  } catch (error) {
+    logger.error('[YouTube Transition] Error:', error);
+    res.status(500).json({ error: 'Failed to transition YouTube broadcasts' });
   }
 });
 

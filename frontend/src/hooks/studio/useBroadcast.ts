@@ -222,39 +222,35 @@ export function useBroadcast({
       });
 
       // Start broadcast with destination settings (using deduplicated array)
-      // This triggers the 10-second countdown on the backend
+      // This triggers the 30-second countdown on the backend and creates YouTube/Facebook broadcasts
       await broadcastService.start(broadcastId, deduplicatedDestinations, apiDestinationSettings);
 
       // CRITICAL: Set isLive=true NOW so countdown is visible!
       console.log('[useBroadcast] Setting isLive=true to show countdown and CompositorPreview...');
       setIsLive(true);
-      toast.success('Starting broadcast...');
+      toast.success('Preparing broadcast...');
 
-      // FLOW: 10-second countdown → intro video → user stream
-      // Step 1: Display 10-second countdown on canvas (NOW VISIBLE because isLive=true)
-      console.log('[useBroadcast] Starting 10-second countdown on canvas...');
-      await compositorService.startCountdown(10);
-      console.log('[useBroadcast] Countdown finished!');
+      // NEW FLOW: Fetch destinations → Start RTMP → 30s countdown → Transition YouTube → Intro video
 
-      // Wait a bit more for YouTube/Facebook broadcasts to be created
+      // Step 1: Wait for YouTube/Facebook broadcasts to be created (happens async on backend)
       console.log('[useBroadcast] Waiting for broadcast destinations to be created...');
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Additional 2 seconds
+      await new Promise(resolve => setTimeout(resolve, 3000)); // 3 seconds to create broadcasts
 
       // Step 2: Fetch broadcast destinations with decrypted RTMP URLs and stream keys
       const broadcastDestinationsResponse = await api.get(`/broadcasts/${broadcastId}/destinations`);
       const broadcastDestinations = broadcastDestinationsResponse.data;
-
       console.log('[useBroadcast] Fetched broadcast destinations:', broadcastDestinations);
 
-      // Start RTMP streaming with real RTMP URLs and stream keys
+      // Step 3: Start RTMP streaming IMMEDIATELY (before countdown)
+      // This connects to YouTube/Facebook and starts sending video in "testing" mode
       const destinationsToStream = broadcastDestinations.map((bd: any) => ({
         id: bd.id,
         platform: bd.platform,
         rtmpUrl: bd.rtmpUrl,
-        streamKey: bd.streamKey, // Now contains the actual decrypted stream key
+        streamKey: bd.streamKey,
       }));
 
-      console.log('[useBroadcast] Starting RTMP push to destinations (user stream):',
+      console.log('[useBroadcast] Starting RTMP streaming to prep platforms:',
         destinationsToStream.map((d: any) => ({ platform: d.platform, rtmpUrl: d.rtmpUrl })));
 
       mediaServerSocketService.emit('start-rtmp', {
@@ -266,15 +262,31 @@ export function useBroadcast({
         },
       });
 
-      // isLive was already set to true before countdown (see above)
-      console.log('[useBroadcast] RTMP streaming started! Now live...');
-      toast.success('You are now live!');
+      console.log('[useBroadcast] RTMP streaming started - platforms receiving video (testing mode)');
+      toast.success('Connected to platforms, starting countdown...');
 
-      // Step 3: Play intro video WHILE STREAMING (after going live)
-      console.log('[useBroadcast] Now playing intro video on live stream...');
+      // Step 4: Display 30-second countdown on canvas (stream is already flowing to YouTube)
+      console.log('[useBroadcast] Starting 30-second countdown on canvas...');
+      await compositorService.startCountdown(30);
+      console.log('[useBroadcast] Countdown finished!');
+
+      // Step 5: Transition YouTube broadcasts from "testing" to "live"
+      try {
+        console.log('[useBroadcast] Transitioning YouTube broadcasts to LIVE...');
+        await api.post(`/broadcasts/${broadcastId}/transition-youtube-to-live`);
+        console.log('[useBroadcast] ✅ YouTube transitioned to LIVE!');
+        toast.success('You are now live!');
+      } catch (error) {
+        console.error('[useBroadcast] Failed to transition YouTube to live:', error);
+        toast.error('Warning: YouTube transition may have failed');
+        // Continue anyway - stream is already connected
+      }
+
+      // Step 6: Play intro video as FIRST thing viewers see on the live stream
+      console.log('[useBroadcast] Now playing intro video as first content viewers see...');
       try {
         await compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
-        console.log('[useBroadcast] Intro video finished, showing user stream');
+        console.log('[useBroadcast] Intro video finished, transitioning to user stream');
       } catch (error) {
         console.error('Intro video failed to play:', error);
         // Continue even if intro video fails - user stream will show immediately
