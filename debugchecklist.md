@@ -1,7 +1,7 @@
 # Streamlick Debug Checklist
 
-**Audit Date:** 2025-11-17
-**Total Issues:** 57 (excluding #1 JWT_SECRET and #2 ENCRYPTION_KEY)
+**Audit Date:** 2025-11-19
+**Total Issues:** 62 (excluding #1 JWT_SECRET and #2 ENCRYPTION_KEY)
 **Status:** ✅ COMPLETE - 100% FIXED
 
 ---
@@ -336,22 +336,94 @@
 
 ---
 
+## 🔴 NEW CRITICAL Issues (2025-11-19)
+
+### Live Streaming Issues
+
+- [x] **#60** - `media-server/src/rtmp/compositor-pipeline.ts` - Multiple FFmpeg processes binding to same RTP ports ✅
+  - **Impact:** When streaming to N destinations, N separate FFmpeg processes tried to bind to the SAME RTP ports (40537 video, 45796 audio). Only the first process succeeded, all others failed with "bind failed: Address already in use"
+  - **Fix:** Use FFmpeg tee muxer for multi-destination streaming
+  - **Status:** FIXED - Single FFmpeg process now uses tee muxer to stream to multiple destinations:
+    - Format: `[f=flv:flvflags=no_duration_filesize]url1|[f=flv:flvflags=no_duration_filesize]url2`
+    - Single process binds to RTP ports once
+    - Lower CPU usage (1 decode instead of N)
+    - Atomic start/stop for all destinations
+
+- [x] **#61** - `backend/src/api/broadcasts.routes.ts` - Duplicate destination IDs creating multiple stream keys ✅
+  - **Impact:** Frontend bug sent duplicate destination IDs in array (e.g., [id, id, id, ..., id] 10 times). Backend created N YouTube live videos with different stream keys for the SAME destination
+  - **Fix:** Deduplicate destination IDs before processing
+  - **Status:** FIXED - Added `Array.from(new Set(destinationIds))` with warning logging:
+    - Prevents multiple stream keys for same destination
+    - Reduces unnecessary YouTube API calls
+    - Prevents database bloat
+
+- [x] **#62** - `frontend/src/hooks/studio/useStudioInitialization.ts` - Duplicate destinations persisting in localStorage ✅
+  - **Impact:** Corrupted localStorage could contain duplicate destination IDs
+  - **Fix:** Deduplicate when loading and saving to localStorage
+  - **Status:** FIXED - Added deduplication safeguards:
+    - Deduplicate when loading from localStorage on mount
+    - Deduplicate before saving to prevent persistence
+    - Warning logs when duplicates detected
+
+- [x] **#63** - `frontend/src/components/DestinationsPanel.tsx` - UI toggle could create duplicates ✅
+  - **Impact:** Toggle logic could add same destination ID multiple times
+  - **Fix:** Deduplicate in toggleDestination function
+  - **Status:** FIXED - Added deduplication before callback with warning logging
+
+- [x] **#64** - `frontend/src/hooks/studio/useBroadcast.ts` - No final validation before API call ✅
+  - **Impact:** Corrupted state could send duplicates to API
+  - **Fix:** Final deduplication in handleGoLive before API call
+  - **Status:** FIXED - Added final safeguard with warning logging before sending to backend
+
+## 🟠 NEW HIGH Priority Issues (2025-11-19)
+
+### Logging & Diagnostics
+
+- [x] **#65** - `media-server/src/index.ts` - Insufficient Socket.io event logging ✅
+  - **Impact:** Hard to diagnose when events not reaching media server
+  - **Fix:** Add comprehensive Socket.io debug logging
+  - **Status:** FIXED - Enhanced logging:
+    - Connection middleware logs all connection attempts
+    - `socket.onAny()` logs all incoming events with data preview
+    - Socket ID tracking for event correlation
+    - Origin and referer logging for debugging
+
+- [x] **#66** - `media-server/src/rtmp/compositor-pipeline.ts` - Generic FFmpeg error messages ✅
+  - **Impact:** FFmpeg errors only showed "FFmpeg error for youtube:" with no details
+  - **Fix:** Log full stdout/stderr from FFmpeg
+  - **Status:** FIXED - Comprehensive error logging:
+    - Full error object (message, name, stack)
+    - Complete stdout and stderr output
+    - Destination details in error context
+    - Real-time stderr categorization (error/warning/info)
+
+- [x] **#67** - `media-server/src/index.ts` - Duplicate start-rtmp events not prevented ✅
+  - **Impact:** Multiple rapid "Go Live" clicks or browser retries created duplicate FFmpeg processes
+  - **Fix:** Add duplicate event guard with isRtmpStreaming flag
+  - **Status:** FIXED - Added streaming state tracking:
+    - `isRtmpStreaming` flag in BroadcastData
+    - Check flag before starting RTMP
+    - Clear flag on stop and errors
+    - Prevents race conditions
+
+---
+
 ## Progress Summary
 
-- **Total Issues:** 57
-- **Fixed:** 57 ✅
+- **Total Issues:** 62
+- **Fixed:** 62 ✅
 - **In Progress:** 0
 - **Remaining:** 0
 
 ### By Priority
-- 🔴 **Critical:** 13/13 fixed (100%) ✅
-- 🟠 **High:** 16/16 fixed (100%) ✅
+- 🔴 **Critical:** 18/18 fixed (100%) ✅
+- 🟠 **High:** 19/19 fixed (100%) ✅
 - 🟡 **Medium:** 16/16 fixed (100%) ✅
 - 🟢 **Low:** 12/12 fixed (100%) ✅
 
 ---
 
-## 🎉 ALL 57 ISSUES RESOLVED - 100% COMPLETE! 🎉
+## 🎉 ALL 62 ISSUES RESOLVED - 100% COMPLETE! 🎉
 
 This comprehensive bug fix effort addressed all security vulnerabilities, race conditions, memory leaks, type safety issues, and code quality concerns across the entire Streamlick platform.
 
