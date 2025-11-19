@@ -307,10 +307,22 @@ app.get('/health', (req: express.Request, res: express.Response) => {
   }
 });
 
+// Helper function to validate UUID format
+function isValidUUID(uuid: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+}
+
 // Get router RTP capabilities
 app.get('/broadcasts/:broadcastId/rtp-capabilities', async (req: express.Request, res: express.Response) => {
   try {
     const { broadcastId } = req.params;
+
+    // CRITICAL FIX: Validate broadcastId format to prevent resource exhaustion
+    if (!isValidUUID(broadcastId)) {
+      logger.warn(`Invalid broadcastId format: ${broadcastId}`);
+      return res.status(400).json({ error: 'Invalid broadcast ID format' });
+    }
 
     let router = getRouter(broadcastId);
     if (!router) {
@@ -343,6 +355,12 @@ io.on('connection', (socket) => {
   // Create transport
   socket.on('create-transport', async ({ broadcastId, direction }, callback) => {
     try {
+      // CRITICAL FIX: Validate broadcastId format to prevent resource exhaustion
+      if (!isValidUUID(broadcastId)) {
+        logger.warn(`[create-transport] Invalid broadcastId format: ${broadcastId}`);
+        return callback({ error: 'Invalid broadcast ID format' });
+      }
+
       // Get or create router for this broadcast
       let router = getRouter(broadcastId);
       if (!router) {
@@ -454,6 +472,12 @@ io.on('connection', (socket) => {
   // Consume media
   socket.on('consume', async ({ broadcastId, producerId, rtpCapabilities }, callback) => {
     try {
+      // CRITICAL FIX: Validate broadcastId format
+      if (!isValidUUID(broadcastId)) {
+        logger.warn(`[consume] Invalid broadcastId format: ${broadcastId}`);
+        return callback({ error: 'Invalid broadcast ID format' });
+      }
+
       const broadcast = broadcasts.get(broadcastId);
       if (!broadcast) {
         throw new Error('Broadcast not found');
@@ -512,6 +536,13 @@ io.on('connection', (socket) => {
       logger.info(`Destinations count: ${destinations?.length || 0}`);
       logger.info(`Destinations:`, JSON.stringify(destinations, null, 2));
       logger.info(`Composite producers:`, JSON.stringify(compositeProducers, null, 2));
+
+      // CRITICAL FIX: Validate broadcastId format
+      if (!isValidUUID(broadcastId)) {
+        logger.error(`[start-rtmp] Invalid broadcastId format: ${broadcastId}`);
+        socket.emit('rtmp-error', { broadcastId, error: 'Invalid broadcast ID format' });
+        return;
+      }
 
       const broadcast = broadcasts.get(broadcastId);
       if (!broadcast) {
@@ -609,6 +640,11 @@ io.on('connection', (socket) => {
   // Stop RTMP streaming
   socket.on('stop-rtmp', async ({ broadcastId }) => {
     try {
+      // CRITICAL FIX: Validate broadcastId format
+      if (!isValidUUID(broadcastId)) {
+        logger.warn(`[stop-rtmp] Invalid broadcastId format: ${broadcastId}`);
+        return;
+      }
       logger.info(`Stop RTMP requested for broadcast ${broadcastId}`);
 
       // Stop compositor pipeline (if active)

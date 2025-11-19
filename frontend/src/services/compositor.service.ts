@@ -73,9 +73,10 @@ class CompositorService {
   private overlayImages: Map<string, HTMLImageElement> = new Map();
 
   // Canvas dimensions - configurable via environment or defaults to 4K UHD (3840x2160)
-  private readonly WIDTH = parseInt(import.meta.env.VITE_CANVAS_WIDTH || '3840');
-  private readonly HEIGHT = parseInt(import.meta.env.VITE_CANVAS_HEIGHT || '2160');
-  private readonly FPS = parseInt(import.meta.env.VITE_CANVAS_FPS || '30');
+  // CRITICAL FIX: Validate dimensions to prevent memory exhaustion attacks
+  private readonly WIDTH = Math.min(Math.max(parseInt(import.meta.env.VITE_CANVAS_WIDTH || '3840'), 640), 7680); // Min 640px, Max 8K (7680px)
+  private readonly HEIGHT = Math.min(Math.max(parseInt(import.meta.env.VITE_CANVAS_HEIGHT || '2160'), 480), 4320); // Min 480px, Max 8K (4320px)
+  private readonly FPS = Math.min(Math.max(parseInt(import.meta.env.VITE_CANVAS_FPS || '30'), 15), 60); // Min 15fps, Max 60fps
 
   // Performance tracking
   private frameCount = 0;
