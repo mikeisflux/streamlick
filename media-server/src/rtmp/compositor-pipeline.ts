@@ -121,6 +121,14 @@ export async function createCompositorPipeline(
     });
 
     logger.info('Consumers created on plain transports');
+
+    // Request keyframe from video producer to help FFmpeg start decoding
+    try {
+      await videoProducer.requestKeyFrame();
+      logger.info('Requested keyframe from video producer');
+    } catch (error) {
+      logger.warn('Failed to request keyframe:', error);
+    }
     diagnosticLogger.logRTPPipeline(
       'Consumer',
       'RTP consumers created on plain transports',
