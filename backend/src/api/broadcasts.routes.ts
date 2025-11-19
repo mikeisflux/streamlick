@@ -274,19 +274,7 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
 
         const broadcastDestinations: any[] = [];
 
-        // CRITICAL FIX: Clean up any existing broadcast destinations for this broadcast
-        // This prevents returning old/duplicate destinations when the frontend fetches them
-        const existingDestinations = await prisma.broadcastDestination.findMany({
-          where: { broadcastId: broadcast.id },
-        });
-
-        if (existingDestinations.length > 0) {
-          logger.warn(`[ASYNC IIFE] 🧹 Found ${existingDestinations.length} existing broadcast destinations for broadcast ${broadcast.id} - cleaning up...`);
-          await prisma.broadcastDestination.deleteMany({
-            where: { broadcastId: broadcast.id },
-          });
-          logger.info(`[ASYNC IIFE] ✓ Cleaned up ${existingDestinations.length} old broadcast destinations`);
-        }
+        // Nuclear cleanup already ran at route handler start - no need for duplicate cleanup here
 
         // If destinations are specified, create live videos for each platform
         if (destinationIds && destinationIds.length > 0) {
