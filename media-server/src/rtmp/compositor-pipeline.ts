@@ -160,16 +160,25 @@ export async function createCompositorPipeline(
     });
     logger.info(`Audio transport connected - MediaSoup will send RTP to ${ffmpegIp}:${ffmpegAudioPort}, RTCP to ${ffmpegIp}:${ffmpegAudioRtcpPort}`);
 
-    // Request a keyframe from the video producer to ensure FFmpeg gets SPS/PPS immediately
+    // Request keyframes from the video producer to ensure FFmpeg gets SPS/PPS immediately
     // This is critical for H.264 streams as FFmpeg needs these to decode the video
+    // Request multiple times to ensure the browser responds
     try {
-      await videoConsumer.requestKeyFrame();
-      logger.info('Requested keyframe from video producer via consumer for FFmpeg initialization');
+      logger.info('Requesting keyframes from video producer (3 attempts)...');
 
-      // Wait for keyframe to be generated and sent before starting FFmpeg
-      // This gives the browser time to encode and send the keyframe with SPS/PPS NAL units
-      await new Promise(resolve => setTimeout(resolve, 500));
-      logger.info('Waited 500ms for keyframe to arrive');
+      // First request
+      await videoConsumer.requestKeyFrame();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Second request
+      await videoConsumer.requestKeyFrame();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Third request
+      await videoConsumer.requestKeyFrame();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      logger.info('Keyframe requests completed, waited 3 seconds for keyframes to arrive');
     } catch (error) {
       logger.warn('Could not request keyframe:', error);
     }
@@ -219,6 +228,18 @@ a=recvonly`;
     // Start FFmpeg for destinations
     const ffmpegProcesses = new Map<string, any>();
 
+    // Determine video codec strategy based on SPS/PPS availability
+    // If SPS/PPS is missing, we MUST transcode to avoid "non-existing PPS" errors
+    const useVideoCopy = !!spropParameterSets;
+    const videoCodecName = useVideoCopy ? 'copy' : 'libx264';
+
+    if (!useVideoCopy) {
+      logger.warn('⚠️  WARNING: SPS/PPS not available in stream - using VIDEO TRANSCODING instead of copy');
+      logger.warn('⚠️  This will increase CPU usage and latency, but is required to avoid decode errors');
+    } else {
+      logger.info('✅ SPS/PPS available - using video copy mode (no transcoding)');
+    }
+
     // Build output based on number of destinations
     let command: any;
 
@@ -229,6 +250,7 @@ a=recvonly`;
 
       logger.info(`========== STARTING SINGLE FFMPEG PROCESS (UNIFIED INPUT, DIRECT OUTPUT) ==========`);
       logger.info(`Destination: ${dest.platform} - ${dest.rtmpUrl}`);
+      logger.info(`Video codec: ${videoCodecName}`);
 
       command = ffmpeg()
         // Global options - debug logging with detailed reports
@@ -247,10 +269,26 @@ a=recvonly`;
           '-probesize', '5000000',        // 5MB probe size to buffer enough packets
           '-reorder_queue_size', '500',   // Reduced from 5000 to prevent OOM (still handles packet reordering)
         ])
-        // Video encoding - copy H.264 stream (no transcoding needed!)
-        .videoCodec('copy')
+        // Video encoding - copy if SPS/PPS available, transcode otherwise
+        .videoCodec(videoCodecName)
         // Audio encoding - transcode Opus to AAC for RTMP
-        .audioCodec('aac')
+        .audioCodec('aac');
+
+      // Add video encoding options if transcoding
+      if (!useVideoCopy) {
+        command.outputOptions([
+          '-preset', 'veryfast',          // Fastest encoding preset for low latency
+          '-tune', 'zerolatency',         // Optimize for streaming/low latency
+          '-b:v', '5000k',                // Target bitrate 5 Mbps (match input roughly)
+          '-maxrate', '6000k',            // Max bitrate 6 Mbps
+          '-bufsize', '3000k',            // Buffer size for rate control
+          '-g', '60',                     // Keyframe interval: 60 frames (2 seconds at 30fps)
+          '-profile:v', 'high',           // H.264 High Profile as recommended by YouTube
+          '-level', '4.1',                // H.264 Level 4.1 (supports 1080p30)
+        ]);
+      }
+
+      command
         .outputOptions([
           '-b:a', '160k',
           '-ar', '48000',
@@ -258,14 +296,23 @@ a=recvonly`;
         ])
         // Output directly to single RTMP destination
         .format('flv')
-        .output(rtmpUrl)
-        .outputOptions([
-          '-map', '0:v',    // Video from unified input
-          '-map', '0:a',    // Audio from unified input
-          '-bsf:v', 'dump_extra',  // Extract SPS/PPS from stream and inject into every keyframe
-          '-flvflags', 'no_duration_filesize',
-          '-max_muxing_queue_size', '1024',  // Limit muxing queue to prevent memory overflow
-        ]);
+        .output(rtmpUrl);
+
+      // Add video-specific output options
+      const videoOutputOpts = [
+        '-map', '0:v',    // Video from unified input
+        '-map', '0:a',    // Audio from unified input
+        '-flvflags', 'no_duration_filesize',
+        '-max_muxing_queue_size', '1024',  // Limit muxing queue to prevent memory overflow
+      ];
+
+      // Only use dump_extra bitstream filter if we're copying video
+      // (not needed when transcoding as encoder will generate new SPS/PPS)
+      if (useVideoCopy) {
+        videoOutputOpts.splice(2, 0, '-bsf:v', 'dump_extra');  // Insert after map commands
+      }
+
+      command.outputOptions(videoOutputOpts);
     } else {
       // MULTIPLE DESTINATIONS: Use tee muxer
       // Format: [f=flv:flvflags=no_duration_filesize]rtmp://url1|[f=flv:flvflags=no_duration_filesize]rtmp://url2
@@ -276,6 +323,7 @@ a=recvonly`;
 
       logger.info(`========== STARTING SINGLE FFMPEG PROCESS (UNIFIED INPUT, TEE MUXER) ==========`);
       logger.info(`Using tee muxer for ${destinations.length} destinations`);
+      logger.info(`Video codec: ${videoCodecName}`);
 
       command = ffmpeg()
         // Global options - debug logging with detailed reports
@@ -294,10 +342,26 @@ a=recvonly`;
           '-probesize', '5000000',        // 5MB probe size to buffer enough packets
           '-reorder_queue_size', '500',   // Reduced from 5000 to prevent OOM (still handles packet reordering)
         ])
-        // Video encoding - copy H.264 stream (no transcoding needed!)
-        .videoCodec('copy')
+        // Video encoding - copy if SPS/PPS available, transcode otherwise
+        .videoCodec(videoCodecName)
         // Audio encoding - transcode Opus to AAC for RTMP
-        .audioCodec('aac')
+        .audioCodec('aac');
+
+      // Add video encoding options if transcoding
+      if (!useVideoCopy) {
+        command.outputOptions([
+          '-preset', 'veryfast',          // Fastest encoding preset for low latency
+          '-tune', 'zerolatency',         // Optimize for streaming/low latency
+          '-b:v', '5000k',                // Target bitrate 5 Mbps (match input roughly)
+          '-maxrate', '6000k',            // Max bitrate 6 Mbps
+          '-bufsize', '3000k',            // Buffer size for rate control
+          '-g', '60',                     // Keyframe interval: 60 frames (2 seconds at 30fps)
+          '-profile:v', 'high',           // H.264 High Profile as recommended by YouTube
+          '-level', '4.1',                // H.264 Level 4.1 (supports 1080p30)
+        ]);
+      }
+
+      command
         .outputOptions([
           '-b:a', '160k',
           '-ar', '48000',
@@ -305,13 +369,21 @@ a=recvonly`;
         ])
         // Use tee muxer to output to multiple destinations
         .format('tee')
-        .output(teeOutputs)
-        .outputOptions([
-          '-map', '0:v',    // Video from unified input
-          '-map', '0:a',    // Audio from unified input
-          '-bsf:v', 'dump_extra',  // Extract SPS/PPS from stream and inject into every keyframe
-          '-max_muxing_queue_size', '1024',  // Limit muxing queue to prevent memory overflow
-        ]);
+        .output(teeOutputs);
+
+      // Add video-specific output options
+      const teeOutputOpts = [
+        '-map', '0:v',    // Video from unified input
+        '-map', '0:a',    // Audio from unified input
+        '-max_muxing_queue_size', '1024',  // Limit muxing queue to prevent memory overflow
+      ];
+
+      // Only use dump_extra bitstream filter if we're copying video
+      if (useVideoCopy) {
+        teeOutputOpts.splice(2, 0, '-bsf:v', 'dump_extra');  // Insert after map commands
+      }
+
+      command.outputOptions(teeOutputOpts);
     }
 
     command
