@@ -126,6 +126,11 @@ export async function createCompositorPipeline(
     try {
       await videoProducer.requestKeyFrame();
       logger.info('Requested keyframe from video producer');
+
+      // Wait 1 second for keyframes to arrive before starting FFmpeg
+      logger.info('Waiting 1 second for keyframes to arrive...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      logger.info('Keyframe wait complete, starting FFmpeg');
     } catch (error) {
       logger.warn('Failed to request keyframe:', error);
     }
@@ -238,6 +243,10 @@ a=recvonly`;
     // Create a single FFmpeg command that outputs to multiple destinations
     // FFmpeg uses SDP files to understand the RTP stream from MediaSoup
     const command = ffmpeg()
+      // Global options - verbose logging for debugging
+      .addOptions([
+        '-loglevel', 'verbose',
+      ])
       // Video input - SDP file describes the VP8 stream on port 40200
       .input(videoSdpPath)
       .inputOptions([
