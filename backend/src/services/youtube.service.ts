@@ -277,12 +277,16 @@ export async function createYouTubeLiveBroadcast(
 
     const streamId = streamResponse.data.id;
     const ingestionInfo = streamResponse.data.cdn.ingestionInfo;
-    const rtmpUrl = ingestionInfo.ingestionAddress;
+
+    // BEST PRACTICE: Use RTMPS (secure RTMP over port 443) instead of plain RTMP
+    // This prevents man-in-the-middle attacks and is recommended by YouTube
+    const rtmpUrl = ingestionInfo.rtmpsIngestionAddress || ingestionInfo.ingestionAddress;
     const streamKey = ingestionInfo.streamName;
 
     logger.info(`[YouTube Step 2/4] ✓ LiveStream created successfully`, {
       streamId,
       rtmpUrl,
+      usingRTMPS: rtmpUrl.startsWith('rtmps://'),
       streamKeyLength: streamKey?.length,
       resolution: streamResponse.data.cdn.resolution,
       frameRate: streamResponse.data.cdn.frameRate
@@ -458,11 +462,12 @@ export async function deleteYouTubeLiveBroadcast(
 
 /**
  * Get YouTube broadcast status
+ * BEST PRACTICE: Also fetch the bound stream status to check if it's actively receiving data
  */
 export async function getYouTubeBroadcastStatus(
   broadcastId: string,
   accessToken: string
-): Promise<{ lifeCycleStatus: string; healthStatus?: any }> {
+): Promise<{ lifeCycleStatus: string; healthStatus?: any; streamStatus?: string; streamId?: string }> {
   try {
     const response = await axios.get(`${YOUTUBE_API_BASE}/liveBroadcasts`, {
       params: {
@@ -477,10 +482,36 @@ export async function getYouTubeBroadcastStatus(
       throw new Error('Broadcast not found');
     }
 
-    return {
+    const result: any = {
       lifeCycleStatus: broadcast.status.lifeCycleStatus,
       healthStatus: broadcast.contentDetails?.monitorStream?.healthStatus,
     };
+
+    // BEST PRACTICE: Check the bound stream's status
+    // YouTube recommends verifying streamStatus is 'active' before transitioning to live
+    const boundStreamId = broadcast.contentDetails?.boundStreamId;
+    if (boundStreamId) {
+      try {
+        const streamResponse = await axios.get(`${YOUTUBE_API_BASE}/liveStreams`, {
+          params: {
+            part: 'status',
+            id: boundStreamId,
+          },
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+
+        const stream = streamResponse.data.items?.[0];
+        if (stream) {
+          result.streamStatus = stream.status?.streamStatus;
+          result.streamId = boundStreamId;
+        }
+      } catch (streamError) {
+        // Don't fail if we can't get stream status, just log it
+        logger.warn(`Could not fetch stream status for ${boundStreamId}`);
+      }
+    }
+
+    return result;
   } catch (error: any) {
     logger.error('Error getting YouTube broadcast status:', error.response?.data || error.message);
     throw new Error(
@@ -552,21 +583,24 @@ export async function monitorAndTransitionYouTubeBroadcast(
       logger.info(`[YouTube Monitor] ========== STATUS CHECK ${attempt}/${maxAttempts} ==========`);
       logger.info(`[YouTube Monitor] Broadcast ID: ${broadcastId}`);
       logger.info(`[YouTube Monitor] Lifecycle Status: ${status.lifeCycleStatus}`);
+      logger.info(`[YouTube Monitor] Stream Status: ${status.streamStatus || 'unknown'}`);
       logger.info(`[YouTube Monitor] Stream Health: ${status.healthStatus?.status || 'unknown'}`);
       if (status.healthStatus?.configurationIssues) {
         logger.warn(`[YouTube Monitor] Configuration Issues:`, status.healthStatus.configurationIssues);
       }
 
+      // BEST PRACTICE: Check stream status is 'active' before transitioning
+      // YouTube documentation recommends verifying the bound stream is actively receiving data
       // Check if we should transition to live:
       // 1. Health status is good/ok (YouTube explicitly validated stream), OR
       // 2. Lifecycle status is liveStarting (YouTube detected stream and is ready to go live), OR
-      // 3. Health status is unknown but we've waited at least 10 seconds (YouTube might not report health immediately)
+      // 3. Stream status is 'active' AND we've waited at least 10 seconds (stream is receiving data)
       const healthIsGood = status.healthStatus?.status === 'good' || status.healthStatus?.status === 'ok';
       const lifecycleIsReady = status.lifeCycleStatus === 'liveStarting';
-      const healthIsUnknownButWaited = (status.healthStatus?.status === 'unknown' || !status.healthStatus?.status) &&
-                                        attempt >= 5; // 5 attempts * 2s = 10 seconds
+      const streamIsActive = status.streamStatus === 'active';
+      const healthIsUnknownButStreamActive = streamIsActive && attempt >= 5; // Stream active for 10+ seconds
 
-      const shouldTransition = healthIsGood || lifecycleIsReady || healthIsUnknownButWaited;
+      const shouldTransition = healthIsGood || lifecycleIsReady || healthIsUnknownButStreamActive;
 
       if (shouldTransition) {
         let reason = '';
@@ -574,8 +608,8 @@ export async function monitorAndTransitionYouTubeBroadcast(
           reason = `Stream health is ${status.healthStatus.status.toUpperCase()}`;
         } else if (lifecycleIsReady) {
           reason = 'Lifecycle status is liveStarting';
-        } else if (healthIsUnknownButWaited) {
-          reason = 'Health unknown but stream has been running for 10+ seconds';
+        } else if (healthIsUnknownButStreamActive) {
+          reason = `Stream status is ACTIVE (${status.streamStatus}) and has been running for 10+ seconds`;
         }
 
         logger.info(`[YouTube Monitor] ========== STREAM DETECTED! ==========`);
@@ -609,7 +643,7 @@ export async function monitorAndTransitionYouTubeBroadcast(
           throw transitionError;
         }
       } else {
-        logger.info(`[YouTube Monitor] Waiting for stream... (health: ${status.healthStatus?.status || 'unknown'}, lifecycle: ${status.lifeCycleStatus})`);
+        logger.info(`[YouTube Monitor] Waiting for stream... (streamStatus: ${status.streamStatus || 'unknown'}, health: ${status.healthStatus?.status || 'unknown'}, lifecycle: ${status.lifeCycleStatus})`);
       }
 
       // Check for error states
