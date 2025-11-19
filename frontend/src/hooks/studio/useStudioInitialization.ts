@@ -32,7 +32,7 @@ export function useStudioInitialization({
 
       const parsed = JSON.parse(saved);
       // CRITICAL: Deduplicate array when loading from localStorage
-      const deduplicated = Array.from(new Set(parsed));
+      const deduplicated = Array.from(new Set(parsed as string[])) as string[];
 
       if (deduplicated.length !== parsed.length) {
         console.warn('[Studio Init] Found duplicates in localStorage:', {

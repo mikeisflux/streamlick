@@ -21,7 +21,7 @@ interface StudioState {
   reset: () => void;
 }
 
-export const useStudioStore = create<StudioState>((set) => ({
+export const useStudioStore = create<StudioState>((set, get) => ({
   broadcast: null,
   participants: new Map(),
   mediaStates: new Map(),
@@ -79,14 +79,14 @@ export const useStudioStore = create<StudioState>((set) => ({
 
     // Stop all local stream tracks (camera/mic)
     if (state.localStream) {
-      state.localStream.getTracks().forEach(track => {
+      state.localStream.getTracks().forEach((track: MediaStreamTrack) => {
         track.stop();
       });
     }
 
     // Stop all screen share tracks
     if (state.screenStream) {
-      state.screenStream.getTracks().forEach(track => {
+      state.screenStream.getTracks().forEach((track: MediaStreamTrack) => {
         track.stop();
       });
     }
