@@ -451,26 +451,78 @@ class CompositorService {
   }
 
   /**
+   * Wait for compositor to be ready (first frame rendered)
+   * Similar to waiting for video metadata before displaying
+   * @returns Promise that resolves when compositor has rendered at least one frame
+   */
+  private async waitForCompositorReady(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // If not compositing, reject immediately
+      if (!this.isCompositing) {
+        reject(new Error('Compositor is not running'));
+        return;
+      }
+
+      // If compositor already running and has rendered frames, resolve immediately
+      if (this.frameCount > 0) {
+        logger.info('[Compositor] Already ready, frameCount:', this.frameCount);
+        resolve();
+        return;
+      }
+
+      logger.info('[Compositor] Waiting for first frame to be rendered...');
+
+      // Wait for first frame with timeout
+      const startTime = Date.now();
+      const checkInterval = setInterval(() => {
+        if (this.frameCount > 0) {
+          clearInterval(checkInterval);
+          logger.info('[Compositor] First frame rendered, compositor ready');
+          resolve();
+        } else if (Date.now() - startTime > 5000) {
+          clearInterval(checkInterval);
+          logger.warn('[Compositor] Timeout waiting for first frame, proceeding anyway');
+          resolve(); // Resolve anyway to prevent blocking
+        }
+      }, 50); // Check every 50ms
+    });
+  }
+
+  /**
    * Start countdown timer
+   * CRITICAL FIX: Wait for compositor to be ready before starting countdown
+   * This ensures the countdown is actually visible on canvas (similar to video readiness check)
    * @param seconds - Number of seconds to countdown from
    * @returns Promise that resolves when countdown finishes
    */
   async startCountdown(seconds: number): Promise<void> {
+    // CRITICAL FIX: Ensure compositor is ready before starting countdown
+    // This prevents the "black canvas" issue where countdown is set but not rendered
+    try {
+      await this.waitForCompositorReady();
+    } catch (error) {
+      logger.error('[Compositor] Failed to wait for compositor ready:', error);
+      throw new Error('Compositor not ready for countdown');
+    }
+
     return new Promise((resolve) => {
-      logger.info(`Starting ${seconds}-second countdown on canvas`);
+      logger.info(`[Compositor] Starting ${seconds}-second countdown on canvas (frameCount: ${this.frameCount})`);
       this.countdownValue = seconds;
+
+      // Log countdown value to verify it's being set
+      logger.info(`[Compositor] Countdown value set to: ${this.countdownValue}`);
 
       const intervalId = setInterval(() => {
         if (this.countdownValue === null || this.countdownValue <= 0) {
           clearInterval(intervalId);
           this.countdownValue = null;
-          logger.info('Countdown finished');
+          logger.info('[Compositor] Countdown finished');
           resolve();
           return;
         }
 
         this.countdownValue--;
-        logger.debug(`Countdown: ${this.countdownValue}`);
+        logger.info(`[Compositor] Countdown: ${this.countdownValue} (frameCount: ${this.frameCount})`);
       }, 1000);
     });
   }
@@ -1212,40 +1264,57 @@ class CompositorService {
   /**
    * Draw countdown timer
    * Renders large countdown number centered on canvas
+   * ENHANCED: Added logging and validation to debug countdown display issues
    */
   private drawCountdown(): void {
-    if (!this.ctx || this.countdownValue === null) return;
+    if (!this.ctx) {
+      logger.warn('[Compositor] Cannot draw countdown - no canvas context');
+      return;
+    }
 
-    // Semi-transparent black overlay
-    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    this.ctx.fillRect(0, 0, this.WIDTH, this.HEIGHT);
+    if (this.countdownValue === null) {
+      return; // Countdown not active
+    }
 
-    // Draw countdown number
-    const fontSize = Math.floor(this.HEIGHT / 4); // Large font size (25% of canvas height)
-    this.ctx.font = `bold ${fontSize}px Arial`;
-    this.ctx.textAlign = 'center';
-    this.ctx.textBaseline = 'middle';
+    // Log every 30 frames (once per second at 30fps) to avoid spam
+    if (this.frameCount % 30 === 0) {
+      logger.debug(`[Compositor] Drawing countdown: ${this.countdownValue} (frame ${this.frameCount})`);
+    }
 
-    // White text with black outline for visibility
-    this.ctx.strokeStyle = '#000000';
-    this.ctx.lineWidth = 20;
-    this.ctx.strokeText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
+    try {
+      // Semi-transparent black overlay to ensure countdown is visible
+      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      this.ctx.fillRect(0, 0, this.WIDTH, this.HEIGHT);
 
-    this.ctx.fillStyle = '#FFFFFF';
-    this.ctx.fillText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
+      // Draw countdown number
+      const fontSize = Math.floor(this.HEIGHT / 4); // Large font size (25% of canvas height)
+      this.ctx.font = `bold ${fontSize}px Arial`;
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
 
-    // Draw "Going Live..." text below countdown
-    const subFontSize = Math.floor(this.HEIGHT / 15);
-    this.ctx.font = `${subFontSize}px Arial`;
+      // White text with black outline for visibility
+      this.ctx.strokeStyle = '#000000';
+      this.ctx.lineWidth = 20;
+      this.ctx.strokeText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
 
-    const subTextY = this.HEIGHT / 2 + fontSize / 2 + subFontSize + 40;
+      this.ctx.fillStyle = '#FFFFFF';
+      this.ctx.fillText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
 
-    this.ctx.strokeStyle = '#000000';
-    this.ctx.lineWidth = 10;
-    this.ctx.strokeText('Going Live...', this.WIDTH / 2, subTextY);
+      // Draw "Going Live..." text below countdown
+      const subFontSize = Math.floor(this.HEIGHT / 15);
+      this.ctx.font = `${subFontSize}px Arial`;
 
-    this.ctx.fillStyle = '#FFFFFF';
-    this.ctx.fillText('Going Live...', this.WIDTH / 2, subTextY);
+      const subTextY = this.HEIGHT / 2 + fontSize / 2 + subFontSize + 40;
+
+      this.ctx.strokeStyle = '#000000';
+      this.ctx.lineWidth = 10;
+      this.ctx.strokeText('Going Live...', this.WIDTH / 2, subTextY);
+
+      this.ctx.fillStyle = '#FFFFFF';
+      this.ctx.fillText('Going Live...', this.WIDTH / 2, subTextY);
+    } catch (error) {
+      logger.error('[Compositor] Error drawing countdown:', error);
+    }
   }
 }
 
