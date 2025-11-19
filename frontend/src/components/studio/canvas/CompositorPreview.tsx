@@ -18,6 +18,12 @@ export function CompositorPreview({ orientation = 'landscape' }: CompositorPrevi
     // Get the compositor canvas
     const compositorCanvas = compositorService.getCanvas();
 
+    console.log('[CompositorPreview] useEffect triggered', {
+      hasCanvas: !!compositorCanvas,
+      hasContainer: !!containerRef.current,
+      alreadyInserted: canvasInserted.current
+    });
+
     if (!compositorCanvas || !containerRef.current || canvasInserted.current) {
       return;
     }
