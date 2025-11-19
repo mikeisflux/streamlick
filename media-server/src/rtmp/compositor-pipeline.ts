@@ -9,7 +9,6 @@ import { Router, PlainTransport, Producer } from 'mediasoup/node/lib/types';
 import ffmpeg from 'fluent-ffmpeg';
 import { RTMPDestination } from './streamer';
 import logger from '../utils/logger';
-import { diagnosticLogger } from '../services/diagnostic-logger.service';
 
 interface Pipeline {
   videoPlainTransport: PlainTransport | null;
@@ -34,13 +33,6 @@ export async function createCompositorPipeline(
 ): Promise<void> {
   try {
     logger.info(`Creating compositor pipeline for broadcast ${broadcastId}`);
-    diagnosticLogger.logRTPPipeline(
-      'CompositorPipeline',
-      'Starting compositor pipeline creation',
-      'info',
-      { broadcastId, destinationCount: destinations.length },
-      broadcastId
-    );
 
     // Create Plain RTP transports for video and audio
     // Support both single-server (FFmpeg on same machine) and multi-server (FFmpeg on different machine)
@@ -54,19 +46,6 @@ export async function createCompositorPipeline(
       comedia: false, // MediaSoup will send to FFmpeg's listening address
     });
 
-    // Add error handler for video transport (listenererror for listening socket errors)
-    videoTransport.on('listenererror', (error: any) => {
-      logger.error(`Video plain transport listener error for broadcast ${broadcastId}:`, error);
-      diagnosticLogger.logError(
-        'rtp-pipeline',
-        'PlainTransport',
-        'Video plain transport listener error',
-        new Error(String(error)),
-        { transportId: videoTransport.id },
-        broadcastId
-      );
-    });
-
     const audioTransport = await router.createPlainTransport({
       listenIp: useExternalFFmpeg
         ? { ip: '0.0.0.0', announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP }
@@ -75,36 +54,11 @@ export async function createCompositorPipeline(
       comedia: false, // MediaSoup will send to FFmpeg's listening address
     });
 
-    // Add error handler for audio transport (listenererror for listening socket errors)
-    audioTransport.on('listenererror', (error: any) => {
-      logger.error(`Audio plain transport listener error for broadcast ${broadcastId}:`, error);
-      diagnosticLogger.logError(
-        'rtp-pipeline',
-        'PlainTransport',
-        'Audio plain transport listener error',
-        new Error(String(error)),
-        { transportId: audioTransport.id },
-        broadcastId
-      );
-    });
-
     logger.info(
       `Plain transports created - Video: ${videoTransport.tuple.localPort}, Audio: ${audioTransport.tuple.localPort}`
     );
     logger.info(
       `FFmpeg deployment mode: ${useExternalFFmpeg ? 'EXTERNAL (multi-server)' : 'LOCAL (same server)'}`
-    );
-    diagnosticLogger.logRTPPipeline(
-      'PlainTransport',
-      'Plain RTP transports created',
-      'info',
-      {
-        videoPort: videoTransport.tuple.localPort,
-        audioPort: audioTransport.tuple.localPort,
-        videoTransportId: videoTransport.id,
-        audioTransportId: audioTransport.id,
-      },
-      broadcastId
     );
 
     // Create consumers on the plain transports
@@ -121,19 +75,6 @@ export async function createCompositorPipeline(
     });
 
     logger.info('Consumers created on plain transports');
-
-    diagnosticLogger.logRTPPipeline(
-      'Consumer',
-      'RTP consumers created on plain transports',
-      'info',
-      {
-        videoConsumerId: videoConsumer.id,
-        audioConsumerId: audioConsumer.id,
-        videoProducerId: videoProducer.id,
-        audioProducerId: audioProducer.id,
-      },
-      broadcastId
-    );
 
     // Get RTP parameters
     const videoPort = videoTransport.tuple.localPort;
@@ -274,18 +215,6 @@ a=recvonly`;
         destinations.forEach((dest, index) => {
           logger.info(`  📺 [${index + 1}] ${dest.platform}: ${dest.rtmpUrl}`);
         });
-        diagnosticLogger.logFFmpeg(
-          'CompositorPipeline',
-          `FFmpeg multi-stream process started for ${destinations.length} destinations`,
-          'info',
-          {
-            destinationCount: destinations.length,
-            videoPort,
-            audioPort,
-            commandLine: commandLine.substring(0, 500),
-          },
-          broadcastId
-        );
       })
       .on('error', (err: Error, stdout: string | null, stderr: string | null) => {
         logger.error(`========== FFMPEG MULTI-STREAM ERROR ==========`);
@@ -309,29 +238,9 @@ a=recvonly`;
         }
 
         logger.error(`========== END FFMPEG ERROR ==========`);
-
-        diagnosticLogger.logError(
-          'ffmpeg',
-          'CompositorPipeline',
-          `FFmpeg multi-stream process error`,
-          err,
-          {
-            destinationCount: destinations.length,
-            stdout: stdout ? stdout.substring(0, 1000) : '',
-            stderr: stderr ? stderr.substring(0, 1000) : '',
-          },
-          broadcastId
-        );
       })
       .on('end', () => {
         logger.info(`FFmpeg multi-stream process ended for ${destinations.length} destination(s)`);
-        diagnosticLogger.logFFmpeg(
-          'CompositorPipeline',
-          `FFmpeg multi-stream process ended`,
-          'info',
-          { destinationCount: destinations.length },
-          broadcastId
-        );
       })
       .on('stderr', (stderrLine: string) => {
         // Log ALL stderr output to help diagnose issues
@@ -342,53 +251,15 @@ a=recvonly`;
           logger.error(`[FFmpeg Multi-Stream] ${stderrLine}`);
         } else if (stderrLine.includes('bitrate=') || stderrLine.includes('fps=')) {
           logger.info(`[FFmpeg Multi-Stream] ${stderrLine}`);
-          const bitrateMatch = stderrLine.match(/bitrate=\s*([\d.]+)kbits\/s/);
-          const fpsMatch = stderrLine.match(/fps=\s*([\d.]+)/);
-          if (bitrateMatch || fpsMatch) {
-            diagnosticLogger.logPerformance(
-              'ffmpeg',
-              'FFmpegMetrics',
-              `FFmpeg multi-stream performance metrics`,
-              {
-                bitrate: bitrateMatch ? parseFloat(bitrateMatch[1]) : undefined,
-                frameRate: fpsMatch ? parseFloat(fpsMatch[1]) : undefined,
-              },
-              broadcastId
-            );
-          }
         } else {
           logger.debug(`[FFmpeg Multi-Stream] ${stderrLine}`);
         }
       });
 
-    try {
-      command.run();
-      ffmpegProcesses.set(broadcastId, command); // Store single process by broadcast ID
-      logger.info(`✅ FFmpeg multi-stream process started successfully for ${destinations.length} destination(s)`);
-    } catch (error) {
-      logger.error(`========== FAILED TO START FFMPEG MULTI-STREAM ==========`);
-      logger.error(`Exception during command.run():`);
-      logger.error(`Error:`, error);
-      logger.error(`Error message: ${(error as Error).message}`);
-      logger.error(`Error stack:`, (error as Error).stack);
-      logger.error(`Destination count: ${destinations.length}`);
-      logger.error(`Media Server IP: ${mediaServerIp}`);
-      logger.error(`Video Port: ${videoPort}, Audio Port: ${audioPort}`);
-      logger.error(`========== END FAILED TO START FFMPEG ==========`);
-      diagnosticLogger.logError(
-        'ffmpeg',
-        'CompositorPipeline',
-        `Failed to start FFmpeg multi-stream process`,
-        error as Error,
-        {
-          destinationCount: destinations.length,
-          mediaServerIp,
-          videoPort,
-          audioPort,
-        },
-        broadcastId
-      );
-    }
+    // Start FFmpeg process
+    command.run();
+    ffmpegProcesses.set(broadcastId, command); // Store single process by broadcast ID
+    logger.info(`✅ FFmpeg multi-stream process started successfully for ${destinations.length} destination(s)`);
 
     // Store pipeline
     activePipelines.set(broadcastId, {
