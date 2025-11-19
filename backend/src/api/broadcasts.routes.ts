@@ -322,10 +322,14 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
           logger.info(`[ASYNC IIFE] Found ${destinations.length} active destinations in database for user ${req.user!.userId}`);
           logger.info(`[ASYNC IIFE] Destinations: ${JSON.stringify(destinations.map(d => ({ id: d.id, platform: d.platform, channelId: d.channelId })))}`);
 
+          // TEMPORARY FIX: ONLY PROCESS FIRST DESTINATION UNTIL MULTI-DESTINATION BUG IS FIXED
+          const singleDestination = destinations.slice(0, 1);
+          logger.warn(`[ASYNC IIFE] ⚠️ TEMPORARY: Only processing FIRST destination (${singleDestination.length}) out of ${destinations.length} selected`);
+
           // CRITICAL FIX: Track processed destination IDs to prevent creating multiple broadcasts for same destination
           const processedDestinationIds = new Set<string>();
 
-          for (const destination of destinations) {
+          for (const destination of singleDestination) {
             try {
               // SAFETY CHECK: Skip if already processed (should never happen, but prevents disaster)
               if (processedDestinationIds.has(destination.id)) {
