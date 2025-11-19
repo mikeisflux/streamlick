@@ -17,6 +17,7 @@ interface Pipeline {
   videoConsumer: any | null;
   audioConsumer: any | null;
   ffmpegProcesses: Map<string, any>;
+  keyframeInterval: NodeJS.Timeout | null;
 }
 
 const activePipelines = new Map<string, Pipeline>();
@@ -123,9 +124,22 @@ export async function createCompositorPipeline(
     logger.info('Consumers created on plain transports');
 
     // Request keyframe from video producer to help FFmpeg start decoding
+    let keyframeInterval: NodeJS.Timeout | null = null;
     try {
       await videoProducer.requestKeyFrame();
-      logger.info('Requested keyframe from video producer');
+      logger.info('Requested initial keyframe from video producer');
+
+      // Set up periodic keyframe requests (every 2 seconds)
+      // This ensures FFmpeg always has fresh keyframes for encoding
+      keyframeInterval = setInterval(async () => {
+        try {
+          await videoProducer.requestKeyFrame();
+          logger.debug('Requested periodic keyframe from video producer');
+        } catch (error) {
+          logger.warn('Failed to request periodic keyframe:', error);
+        }
+      }, 2000);
+      logger.info('Started periodic keyframe requests (every 2 seconds)');
 
       // Wait 1 second for keyframes to arrive before starting FFmpeg
       logger.info('Waiting 1 second for keyframes to arrive...');
@@ -268,7 +282,8 @@ a=recvonly`;
         '-maxrate', '4500k',
         '-bufsize', '9000k',
         '-pix_fmt', 'yuv420p',  // Compatibility
-        '-g', '60',             // Keyframe every 2 seconds at 30fps
+        '-g', '30',             // Keyframe every 1 second at 30fps (reduced from 60)
+        '-force_key_frames', 'expr:gte(t,n_forced*1)', // Force keyframe every 1 second
       ])
       // Audio encoding - transcode Opus to AAC for RTMP
       .audioCodec('aac')
@@ -416,6 +431,7 @@ a=recvonly`;
       videoConsumer,
       audioConsumer,
       ffmpegProcesses,
+      keyframeInterval,
     });
 
     logger.info(`Compositor pipeline created for broadcast ${broadcastId}`);
@@ -446,6 +462,12 @@ export async function stopCompositorPipeline(broadcastId: string): Promise<void>
       logger.error(`Error stopping FFmpeg for destination ${destId}:`, error);
     }
   });
+
+  // Stop keyframe interval
+  if (pipeline.keyframeInterval) {
+    clearInterval(pipeline.keyframeInterval);
+    logger.info('Stopped periodic keyframe requests');
+  }
 
   // Clean up SDP files
   try {
