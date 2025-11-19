@@ -218,10 +218,26 @@ docker-compose logs -f frontend
 
 ### Issue: "Address already in use" Error
 **Symptom**: FFmpeg fails to start with EADDRINUSE error
-**Cause**: Previous FFmpeg process didn't clean up properly
-**Solution**:
+```
+[udp @ 0x...] bind failed: Address already in use
+Error opening input file rtp://127.0.0.1:46404.
+```
+
+**Cause (FIXED in latest code)**:
+- MediaSoup plain transport binds to RTP ports (e.g., 46404, 42132)
+- FFmpeg using `rtp://127.0.0.1:46404` also tries to bind to same port
+- Port binding conflict occurs
+
+**Solution (Applied)**:
+- Now using SDP (Session Description Protocol) files instead of direct RTP URLs
+- SDP files describe the RTP streams without requiring FFmpeg to bind to ports
+- MediaSoup sends RTP packets, FFmpeg receives them via SDP specification
+- Check logs for: `SDP files created:` followed by paths to `/tmp/video_*.sdp` and `/tmp/audio_*.sdp`
+
+**If issue persists**:
 - Restart media-server container: `docker-compose restart media-server`
 - Check for zombie FFmpeg processes: `ps aux | grep ffmpeg`
+- Check for orphaned SDP files: `ls -la /tmp/*.sdp`
 
 ### Issue: No Video on RTMP Destination
 **Symptom**: Stream starts but no video appears on platform
@@ -306,8 +322,81 @@ If issues persist:
 
 ## Questions to Investigate
 
-1. Does FFmpeg successfully connect to the RTP streams?
+1. ✅ Does FFmpeg successfully connect to the RTP streams? **FIXED**: Now using SDP files
 2. Are RTP packets being sent from mediasoup?
 3. Is the tee muxer format correct?
 4. Are all stream keys valid and fresh (OAuth tokens)?
 5. Is the duplicate guard preventing race conditions?
+6. ⚠️  **NEW**: Why are duplicate destinations appearing in logs? (See section below)
+
+## Known Issue: Duplicate Destinations in Logs
+
+### Observed Behavior
+In recent testing, logs showed 11 destinations being sent to media-server, all with:
+- Same destination ID: `8cc2531d-b3db-4c1d-9e88-781fb5a314ca`
+- Same platform: `youtube`
+- Different stream keys (11 different YouTube broadcast IDs)
+
+### Expected Behavior
+User selected ONE YouTube destination, should see:
+- 1 destination in logs
+- 1 YouTube broadcast created
+- 1 stream key
+
+### Deduplication Already In Place
+Code has multiple layers of deduplication:
+1. **Frontend - DestinationsPanel.tsx:147**: Deduplicates on toggle
+2. **Frontend - useBroadcast.ts:133**: Deduplicates before API call
+3. **Backend - broadcasts.routes.ts:275**: Deduplicates destinationIds array
+4. **Frontend - useStudioInitialization.ts**: Deduplicates on load/save
+
+### Investigation Needed
+To debug this issue, we need to check:
+
+1. **Frontend State Inspection**:
+   ```javascript
+   // In browser console on Studio page
+   console.log('Selected destinations:', JSON.parse(localStorage.getItem('selectedDestinations')));
+   ```
+
+2. **Backend Logs** - Look for:
+   ```
+   [ASYNC IIFE] destinationIds: [...]
+   [ASYNC IIFE] Processing X selected destinations
+   [ASYNC IIFE] Found X active destinations in database
+   ```
+   Check if backend receives 11 IDs or just 1
+
+3. **Network Tab** - Check POST request to `/broadcasts/start`:
+   - Look at request payload
+   - Check `destinationIds` array length
+   - Verify no duplicate IDs in request
+
+4. **Database Query**:
+   ```sql
+   SELECT destination_id, COUNT(*) as count
+   FROM broadcast_destinations
+   WHERE broadcast_id = '<broadcast-id>'
+   GROUP BY destination_id
+   HAVING COUNT(*) > 1;
+   ```
+   Check if database has duplicate BroadcastDestination records
+
+### Possible Causes
+1. **Frontend State Corruption**: selectedDestinations array has duplicates before deduplication runs
+2. **Race Condition**: Multiple rapid clicks adding same destination
+3. **LocalStorage Corruption**: Cached state has duplicates
+4. **Backend Loop Bug**: YouTube broadcast creation happening in a loop
+
+### Temporary Workaround
+If you see multiple destinations when only one was selected:
+1. Clear browser localStorage: `localStorage.clear()`
+2. Refresh page
+3. Reconnect destinations
+4. Select destinations again
+
+### Next Steps
+1. Test with latest code (SDP fix applied)
+2. Monitor browser console for deduplication warnings
+3. Check backend logs for destinationIds array
+4. Report back with findings
