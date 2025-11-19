@@ -51,7 +51,7 @@ export async function createCompositorPipeline(
         ? { ip: '0.0.0.0', announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP }
         : { ip: '127.0.0.1', announcedIp: undefined },
       rtcpMux: false,
-      comedia: true, // Auto-learn FFmpeg address from first packet
+      comedia: false, // MediaSoup will send to FFmpeg's listening address
     });
 
     // Add error handler for video transport (listenererror for listening socket errors)
@@ -72,7 +72,7 @@ export async function createCompositorPipeline(
         ? { ip: '0.0.0.0', announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP }
         : { ip: '127.0.0.1', announcedIp: undefined },
       rtcpMux: false,
-      comedia: true, // Auto-learn FFmpeg address from first packet
+      comedia: false, // MediaSoup will send to FFmpeg's listening address
     });
 
     // Add error handler for audio transport (listenererror for listening socket errors)
@@ -148,45 +148,33 @@ export async function createCompositorPipeline(
     logger.info(`========== FFMPEG MULTI-DESTINATION SETUP ==========`);
     logger.info(`Total destinations: ${destinations.length}`);
     logger.info(`Media Server IP: ${mediaServerIp}`);
-    logger.info(`Video RTP Port: ${videoPort}`);
-    logger.info(`Audio RTP Port: ${audioPort}`);
+    logger.info(`MediaSoup Video Port: ${videoPort} (MediaSoup sends FROM this port)`);
+    logger.info(`MediaSoup Audio Port: ${audioPort} (MediaSoup sends FROM this port)`);
     logger.info(`Destinations:`);
     destinations.forEach((dest, index) => {
       logger.info(`  [${index + 1}] ${dest.platform}: ${dest.rtmpUrl}/${dest.streamKey?.substring(0, 20)}...`);
     });
 
-    // Create SDP files for video and audio to avoid port binding conflicts
-    // SDP allows FFmpeg to receive RTP without binding to mediasoup's ports
-    const videoSdp = `v=0
-o=- 0 0 IN IP4 ${mediaServerIp}
-s=Video Stream
-c=IN IP4 ${mediaServerIp}
-t=0 0
-m=video ${videoPort} RTP/AVP ${videoPayloadType}
-a=rtpmap:${videoPayloadType} H264/90000
-a=recvonly`;
+    // FFmpeg will listen on different ports to avoid binding conflicts
+    // MediaSoup uses ports 40000-40100 for WebRTC, FFmpeg uses 40200-40201
+    // Available range: 40000-49999
+    const ffmpegVideoPort = 40200;
+    const ffmpegAudioPort = 40201;
+    const ffmpegIp = '127.0.0.1';
 
-    const audioSdp = `v=0
-o=- 0 0 IN IP4 ${mediaServerIp}
-s=Audio Stream
-c=IN IP4 ${mediaServerIp}
-t=0 0
-m=audio ${audioPort} RTP/AVP ${audioPayloadType}
-a=rtpmap:${audioPayloadType} opus/48000/2
-a=recvonly`;
+    // Connect plain transports to tell MediaSoup where to send RTP
+    // MediaSoup will send RTP packets TO FFmpeg's listening ports
+    await videoTransport.connect({
+      ip: ffmpegIp,
+      port: ffmpegVideoPort,
+    });
+    logger.info(`Video transport connected - MediaSoup will send RTP to ${ffmpegIp}:${ffmpegVideoPort}`);
 
-    // Write SDP files to /tmp
-    const fs = require('fs');
-    const path = require('path');
-    const videoSdpPath = path.join('/tmp', `video_${broadcastId}.sdp`);
-    const audioSdpPath = path.join('/tmp', `audio_${broadcastId}.sdp`);
-
-    fs.writeFileSync(videoSdpPath, videoSdp);
-    fs.writeFileSync(audioSdpPath, audioSdp);
-
-    logger.info(`SDP files created:`);
-    logger.info(`  Video SDP: ${videoSdpPath}`);
-    logger.info(`  Audio SDP: ${audioSdpPath}`);
+    await audioTransport.connect({
+      ip: ffmpegIp,
+      port: ffmpegAudioPort,
+    });
+    logger.info(`Audio transport connected - MediaSoup will send RTP to ${ffmpegIp}:${ffmpegAudioPort}`);
 
     // Build tee output for multiple RTMP destinations
     // Format: [f=flv:flvflags=no_duration_filesize]rtmp://url1|[f=flv:flvflags=no_duration_filesize]rtmp://url2
@@ -202,19 +190,19 @@ a=recvonly`;
     const ffmpegProcesses = new Map<string, any>();
 
     // Create a single FFmpeg command that outputs to multiple destinations
-    // Use SDP files as input to avoid port binding conflicts
+    // FFmpeg listens on different ports than MediaSoup to avoid binding conflicts
     const command = ffmpeg()
-      // Video input (SDP file)
-      .input(videoSdpPath)
+      // Video input - FFmpeg listens on port 50000
+      .input(`rtp://${ffmpegIp}:${ffmpegVideoPort}?timeout=5000000`)
       .inputOptions([
         '-protocol_whitelist', 'file,rtp,udp',
-        '-f', 'sdp',
+        '-f', 'rtp',
       ])
-      // Audio input (SDP file)
-      .input(audioSdpPath)
+      // Audio input - FFmpeg listens on port 50001
+      .input(`rtp://${ffmpegIp}:${ffmpegAudioPort}?timeout=5000000`)
       .inputOptions([
         '-protocol_whitelist', 'file,rtp,udp',
-        '-f', 'sdp',
+        '-f', 'rtp',
       ])
       // Video encoding
       .videoCodec('copy') // Copy H264 stream without re-encoding
@@ -394,25 +382,6 @@ export async function stopCompositorPipeline(broadcastId: string): Promise<void>
       logger.error(`Error stopping FFmpeg for destination ${destId}:`, error);
     }
   });
-
-  // Clean up SDP files
-  try {
-    const fs = require('fs');
-    const path = require('path');
-    const videoSdpPath = path.join('/tmp', `video_${broadcastId}.sdp`);
-    const audioSdpPath = path.join('/tmp', `audio_${broadcastId}.sdp`);
-
-    if (fs.existsSync(videoSdpPath)) {
-      fs.unlinkSync(videoSdpPath);
-      logger.info('Video SDP file deleted');
-    }
-    if (fs.existsSync(audioSdpPath)) {
-      fs.unlinkSync(audioSdpPath);
-      logger.info('Audio SDP file deleted');
-    }
-  } catch (error) {
-    logger.error('Error deleting SDP files:', error);
-  }
 
   // Close consumers
   try {

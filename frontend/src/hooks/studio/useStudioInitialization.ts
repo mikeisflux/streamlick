@@ -152,11 +152,39 @@ export function useStudioInitialization({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [broadcastId]);
 
+  // Wrap setSelectedDestinations to always deduplicate
+  const setSelectedDestinationsSafe = (destinations: string[] | ((prev: string[]) => string[])) => {
+    if (typeof destinations === 'function') {
+      setSelectedDestinations((prev) => {
+        const updated = destinations(prev);
+        const deduplicated = Array.from(new Set(updated));
+        if (deduplicated.length !== updated.length) {
+          console.warn('[Studio Init] Auto-deduplicating in setSelectedDestinations:', {
+            original: updated,
+            deduplicated,
+            duplicateCount: updated.length - deduplicated.length,
+          });
+        }
+        return deduplicated;
+      });
+    } else {
+      const deduplicated = Array.from(new Set(destinations));
+      if (deduplicated.length !== destinations.length) {
+        console.warn('[Studio Init] Auto-deduplicating in setSelectedDestinations:', {
+          original: destinations,
+          deduplicated,
+          duplicateCount: destinations.length - deduplicated.length,
+        });
+      }
+      setSelectedDestinations(deduplicated);
+    }
+  };
+
   return {
     isLoading,
     destinations,
     setDestinations,
     selectedDestinations,
-    setSelectedDestinations,
+    setSelectedDestinations: setSelectedDestinationsSafe,
   };
 }

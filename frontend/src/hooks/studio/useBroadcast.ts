@@ -226,11 +226,12 @@ export function useBroadcast({
       await broadcastService.start(broadcastId, deduplicatedDestinations, apiDestinationSettings);
 
       // FLOW: 10-second countdown → intro video → user stream
-      // Step 1: Wait for 10-second countdown to finish
-      console.log('[useBroadcast] Waiting for 10-second countdown...');
-      await new Promise(resolve => setTimeout(resolve, 10000)); // 10 seconds for countdown
+      // Step 1: Display 10-second countdown on canvas
+      console.log('[useBroadcast] Starting 10-second countdown on canvas...');
+      await compositorService.startCountdown(10);
+      console.log('[useBroadcast] Countdown finished!');
 
-      // Wait a bit more for YouTube/Facebook broadcasts to be created during countdown
+      // Wait a bit more for YouTube/Facebook broadcasts to be created
       console.log('[useBroadcast] Waiting for broadcast destinations to be created...');
       await new Promise(resolve => setTimeout(resolve, 2000)); // Additional 2 seconds
 

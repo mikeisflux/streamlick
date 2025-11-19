@@ -67,6 +67,7 @@ class CompositorService {
   private showChat = false;
   private lowerThird: LowerThird | null = null;
   private mediaClipOverlay: HTMLVideoElement | HTMLImageElement | null = null;
+  private countdownValue: number | null = null;
 
   // Image caching to prevent memory leaks from creating Images every frame
   private backgroundImage: HTMLImageElement | null = null;
@@ -382,20 +383,42 @@ class CompositorService {
       videoElement.src = videoUrl;
       videoElement.muted = false; // Enable audio for intro video
       videoElement.autoplay = false;
-      videoElement.preload = 'auto';
+      videoElement.preload = 'metadata'; // Load metadata first to get dimensions
+      videoElement.crossOrigin = 'anonymous'; // Allow CORS for local files
 
-      // Load video
-      videoElement.addEventListener('loadeddata', () => {
-        logger.info(`Intro video loaded: ${videoUrl}, duration: ${videoElement.duration}s`);
+      logger.info(`Loading intro video: ${videoUrl}`);
 
-        // Set as media clip overlay
+      // Wait for metadata (dimensions) to load first
+      videoElement.addEventListener('loadedmetadata', () => {
+        logger.info(`Intro video metadata loaded: ${videoUrl}, dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}, duration: ${videoElement.duration}s`);
+
+        // Ensure video has valid dimensions
+        if (!videoElement.videoWidth || !videoElement.videoHeight) {
+          logger.error('Intro video has invalid dimensions:', videoElement.videoWidth, videoElement.videoHeight);
+          reject(new Error('Invalid video dimensions'));
+          return;
+        }
+
+        // Set as media clip overlay BEFORE playing
         this.setMediaClipOverlay(videoElement);
+        logger.info('Intro video set as media clip overlay');
 
-        // Play the video
-        videoElement.play().catch((error) => {
-          logger.error('Failed to play intro video:', error);
-          reject(error);
-        });
+        // Now wait for enough data to play
+        const playWhenReady = () => {
+          logger.info('Intro video ready to play, starting playback...');
+          videoElement.play().catch((error) => {
+            logger.error('Failed to play intro video:', error);
+            this.clearMediaClipOverlay();
+            reject(error);
+          });
+        };
+
+        if (videoElement.readyState >= 3) {
+          // HAVE_FUTURE_DATA or better - can play
+          playWhenReady();
+        } else {
+          videoElement.addEventListener('canplay', playWhenReady, { once: true });
+        }
       });
 
       // Clear overlay when video ends
@@ -406,10 +429,13 @@ class CompositorService {
       });
 
       // Handle errors
-      videoElement.addEventListener('error', (error) => {
-        logger.error('Intro video error:', error);
+      videoElement.addEventListener('error', (event) => {
+        const errorMsg = videoElement.error
+          ? `Code: ${videoElement.error.code}, Message: ${videoElement.error.message}`
+          : 'Unknown error';
+        logger.error(`Intro video error: ${errorMsg}`, event);
         this.clearMediaClipOverlay();
-        reject(error);
+        reject(new Error(`Video error: ${errorMsg}`));
       });
 
       // If duration is specified, stop video after that duration
@@ -421,6 +447,31 @@ class CompositorService {
           resolve();
         }, duration * 1000);
       }
+    });
+  }
+
+  /**
+   * Start countdown timer
+   * @param seconds - Number of seconds to countdown from
+   * @returns Promise that resolves when countdown finishes
+   */
+  async startCountdown(seconds: number): Promise<void> {
+    return new Promise((resolve) => {
+      logger.info(`Starting ${seconds}-second countdown on canvas`);
+      this.countdownValue = seconds;
+
+      const intervalId = setInterval(() => {
+        if (this.countdownValue === null || this.countdownValue <= 0) {
+          clearInterval(intervalId);
+          this.countdownValue = null;
+          logger.info('Countdown finished');
+          resolve();
+          return;
+        }
+
+        this.countdownValue--;
+        logger.debug(`Countdown: ${this.countdownValue}`);
+      }, 1000);
     });
   }
 
@@ -570,6 +621,11 @@ class CompositorService {
       // Draw media clip overlay if active (on top of everything)
       if (this.mediaClipOverlay) {
         this.drawMediaClipOverlay();
+      }
+
+      // Draw countdown if active (on top of everything else)
+      if (this.countdownValue !== null) {
+        this.drawCountdown();
       }
     } catch (error) {
       logger.error('Compositor animation error:', error);
@@ -1103,6 +1159,45 @@ class CompositorService {
       // Draw the media clip
       this.ctx.drawImage(element, drawX, drawY, drawWidth, drawHeight);
     }
+  }
+
+  /**
+   * Draw countdown timer
+   * Renders large countdown number centered on canvas
+   */
+  private drawCountdown(): void {
+    if (!this.ctx || this.countdownValue === null) return;
+
+    // Semi-transparent black overlay
+    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    this.ctx.fillRect(0, 0, this.WIDTH, this.HEIGHT);
+
+    // Draw countdown number
+    const fontSize = Math.floor(this.HEIGHT / 4); // Large font size (25% of canvas height)
+    this.ctx.font = `bold ${fontSize}px Arial`;
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'middle';
+
+    // White text with black outline for visibility
+    this.ctx.strokeStyle = '#000000';
+    this.ctx.lineWidth = 20;
+    this.ctx.strokeText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
+
+    this.ctx.fillStyle = '#FFFFFF';
+    this.ctx.fillText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
+
+    // Draw "Going Live..." text below countdown
+    const subFontSize = Math.floor(this.HEIGHT / 15);
+    this.ctx.font = `${subFontSize}px Arial`;
+
+    const subTextY = this.HEIGHT / 2 + fontSize / 2 + subFontSize + 40;
+
+    this.ctx.strokeStyle = '#000000';
+    this.ctx.lineWidth = 10;
+    this.ctx.strokeText('Going Live...', this.WIDTH / 2, subTextY);
+
+    this.ctx.fillStyle = '#FFFFFF';
+    this.ctx.fillText('Going Live...', this.WIDTH / 2, subTextY);
   }
 }
 
