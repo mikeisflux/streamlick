@@ -652,35 +652,36 @@ class CompositorService {
       this.ctx.fillStyle = '#000000';
       this.ctx.fillRect(0, 0, this.WIDTH, this.HEIGHT);
 
-      // Draw background if exists
-      if (this.background) {
-        this.drawBackground();
-      }
-
-      // Draw participants based on layout
-      this.drawParticipants();
-
-      // Draw overlays (logos, banners, lower thirds)
-      this.drawOverlays();
-
-      // Draw chat messages if enabled
-      if (this.showChat) {
-        this.drawChatMessages();
-      }
-
-      // Draw lower third if active
-      if (this.lowerThird) {
-        this.drawLowerThird();
-      }
-
-      // Draw media clip overlay if active (on top of everything)
-      if (this.mediaClipOverlay) {
-        this.drawMediaClipOverlay();
-      }
-
-      // Draw countdown if active (on top of everything else)
+      // CRITICAL FIX: When countdown or media clip is active, ONLY show that (fullscreen, exclusive)
+      // This prevents flickering caused by drawing participants underneath
       if (this.countdownValue !== null) {
+        // Countdown is active - show ONLY countdown (no participants, no overlays)
         this.drawCountdown();
+      } else if (this.mediaClipOverlay) {
+        // Media clip (intro video) is active - show ONLY the video (no participants, no overlays)
+        this.drawMediaClipOverlay();
+      } else {
+        // Normal mode - draw participants and all overlays
+        // Draw background if exists
+        if (this.background) {
+          this.drawBackground();
+        }
+
+        // Draw participants based on layout
+        this.drawParticipants();
+
+        // Draw overlays (logos, banners, lower thirds)
+        this.drawOverlays();
+
+        // Draw chat messages if enabled
+        if (this.showChat) {
+          this.drawChatMessages();
+        }
+
+        // Draw lower third if active
+        if (this.lowerThird) {
+          this.drawLowerThird();
+        }
       }
     } catch (error) {
       logger.error('Compositor animation error:', error);
