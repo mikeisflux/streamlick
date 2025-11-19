@@ -333,16 +333,30 @@ a=recvonly`;
         logger.info(`FFmpeg multi-stream process ended for ${destinations.length} destination(s)`);
       })
       .on('stderr', (stderrLine: string) => {
-        // Log ALL stderr output to help diagnose issues
+        // Log ALL FFmpeg stderr output to visible logs for debugging
+        // With -loglevel debug, we want to see EVERYTHING in the media server logs
         if (stderrLine.includes('error') || stderrLine.includes('Error') ||
-            stderrLine.includes('warning') || stderrLine.includes('Warning') ||
             stderrLine.includes('failed') || stderrLine.includes('Failed') ||
             stderrLine.includes('Invalid') || stderrLine.includes('invalid')) {
-          logger.error(`[FFmpeg Multi-Stream] ${stderrLine}`);
-        } else if (stderrLine.includes('bitrate=') || stderrLine.includes('fps=')) {
-          logger.info(`[FFmpeg Multi-Stream] ${stderrLine}`);
+          // Errors are always logged at error level
+          logger.error(`[FFmpeg] ${stderrLine}`);
+        } else if (stderrLine.includes('warning') || stderrLine.includes('Warning')) {
+          // Warnings logged at warn level
+          logger.warn(`[FFmpeg] ${stderrLine}`);
+        } else if (stderrLine.includes('bitrate=') || stderrLine.includes('fps=') ||
+                   stderrLine.includes('frame=') || stderrLine.includes('time=') ||
+                   stderrLine.includes('speed=')) {
+          // Progress info logged at info level (always visible)
+          logger.info(`[FFmpeg] ${stderrLine}`);
+        } else if (stderrLine.includes('RTP:') || stderrLine.includes('Input #') ||
+                   stderrLine.includes('Output #') || stderrLine.includes('Stream #') ||
+                   stderrLine.includes('codec') || stderrLine.includes('Codec')) {
+          // Important stream/codec info logged at info level (always visible)
+          logger.info(`[FFmpeg] ${stderrLine}`);
         } else {
-          logger.debug(`[FFmpeg Multi-Stream] ${stderrLine}`);
+          // Everything else logged at info level when using debug mode
+          // This ensures we see ALL FFmpeg output in the logs
+          logger.info(`[FFmpeg Debug] ${stderrLine}`);
         }
       });
 
