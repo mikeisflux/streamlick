@@ -1127,37 +1127,85 @@ class CompositorService {
 
     const element = this.mediaClipOverlay;
 
-    // Calculate dimensions to maintain aspect ratio
-    let drawWidth = this.WIDTH;
-    let drawHeight = this.HEIGHT;
-    let drawX = 0;
-    let drawY = 0;
-
-    if (element instanceof HTMLVideoElement || element instanceof HTMLImageElement) {
-      const videoWidth = element instanceof HTMLVideoElement ? element.videoWidth : element.naturalWidth;
-      const videoHeight = element instanceof HTMLVideoElement ? element.videoHeight : element.naturalHeight;
-
-      if (videoWidth && videoHeight) {
-        const aspectRatio = videoWidth / videoHeight;
-        const canvasAspectRatio = this.WIDTH / this.HEIGHT;
-
-        if (aspectRatio > canvasAspectRatio) {
-          // Video is wider than canvas
-          drawWidth = this.WIDTH;
-          drawHeight = this.WIDTH / aspectRatio;
-          drawX = 0;
-          drawY = (this.HEIGHT - drawHeight) / 2;
-        } else {
-          // Video is taller than canvas
-          drawHeight = this.HEIGHT;
-          drawWidth = this.HEIGHT * aspectRatio;
-          drawX = (this.WIDTH - drawWidth) / 2;
-          drawY = 0;
-        }
+    // CRITICAL FIX: Check if video is ready before attempting to draw
+    if (element instanceof HTMLVideoElement) {
+      // Video must have metadata loaded (readyState >= 2) to draw properly
+      if (element.readyState < 2) {
+        // Video metadata not loaded yet - skip drawing this frame
+        return;
       }
 
-      // Draw the media clip
-      this.ctx.drawImage(element, drawX, drawY, drawWidth, drawHeight);
+      // Validate video dimensions are non-zero
+      if (element.videoWidth === 0 || element.videoHeight === 0) {
+        console.warn('[Compositor] Video dimensions not yet available:', {
+          videoWidth: element.videoWidth,
+          videoHeight: element.videoHeight,
+          readyState: element.readyState,
+        });
+        return;
+      }
+
+      // Calculate dimensions to maintain aspect ratio - FILL ENTIRE CANVAS
+      const videoAspect = element.videoWidth / element.videoHeight;
+      const canvasAspect = this.WIDTH / this.HEIGHT;
+
+      let drawWidth: number;
+      let drawHeight: number;
+      let drawX: number;
+      let drawY: number;
+
+      if (videoAspect > canvasAspect) {
+        // Video is wider - fit to canvas width
+        drawWidth = this.WIDTH;
+        drawHeight = this.WIDTH / videoAspect;
+        drawX = 0;
+        drawY = (this.HEIGHT - drawHeight) / 2;
+      } else {
+        // Video is taller - fit to canvas height
+        drawHeight = this.HEIGHT;
+        drawWidth = this.HEIGHT * videoAspect;
+        drawX = (this.WIDTH - drawWidth) / 2;
+        drawY = 0;
+      }
+
+      // Draw the video fullscreen on canvas
+      try {
+        this.ctx.drawImage(element, drawX, drawY, drawWidth, drawHeight);
+      } catch (error) {
+        console.error('[Compositor] Failed to draw video to canvas:', error);
+      }
+    } else if (element instanceof HTMLImageElement) {
+      // Handle image overlays
+      if (!element.complete || element.naturalWidth === 0) {
+        // Image not loaded yet
+        return;
+      }
+
+      const imageAspect = element.naturalWidth / element.naturalHeight;
+      const canvasAspect = this.WIDTH / this.HEIGHT;
+
+      let drawWidth: number;
+      let drawHeight: number;
+      let drawX: number;
+      let drawY: number;
+
+      if (imageAspect > canvasAspect) {
+        drawWidth = this.WIDTH;
+        drawHeight = this.WIDTH / imageAspect;
+        drawX = 0;
+        drawY = (this.HEIGHT - drawHeight) / 2;
+      } else {
+        drawHeight = this.HEIGHT;
+        drawWidth = this.HEIGHT * imageAspect;
+        drawX = (this.WIDTH - drawWidth) / 2;
+        drawY = 0;
+      }
+
+      try {
+        this.ctx.drawImage(element, drawX, drawY, drawWidth, drawHeight);
+      } catch (error) {
+        console.error('[Compositor] Failed to draw image to canvas:', error);
+      }
     }
   }
 

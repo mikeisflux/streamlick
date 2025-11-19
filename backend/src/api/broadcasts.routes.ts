@@ -269,6 +269,20 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
 
         const broadcastDestinations: any[] = [];
 
+        // CRITICAL FIX: Clean up any existing broadcast destinations for this broadcast
+        // This prevents returning old/duplicate destinations when the frontend fetches them
+        const existingDestinations = await prisma.broadcastDestination.findMany({
+          where: { broadcastId: broadcast.id },
+        });
+
+        if (existingDestinations.length > 0) {
+          logger.warn(`[ASYNC IIFE] 🧹 Found ${existingDestinations.length} existing broadcast destinations for broadcast ${broadcast.id} - cleaning up...`);
+          await prisma.broadcastDestination.deleteMany({
+            where: { broadcastId: broadcast.id },
+          });
+          logger.info(`[ASYNC IIFE] ✓ Cleaned up ${existingDestinations.length} old broadcast destinations`);
+        }
+
         // If destinations are specified, create live videos for each platform
         if (destinationIds && destinationIds.length > 0) {
           // CRITICAL: Deduplicate destination IDs to prevent creating multiple stream keys for the same destination
@@ -630,10 +644,31 @@ router.get('/:id/destinations', authenticate, async (req: AuthRequest, res) => {
           },
         },
       },
+      orderBy: {
+        createdAt: 'desc', // Get most recent first
+      },
     });
 
+    // CRITICAL FIX: Deduplicate by destination ID to prevent multiple streams to the same destination
+    // This handles the case where old records weren't cleaned up
+    const seenDestinationIds = new Set<string>();
+    const deduplicatedDestinations = broadcastDestinations.filter((bd) => {
+      if (seenDestinationIds.has(bd.destination.id)) {
+        logger.warn(`[Get Destinations] Skipping duplicate destination ${bd.destination.id} for broadcast ${req.params.id}`);
+        return false;
+      }
+      seenDestinationIds.add(bd.destination.id);
+      return true;
+    });
+
+    if (deduplicatedDestinations.length !== broadcastDestinations.length) {
+      logger.warn(`[Get Destinations] Deduplicated ${broadcastDestinations.length} to ${deduplicatedDestinations.length} destinations for broadcast ${req.params.id}`);
+    }
+
+    logger.info(`[Get Destinations] Returning ${deduplicatedDestinations.length} destinations for broadcast ${req.params.id}`);
+
     // Decrypt stream keys for media server
-    const destinationsForMediaServer = broadcastDestinations.map((bd) => ({
+    const destinationsForMediaServer = deduplicatedDestinations.map((bd) => ({
       id: bd.destination.id,
       platform: bd.destination.platform,
       rtmpUrl: bd.streamUrl,

@@ -125,6 +125,7 @@ export async function createCompositorPipeline(
     // Create SDP files for FFmpeg to understand the RTP stream parameters
     // The SDP describes what MediaSoup is sending TO FFmpeg
     // The ports in SDP are the ports FFmpeg is LISTENING on (40200, 40202)
+    // CRITICAL FIX: Profile must match mediasoup codec config (4d001f = Constrained Baseline Level 3.1)
     const videoSdp = `v=0
 o=- 0 0 IN IP4 ${ffmpegIp}
 s=Video Stream
@@ -132,7 +133,7 @@ c=IN IP4 ${ffmpegIp}
 t=0 0
 m=video ${ffmpegVideoPort} RTP/AVP ${videoPayloadType}
 a=rtpmap:${videoPayloadType} H264/90000
-a=fmtp:${videoPayloadType} level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f
+a=fmtp:${videoPayloadType} level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=4d001f
 a=recvonly`;
 
     const audioSdp = `v=0

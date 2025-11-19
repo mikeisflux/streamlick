@@ -93,10 +93,37 @@ class ClipPlayerService {
 
     this.activeClips.set(clip.id, state);
 
-    // Register with compositor if provided
-    if (compositorService) {
-      compositorService.setMediaClipOverlay(video);
-    }
+    // CRITICAL FIX: Wait for video metadata to load before registering with compositor
+    // This prevents the black canvas issue where compositor tries to draw before video is ready
+    const metadataLoaded = new Promise<void>((resolve, reject) => {
+      if (video.readyState >= 2) {
+        // Metadata already loaded
+        resolve();
+      } else {
+        // Wait for loadedmetadata event
+        video.addEventListener('loadedmetadata', () => {
+          console.log('[ClipPlayer] Video metadata loaded:', {
+            width: video.videoWidth,
+            height: video.videoHeight,
+            duration: video.duration,
+            readyState: video.readyState,
+          });
+          resolve();
+        }, { once: true });
+
+        video.addEventListener('error', (e) => {
+          console.error('[ClipPlayer] Video load error:', e);
+          reject(new Error('Failed to load video metadata'));
+        }, { once: true });
+
+        // Timeout after 10 seconds
+        setTimeout(() => {
+          if (video.readyState < 2) {
+            reject(new Error('Video metadata load timeout'));
+          }
+        }, 10000);
+      }
+    });
 
     // Handle video end
     video.addEventListener('ended', () => {
@@ -118,7 +145,24 @@ class ClipPlayerService {
       }, clip.duration!);
     }
 
+    // Start playing the video
     await video.play();
+
+    // Wait for metadata to be loaded before registering with compositor
+    try {
+      await metadataLoaded;
+      console.log('[ClipPlayer] Video ready to display on canvas');
+
+      // NOW register with compositor - video is guaranteed to be ready
+      if (compositorService) {
+        compositorService.setMediaClipOverlay(video);
+      }
+    } catch (error) {
+      console.error('[ClipPlayer] Failed to load video metadata:', error);
+      // Clean up on error
+      this.stopClip(clip.id);
+      throw error;
+    }
 
     if (this.onPlayCallback) {
       this.onPlayCallback(clip.id);
