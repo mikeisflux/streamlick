@@ -322,11 +322,18 @@ a=recvonly`;
           logger.info(`[FFmpeg] ✅ AUDIO STREAM DETECTED: ${stderrLine}`);
         } else if (stderrLine.includes('Input #0') && stderrLine.includes('sdp')) {
           logger.info(`[FFmpeg] 📥 SDP INPUT OPENED: ${stderrLine}`);
+        } else if (stderrLine.includes('Opening') && stderrLine.includes('rtmp://')) {
+          logger.info(`[FFmpeg] 🔌 CONNECTING TO RTMP: ${stderrLine}`);
+        } else if (stderrLine.includes('Metadata') || stderrLine.includes('onMetaData')) {
+          logger.info(`[FFmpeg] 📤 RTMP METADATA SENT: ${stderrLine}`);
         } else if (stderrLine.includes('error') || stderrLine.includes('Error') ||
             stderrLine.includes('failed') || stderrLine.includes('Failed') ||
-            stderrLine.includes('Invalid') || stderrLine.includes('invalid')) {
-          // Errors are always logged at error level
-          logger.error(`[FFmpeg] ${stderrLine}`);
+            stderrLine.includes('Invalid') || stderrLine.includes('invalid') ||
+            stderrLine.includes('I/O error') || stderrLine.includes('Connection reset') ||
+            stderrLine.includes('Broken pipe') || stderrLine.includes('Connection timed out') ||
+            stderrLine.includes('rtmp') && (stderrLine.includes('error') || stderrLine.includes('failed'))) {
+          // Errors are always logged at error level (including RTMP connection issues)
+          logger.error(`[FFmpeg] ❌ ${stderrLine}`);
         } else if (stderrLine.includes('warning') || stderrLine.includes('Warning')) {
           // Warnings logged at warn level
           logger.warn(`[FFmpeg] ${stderrLine}`);
