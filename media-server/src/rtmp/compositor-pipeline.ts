@@ -162,6 +162,9 @@ a=recvonly`;
 
     logger.info(`Unified SDP file created for FFmpeg:`);
     logger.info(`  SDP: ${sdpPath} (listening on ${ffmpegRtpPort})`);
+    logger.info(`========== SDP CONTENT (VERIFY VIDEO STREAM) ==========`);
+    logger.info(unifiedSdp);
+    logger.info(`========== END SDP CONTENT ==========`);
 
     // Start FFmpeg for destinations
     const ffmpegProcesses = new Map<string, any>();
@@ -295,7 +298,15 @@ a=recvonly`;
       .on('stderr', (stderrLine: string) => {
         // Log ALL FFmpeg stderr output to visible logs for debugging
         // With -loglevel debug, we want to see EVERYTHING in the media server logs
-        if (stderrLine.includes('error') || stderrLine.includes('Error') ||
+
+        // CRITICAL: Highlight when video stream is detected (or missing!)
+        if (stderrLine.includes('Stream #0:0') && stderrLine.includes('Video')) {
+          logger.info(`[FFmpeg] ✅ VIDEO STREAM DETECTED: ${stderrLine}`);
+        } else if (stderrLine.includes('Stream #0:1') && stderrLine.includes('Audio')) {
+          logger.info(`[FFmpeg] ✅ AUDIO STREAM DETECTED: ${stderrLine}`);
+        } else if (stderrLine.includes('Input #0') && stderrLine.includes('sdp')) {
+          logger.info(`[FFmpeg] 📥 SDP INPUT OPENED: ${stderrLine}`);
+        } else if (stderrLine.includes('error') || stderrLine.includes('Error') ||
             stderrLine.includes('failed') || stderrLine.includes('Failed') ||
             stderrLine.includes('Invalid') || stderrLine.includes('invalid')) {
           // Errors are always logged at error level
