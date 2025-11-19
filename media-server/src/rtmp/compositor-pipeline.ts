@@ -180,6 +180,40 @@ export async function createCompositorPipeline(
     });
     logger.info(`Audio transport connected - MediaSoup will send RTP to ${ffmpegIp}:${ffmpegAudioPort}, RTCP to ${ffmpegIp}:${ffmpegAudioRtcpPort}`);
 
+    // Create SDP files for FFmpeg to understand the RTP stream parameters
+    // The SDP describes what MediaSoup is sending TO FFmpeg
+    // The ports in SDP are the ports FFmpeg is LISTENING on (40200, 40202)
+    const videoSdp = `v=0
+o=- 0 0 IN IP4 ${ffmpegIp}
+s=Video Stream
+c=IN IP4 ${ffmpegIp}
+t=0 0
+m=video ${ffmpegVideoPort} RTP/AVP ${videoPayloadType}
+a=rtpmap:${videoPayloadType} VP8/90000
+a=recvonly`;
+
+    const audioSdp = `v=0
+o=- 0 0 IN IP4 ${ffmpegIp}
+s=Audio Stream
+c=IN IP4 ${ffmpegIp}
+t=0 0
+m=audio ${ffmpegAudioPort} RTP/AVP ${audioPayloadType}
+a=rtpmap:${audioPayloadType} opus/48000/2
+a=recvonly`;
+
+    // Write SDP files to /tmp
+    const fs = require('fs');
+    const path = require('path');
+    const videoSdpPath = path.join('/tmp', `video_${broadcastId}.sdp`);
+    const audioSdpPath = path.join('/tmp', `audio_${broadcastId}.sdp`);
+
+    fs.writeFileSync(videoSdpPath, videoSdp);
+    fs.writeFileSync(audioSdpPath, audioSdp);
+
+    logger.info(`SDP files created for FFmpeg:`);
+    logger.info(`  Video SDP: ${videoSdpPath} (listening on ${ffmpegVideoPort})`);
+    logger.info(`  Audio SDP: ${audioSdpPath} (listening on ${ffmpegAudioPort})`);
+
     // Build tee output for multiple RTMP destinations
     // Format: [f=flv:flvflags=no_duration_filesize]rtmp://url1|[f=flv:flvflags=no_duration_filesize]rtmp://url2
     const teeOutputs = destinations.map(dest => {
@@ -194,23 +228,32 @@ export async function createCompositorPipeline(
     const ffmpegProcesses = new Map<string, any>();
 
     // Create a single FFmpeg command that outputs to multiple destinations
-    // FFmpeg listens on different ports than MediaSoup to avoid binding conflicts
+    // FFmpeg uses SDP files to understand the RTP stream from MediaSoup
     const command = ffmpeg()
-      // Video input - FFmpeg listens on port 50000
-      .input(`rtp://${ffmpegIp}:${ffmpegVideoPort}?timeout=5000000`)
+      // Video input - SDP file describes the VP8 stream on port 40200
+      .input(videoSdpPath)
       .inputOptions([
         '-protocol_whitelist', 'file,rtp,udp',
-        '-f', 'rtp',
+        '-f', 'sdp',
       ])
-      // Audio input - FFmpeg listens on port 50001
-      .input(`rtp://${ffmpegIp}:${ffmpegAudioPort}?timeout=5000000`)
+      // Audio input - SDP file describes the Opus stream on port 40202
+      .input(audioSdpPath)
       .inputOptions([
         '-protocol_whitelist', 'file,rtp,udp',
-        '-f', 'rtp',
+        '-f', 'sdp',
       ])
-      // Video encoding
-      .videoCodec('copy') // Copy H264 stream without re-encoding
-      // Audio encoding
+      // Video encoding - transcode VP8 to H.264 for RTMP
+      .videoCodec('libx264')
+      .outputOptions([
+        '-preset', 'veryfast',  // Fast encoding
+        '-tune', 'zerolatency', // Low latency for live streaming
+        '-b:v', '4500k',        // 4.5 Mbps video bitrate for 4K
+        '-maxrate', '4500k',
+        '-bufsize', '9000k',
+        '-pix_fmt', 'yuv420p',  // Compatibility
+        '-g', '60',             // Keyframe every 2 seconds at 30fps
+      ])
+      // Audio encoding - transcode Opus to AAC for RTMP
       .audioCodec('aac')
       .outputOptions([
         '-b:a', '160k',
@@ -386,6 +429,25 @@ export async function stopCompositorPipeline(broadcastId: string): Promise<void>
       logger.error(`Error stopping FFmpeg for destination ${destId}:`, error);
     }
   });
+
+  // Clean up SDP files
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const videoSdpPath = path.join('/tmp', `video_${broadcastId}.sdp`);
+    const audioSdpPath = path.join('/tmp', `audio_${broadcastId}.sdp`);
+
+    if (fs.existsSync(videoSdpPath)) {
+      fs.unlinkSync(videoSdpPath);
+      logger.info('Video SDP file deleted');
+    }
+    if (fs.existsSync(audioSdpPath)) {
+      fs.unlinkSync(audioSdpPath);
+      logger.info('Audio SDP file deleted');
+    }
+  } catch (error) {
+    logger.error('Error deleting SDP files:', error);
+  }
 
   // Close consumers
   try {
