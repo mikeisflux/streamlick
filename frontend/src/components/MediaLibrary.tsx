@@ -14,22 +14,63 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
   const [selectedType, setSelectedType] = useState<'all' | 'video' | 'audio' | 'image'>('all');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
+  const [failedMedia, setFailedMedia] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchClips();
   }, []);
 
+  // CRITICAL FIX: Auto-refresh clips every 30 seconds to handle server reloads
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      // Silently refresh clips in background
+      fetchClips();
+    }, 30000); // Refresh every 30 seconds
+
+    return () => clearInterval(intervalId);
+  }, []);
+
   const fetchClips = async () => {
     setIsLoading(true);
     try {
       const response = await api.get('/media-clips');
-      setClips(response.data.clips || []);
+      const newClips = response.data.clips || [];
+      setClips(newClips);
+      // Clear failed media state on successful refresh
+      setFailedMedia(new Set());
     } catch (error) {
       toast.error('Failed to load media clips');
       console.error('Fetch clips error:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Handle media load errors
+  const handleMediaError = (clipId: string, error: any) => {
+    console.error(`Media load error for clip ${clipId}:`, error);
+    setFailedMedia(prev => new Set(prev).add(clipId));
+  };
+
+  // Retry loading a specific clip
+  const handleRetryMedia = async (clipId: string) => {
+    try {
+      const response = await api.get(`/media-clips/${clipId}`);
+      if (response.data.clip) {
+        // Update the specific clip in state
+        setClips(clips.map(c => c.id === clipId ? response.data.clip : c));
+        // Remove from failed set
+        setFailedMedia(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(clipId);
+          return newSet;
+        });
+        toast.success('Media reloaded');
+      }
+    } catch (error) {
+      toast.error('Failed to reload media');
+      console.error('Retry media error:', error);
     }
   };
 
@@ -112,6 +153,15 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
         <h2 className="text-xl font-bold text-white">Media Clips</h2>
         <div className="flex gap-2">
           <Button
+            onClick={() => fetchClips()}
+            variant="secondary"
+            size="sm"
+            disabled={isLoading}
+            title="Reload all media clips"
+          >
+            {isLoading ? '⏳' : '🔄'} Refresh
+          </Button>
+          <Button
             onClick={() => setShowUploadModal(true)}
             variant="primary"
             size="sm"
@@ -170,20 +220,63 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
               </button>
             </div>
 
-            {/* Thumbnail/Preview */}
+            {/* Thumbnail/Preview with Error Handling */}
             {clip.type === 'image' && (
-              <img
-                src={clip.url}
-                alt={clip.name}
-                className="w-full h-32 object-cover rounded mb-3"
-              />
+              <div className="w-full h-32 relative rounded mb-3 overflow-hidden">
+                {failedMedia.has(clip.id) ? (
+                  <div className="w-full h-full bg-red-900/50 flex flex-col items-center justify-center">
+                    <span className="text-3xl mb-2">❌</span>
+                    <span className="text-xs text-red-300">Failed to load</span>
+                    <button
+                      onClick={() => handleRetryMedia(clip.id)}
+                      className="mt-2 px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : (
+                  <img
+                    src={clip.url}
+                    alt={clip.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      handleMediaError(clip.id, e);
+                      // Prevent infinite error loop
+                      e.currentTarget.style.display = 'none';
+                    }}
+                    crossOrigin="anonymous"
+                  />
+                )}
+              </div>
             )}
             {clip.type === 'video' && (
-              <video
-                src={clip.url}
-                className="w-full h-32 object-cover rounded mb-3"
-                muted
-              />
+              <div className="w-full h-32 relative rounded mb-3 overflow-hidden">
+                {failedMedia.has(clip.id) ? (
+                  <div className="w-full h-full bg-red-900/50 flex flex-col items-center justify-center">
+                    <span className="text-3xl mb-2">❌</span>
+                    <span className="text-xs text-red-300">Failed to load</span>
+                    <button
+                      onClick={() => handleRetryMedia(clip.id)}
+                      className="mt-2 px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : (
+                  <video
+                    src={clip.url}
+                    className="w-full h-full object-cover"
+                    muted
+                    preload="metadata"
+                    onError={(e) => {
+                      handleMediaError(clip.id, e);
+                      // Prevent infinite error loop
+                      e.currentTarget.style.display = 'none';
+                    }}
+                    crossOrigin="anonymous"
+                  />
+                )}
+              </div>
             )}
             {clip.type === 'audio' && (
               <div className="w-full h-32 bg-gray-600 rounded mb-3 flex items-center justify-center">
@@ -254,7 +347,7 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
             <div className="text-sm text-gray-400 mb-4">
               Supported: Video (MP4, WebM), Audio (MP3, WAV), Images (JPG, PNG, GIF)
               <br />
-              Max size: 100MB
+              Max size: Videos 2GB, Audio 50MB, Images 10MB
             </div>
             <div className="flex gap-2">
               <Button onClick={() => setShowUploadModal(false)} variant="secondary" className="flex-1">
