@@ -32,7 +32,7 @@ interface HetznerServer {
   };
 }
 
-type ServerRole = 'media-server' | 'database-server' | 'load-balancer' | 'api-server' | 'frontend-server' | 'redis-server';
+type ServerRole = 'media-server' | 'database-server' | 'load-balancer' | 'api-server' | 'frontend-server' | 'redis-server' | 'turn-server';
 
 export function AdminInfrastructure() {
   const navigate = useNavigate();
