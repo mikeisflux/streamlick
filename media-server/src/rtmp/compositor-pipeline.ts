@@ -145,37 +145,20 @@ export async function createCompositorPipeline(
     const ffmpegAudioRtcpPort = 40203;  // Audio RTCP
     const ffmpegIp = '127.0.0.1';
 
-    // Connect both plain transports to their respective FFmpeg ports
-    await videoTransport.connect({
-      ip: ffmpegIp,
-      port: ffmpegVideoPort,
-      rtcpPort: ffmpegVideoRtcpPort,
-    });
-    logger.info(`Video transport connected - MediaSoup will send RTP to ${ffmpegIp}:${ffmpegVideoPort}, RTCP to ${ffmpegIp}:${ffmpegVideoRtcpPort}`);
+    // DO NOT CONNECT TRANSPORTS YET - we need FFmpeg to be listening first!
+    // Connecting will cause MediaSoup to start sending immediately,
+    // and FFmpeg will miss the initial packets with SPS/PPS headers
+    logger.info(`Transports ready but NOT connected yet - will connect after FFmpeg starts`);
+    logger.info(`Video will go to ${ffmpegIp}:${ffmpegVideoPort}, Audio to ${ffmpegIp}:${ffmpegAudioPort}`);
 
-    await audioTransport.connect({
-      ip: ffmpegIp,
-      port: ffmpegAudioPort,
-      rtcpPort: ffmpegAudioRtcpPort,
-    });
-    logger.info(`Audio transport connected - MediaSoup will send RTP to ${ffmpegIp}:${ffmpegAudioPort}, RTCP to ${ffmpegIp}:${ffmpegAudioRtcpPort}`);
-
-    // Request keyframes from the video producer to ensure FFmpeg gets SPS/PPS immediately
-    // This is critical for H.264 streams as FFmpeg needs these to decode the video
-    // Request multiple times with longer waits to ensure the browser responds
+    // Request a keyframe from the producer before we start FFmpeg
+    // This ensures the browser generates a keyframe with SPS/PPS headers
     try {
-      logger.info('Requesting keyframes from video producer (5 attempts over 10 seconds)...');
-
-      // Request keyframes 5 times over 10 seconds
-      for (let i = 0; i < 5; i++) {
-        await videoConsumer.requestKeyFrame();
-        logger.info(`Keyframe request ${i + 1}/5 sent, waiting 2 seconds...`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-
-      logger.info('Keyframe requests completed, waited 10 seconds for keyframes to arrive');
+      logger.info('Requesting initial keyframe from video producer...');
+      await videoConsumer.requestKeyFrame();
+      logger.info('Initial keyframe requested');
     } catch (error) {
-      logger.warn('Could not request keyframe:', error);
+      logger.warn('Could not request initial keyframe:', error);
     }
 
     // Create unified SDP file with separate ports for video and audio
@@ -480,10 +463,40 @@ a=recvonly`;
         }
       });
 
-    // Start FFmpeg process
+    // Start FFmpeg process - it will start listening on the RTP ports
     command.run();
     ffmpegProcesses.set(broadcastId, command); // Store single process by broadcast ID
-    logger.info(`✅ FFmpeg multi-stream process started successfully for ${destinations.length} destination(s)`);
+    logger.info(`✅ FFmpeg process started and listening for RTP on ports ${ffmpegVideoPort} and ${ffmpegAudioPort}`);
+
+    // CRITICAL: Wait for FFmpeg to fully initialize and start listening
+    // If we connect too early, MediaSoup will send packets before FFmpeg is ready
+    logger.info(`Waiting 2 seconds for FFmpeg to initialize...`);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // NOW connect the transports - this will trigger MediaSoup to start sending RTP
+    await videoTransport.connect({
+      ip: ffmpegIp,
+      port: ffmpegVideoPort,
+      rtcpPort: ffmpegVideoRtcpPort,
+    });
+    logger.info(`✅ Video transport connected - MediaSoup sending RTP to ${ffmpegIp}:${ffmpegVideoPort}`);
+
+    await audioTransport.connect({
+      ip: ffmpegIp,
+      port: ffmpegAudioPort,
+      rtcpPort: ffmpegAudioRtcpPort,
+    });
+    logger.info(`✅ Audio transport connected - MediaSoup sending RTP to ${ffmpegIp}:${ffmpegAudioPort}`);
+
+    // Request one more keyframe now that FFmpeg is definitely listening
+    try {
+      await videoConsumer.requestKeyFrame();
+      logger.info(`🔑 Final keyframe requested after FFmpeg connection`);
+    } catch (error) {
+      logger.warn('Could not request final keyframe:', error);
+    }
+
+    logger.info(`✅ Pipeline fully connected and streaming to ${destinations.length} destination(s)`);
 
     // Store pipeline
     activePipelines.set(broadcastId, {
