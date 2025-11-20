@@ -236,8 +236,7 @@ a=recvonly`;
         // Global options
         .addOptions([
           '-loglevel', 'info',            // Info level (less noisy than debug)
-          '-fflags', '+genpts+discardcorrupt+igndts', // Generate timestamps, discard corrupted packets, ignore DTS
-          '-use_wallclock_as_timestamps', '1', // Use system clock for timestamps (helps with RTP jitter)
+          '-fflags', '+genpts+discardcorrupt', // Generate timestamps if missing, discard corrupted packets
         ])
         // UNIFIED INPUT: ONE SDP file with both video and audio streams
         .input(sdpPath)
@@ -321,8 +320,7 @@ a=recvonly`;
         // Global options
         .addOptions([
           '-loglevel', 'info',            // Info level (less noisy than debug)
-          '-fflags', '+genpts+discardcorrupt+igndts', // Generate timestamps, discard corrupted packets, ignore DTS
-          '-use_wallclock_as_timestamps', '1', // Use system clock for timestamps (helps with RTP jitter)
+          '-fflags', '+genpts+discardcorrupt', // Generate timestamps if missing, discard corrupted packets
         ])
         // UNIFIED INPUT: ONE SDP file with both video and audio streams
         .input(sdpPath)
