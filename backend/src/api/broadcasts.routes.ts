@@ -12,6 +12,7 @@ import {
   createYouTubeLiveBroadcast,
   endYouTubeLiveBroadcast,
   getValidYouTubeToken,
+  getYouTubeBroadcastStatus,
   monitorAndTransitionYouTubeBroadcast,
   transitionYouTubeBroadcastToLive,
 } from '../services/youtube.service';
@@ -553,6 +554,55 @@ router.post('/:id/transition-youtube-to-live', authenticate, async (req: AuthReq
 
         // Get valid access token (auto-refreshes if needed)
         const accessToken = await getValidYouTubeToken(destination.id);
+
+        // CRITICAL: Check broadcast state before transitioning
+        // YouTube requires broadcast to be in 'testing' state before going live
+        logger.info(`[YouTube Transition] Checking broadcast state before transition...`);
+        const status = await getYouTubeBroadcastStatus(liveVideoId, accessToken);
+        logger.info(`[YouTube Transition] Current state: lifecycle=${status.lifeCycleStatus}, stream=${status.streamStatus || 'unknown'}`);
+
+        // If still in 'ready' state, wait for YouTube to detect stream and transition to 'testing'
+        if (status.lifeCycleStatus === 'ready') {
+          logger.info(`[YouTube Transition] Broadcast is in 'ready' state - waiting for YouTube to detect stream...`);
+
+          // Poll for up to 20 seconds (10 attempts x 2 seconds)
+          let becameTesting = false;
+          for (let attempt = 1; attempt <= 10; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+
+            const updatedStatus = await getYouTubeBroadcastStatus(liveVideoId, accessToken);
+            logger.info(`[YouTube Transition] Poll ${attempt}/10: lifecycle=${updatedStatus.lifeCycleStatus}, stream=${updatedStatus.streamStatus || 'unknown'}`);
+
+            if (updatedStatus.lifeCycleStatus === 'testing' || updatedStatus.lifeCycleStatus === 'liveStarting') {
+              logger.info(`[YouTube Transition] ✅ Broadcast transitioned to '${updatedStatus.lifeCycleStatus}' state`);
+              becameTesting = true;
+              break;
+            }
+          }
+
+          if (!becameTesting) {
+            throw new Error('Broadcast did not transition to testing state - YouTube may not have detected the stream yet. Please wait longer and try again.');
+          }
+        } else if (status.lifeCycleStatus === 'testing' || status.lifeCycleStatus === 'liveStarting') {
+          logger.info(`[YouTube Transition] ✅ Broadcast is in '${status.lifeCycleStatus}' state - ready to go live`);
+        } else if (status.lifeCycleStatus === 'live') {
+          logger.info(`[YouTube Transition] ℹ️  Broadcast is already LIVE - no transition needed`);
+
+          // Update status in database
+          await prisma.broadcastDestination.update({
+            where: { id: broadcastDest.id },
+            data: { status: 'live' },
+          });
+
+          results.push({
+            destinationId: destination.id,
+            liveVideoId,
+            status: 'success',
+          });
+          continue; // Skip transition, already live
+        } else {
+          throw new Error(`Broadcast is in unexpected state: ${status.lifeCycleStatus}`);
+        }
 
         // Transition to live
         await transitionYouTubeBroadcastToLive(liveVideoId, accessToken);
