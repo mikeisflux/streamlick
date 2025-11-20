@@ -140,10 +140,36 @@ export function useBroadcast({
       });
     }
 
-    if (deduplicatedDestinations.length === 0) {
-      toast.error('Please select at least one destination');
+    // CRITICAL: Filter out any destination IDs that don't correspond to actually connected destinations
+    // This prevents sending unchecked or stale destination IDs from localStorage
+    const connectedDestinationIds = destinations
+      .filter(dest => dest.connected)
+      .map(dest => dest.id);
+
+    const validDestinations = deduplicatedDestinations.filter(destId =>
+      connectedDestinationIds.includes(destId)
+    );
+
+    if (validDestinations.length !== deduplicatedDestinations.length) {
+      console.warn('[useBroadcast] Filtered out invalid/disconnected destination IDs:', {
+        selected: deduplicatedDestinations,
+        connected: connectedDestinationIds,
+        valid: validDestinations,
+        removed: deduplicatedDestinations.filter(id => !connectedDestinationIds.includes(id)),
+      });
+    }
+
+    if (validDestinations.length === 0) {
+      toast.error('Please select at least one connected destination');
       return false;
     }
+
+    console.log('[useBroadcast] Final validated destinations:', {
+      selected: selectedDestinations.length,
+      deduplicated: deduplicatedDestinations.length,
+      valid: validDestinations.length,
+      validIds: validDestinations,
+    });
 
     try {
       // Initialize WebRTC if not already done
@@ -197,9 +223,9 @@ export function useBroadcast({
         compositeAudioProducerId = await webrtcService.produceMedia(compositeAudioTrack);
       }
 
-      // Prepare destination settings for API
+      // Prepare destination settings for API (using only valid, connected destinations)
       const apiDestinationSettings: Record<string, { privacyStatus?: string; scheduledStartTime?: string; title?: string; description?: string }> = {};
-      deduplicatedDestinations.forEach((destId) => {
+      validDestinations.forEach((destId) => {
         const destTitle = destinationSettings.title[destId];
         const destDescription = destinationSettings.description[destId];
 
@@ -215,15 +241,15 @@ export function useBroadcast({
         };
       });
 
-      console.log('[useBroadcast] Starting broadcast with:', {
-        selectedDestinations: deduplicatedDestinations,
-        destinationCount: deduplicatedDestinations.length,
+      console.log('[useBroadcast] Starting broadcast with validated destinations:', {
+        validDestinations,
+        destinationCount: validDestinations.length,
         apiDestinationSettings
       });
 
-      // Start broadcast with destination settings (using deduplicated array)
+      // Start broadcast with destination settings (using only valid, connected destinations)
       // This triggers the 30-second countdown on the backend and creates YouTube/Facebook broadcasts
-      await broadcastService.start(broadcastId, deduplicatedDestinations, apiDestinationSettings);
+      await broadcastService.start(broadcastId, validDestinations, apiDestinationSettings);
 
       // CRITICAL: Set isLive=true NOW so countdown is visible!
       console.log('[useBroadcast] Setting isLive=true to show countdown and CompositorPreview...');

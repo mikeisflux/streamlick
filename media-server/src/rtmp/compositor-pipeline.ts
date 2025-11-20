@@ -418,18 +418,19 @@ a=recvonly`;
         logger.info(`FFmpeg multi-stream process ended for ${destinations.length} destination(s)`);
       })
       .on('stderr', (stderrLine: string) => {
-        // Filter out repetitive debug noise
+        // Filter out repetitive debug noise that provides no diagnostic value
+        // These messages can appear thousands of times per second and overwhelm logs
         if (
-          stderrLine.includes('non-existing PPS') ||
-          stderrLine.includes('RTP: dropping old packet') ||
-          stderrLine.includes('nal_unit_type:') ||
-          stderrLine.includes('decode_slice_header error') ||
-          stderrLine.includes('no frame!') ||
-          stderrLine.includes('Last message repeated') ||
-          stderrLine.includes('sq: send') ||
-          stderrLine.includes('sq: receive')
+          stderrLine.includes('non-existing PPS') ||           // Repetitive decoder errors (handled by -err_detect ignore_err)
+          stderrLine.includes('RTP: dropping old packet') ||   // Normal RTP jitter handling
+          stderrLine.includes('nal_unit_type:') ||             // Low-level NAL unit debug spam
+          stderrLine.includes('decode_slice_header error') ||  // Repetitive decoding errors
+          stderrLine.includes('no frame!') ||                  // Repetitive frame drops
+          stderrLine.includes('Last message repeated') ||      // Meta noise
+          stderrLine.includes('sq: send') ||                   // Scheduler queue operations (per-packet spam)
+          stderrLine.includes('sq: receive')                   // Scheduler queue operations (per-packet spam)
         ) {
-          return; // Skip these noisy messages
+          return; // Skip packet-level noise
         }
 
         // CRITICAL: Highlight when video stream is detected (or missing!)
@@ -439,10 +440,20 @@ a=recvonly`;
           logger.info(`[FFmpeg] ✅ AUDIO STREAM DETECTED: ${stderrLine}`);
         } else if (stderrLine.includes('Input #0') && stderrLine.includes('sdp')) {
           logger.info(`[FFmpeg] 📥 SDP INPUT OPENED: ${stderrLine}`);
+        } else if (stderrLine.includes('Output #0')) {
+          logger.info(`[FFmpeg] 📤 OUTPUT CONFIGURED: ${stderrLine}`);
         } else if (stderrLine.includes('Opening') && stderrLine.includes('rtmp://')) {
           logger.info(`[FFmpeg] 🔌 CONNECTING TO RTMP: ${stderrLine}`);
+        } else if (stderrLine.includes('Server version') || stderrLine.includes('Bandwidth')) {
+          logger.info(`[FFmpeg] 🤝 RTMP HANDSHAKE: ${stderrLine}`);
         } else if (stderrLine.includes('Metadata') || stderrLine.includes('onMetaData')) {
           logger.info(`[FFmpeg] 📤 RTMP METADATA SENT: ${stderrLine}`);
+        } else if (stderrLine.includes('Press [q] to stop')) {
+          logger.info(`[FFmpeg] ▶️  ENCODING STARTED: ${stderrLine}`);
+        } else if (stderrLine.includes('encoder') || stderrLine.includes('Encoder')) {
+          logger.info(`[FFmpeg] ⚙️  ENCODER: ${stderrLine}`);
+        } else if (stderrLine.includes('muxer') || stderrLine.includes('Muxer')) {
+          logger.info(`[FFmpeg] ⚙️  MUXER: ${stderrLine}`);
         } else if (stderrLine.includes('error') || stderrLine.includes('Error') ||
             stderrLine.includes('failed') || stderrLine.includes('Failed') ||
             stderrLine.includes('I/O error') || stderrLine.includes('Connection reset') ||
@@ -456,15 +467,15 @@ a=recvonly`;
         } else if (stderrLine.includes('bitrate=') || stderrLine.includes('fps=') ||
                    stderrLine.includes('frame=') || stderrLine.includes('time=') ||
                    stderrLine.includes('speed=')) {
-          // Progress info logged at info level (always visible)
-          logger.info(`[FFmpeg] ${stderrLine}`);
+          // Progress info logged at info level (shows encoding is working)
+          logger.info(`[FFmpeg] 📊 ${stderrLine}`);
         } else if (stderrLine.includes('RTP:') || stderrLine.includes('Input #') ||
-                   stderrLine.includes('Output #') || stderrLine.includes('Stream #') ||
-                   stderrLine.includes('codec') || stderrLine.includes('Codec')) {
+                   stderrLine.includes('Stream #') || stderrLine.includes('codec') ||
+                   stderrLine.includes('Codec') || stderrLine.includes('Duration')) {
           // Important stream/codec info logged at info level (always visible)
           logger.info(`[FFmpeg] ${stderrLine}`);
-        } else {
-          // Everything else logged at info level
+        } else if (stderrLine.trim().length > 0) {
+          // Everything else logged at info level (skip empty lines)
           logger.info(`[FFmpeg] ${stderrLine}`);
         }
       });
