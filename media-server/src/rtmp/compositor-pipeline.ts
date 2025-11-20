@@ -286,7 +286,7 @@ a=recvonly`;
 
       command
         .outputOptions([
-          '-b:a', '160k',
+          '-b:a', '192k',              // YouTube recommends 192k for stereo
           '-ar', '48000',
           '-ac', '2',
         ])
@@ -361,7 +361,7 @@ a=recvonly`;
 
       command
         .outputOptions([
-          '-b:a', '160k',
+          '-b:a', '192k',              // YouTube recommends 192k for stereo
           '-ar', '48000',
           '-ac', '2',
         ])
