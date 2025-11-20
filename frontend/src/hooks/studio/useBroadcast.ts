@@ -233,12 +233,31 @@ export function useBroadcast({
       // NEW FLOW: Fetch destinations → Start RTMP → 30s countdown → Transition YouTube → Intro video
 
       // Step 1: Wait for YouTube/Facebook broadcasts to be created (happens async on backend)
+      // Then poll until destinations are ready (with timeout)
       console.log('[useBroadcast] Waiting for broadcast destinations to be created...');
-      await new Promise(resolve => setTimeout(resolve, 3000)); // 3 seconds to create broadcasts
 
-      // Step 2: Fetch broadcast destinations with decrypted RTMP URLs and stream keys
-      const broadcastDestinationsResponse = await api.get(`/broadcasts/${broadcastId}/destinations`);
-      const broadcastDestinations = broadcastDestinationsResponse.data;
+      let broadcastDestinations: any[] = [];
+      let attempts = 0;
+      const maxAttempts = 10; // 10 attempts x 1 second = 10 seconds max wait
+
+      while (attempts < maxAttempts && broadcastDestinations.length === 0) {
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second between attempts
+        attempts++;
+
+        console.log(`[useBroadcast] Fetching destinations (attempt ${attempts}/${maxAttempts})...`);
+        const response = await api.get(`/broadcasts/${broadcastId}/destinations`);
+        broadcastDestinations = response.data;
+
+        if (broadcastDestinations.length > 0) {
+          console.log(`[useBroadcast] ✅ Got ${broadcastDestinations.length} destination(s) after ${attempts} attempt(s)`);
+          break;
+        }
+      }
+
+      if (broadcastDestinations.length === 0) {
+        throw new Error('No broadcast destinations were created. Please try again.');
+      }
+
       console.log('[useBroadcast] Fetched broadcast destinations:', broadcastDestinations);
 
       // Step 3: Start RTMP streaming IMMEDIATELY (before countdown)
