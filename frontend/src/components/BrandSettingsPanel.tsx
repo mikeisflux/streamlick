@@ -6,6 +6,7 @@ import {
   InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
+import { SafeMediaPreview } from './SafeMediaPreview';
 
 interface BrandSettings {
   logo: string | null;
@@ -180,10 +181,12 @@ export function BrandSettingsPanel() {
           ) : (
             <div className="relative">
               <div className="w-full h-32 border-2 border-gray-300 rounded-lg bg-gray-50 flex items-center justify-center overflow-hidden">
-                <img
+                <SafeMediaPreview
                   src={settings.logo}
                   alt="Logo"
+                  type="image"
                   className="max-h-full max-w-full object-contain"
+                  fallbackClassName="w-full h-full"
                 />
               </div>
               <button
@@ -382,10 +385,12 @@ export function BrandSettingsPanel() {
             ) : (
               <div className="relative">
                 <div className="w-full h-32 border-2 border-gray-300 rounded-lg overflow-hidden">
-                  <img
+                  <SafeMediaPreview
                     src={settings.background}
                     alt="Background"
+                    type="image"
                     className="w-full h-full object-cover"
+                    fallbackClassName="w-full h-full"
                   />
                 </div>
                 <button
@@ -438,9 +443,10 @@ export function BrandSettingsPanel() {
           }}
         >
           {settings.logo && (
-            <img
+            <SafeMediaPreview
               src={settings.logo}
               alt="Logo preview"
+              type="image"
               className={`absolute ${
                 settings.logoPosition.includes('top') ? 'top-4' : 'bottom-4'
               } ${
@@ -450,6 +456,7 @@ export function BrandSettingsPanel() {
                 width: `${getLogoSize()}px`,
                 opacity: settings.logoOpacity / 100,
               }}
+              showRetryButton={false}
             />
           )}
         </div>

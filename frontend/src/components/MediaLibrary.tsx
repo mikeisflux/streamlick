@@ -3,6 +3,7 @@ import { Button } from './Button';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { clipPlayerService, MediaClip } from '../services/clip-player.service';
+import { SafeMediaPreview } from './SafeMediaPreview';
 
 interface MediaLibraryProps {
   onTriggerClip?: (clip: MediaClip) => void;
@@ -222,61 +223,28 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
 
             {/* Thumbnail/Preview with Error Handling */}
             {clip.type === 'image' && (
-              <div className="w-full h-32 relative rounded mb-3 overflow-hidden">
-                {failedMedia.has(clip.id) ? (
-                  <div className="w-full h-full bg-red-900/50 flex flex-col items-center justify-center">
-                    <span className="text-3xl mb-2">❌</span>
-                    <span className="text-xs text-red-300">Failed to load</span>
-                    <button
-                      onClick={() => handleRetryMedia(clip.id)}
-                      className="mt-2 px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
-                    >
-                      Retry
-                    </button>
-                  </div>
-                ) : (
-                  <img
-                    src={clip.url}
-                    alt={clip.name}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      handleMediaError(clip.id, e);
-                      // Prevent infinite error loop
-                      e.currentTarget.style.display = 'none';
-                    }}
-                    crossOrigin="anonymous"
-                  />
-                )}
-              </div>
+              <SafeMediaPreview
+                src={clip.url}
+                alt={clip.name}
+                type="image"
+                className="w-full h-32 object-cover rounded mb-3"
+                fallbackClassName="w-full h-32 rounded mb-3"
+                onError={(e) => handleMediaError(clip.id, e)}
+                onRetry={() => handleRetryMedia(clip.id)}
+              />
             )}
             {clip.type === 'video' && (
-              <div className="w-full h-32 relative rounded mb-3 overflow-hidden">
-                {failedMedia.has(clip.id) ? (
-                  <div className="w-full h-full bg-red-900/50 flex flex-col items-center justify-center">
-                    <span className="text-3xl mb-2">❌</span>
-                    <span className="text-xs text-red-300">Failed to load</span>
-                    <button
-                      onClick={() => handleRetryMedia(clip.id)}
-                      className="mt-2 px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
-                    >
-                      Retry
-                    </button>
-                  </div>
-                ) : (
-                  <video
-                    src={clip.url}
-                    className="w-full h-full object-cover"
-                    muted
-                    preload="metadata"
-                    onError={(e) => {
-                      handleMediaError(clip.id, e);
-                      // Prevent infinite error loop
-                      e.currentTarget.style.display = 'none';
-                    }}
-                    crossOrigin="anonymous"
-                  />
-                )}
-              </div>
+              <SafeMediaPreview
+                src={clip.url}
+                alt={clip.name}
+                type="video"
+                className="w-full h-32 object-cover rounded mb-3"
+                fallbackClassName="w-full h-32 rounded mb-3"
+                muted
+                preload="metadata"
+                onError={(e) => handleMediaError(clip.id, e)}
+                onRetry={() => handleRetryMedia(clip.id)}
+              />
             )}
             {clip.type === 'audio' && (
               <div className="w-full h-32 bg-gray-600 rounded mb-3 flex items-center justify-center">
