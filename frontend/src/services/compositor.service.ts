@@ -381,7 +381,7 @@ class CompositorService {
     return new Promise((resolve, reject) => {
       const videoElement = document.createElement('video');
       videoElement.src = videoUrl;
-      videoElement.muted = false; // Enable audio for intro video
+      videoElement.muted = false; // Keep unmuted so audio can be captured by Web Audio API
       videoElement.autoplay = false;
       videoElement.preload = 'auto'; // FIX FLICKERING: Preload entire video for smooth playback
       videoElement.crossOrigin = 'anonymous'; // Allow CORS for local files
@@ -399,6 +399,17 @@ class CompositorService {
           return;
         }
 
+        // CRITICAL FIX: Add intro video audio to the mixer BEFORE playing
+        // This ensures the audio is captured and included in the output stream
+        try {
+          logger.info('Adding intro video audio to mixer...');
+          audioMixerService.addMediaElement('intro-video', videoElement);
+          logger.info('Intro video audio added to mixer successfully');
+        } catch (error) {
+          logger.error('Failed to add intro video audio to mixer:', error);
+          // Continue anyway - video will play without audio in output stream
+        }
+
         // FIX FLICKERING: Wait for video to have buffered data BEFORE setting as overlay
         // This prevents flickering caused by drawing frames before they're ready
         const setOverlayAndPlay = () => {
@@ -411,6 +422,8 @@ class CompositorService {
           videoElement.play().catch((error) => {
             logger.error('Failed to play intro video:', error);
             this.clearMediaClipOverlay();
+            // Clean up audio on error
+            audioMixerService.removeStream('intro-video');
             reject(error);
           });
         };
@@ -424,10 +437,11 @@ class CompositorService {
         }
       });
 
-      // Clear overlay when video ends
+      // Clear overlay and remove audio when video ends
       videoElement.addEventListener('ended', () => {
-        logger.info('Intro video ended, clearing overlay');
+        logger.info('Intro video ended, clearing overlay and removing audio from mixer');
         this.clearMediaClipOverlay();
+        audioMixerService.removeStream('intro-video');
         resolve();
       });
 
@@ -438,15 +452,17 @@ class CompositorService {
           : 'Unknown error';
         logger.error(`Intro video error: ${errorMsg}`, event);
         this.clearMediaClipOverlay();
+        audioMixerService.removeStream('intro-video');
         reject(new Error(`Video error: ${errorMsg}`));
       });
 
       // If duration is specified, stop video after that duration
       if (duration) {
         setTimeout(() => {
-          logger.info(`Intro video duration limit reached (${duration}s), clearing overlay`);
+          logger.info(`Intro video duration limit reached (${duration}s), clearing overlay and removing audio`);
           videoElement.pause();
           this.clearMediaClipOverlay();
+          audioMixerService.removeStream('intro-video');
           resolve();
         }, duration * 1000);
       }
