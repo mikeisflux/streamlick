@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { User } from '../types';
 import { authService } from '../services/auth.service';
+import { fetchCsrfToken } from '../services/api';
 
 interface AuthState {
   user: User | null;
@@ -38,6 +39,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true });
     try {
       const user = await authService.getMe();
+      // Fetch CSRF token after validating authentication
+      // This ensures CSRF token is available for state-changing requests
+      await fetchCsrfToken();
       set({ user, isAuthenticated: true, isLoading: false });
     } catch (error) {
       set({ user: null, isAuthenticated: false, isLoading: false });
