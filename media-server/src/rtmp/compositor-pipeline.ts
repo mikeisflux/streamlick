@@ -241,9 +241,9 @@ a=recvonly`;
           '-rtbufsize', '50M',            // 50MB RTP buffer (moderate buffering)
           '-analyzeduration', '2000000',  // 2s analysis duration
           '-probesize', '5000000',        // 5MB probe size
-          '-reorder_queue_size', '500',   // 500 packet reorder queue
+          '-reorder_queue_size', '1000',  // 1000 packet reorder queue (increased for stability)
           '-thread_queue_size', '1024',   // Standard thread queue
-          '-max_delay', '2000000',        // 2 second max delay
+          '-max_delay', '5000000',        // 5 second max delay (increased for stability)
           '-err_detect', 'ignore_err',    // CRITICAL: Ignore decoder errors (missing SPS/PPS) and wait for keyframe
           '-ec', '3',                     // Error concealment: guess missing data from surrounding frames
         ])
@@ -316,9 +316,9 @@ a=recvonly`;
           '-rtbufsize', '50M',            // 50MB RTP buffer (moderate buffering)
           '-analyzeduration', '2000000',  // 2s analysis duration
           '-probesize', '5000000',        // 5MB probe size
-          '-reorder_queue_size', '500',   // 500 packet reorder queue
+          '-reorder_queue_size', '1000',  // 1000 packet reorder queue (increased for stability)
           '-thread_queue_size', '1024',   // Standard thread queue
-          '-max_delay', '2000000',        // 2 second max delay
+          '-max_delay', '5000000',        // 5 second max delay (increased for stability)
           '-err_detect', 'ignore_err',    // CRITICAL: Ignore decoder errors (missing SPS/PPS) and wait for keyframe
           '-ec', '3',                     // Error concealment: guess missing data from surrounding frames
         ])

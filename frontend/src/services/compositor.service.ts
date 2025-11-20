@@ -73,14 +73,15 @@ class CompositorService {
   private backgroundImage: HTMLImageElement | null = null;
   private overlayImages: Map<string, HTMLImageElement> = new Map();
 
-  // Canvas dimensions - configurable via environment or defaults to 4K UHD (3840x2160)
-  private readonly WIDTH = parseInt(import.meta.env.VITE_CANVAS_WIDTH || '3840');
-  private readonly HEIGHT = parseInt(import.meta.env.VITE_CANVAS_HEIGHT || '2160');
+  // Canvas dimensions - configurable via environment or defaults to 1080p Full HD (1920x1080)
+  private readonly WIDTH = parseInt(import.meta.env.VITE_CANVAS_WIDTH || '1920');
+  private readonly HEIGHT = parseInt(import.meta.env.VITE_CANVAS_HEIGHT || '1080');
   private readonly FPS = parseInt(import.meta.env.VITE_CANVAS_FPS || '30');
 
   // Performance tracking
   private frameCount = 0;
   private lastFrameTime = 0;
+  private lastRenderTime = 0; // For FPS throttling
   private lastFpsReport = 0;
   private renderTimes: number[] = [];
   private droppedFrames = 0;
@@ -644,7 +645,7 @@ class CompositorService {
   }
 
   /**
-   * Main animation loop
+   * Main animation loop with FPS throttling
    */
   private animate = (): void => {
     if (!this.isCompositing) {
@@ -657,12 +658,26 @@ class CompositorService {
       return;
     }
 
-    const frameStartTime = performance.now();
+    // FPS throttling - only render if enough time has passed
+    const now = performance.now();
+    const elapsed = now - this.lastRenderTime;
+    const targetFrameTime = 1000 / this.FPS; // 33.33ms for 30fps
 
-    // Track frame timing
+    // If not enough time has passed, schedule next frame and skip rendering
+    if (this.lastRenderTime > 0 && elapsed < targetFrameTime - 1) {
+      this.animationFrameId = requestAnimationFrame(this.animate);
+      return;
+    }
+
+    // Update render time, accounting for any drift
+    this.lastRenderTime = now - (elapsed % targetFrameTime);
+
+    const frameStartTime = now;
+
+    // Track frame timing for performance metrics
     if (this.lastFrameTime > 0) {
       const frameDelta = frameStartTime - this.lastFrameTime;
-      const expectedFrameTime = 1000 / this.FPS;
+      const expectedFrameTime = targetFrameTime;
 
       // Detect dropped frames (frame took longer than expected + 50% tolerance)
       if (frameDelta > expectedFrameTime * 1.5) {
