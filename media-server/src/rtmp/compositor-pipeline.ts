@@ -516,21 +516,24 @@ a=recvonly`;
         const aConsumerStats = await audioConsumer.getStats();
 
         // Extract packet counts from stats
+        // Producers receive packets FROM browser, so they have 'inbound-rtp' stats
         const videoProducerPackets = Array.from(vProducerStats.values())
-          .filter((s: any) => s.type === 'outbound-rtp')
+          .filter((s: any) => s.type === 'inbound-rtp')
           .map((s: any) => s.packetCount)[0] || 0;
 
         const audioProducerPackets = Array.from(aProducerStats.values())
-          .filter((s: any) => s.type === 'outbound-rtp')
-          .map((s: any) => s.packetCount)[0] || 0;
-
-        const videoConsumerPackets = Array.from(vConsumerStats.values())
           .filter((s: any) => s.type === 'inbound-rtp')
           .map((s: any) => s.packetCount)[0] || 0;
+
+        // Consumers show what they RECEIVED from producer in inbound-rtp stats
+        // For PlainRtpTransport, inbound shows what came from producer
+        const videoConsumerPackets = Array.from(vConsumerStats.values())
+          .filter((s: any) => s.type === 'inbound-rtp')
+          .reduce((sum: number, s: any) => sum + (s.packetCount || 0), 0);
 
         const audioConsumerPackets = Array.from(aConsumerStats.values())
           .filter((s: any) => s.type === 'inbound-rtp')
-          .map((s: any) => s.packetCount)[0] || 0;
+          .reduce((sum: number, s: any) => sum + (s.packetCount || 0), 0);
 
         logger.info(`[Monitor] Broadcast ${broadcastId} - Video: Producer=${videoProducerPackets} pkts, Consumer=${videoConsumerPackets} pkts | Audio: Producer=${audioProducerPackets} pkts, Consumer=${audioConsumerPackets} pkts`);
 
