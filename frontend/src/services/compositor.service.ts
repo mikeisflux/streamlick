@@ -556,9 +556,9 @@ class CompositorService {
     logger.info('Starting compositor');
     this.isCompositing = true;
 
-    // Capture stream from canvas
-    const frameRate = this.FPS;
-    this.outputStream = this.canvas!.captureStream(frameRate);
+    // Capture stream from canvas with MANUAL frame capture (0 fps = manual mode)
+    // This allows us to control exactly when frames are captured via requestFrame()
+    this.outputStream = this.canvas!.captureStream(0);
 
     // Start animation loop
     this.animate();
@@ -724,6 +724,15 @@ class CompositorService {
       }
     } catch (error) {
       logger.error('Compositor animation error:', error);
+    }
+
+    // CRITICAL: Request frame capture after rendering (manual frame capture mode)
+    // This ensures we only capture frames we actually rendered, preventing duplication
+    if (this.outputStream) {
+      const videoTrack = this.outputStream.getVideoTracks()[0];
+      if (videoTrack && typeof videoTrack.requestFrame === 'function') {
+        videoTrack.requestFrame();
+      }
     }
 
     // Track render time
