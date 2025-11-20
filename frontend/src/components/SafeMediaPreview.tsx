@@ -22,6 +22,7 @@ interface SafeMediaPreviewProps {
   type: 'image' | 'video';
   className?: string;
   fallbackClassName?: string;
+  style?: React.CSSProperties;
   showRetryButton?: boolean;
   onError?: (error: any) => void;
   onRetry?: () => void;
@@ -37,6 +38,7 @@ export function SafeMediaPreview({
   type,
   className = '',
   fallbackClassName = '',
+  style,
   showRetryButton = true,
   onError,
   onRetry,
@@ -110,6 +112,7 @@ export function SafeMediaPreview({
         src={src}
         alt={alt}
         className={className}
+        style={style}
         onError={handleError}
         crossOrigin="anonymous"
         loading="lazy"
@@ -124,6 +127,7 @@ export function SafeMediaPreview({
         key={retryKey}
         src={src}
         className={className}
+        style={style}
         muted={muted}
         autoPlay={autoPlay}
         preload={preload}

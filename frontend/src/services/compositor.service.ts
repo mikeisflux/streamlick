@@ -739,10 +739,10 @@ class CompositorService {
     this.frameCount++;
 
     // Report performance metrics every 5 seconds
-    const now = Date.now();
-    if (now - this.lastFpsReport >= 5000) {
+    const metricsTime = Date.now();
+    if (metricsTime - this.lastFpsReport >= 5000) {
       this.reportPerformanceMetrics();
-      this.lastFpsReport = now;
+      this.lastFpsReport = metricsTime;
     }
 
     // Continue loop
