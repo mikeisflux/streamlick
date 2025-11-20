@@ -61,10 +61,20 @@ export function useMedia() {
         video: {
           cursor: 'always',
         } as MediaTrackConstraints,
-        audio: true,
+        audio: {
+          // Disable processing for system audio to preserve original quality
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        },
       });
       screenStreamRef.current = stream;
       setScreenStream(stream);
+
+      // Log if system audio was included
+      const hasAudio = stream.getAudioTracks().length > 0;
+      console.log(`[useMedia] Screen share ${hasAudio ? 'includes' : 'does not include'} system audio`);
+
       return stream;
     } catch (error) {
       console.error('Error sharing screen:', error);

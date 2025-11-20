@@ -66,12 +66,19 @@ export function useScreenShare({ currentLayout, onLayoutChange }: UseScreenShare
         setIsSharingScreen(true);
         setScreenShareStream(stream);
 
+        // CRITICAL FIX: Check if screen share has audio tracks (system audio)
+        // If present, enable audio so it gets captured in the output stream
+        const hasAudio = stream.getAudioTracks().length > 0;
+        if (hasAudio) {
+          console.log('[ScreenShare] Screen share includes system audio - will be captured in output stream');
+        }
+
         await compositorService.addParticipant({
           id: 'screen-share',
           name: 'Screen Share',
           stream,
           isLocal: true,
-          audioEnabled: false,
+          audioEnabled: hasAudio, // Enable audio if screen share has audio tracks
           videoEnabled: true,
         });
 
