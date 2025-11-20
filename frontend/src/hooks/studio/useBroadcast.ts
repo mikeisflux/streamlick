@@ -142,9 +142,8 @@ export function useBroadcast({
 
     // CRITICAL: Filter out any destination IDs that don't correspond to actually connected destinations
     // This prevents sending unchecked or stale destination IDs from localStorage
-    const connectedDestinationIds = destinations
-      .filter(dest => dest.connected)
-      .map(dest => dest.id);
+    // Note: destinations array already contains only connected destinations from the API
+    const connectedDestinationIds = destinations.map(dest => dest.id);
 
     const validDestinations = deduplicatedDestinations.filter(destId =>
       connectedDestinationIds.includes(destId)
