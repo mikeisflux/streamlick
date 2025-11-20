@@ -295,11 +295,13 @@ a=recvonly`;
 
       // Frame sync method depends on codec mode
       if (useVideoCopy) {
-        // Copy mode: pass timestamps through unchanged to avoid buffering
-        videoOutputOpts.push('-vsync', 'passthrough');
+        // Copy mode: Force constant frame rate to regenerate timestamps
+        // RTP packets from MediaSoup may have missing/broken timestamps
+        // Using CFR with explicit framerate ensures smooth, monotonic timestamps
+        videoOutputOpts.push('-r', '30', '-fps_mode', 'cfr');
       } else {
         // Transcode mode: force constant frame rate for consistent output
-        videoOutputOpts.push('-vsync', 'cfr');
+        videoOutputOpts.push('-fps_mode', 'cfr');
       }
 
       // No bitstream filter needed - libx264 generates fresh SPS/PPS automatically
@@ -378,11 +380,13 @@ a=recvonly`;
 
       // Frame sync method depends on codec mode
       if (useVideoCopy) {
-        // Copy mode: pass timestamps through unchanged to avoid buffering
-        teeOutputOpts.push('-vsync', 'passthrough');
+        // Copy mode: Force constant frame rate to regenerate timestamps
+        // RTP packets from MediaSoup may have missing/broken timestamps
+        // Using CFR with explicit framerate ensures smooth, monotonic timestamps
+        teeOutputOpts.push('-r', '30', '-fps_mode', 'cfr');
       } else {
         // Transcode mode: force constant frame rate for consistent output
-        teeOutputOpts.push('-vsync', 'cfr');
+        teeOutputOpts.push('-fps_mode', 'cfr');
       }
 
       // No bitstream filter needed - libx264 generates fresh SPS/PPS automatically
