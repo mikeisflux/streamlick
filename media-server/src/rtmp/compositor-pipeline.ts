@@ -292,8 +292,16 @@ a=recvonly`;
         '-flvflags', 'no_duration_filesize',
         '-max_muxing_queue_size', '4096',  // Large muxing queue (4096 packets) to handle transcoding latency
         '-async', '1',                     // Audio sync method (stretch/squeeze)
-        '-vsync', 'cfr',                   // Constant frame rate - important for live streaming
       ];
+
+      // Frame sync method depends on codec mode
+      if (useVideoCopy) {
+        // Copy mode: pass timestamps through unchanged to avoid buffering
+        videoOutputOpts.push('-vsync', 'passthrough');
+      } else {
+        // Transcode mode: force constant frame rate for consistent output
+        videoOutputOpts.push('-vsync', 'cfr');
+      }
 
       // No bitstream filter needed - libx264 generates fresh SPS/PPS automatically
       command.outputOptions(videoOutputOpts);
@@ -368,8 +376,16 @@ a=recvonly`;
         '-map', '0:a',    // Audio from unified input
         '-max_muxing_queue_size', '4096',  // Large muxing queue (4096 packets) to handle transcoding latency
         '-async', '1',                     // Audio sync method (stretch/squeeze)
-        '-vsync', 'cfr',                   // Constant frame rate - important for live streaming
       ];
+
+      // Frame sync method depends on codec mode
+      if (useVideoCopy) {
+        // Copy mode: pass timestamps through unchanged to avoid buffering
+        teeOutputOpts.push('-vsync', 'passthrough');
+      } else {
+        // Transcode mode: force constant frame rate for consistent output
+        teeOutputOpts.push('-vsync', 'cfr');
+      }
 
       // No bitstream filter needed - libx264 generates fresh SPS/PPS automatically
       command.outputOptions(teeOutputOpts);
