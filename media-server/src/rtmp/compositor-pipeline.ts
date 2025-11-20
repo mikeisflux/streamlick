@@ -257,17 +257,20 @@ a=recvonly`;
         .addOptions([
           '-loglevel', 'debug',           // More detailed logging than verbose
           '-report',                      // Generate detailed log file (ffmpeg-YYYYMMDD-HHMMSS.log)
-          '-fflags', '+genpts',           // Generate presentation timestamps to handle packet reordering
+          '-fflags', '+genpts+discardcorrupt', // Generate timestamps + discard corrupted packets
           '-max_delay', '5000000',        // Increase max delay tolerance to 5 seconds (helps with RTP jitter)
+          '-use_wallclock_as_timestamps', '1', // Use system clock for timestamps (helps with RTP jitter)
         ])
         // UNIFIED INPUT: ONE SDP file with both video and audio streams
         .input(sdpPath)
         .inputOptions([
           '-protocol_whitelist', 'file,rtp,udp',
           '-f', 'sdp',
+          '-rtbufsize', '100M',           // Increase RTP receive buffer to 100MB to prevent packet loss
           '-analyzeduration', '5000000',  // 5s analysis to wait for keyframe with SPS/PPS
-          '-probesize', '5000000',        // 5MB probe size to buffer enough packets
-          '-reorder_queue_size', '500',   // Reduced from 5000 to prevent OOM (still handles packet reordering)
+          '-probesize', '10000000',       // 10MB probe size to buffer enough packets (increased from 5MB)
+          '-reorder_queue_size', '5000',  // Large queue for packet reordering (handles network jitter)
+          '-thread_queue_size', '4096',   // Large thread queue to prevent blocking
         ])
         // Video encoding - copy if SPS/PPS available, transcode otherwise
         .videoCodec(videoCodecName)
@@ -277,14 +280,15 @@ a=recvonly`;
       // Add video encoding options if transcoding
       if (!useVideoCopy) {
         command.outputOptions([
-          '-preset', 'veryfast',          // Fastest encoding preset for low latency
+          '-preset', 'ultrafast',         // Ultra fast encoding for minimal latency
           '-tune', 'zerolatency',         // Optimize for streaming/low latency
           '-b:v', '5000k',                // Target bitrate 5 Mbps (match input roughly)
           '-maxrate', '6000k',            // Max bitrate 6 Mbps
-          '-bufsize', '3000k',            // Buffer size for rate control
+          '-bufsize', '12000k',           // 2x maxrate buffer (12MB) - large buffer for transcoding
           '-g', '60',                     // Keyframe interval: 60 frames (2 seconds at 30fps)
           '-profile:v', 'high',           // H.264 High Profile as recommended by YouTube
           '-level', '4.1',                // H.264 Level 4.1 (supports 1080p30)
+          '-x264-params', 'nal-hrd=cbr',  // Constant bitrate for stable streaming
         ]);
       }
 
@@ -303,7 +307,9 @@ a=recvonly`;
         '-map', '0:v',    // Video from unified input
         '-map', '0:a',    // Audio from unified input
         '-flvflags', 'no_duration_filesize',
-        '-max_muxing_queue_size', '1024',  // Limit muxing queue to prevent memory overflow
+        '-max_muxing_queue_size', '4096',  // Large muxing queue (4096 packets) to handle transcoding latency
+        '-async', '1',                     // Audio sync method (stretch/squeeze)
+        '-vsync', 'cfr',                   // Constant frame rate - important for live streaming
       ];
 
       // Only use dump_extra bitstream filter if we're copying video
@@ -330,17 +336,20 @@ a=recvonly`;
         .addOptions([
           '-loglevel', 'debug',           // More detailed logging than verbose
           '-report',                      // Generate detailed log file (ffmpeg-YYYYMMDD-HHMMSS.log)
-          '-fflags', '+genpts',           // Generate presentation timestamps to handle packet reordering
+          '-fflags', '+genpts+discardcorrupt', // Generate timestamps + discard corrupted packets
           '-max_delay', '5000000',        // Increase max delay tolerance to 5 seconds (helps with RTP jitter)
+          '-use_wallclock_as_timestamps', '1', // Use system clock for timestamps (helps with RTP jitter)
         ])
         // UNIFIED INPUT: ONE SDP file with both video and audio streams
         .input(sdpPath)
         .inputOptions([
           '-protocol_whitelist', 'file,rtp,udp',
           '-f', 'sdp',
+          '-rtbufsize', '100M',           // Increase RTP receive buffer to 100MB to prevent packet loss
           '-analyzeduration', '5000000',  // 5s analysis to wait for keyframe with SPS/PPS
-          '-probesize', '5000000',        // 5MB probe size to buffer enough packets
-          '-reorder_queue_size', '500',   // Reduced from 5000 to prevent OOM (still handles packet reordering)
+          '-probesize', '10000000',       // 10MB probe size to buffer enough packets (increased from 5MB)
+          '-reorder_queue_size', '5000',  // Large queue for packet reordering (handles network jitter)
+          '-thread_queue_size', '4096',   // Large thread queue to prevent blocking
         ])
         // Video encoding - copy if SPS/PPS available, transcode otherwise
         .videoCodec(videoCodecName)
@@ -350,14 +359,15 @@ a=recvonly`;
       // Add video encoding options if transcoding
       if (!useVideoCopy) {
         command.outputOptions([
-          '-preset', 'veryfast',          // Fastest encoding preset for low latency
+          '-preset', 'ultrafast',         // Ultra fast encoding for minimal latency
           '-tune', 'zerolatency',         // Optimize for streaming/low latency
           '-b:v', '5000k',                // Target bitrate 5 Mbps (match input roughly)
           '-maxrate', '6000k',            // Max bitrate 6 Mbps
-          '-bufsize', '3000k',            // Buffer size for rate control
+          '-bufsize', '12000k',           // 2x maxrate buffer (12MB) - large buffer for transcoding
           '-g', '60',                     // Keyframe interval: 60 frames (2 seconds at 30fps)
           '-profile:v', 'high',           // H.264 High Profile as recommended by YouTube
           '-level', '4.1',                // H.264 Level 4.1 (supports 1080p30)
+          '-x264-params', 'nal-hrd=cbr',  // Constant bitrate for stable streaming
         ]);
       }
 
@@ -375,7 +385,9 @@ a=recvonly`;
       const teeOutputOpts = [
         '-map', '0:v',    // Video from unified input
         '-map', '0:a',    // Audio from unified input
-        '-max_muxing_queue_size', '1024',  // Limit muxing queue to prevent memory overflow
+        '-max_muxing_queue_size', '4096',  // Large muxing queue (4096 packets) to handle transcoding latency
+        '-async', '1',                     // Audio sync method (stretch/squeeze)
+        '-vsync', 'cfr',                   // Constant frame rate - important for live streaming
       ];
 
       // Only use dump_extra bitstream filter if we're copying video
