@@ -79,15 +79,19 @@ class AudioMixerService {
     const gainNode = this.audioContext.createGain();
     gainNode.gain.value = 1.0; // Full volume
 
-    // Connect: source -> gain -> destination
+    // CRITICAL FIX: Connect to BOTH destinations
+    // 1. Connect to mixer destination (for stream output to YouTube/etc)
     source.connect(gainNode);
     gainNode.connect(this.destination);
+
+    // 2. Connect to local speakers (so user can hear the audio)
+    gainNode.connect(this.audioContext.destination);
 
     // Store source and gain node (using same Map, they're compatible types)
     this.sources.set(id, source as any);
     this.gainNodes.set(id, gainNode);
 
-    console.log(`Media element audio added: ${id}`);
+    console.log(`Media element audio added: ${id} (dual output: stream + local)`);
   }
 
   /**
