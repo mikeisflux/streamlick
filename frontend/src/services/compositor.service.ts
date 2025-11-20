@@ -13,6 +13,12 @@ import { audioMixerService } from './audio-mixer.service';
 import type { PerformanceMetrics } from '../types';
 import logger from '../utils/logger';
 
+// CanvasCaptureMediaStreamTrack extends MediaStreamTrack with requestFrame() method
+// This is returned by canvas.captureStream(0) for manual frame capture mode
+interface CanvasCaptureMediaStreamTrack extends MediaStreamTrack {
+  requestFrame(): void;
+}
+
 interface ParticipantStream {
   id: string;
   name: string;
@@ -730,8 +736,8 @@ class CompositorService {
     // This ensures we only capture frames we actually rendered, preventing duplication
     if (this.outputStream) {
       const videoTrack = this.outputStream.getVideoTracks()[0];
-      if (videoTrack && typeof videoTrack.requestFrame === 'function') {
-        videoTrack.requestFrame();
+      if (videoTrack && typeof (videoTrack as any).requestFrame === 'function') {
+        (videoTrack as CanvasCaptureMediaStreamTrack).requestFrame();
       }
     }
 
