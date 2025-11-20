@@ -269,20 +269,20 @@ a=recvonly`;
         // Audio encoding - transcode Opus to AAC for RTMP
         .audioCodec('aac');
 
-      // Add video encoding options if transcoding
-      if (!useVideoCopy) {
-        command.outputOptions([
-          '-preset', 'ultrafast',         // Ultra fast encoding for minimal latency
-          '-tune', 'zerolatency',         // Optimize for streaming/low latency
-          '-b:v', '5000k',                // Target bitrate 5 Mbps (match input roughly)
-          '-maxrate', '6000k',            // Max bitrate 6 Mbps
-          '-bufsize', '12000k',           // 2x maxrate buffer (12MB) - large buffer for transcoding
-          '-g', '60',                     // Keyframe interval: 60 frames (2 seconds at 30fps)
-          '-profile:v', 'high',           // H.264 High Profile as recommended by YouTube
-          '-level', '4.1',                // H.264 Level 4.1 (supports 1080p30)
-          '-x264-params', 'nal-hrd=cbr',  // Constant bitrate for stable streaming
-        ]);
-      }
+      // Always add video encoding options (we always transcode now)
+      command.outputOptions([
+        '-preset', 'ultrafast',         // Ultra fast encoding for minimal latency
+        '-tune', 'zerolatency',         // Optimize for streaming/low latency
+        '-b:v', '5000k',                // Target bitrate 5 Mbps
+        '-maxrate', '6000k',            // Max bitrate 6 Mbps
+        '-bufsize', '12000k',           // 2x maxrate buffer (12MB)
+        '-g', '60',                     // Keyframe interval: 60 frames (2s at 30fps, YouTube requires ≤4s)
+        '-keyint_min', '60',            // Minimum keyframe interval (force regular keyframes)
+        '-sc_threshold', '0',           // Disable scene change detection (prevents irregular keyframes)
+        '-profile:v', 'high',           // H.264 High Profile as recommended by YouTube
+        '-level', '4.1',                // H.264 Level 4.1 (supports 1080p30)
+        '-x264-params', 'nal-hrd=cbr:force-cfr=1',  // CBR + force constant framerate
+      ]);
 
       command
         .outputOptions([
@@ -344,20 +344,20 @@ a=recvonly`;
         // Audio encoding - transcode Opus to AAC for RTMP
         .audioCodec('aac');
 
-      // Add video encoding options if transcoding
-      if (!useVideoCopy) {
-        command.outputOptions([
-          '-preset', 'ultrafast',         // Ultra fast encoding for minimal latency
-          '-tune', 'zerolatency',         // Optimize for streaming/low latency
-          '-b:v', '5000k',                // Target bitrate 5 Mbps (match input roughly)
-          '-maxrate', '6000k',            // Max bitrate 6 Mbps
-          '-bufsize', '12000k',           // 2x maxrate buffer (12MB) - large buffer for transcoding
-          '-g', '60',                     // Keyframe interval: 60 frames (2 seconds at 30fps)
-          '-profile:v', 'high',           // H.264 High Profile as recommended by YouTube
-          '-level', '4.1',                // H.264 Level 4.1 (supports 1080p30)
-          '-x264-params', 'nal-hrd=cbr',  // Constant bitrate for stable streaming
-        ]);
-      }
+      // Always add video encoding options (we always transcode now)
+      command.outputOptions([
+        '-preset', 'ultrafast',         // Ultra fast encoding for minimal latency
+        '-tune', 'zerolatency',         // Optimize for streaming/low latency
+        '-b:v', '5000k',                // Target bitrate 5 Mbps
+        '-maxrate', '6000k',            // Max bitrate 6 Mbps
+        '-bufsize', '12000k',           // 2x maxrate buffer (12MB)
+        '-g', '60',                     // Keyframe interval: 60 frames (2s at 30fps, YouTube requires ≤4s)
+        '-keyint_min', '60',            // Minimum keyframe interval (force regular keyframes)
+        '-sc_threshold', '0',           // Disable scene change detection (prevents irregular keyframes)
+        '-profile:v', 'high',           // H.264 High Profile as recommended by YouTube
+        '-level', '4.1',                // H.264 Level 4.1 (supports 1080p30)
+        '-x264-params', 'nal-hrd=cbr:force-cfr=1',  // CBR + force constant framerate
+      ]);
 
       command
         .outputOptions([
