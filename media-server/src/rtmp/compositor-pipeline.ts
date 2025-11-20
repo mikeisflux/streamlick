@@ -162,23 +162,18 @@ export async function createCompositorPipeline(
 
     // Request keyframes from the video producer to ensure FFmpeg gets SPS/PPS immediately
     // This is critical for H.264 streams as FFmpeg needs these to decode the video
-    // Request multiple times to ensure the browser responds
+    // Request multiple times with longer waits to ensure the browser responds
     try {
-      logger.info('Requesting keyframes from video producer (3 attempts)...');
+      logger.info('Requesting keyframes from video producer (5 attempts over 10 seconds)...');
 
-      // First request
-      await videoConsumer.requestKeyFrame();
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Request keyframes 5 times over 10 seconds
+      for (let i = 0; i < 5; i++) {
+        await videoConsumer.requestKeyFrame();
+        logger.info(`Keyframe request ${i + 1}/5 sent, waiting 2 seconds...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
 
-      // Second request
-      await videoConsumer.requestKeyFrame();
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Third request
-      await videoConsumer.requestKeyFrame();
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      logger.info('Keyframe requests completed, waited 3 seconds for keyframes to arrive');
+      logger.info('Keyframe requests completed, waited 10 seconds for keyframes to arrive');
     } catch (error) {
       logger.warn('Could not request keyframe:', error);
     }
@@ -272,6 +267,8 @@ a=recvonly`;
           '-reorder_queue_size', '10000', // 10000 packet reorder queue (handles severe jitter)
           '-thread_queue_size', '8192',   // Large thread queue (8192 packets)
           '-max_delay', '10000000',       // 10 second max delay for buffering
+          '-err_detect', 'ignore_err',    // CRITICAL: Ignore decoder errors (missing SPS/PPS) and wait for keyframe
+          '-ec', '3',                     // Error concealment: guess missing data from surrounding frames
         ])
         // Video encoding - copy if SPS/PPS available, transcode otherwise
         .videoCodec(videoCodecName)
@@ -352,6 +349,8 @@ a=recvonly`;
           '-reorder_queue_size', '10000', // 10000 packet reorder queue (handles severe jitter)
           '-thread_queue_size', '8192',   // Large thread queue (8192 packets)
           '-max_delay', '10000000',       // 10 second max delay for buffering
+          '-err_detect', 'ignore_err',    // CRITICAL: Ignore decoder errors (missing SPS/PPS) and wait for keyframe
+          '-ec', '3',                     // Error concealment: guess missing data from surrounding frames
         ])
         // Video encoding - copy if SPS/PPS available, transcode otherwise
         .videoCodec(videoCodecName)
