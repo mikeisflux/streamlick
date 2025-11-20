@@ -532,7 +532,12 @@ router.post('/:id/transition-youtube-to-live', authenticate, async (req: AuthReq
       return res.json({ message: 'No YouTube destinations to transition', transitioned: [] });
     }
 
-    const results = [];
+    const results: Array<{
+      destinationId: string;
+      liveVideoId: string;
+      status: 'success' | 'error';
+      error?: string;
+    }> = [];
 
     // Transition each YouTube broadcast
     for (const broadcastDest of broadcastDestinations) {
