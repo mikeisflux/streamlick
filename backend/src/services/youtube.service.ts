@@ -278,15 +278,16 @@ export async function createYouTubeLiveBroadcast(
     const streamId = streamResponse.data.id;
     const ingestionInfo = streamResponse.data.cdn.ingestionInfo;
 
-    // BEST PRACTICE: Use RTMPS (secure RTMP over port 443) instead of plain RTMP
-    // This prevents man-in-the-middle attacks and is recommended by YouTube
-    const rtmpUrl = ingestionInfo.rtmpsIngestionAddress || ingestionInfo.ingestionAddress;
+    // Use plain RTMP (not RTMPS) for FFmpeg compatibility
+    // FFmpeg has issues with rtmps:// URLs - use standard rtmp:// on port 1935
+    // YouTube supports both rtmp:// and rtmps:// endpoints
+    const rtmpUrl = ingestionInfo.ingestionAddress; // Plain RTMP (e.g., rtmp://a.rtmp.youtube.com/live2)
     const streamKey = ingestionInfo.streamName;
 
     logger.info(`[YouTube Step 2/4] ✓ LiveStream created successfully`, {
       streamId,
       rtmpUrl,
-      usingRTMPS: rtmpUrl.startsWith('rtmps://'),
+      protocol: rtmpUrl.startsWith('rtmps://') ? 'RTMPS' : 'RTMP',
       streamKeyLength: streamKey?.length,
       resolution: streamResponse.data.cdn.resolution,
       frameRate: streamResponse.data.cdn.frameRate
