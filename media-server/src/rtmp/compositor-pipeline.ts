@@ -257,20 +257,21 @@ a=recvonly`;
         .addOptions([
           '-loglevel', 'debug',           // More detailed logging than verbose
           '-report',                      // Generate detailed log file (ffmpeg-YYYYMMDD-HHMMSS.log)
-          '-fflags', '+genpts+discardcorrupt', // Generate timestamps + discard corrupted packets
-          '-max_delay', '5000000',        // Increase max delay tolerance to 5 seconds (helps with RTP jitter)
+          '-fflags', '+genpts+discardcorrupt+igndts', // Generate timestamps, discard corrupted packets, ignore DTS
           '-use_wallclock_as_timestamps', '1', // Use system clock for timestamps (helps with RTP jitter)
+          '-max_interleave_delta', '10000000', // 10s max interleave for audio/video sync buffering
         ])
         // UNIFIED INPUT: ONE SDP file with both video and audio streams
         .input(sdpPath)
         .inputOptions([
           '-protocol_whitelist', 'file,rtp,udp',
           '-f', 'sdp',
-          '-rtbufsize', '100M',           // Increase RTP receive buffer to 100MB to prevent packet loss
-          '-analyzeduration', '5000000',  // 5s analysis to wait for keyframe with SPS/PPS
-          '-probesize', '10000000',       // 10MB probe size to buffer enough packets (increased from 5MB)
-          '-reorder_queue_size', '5000',  // Large queue for packet reordering (handles network jitter)
-          '-thread_queue_size', '4096',   // Large thread queue to prevent blocking
+          '-rtbufsize', '200M',           // 200MB RTP buffer for ~10 seconds at 5 Mbps (5000kb/s * 10s / 8 = 6.25MB, with overhead)
+          '-analyzeduration', '10000000', // 10s analysis for deep buffering
+          '-probesize', '20000000',       // 20MB probe size (2x analyzeduration worth of data)
+          '-reorder_queue_size', '10000', // 10000 packet reorder queue (handles severe jitter)
+          '-thread_queue_size', '8192',   // Large thread queue (8192 packets)
+          '-max_delay', '10000000',       // 10 second max delay for buffering
         ])
         // Video encoding - copy if SPS/PPS available, transcode otherwise
         .videoCodec(videoCodecName)
@@ -336,20 +337,21 @@ a=recvonly`;
         .addOptions([
           '-loglevel', 'debug',           // More detailed logging than verbose
           '-report',                      // Generate detailed log file (ffmpeg-YYYYMMDD-HHMMSS.log)
-          '-fflags', '+genpts+discardcorrupt', // Generate timestamps + discard corrupted packets
-          '-max_delay', '5000000',        // Increase max delay tolerance to 5 seconds (helps with RTP jitter)
+          '-fflags', '+genpts+discardcorrupt+igndts', // Generate timestamps, discard corrupted packets, ignore DTS
           '-use_wallclock_as_timestamps', '1', // Use system clock for timestamps (helps with RTP jitter)
+          '-max_interleave_delta', '10000000', // 10s max interleave for audio/video sync buffering
         ])
         // UNIFIED INPUT: ONE SDP file with both video and audio streams
         .input(sdpPath)
         .inputOptions([
           '-protocol_whitelist', 'file,rtp,udp',
           '-f', 'sdp',
-          '-rtbufsize', '100M',           // Increase RTP receive buffer to 100MB to prevent packet loss
-          '-analyzeduration', '5000000',  // 5s analysis to wait for keyframe with SPS/PPS
-          '-probesize', '10000000',       // 10MB probe size to buffer enough packets (increased from 5MB)
-          '-reorder_queue_size', '5000',  // Large queue for packet reordering (handles network jitter)
-          '-thread_queue_size', '4096',   // Large thread queue to prevent blocking
+          '-rtbufsize', '200M',           // 200MB RTP buffer for ~10 seconds at 5 Mbps (5000kb/s * 10s / 8 = 6.25MB, with overhead)
+          '-analyzeduration', '10000000', // 10s analysis for deep buffering
+          '-probesize', '20000000',       // 20MB probe size (2x analyzeduration worth of data)
+          '-reorder_queue_size', '10000', // 10000 packet reorder queue (handles severe jitter)
+          '-thread_queue_size', '8192',   // Large thread queue (8192 packets)
+          '-max_delay', '10000000',       // 10 second max delay for buffering
         ])
         // Video encoding - copy if SPS/PPS available, transcode otherwise
         .videoCodec(videoCodecName)
