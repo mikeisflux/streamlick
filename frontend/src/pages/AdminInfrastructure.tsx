@@ -178,6 +178,7 @@ export function AdminInfrastructure() {
 
   const tabs: { id: ServerRole; label: string; icon: any }[] = [
     { id: 'media-server', label: 'Media Servers', icon: Server },
+    { id: 'turn-server', label: 'TURN Servers', icon: Network },
     { id: 'database-server', label: 'Databases', icon: Database },
     { id: 'load-balancer', label: 'Load Balancers', icon: Network },
     { id: 'api-server', label: 'API Servers', icon: HardDrive },
@@ -517,6 +518,7 @@ export function AdminInfrastructure() {
                         >
                           <option value="">Assign Role...</option>
                           <option value="media-server">Media Server</option>
+                          <option value="turn-server">TURN Server</option>
                           <option value="database-server">Database Server</option>
                           <option value="load-balancer">Load Balancer</option>
                           <option value="api-server">API Server</option>
@@ -576,6 +578,7 @@ export function AdminInfrastructure() {
                   >
                     <option value="">Select a role...</option>
                     <option value="media-server">Media Server</option>
+                    <option value="turn-server">TURN Server (WebRTC Relay)</option>
                     <option value="database-server">Database Server (PostgreSQL)</option>
                     <option value="load-balancer">Load Balancer (Nginx)</option>
                     <option value="api-server">API Server</option>
@@ -592,10 +595,20 @@ export function AdminInfrastructure() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     disabled={deploying}
                   >
-                    <option value="ccx13">CCX13 - 2 vCPU, 8GB RAM (€11.99/mo)</option>
-                    <option value="ccx23">CCX23 - 4 vCPU, 16GB RAM (€24.49/mo)</option>
-                    <option value="ccx33">CCX33 - 8 vCPU, 32GB RAM (€48.99/mo)</option>
-                    <option value="ccx43">CCX43 - 16 vCPU, 64GB RAM (€97.99/mo)</option>
+                    {deployConfig.role === 'turn-server' ? (
+                      <>
+                        <option value="cpx11">CPX11 - 2 vCPU, 2GB RAM (€4.51/mo) - Recommended</option>
+                        <option value="cpx21">CPX21 - 3 vCPU, 4GB RAM (€8.21/mo) - High Traffic</option>
+                        <option value="cpx31">CPX31 - 4 vCPU, 8GB RAM (€15.29/mo)</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="ccx13">CCX13 - 2 vCPU, 8GB RAM (€11.99/mo)</option>
+                        <option value="ccx23">CCX23 - 4 vCPU, 16GB RAM (€24.49/mo)</option>
+                        <option value="ccx33">CCX33 - 8 vCPU, 32GB RAM (€48.99/mo)</option>
+                        <option value="ccx43">CCX43 - 16 vCPU, 64GB RAM (€97.99/mo)</option>
+                      </>
+                    )}
                   </select>
                 </div>
 

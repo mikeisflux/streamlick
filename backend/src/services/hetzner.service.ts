@@ -152,7 +152,7 @@ class HetznerService {
     name: string;
     serverType: string; // CCX13, CCX23, CCX33, CPX32, etc.
     location: string; // nbg1, fsn1, hel1, ash
-    role: 'media-server' | 'api-server' | 'frontend-server' | 'load-balancer' | 'database-server' | 'redis-server';
+    role: 'media-server' | 'api-server' | 'frontend-server' | 'load-balancer' | 'database-server' | 'redis-server' | 'turn-server';
     sshKeys?: number[];
     // Configuration options
     backendUrl?: string; // For media/frontend servers to connect to API
@@ -213,7 +213,7 @@ class HetznerService {
    * Get cloud-init script for automated setup based on role
    */
   private getCloudInitScript(
-    role: 'media-server' | 'api-server' | 'frontend-server' | 'load-balancer' | 'database-server' | 'redis-server',
+    role: 'media-server' | 'api-server' | 'frontend-server' | 'load-balancer' | 'database-server' | 'redis-server' | 'turn-server',
     options: any
   ): string {
     switch (role) {
@@ -240,6 +240,8 @@ class HetznerService {
         return this.getDatabaseServerScript();
       case 'redis-server':
         return this.getRedisServerScript();
+      case 'turn-server':
+        return this.getTurnServerScript();
       default:
         throw new Error(`Unknown server role: ${role}`);
     }
@@ -708,6 +710,183 @@ ufw --force enable
 
 echo "✅ Redis server deployed successfully"
 echo "⚠️  Remember to change the default password!"
+`;
+  }
+
+  /**
+   * TURN Server (Coturn) cloud-init script
+   * Installs and configures Coturn for WebRTC TURN/STUN relay
+   */
+  private getTurnServerScript(): string {
+    const turnUsername = this.generateSecurePassword(16);
+    const turnPassword = this.generateSecurePassword(32);
+    const turnSecret = this.generateSecurePassword(32);
+
+    return `#!/bin/bash
+set -e
+
+echo "========================================="
+echo "🚀 TURN Server (Coturn) Deployment"
+echo "========================================="
+
+# Update system
+apt-get update
+apt-get upgrade -y
+
+# Install Coturn
+apt-get install -y coturn
+
+# Enable Coturn service
+sed -i 's/#TURNSERVER_ENABLED=1/TURNSERVER_ENABLED=1/' /etc/default/coturn
+
+# Configure Coturn
+cat > /etc/turnserver.conf << 'EOF'
+# TURN server configuration for WebRTC
+
+# Listening port for TURN/STUN
+listening-port=3478
+tls-listening-port=5349
+
+# Listening IPs (0.0.0.0 for all interfaces)
+listening-ip=0.0.0.0
+
+# External IP (will be auto-detected)
+# external-ip=AUTO_DETECTED
+
+# Relay IP addresses
+relay-ip=0.0.0.0
+
+# Fingerprint in TURN messages
+fingerprint
+
+# Use long-term credentials mechanism
+lt-cred-mech
+
+# Static auth secret for generating time-limited credentials
+use-auth-secret
+static-auth-secret=${turnSecret}
+
+# Realm (replace with your domain if you have one)
+realm=streamlick.turn
+
+# Total quota (100 sessions)
+total-quota=100
+
+# Max bps capacity (0 = unlimited)
+bps-capacity=0
+
+# Stale nonce (security)
+stale-nonce=600
+
+# No loopback peers
+no-loopback-peers
+
+# No multicast peers
+no-multicast-peers
+
+# Mobility support
+mobility
+
+# Verbose logging (disable in production)
+verbose
+
+# Log file
+log-file=/var/log/turnserver/turnserver.log
+
+# Disable CLI
+no-cli
+
+# TLS/DTLS configuration (requires SSL cert)
+# cert=/etc/ssl/certs/turn_server_cert.pem
+# pkey=/etc/ssl/private/turn_server_pkey.pem
+
+# Process management
+proc-user=turnserver
+proc-group=turnserver
+EOF
+
+# Create log directory
+mkdir -p /var/log/turnserver
+chown turnserver:turnserver /var/log/turnserver
+
+# Configure comprehensive firewall rules for TURN server
+echo "Configuring firewall..."
+
+# Allow SSH
+ufw allow 22/tcp
+
+# Allow TURN server ports
+# 3478: TURN/STUN over UDP and TCP
+ufw allow 3478/tcp
+ufw allow 3478/udp
+
+# 5349: TURN/STUN over TLS/DTLS
+ufw allow 5349/tcp
+ufw allow 5349/udp
+
+# 49152-65535: UDP relay ports (required for media streams)
+# This is the dynamic port range used by Coturn for relaying RTP/RTCP traffic
+ufw allow 49152:65535/udp
+
+# Enable firewall
+ufw --force enable
+
+# Restart Coturn with new configuration
+systemctl enable coturn
+systemctl restart coturn
+
+# Wait for Coturn to start
+sleep 5
+
+# Check if Coturn is running
+if systemctl is-active --quiet coturn; then
+  echo "✅ Coturn is running successfully"
+else
+  echo "❌ Coturn failed to start - check logs: journalctl -u coturn -n 50"
+  exit 1
+fi
+
+# Display server information
+echo ""
+echo "========================================="
+echo "✅ TURN Server Deployed Successfully"
+echo "========================================="
+echo ""
+echo "TURN Server Configuration:"
+echo "  Host: \$(hostname -I | awk '{print \$1}')"
+echo "  TURN Port: 3478 (UDP/TCP)"
+echo "  TURNS Port: 5349 (TCP with TLS)"
+echo "  Realm: streamlick.turn"
+echo "  Static Secret: ${turnSecret}"
+echo ""
+echo "Firewall Rules:"
+echo "  ✅ SSH: 22/tcp"
+echo "  ✅ TURN/STUN: 3478/tcp, 3478/udp"
+echo "  ✅ TURNS/STUNS: 5349/tcp, 5349/udp"
+echo "  ✅ UDP Relay Range: 49152-65535/udp"
+echo ""
+echo "WebRTC Configuration Example:"
+echo "{"
+echo "  iceServers: ["
+echo "    { urls: 'stun:\$(hostname -I | awk '{print \$1}'):3478' },"
+echo "    {"
+echo "      urls: 'turn:\$(hostname -I | awk '{print \$1}'):3478',"
+echo "      username: '${turnUsername}',"
+echo "      credential: '${turnPassword}'"
+echo "    }"
+echo "  ]"
+echo "}"
+echo ""
+echo "⚠️  IMPORTANT NOTES:"
+echo "  1. Save the static secret - needed for generating time-limited credentials"
+echo "  2. For TLS (turns://), install SSL certificate at:"
+echo "     /etc/ssl/certs/turn_server_cert.pem"
+echo "     /etc/ssl/private/turn_server_pkey.pem"
+echo "  3. Then uncomment cert/pkey lines in /etc/turnserver.conf"
+echo "  4. Monitor logs: journalctl -u coturn -f"
+echo "  5. Test TURN server: https://webrtc.github.io/samples/src/content/peerconnection/trickle-ice/"
+echo ""
+echo "========================================="
 `;
   }
 
