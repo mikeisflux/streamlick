@@ -240,6 +240,7 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
                 type="video"
                 className="w-full h-32 object-cover rounded mb-3"
                 fallbackClassName="w-full h-32 rounded mb-3"
+                muted={false}
                 controls
                 preload="metadata"
                 onError={(e) => handleMediaError(clip.id, e)}
