@@ -4,6 +4,7 @@ import api from '../services/api';
 import toast from 'react-hot-toast';
 import { clipPlayerService, MediaClip } from '../services/clip-player.service';
 import { SafeMediaPreview } from './SafeMediaPreview';
+import { audioMixerService } from '../services/audio-mixer.service';
 
 interface MediaLibraryProps {
   onTriggerClip?: (clip: MediaClip) => void;
@@ -136,7 +137,7 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
     }
   };
 
-  const handlePreviewClick = (clipId: string) => {
+  const handlePreviewClick = async (clipId: string) => {
     const videoElement = videoRefs.current.get(clipId);
     if (!videoElement) return;
 
@@ -150,9 +151,27 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
         return newSet;
       });
     } else {
+      // CRITICAL FIX: Resume AudioContext before playing to enable audio
+      // Browser autoplay policies suspend AudioContext by default
+      try {
+        const audioContext = (audioMixerService as any).audioContext;
+        if (audioContext && audioContext.state === 'suspended') {
+          console.log('[MediaLibrary] Resuming suspended AudioContext...');
+          await audioContext.resume();
+          console.log('[MediaLibrary] AudioContext resumed');
+        }
+      } catch (error) {
+        console.error('[MediaLibrary] Failed to resume AudioContext:', error);
+      }
+
       // Start playing
-      videoElement.play();
-      setPlayingClips(prev => new Set(prev).add(clipId));
+      try {
+        await videoElement.play();
+        setPlayingClips(prev => new Set(prev).add(clipId));
+      } catch (error) {
+        console.error('[MediaLibrary] Failed to play video:', error);
+        toast.error('Failed to play video');
+      }
     }
   };
 

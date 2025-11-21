@@ -761,20 +761,18 @@ class CompositorService {
       this.ctx.fillStyle = '#000000';
       this.ctx.fillRect(0, 0, this.WIDTH, this.HEIGHT);
 
-      // CRITICAL FIX: Always draw participant video to prevent canvas track from being muted
-      // The browser auto-mutes canvas tracks with static/uniform content (like countdown-only)
-      // We must render real video content continuously to keep the track active
+      // CRITICAL FIX: Don't draw participants during countdown/intro to prevent flickering
+      // The RGB anti-throttle pixel below is sufficient to keep track active
+      const showingFullscreenOverlay = this.countdownValue !== null || this.mediaClipOverlay !== null;
 
-      // Draw background if exists
-      if (this.background) {
-        this.drawBackground();
-      }
+      if (!showingFullscreenOverlay) {
+        // Normal mode: Draw background, participants, and overlays
+        if (this.background) {
+          this.drawBackground();
+        }
 
-      // ALWAYS draw participants - this keeps canvas "active" with real video
-      this.drawParticipants();
+        this.drawParticipants();
 
-      // Draw overlays (logos, banners, lower thirds) - except during countdown/media clip
-      if (!this.countdownValue && !this.mediaClipOverlay) {
         this.drawOverlays();
 
         // Draw chat messages if enabled
@@ -786,15 +784,14 @@ class CompositorService {
         if (this.lowerThird) {
           this.drawLowerThird();
         }
-      }
-
-      // Draw fullscreen overlays LAST (on top of everything)
-      if (this.countdownValue !== null) {
-        // Countdown overlay - drawn over participant video
-        this.drawCountdown();
-      } else if (this.mediaClipOverlay) {
-        // Media clip overlay - drawn over participant video
-        this.drawMediaClipOverlay();
+      } else {
+        // Fullscreen overlay mode: Skip participants to prevent bleeding through
+        // Draw countdown or intro video directly on black canvas
+        if (this.countdownValue !== null) {
+          this.drawCountdown();
+        } else if (this.mediaClipOverlay) {
+          this.drawMediaClipOverlay();
+        }
       }
 
       // CRITICAL FIX: Draw DRAMATIC anti-throttle marker EVERY frame
@@ -1427,9 +1424,8 @@ class CompositorService {
     }
 
     try {
-      // Semi-transparent black overlay to ensure countdown is visible
-      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      this.ctx.fillRect(0, 0, this.WIDTH, this.HEIGHT);
+      // Canvas is already black (cleared at start of animate loop)
+      // No need for semi-transparent overlay that caused flickering
 
       // Draw countdown number
       const fontSize = Math.floor(this.HEIGHT / 4); // Large font size (25% of canvas height)
