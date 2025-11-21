@@ -29,6 +29,7 @@ interface SafeMediaPreviewProps {
   // Video-specific props
   muted?: boolean;
   autoPlay?: boolean;
+  controls?: boolean;
   preload?: 'none' | 'metadata' | 'auto';
 }
 
@@ -44,6 +45,7 @@ export function SafeMediaPreview({
   onRetry,
   muted = true,
   autoPlay = false,
+  controls = false,
   preload = 'metadata',
 }: SafeMediaPreviewProps) {
   const [hasError, setHasError] = useState(false);
@@ -130,6 +132,7 @@ export function SafeMediaPreview({
         style={style}
         muted={muted}
         autoPlay={autoPlay}
+        controls={controls}
         preload={preload}
         onError={handleError}
         crossOrigin="anonymous"
