@@ -123,7 +123,31 @@ export function Studio() {
     if (!broadcastId) return { privacy: {}, schedule: {}, title: {}, description: {} };
     try {
       const saved = localStorage.getItem(`destinationSettings_${broadcastId}`);
-      return saved ? JSON.parse(saved) : { privacy: {}, schedule: {}, title: {}, description: {} };
+      if (!saved) return { privacy: {}, schedule: {}, title: {}, description: {} };
+
+      const parsed = JSON.parse(saved);
+
+      // CRITICAL FIX: Sanitize loaded settings to remove corrupted/placeholder data
+      // Remove any "Loading" placeholders or corrupted values from malware
+      const sanitize = (obj: Record<string, string>) => {
+        const clean: Record<string, string> = {};
+        for (const [key, value] of Object.entries(obj)) {
+          // Skip "Loading" placeholders and obviously corrupted data
+          if (value === 'Loading' || typeof value !== 'string' || value.length > 500) {
+            console.warn(`[Studio] Removed corrupted destination setting: ${key}=${value}`);
+            continue;
+          }
+          clean[key] = value;
+        }
+        return clean;
+      };
+
+      return {
+        privacy: sanitize(parsed.privacy || {}),
+        schedule: sanitize(parsed.schedule || {}),
+        title: sanitize(parsed.title || {}),
+        description: sanitize(parsed.description || {}),
+      };
     } catch (error) {
       console.error('Failed to load destination settings from localStorage:', error);
       return { privacy: {}, schedule: {}, title: {}, description: {} };

@@ -797,12 +797,14 @@ class CompositorService {
         this.drawMediaClipOverlay();
       }
 
-      // CRITICAL FIX: Draw unique anti-throttle marker EVERY frame
-      // Browser/encoder throttles canvas streams with static content
-      // By drawing a truly unique pixel value every frame, we force encoder to detect changes
-      // Using frameCount ensures every single frame is unique to prevent ANY throttling
-      const uniqueColor = this.frameCount % 256; // 0-255 range, cycles through all values
-      this.ctx.fillStyle = `rgb(${uniqueColor}, ${uniqueColor}, ${uniqueColor})`;
+      // CRITICAL FIX: Draw DRAMATIC anti-throttle marker EVERY frame
+      // Browser aggressively mutes canvas streams with minimal activity
+      // Use random RGB colors (not just grayscale) to ensure maximum encoder detection
+      // This forces the encoder to treat every frame as unique content
+      const r = (this.frameCount * 67) % 256;  // Prime number multiplier for pseudo-random
+      const g = (this.frameCount * 139) % 256; // Different prime for different color
+      const b = (this.frameCount * 211) % 256; // Third prime for blue channel
+      this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
       this.ctx.fillRect(this.WIDTH - 1, this.HEIGHT - 1, 1, 1);
     } catch (error) {
       logger.error('Compositor animation error:', error);
