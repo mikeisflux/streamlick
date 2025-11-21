@@ -629,6 +629,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
     return (
       <div
         key={asset.id}
+        onClick={() => handleUseAsset(asset)}
         className={`p-3 bg-white rounded-lg hover:shadow-md transition-shadow cursor-pointer group relative ${
           isActive ? 'border-2 border-blue-500' : 'border border-gray-200'
         }`}
@@ -642,10 +643,18 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
                 className="w-full h-full object-cover"
               />
               {/* Video play icon indicator */}
-              {(asset.type === 'videoBackground' || asset.type === 'videoClip') && (
+              {(asset.type === 'videoBackground' || asset.type === 'videoClip') && !isActive && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="w-12 h-12 bg-black bg-opacity-60 rounded-full flex items-center justify-center">
                     <div className="w-0 h-0 border-l-[16px] border-l-white border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent ml-1"></div>
+                  </div>
+                </div>
+              )}
+              {/* Stop icon for active videos */}
+              {(asset.type === 'videoBackground' || asset.type === 'videoClip') && isActive && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="w-12 h-12 bg-red-600 bg-opacity-80 rounded-full flex items-center justify-center">
+                    <div className="w-4 h-4 bg-white"></div>
                   </div>
                 </div>
               )}
@@ -657,34 +666,21 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
           )}
           {/* Active indicator */}
           {isActive && (
-            <div className="absolute top-2 right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded font-medium">
+            <div className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded font-medium">
               Active
             </div>
           )}
-          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleUseAsset(asset);
-              }}
-              className={`px-3 py-1 rounded text-sm font-medium ${
-                isActive
-                  ? 'bg-red-600 hover:bg-red-700 text-white'
-                  : 'bg-white text-gray-900 hover:bg-gray-100'
-              }`}
-            >
-              {isActive ? 'Remove' : 'Use'}
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeleteAsset(asset.id);
-              }}
-              className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium"
-            >
-              Delete
-            </button>
-          </div>
+          {/* Delete button - tiny red X in top-right corner */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteAsset(asset.id);
+            }}
+            className="absolute top-2 right-2 w-6 h-6 bg-red-600 hover:bg-red-700 text-white rounded-full flex items-center justify-center text-sm font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+            title="Delete"
+          >
+            ×
+          </button>
         </div>
         <p className="text-xs font-medium text-gray-900 truncate">{asset.name}</p>
         {asset.duration && (
