@@ -794,28 +794,32 @@ class CompositorService {
         }
       }
 
-      // CRITICAL FIX: Draw DRAMATIC anti-throttle markers EVERY frame
-      // Browser aggressively mutes canvas streams with minimal activity
-      // During countdown/intro overlays, add MORE random pixels to prevent muting
+      // CRITICAL FIX: Use TRUE randomness to prevent browser track muting
+      // Browser detected deterministic pseudo-random patterns and muted track anyway
+      // Math.random() provides unpredictable values that browser cannot pattern-match
       if (showingFullscreenOverlay) {
-        // Aggressive mode: Draw 100 random pixels scattered across canvas
-        // This prevents browser from detecting "static content" during countdown
-        for (let i = 0; i < 100; i++) {
-          const x = ((this.frameCount * 67 + i * 13) % this.WIDTH);
-          const y = ((this.frameCount * 139 + i * 17) % this.HEIGHT);
-          const r = (this.frameCount * 67 + i * 11) % 256;
-          const g = (this.frameCount * 139 + i * 23) % 256;
-          const b = (this.frameCount * 211 + i * 31) % 256;
+        // ULTRA-AGGRESSIVE: Draw 200 truly random pixels with random colors
+        // This is the nuclear option - browser CANNOT detect pattern in true randomness
+        for (let i = 0; i < 200; i++) {
+          const x = Math.floor(Math.random() * this.WIDTH);
+          const y = Math.floor(Math.random() * this.HEIGHT);
+          const r = Math.floor(Math.random() * 256);
+          const g = Math.floor(Math.random() * 256);
+          const b = Math.floor(Math.random() * 256);
           this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
           this.ctx.fillRect(x, y, 1, 1);
         }
       } else {
-        // Normal mode: Single pixel is enough when participants are drawing
-        const r = (this.frameCount * 67) % 256;
-        const g = (this.frameCount * 139) % 256;
-        const b = (this.frameCount * 211) % 256;
-        this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-        this.ctx.fillRect(this.WIDTH - 1, this.HEIGHT - 1, 1, 1);
+        // Normal mode: Still use true randomness but fewer pixels
+        for (let i = 0; i < 10; i++) {
+          const x = Math.floor(Math.random() * this.WIDTH);
+          const y = Math.floor(Math.random() * this.HEIGHT);
+          const r = Math.floor(Math.random() * 256);
+          const g = Math.floor(Math.random() * 256);
+          const b = Math.floor(Math.random() * 256);
+          this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+          this.ctx.fillRect(x, y, 1, 1);
+        }
       }
     } catch (error) {
       logger.error('Compositor animation error:', error);
