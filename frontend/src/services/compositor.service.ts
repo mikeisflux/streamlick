@@ -566,6 +566,39 @@ class CompositorService {
     // This allows us to control exactly when frames are captured via requestFrame()
     this.outputStream = this.canvas!.captureStream(0);
 
+    // DIAGNOSTIC: Monitor canvas video track state
+    const videoTrack = this.outputStream.getVideoTracks()[0];
+    if (videoTrack) {
+      logger.info('[Canvas Track] Initial state:', {
+        id: videoTrack.id,
+        enabled: videoTrack.enabled,
+        muted: videoTrack.muted,
+        readyState: videoTrack.readyState,
+      });
+
+      // Monitor track ended event
+      videoTrack.addEventListener('ended', () => {
+        logger.error('[Canvas Track] Video track ENDED unexpectedly!', {
+          id: videoTrack.id,
+          readyState: videoTrack.readyState,
+        });
+      });
+
+      // Monitor track muted event
+      videoTrack.addEventListener('mute', () => {
+        logger.warn('[Canvas Track] Video track MUTED!', {
+          id: videoTrack.id,
+        });
+      });
+
+      // Monitor track unmuted event
+      videoTrack.addEventListener('unmute', () => {
+        logger.info('[Canvas Track] Video track UNMUTED!', {
+          id: videoTrack.id,
+        });
+      });
+    }
+
     // Start animation loop
     this.animate();
   }
@@ -736,9 +769,43 @@ class CompositorService {
     // This ensures we only capture frames we actually rendered, preventing duplication
     if (this.outputStream) {
       const videoTrack = this.outputStream.getVideoTracks()[0];
-      if (videoTrack && typeof (videoTrack as any).requestFrame === 'function') {
-        (videoTrack as CanvasCaptureMediaStreamTrack).requestFrame();
+      if (videoTrack) {
+        // DIAGNOSTIC: Log track state every 5 seconds (300 frames at 60fps, 150 frames at 30fps)
+        if (this.frameCount % 300 === 0) {
+          logger.info('[Canvas Track] State check:', {
+            frameCount: this.frameCount,
+            enabled: videoTrack.enabled,
+            muted: videoTrack.muted,
+            readyState: videoTrack.readyState,
+            trackId: videoTrack.id,
+          });
+        }
+
+        if (typeof (videoTrack as any).requestFrame === 'function') {
+          try {
+            (videoTrack as CanvasCaptureMediaStreamTrack).requestFrame();
+          } catch (error) {
+            logger.error('[Canvas Track] requestFrame() error:', error, {
+              frameCount: this.frameCount,
+              readyState: videoTrack.readyState,
+              enabled: videoTrack.enabled,
+            });
+          }
+        } else {
+          // Log once if requestFrame is not available
+          if (this.frameCount === 1) {
+            logger.error('[Canvas Track] requestFrame() method not available on track!');
+          }
+        }
+      } else {
+        logger.error('[Canvas Track] No video track found in outputStream!', {
+          frameCount: this.frameCount,
+        });
       }
+    } else {
+      logger.error('[Canvas Track] No outputStream available!', {
+        frameCount: this.frameCount,
+      });
     }
 
     // Track render time
