@@ -104,6 +104,24 @@ export function useStudioInitialization({
         // NOTE: Do NOT auto-select destinations - user chooses per broadcast via Destinations panel
         console.log('[Studio Init] Loaded destinations:', connectedDestinations.length);
 
+        // CRITICAL FIX: Validate selectedDestinations against actual available destinations
+        // Remove any stale/invalid destination IDs from localStorage
+        const validDestinationIds = new Set(connectedDestinations.map((d: any) => d.id));
+        const validatedSelection = selectedDestinations.filter(id => validDestinationIds.has(id));
+
+        if (validatedSelection.length !== selectedDestinations.length) {
+          const removedIds = selectedDestinations.filter(id => !validDestinationIds.has(id));
+          console.warn('[Studio Init] Removing stale destination IDs from localStorage:', {
+            original: selectedDestinations,
+            validated: validatedSelection,
+            removed: removedIds,
+            removedCount: removedIds.length,
+          });
+
+          // Update state and localStorage with cleaned list
+          setSelectedDestinations(validatedSelection);
+        }
+
         console.log('[Studio Init] Starting camera...');
         // Start camera FIRST to request permissions
         await startCamera();
