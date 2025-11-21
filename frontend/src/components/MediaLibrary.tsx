@@ -235,22 +235,9 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
               </div>
             </div>
 
-            {/* Preview with hover delete X */}
-            <div className="relative group">
-              {/* Delete button - appears on hover */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteClip(clip.id);
-                }}
-                className="absolute top-1 right-1 z-10 bg-red-600 text-white w-5 h-5 flex items-center justify-center rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
-                title="Delete"
-              >
-                ×
-              </button>
-
-              {/* Image Preview */}
-              {clip.type === 'image' && (
+            {/* Image Preview */}
+            {clip.type === 'image' && (
+              <div className="relative group">
                 <SafeMediaPreview
                   src={clip.url}
                   alt={clip.name}
@@ -260,11 +247,23 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
                   onError={(e) => handleMediaError(clip.id, e)}
                   onRetry={() => handleRetryMedia(clip.id)}
                 />
-              )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteClip(clip.id);
+                  }}
+                  className="absolute top-1 right-1 z-10 bg-red-600 text-white w-5 h-5 flex items-center justify-center rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                  title="Delete"
+                >
+                  ×
+                </button>
+              </div>
+            )}
 
-              {/* Video Preview - Click to play/stop */}
-              {clip.type === 'video' && (
-                <div onClick={() => handlePreviewClick(clip.id)} className="cursor-pointer relative">
+            {/* Video Preview - Click to play/stop */}
+            {clip.type === 'video' && (
+              <div className="relative group">
+                <div onClick={() => handlePreviewClick(clip.id)} className="cursor-pointer">
                   <video
                     ref={(el) => {
                       if (el) videoRefs.current.set(clip.id, el);
@@ -282,23 +281,38 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
                     }}
                     data-exclude-global-mute="true"
                   />
-                  {!playingClips.has(clip.id) && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded">
-                      <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center">
-                        <div className="w-0 h-0 border-l-[20px] border-l-gray-800 border-t-[12px] border-t-transparent border-b-[12px] border-b-transparent ml-1"></div>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteClip(clip.id);
+                  }}
+                  className="absolute top-1 right-1 z-10 bg-red-600 text-white w-5 h-5 flex items-center justify-center rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                  title="Delete"
+                >
+                  ×
+                </button>
+              </div>
+            )}
 
-              {/* Audio Preview */}
-              {clip.type === 'audio' && (
+            {/* Audio Preview */}
+            {clip.type === 'audio' && (
+              <div className="relative group">
                 <div className="w-full h-32 bg-gray-600 rounded flex items-center justify-center">
                   <span className="text-4xl">🎵</span>
                 </div>
-              )}
-            </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteClip(clip.id);
+                  }}
+                  className="absolute top-1 right-1 z-10 bg-red-600 text-white w-5 h-5 flex items-center justify-center rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                  title="Delete"
+                >
+                  ×
+                </button>
+              </div>
+            )}
 
             {/* Volume Control for Audio/Video */}
             {(clip.type === 'audio' || clip.type === 'video') && (
