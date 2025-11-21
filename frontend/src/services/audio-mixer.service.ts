@@ -60,6 +60,41 @@ class AudioMixerService {
   }
 
   /**
+   * Add an HTML media element (video/audio) to the mix
+   * Uses MediaElementSource for direct element audio capture
+   */
+  addMediaElement(id: string, element: HTMLVideoElement | HTMLAudioElement): void {
+    if (!this.audioContext || !this.destination) {
+      throw new Error('Audio mixer not initialized');
+    }
+
+    // Remove existing source if any
+    this.removeStream(id);
+
+    // Create source from media element
+    // NOTE: Once created, the element's audio is ONLY routed through Web Audio API
+    const source = this.audioContext.createMediaElementSource(element);
+
+    // Create gain node for volume control
+    const gainNode = this.audioContext.createGain();
+    gainNode.gain.value = 1.0; // Full volume
+
+    // CRITICAL FIX: Connect to BOTH destinations
+    // 1. Connect to mixer destination (for stream output to YouTube/etc)
+    source.connect(gainNode);
+    gainNode.connect(this.destination);
+
+    // 2. Connect to local speakers (so user can hear the audio)
+    gainNode.connect(this.audioContext.destination);
+
+    // Store source and gain node (using same Map, they're compatible types)
+    this.sources.set(id, source as any);
+    this.gainNodes.set(id, gainNode);
+
+    console.log(`Media element audio added: ${id} (dual output: stream + local)`);
+  }
+
+  /**
    * Remove an audio stream from the mix
    */
   removeStream(id: string): void {

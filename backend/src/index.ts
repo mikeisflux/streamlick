@@ -40,6 +40,13 @@ import logger from './utils/logger';
 import { validateCsrfToken } from './auth/csrf';
 import { sanitizeInput } from './middleware/sanitize';
 
+// MINOR FIX: Add BigInt JSON serialization support
+// Converts BigInt values to strings when serializing to JSON
+// Prevents "TypeError: Do not know how to serialize a BigInt" errors
+// Affects fileSizeBytes fields in Recording, MediaClip, Asset, and BrandingAsset models
+// @ts-ignore - Adding toJSON to BigInt prototype
+BigInt.prototype.toJSON = function() { return this.toString(); };
+
 dotenv.config();
 
 // Validate critical environment variables at startup
@@ -76,7 +83,8 @@ app.use(helmet({
     },
   },
   crossOriginEmbedderPolicy: true,
-  crossOriginOpenerPolicy: { policy: "same-origin" },
+  // Allow popups to maintain window.opener for OAuth flows
+  crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
   crossOriginResourcePolicy: { policy: "same-site" }, // Changed from cross-origin
   dnsPrefetchControl: { allow: false },
   frameguard: { action: "deny" },

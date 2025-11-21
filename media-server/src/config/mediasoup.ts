@@ -44,6 +44,43 @@ export const mediasoupConfig = {
           cbr: 1,                      // Constant bitrate for consistent quality
         },
       },
+      // CRITICAL FIX: H.264 MUST be first in the list so browsers select it
+      // This prevents codec mismatch where FFmpeg expects H.264 but receives VP8
+      // BEST PRACTICE: YouTube recommends High Profile for better quality
+      {
+        kind: 'video',
+        mimeType: 'video/h264',
+        clockRate: 90000,
+        parameters: {
+          'packetization-mode': 1,
+          'profile-level-id': '640033',    // High Profile Level 5.1 (YouTube recommended, best quality)
+          'level-asymmetry-allowed': 1,
+          'x-google-start-bitrate': 3000,  // 3 Mbps start bitrate for HD streaming
+        },
+      },
+      {
+        kind: 'video',
+        mimeType: 'video/h264',
+        clockRate: 90000,
+        parameters: {
+          'packetization-mode': 1,
+          'profile-level-id': '4d001f',    // Constrained Baseline Profile Level 3.1 (fallback for compatibility)
+          'level-asymmetry-allowed': 1,
+          'x-google-start-bitrate': 3000,  // 3 Mbps start bitrate for HD streaming
+        },
+      },
+      {
+        kind: 'video',
+        mimeType: 'video/h264',
+        clockRate: 90000,
+        parameters: {
+          'packetization-mode': 1,
+          'profile-level-id': '42e01f',    // Baseline profile (fallback for older devices)
+          'level-asymmetry-allowed': 1,
+          'x-google-start-bitrate': 2000,
+        },
+      },
+      // VP8 and VP9 as fallback options (kept for compatibility)
       {
         kind: 'video',
         mimeType: 'video/VP8',
@@ -59,28 +96,6 @@ export const mediasoupConfig = {
         parameters: {
           'profile-id': 2,
           'x-google-start-bitrate': 3000,  // 3 Mbps start bitrate for HD streaming
-        },
-      },
-      {
-        kind: 'video',
-        mimeType: 'video/h264',
-        clockRate: 90000,
-        parameters: {
-          'packetization-mode': 1,
-          'profile-level-id': '4d0020',    // Main profile, Level 3.2 (better quality than baseline)
-          'level-asymmetry-allowed': 1,
-          'x-google-start-bitrate': 3000,  // 3 Mbps start bitrate for HD streaming
-        },
-      },
-      {
-        kind: 'video',
-        mimeType: 'video/h264',
-        clockRate: 90000,
-        parameters: {
-          'packetization-mode': 1,
-          'profile-level-id': '42e01f',    // Baseline profile (fallback for compatibility)
-          'level-asymmetry-allowed': 1,
-          'x-google-start-bitrate': 2000,
         },
       },
     ] as any,

@@ -13,6 +13,12 @@ import { audioMixerService } from './audio-mixer.service';
 import type { PerformanceMetrics } from '../types';
 import logger from '../utils/logger';
 
+// CanvasCaptureMediaStreamTrack extends MediaStreamTrack with requestFrame() method
+// This is returned by canvas.captureStream(0) for manual frame capture mode
+interface CanvasCaptureMediaStreamTrack extends MediaStreamTrack {
+  requestFrame(): void;
+}
+
 interface ParticipantStream {
   id: string;
   name: string;
@@ -67,19 +73,21 @@ class CompositorService {
   private showChat = false;
   private lowerThird: LowerThird | null = null;
   private mediaClipOverlay: HTMLVideoElement | HTMLImageElement | null = null;
+  private countdownValue: number | null = null;
 
   // Image caching to prevent memory leaks from creating Images every frame
   private backgroundImage: HTMLImageElement | null = null;
   private overlayImages: Map<string, HTMLImageElement> = new Map();
 
-  // Canvas dimensions - configurable via environment or defaults to 4K UHD (3840x2160)
-  private readonly WIDTH = parseInt(import.meta.env.VITE_CANVAS_WIDTH || '3840');
-  private readonly HEIGHT = parseInt(import.meta.env.VITE_CANVAS_HEIGHT || '2160');
+  // Canvas dimensions - configurable via environment or defaults to 1080p Full HD (1920x1080)
+  private readonly WIDTH = parseInt(import.meta.env.VITE_CANVAS_WIDTH || '1920');
+  private readonly HEIGHT = parseInt(import.meta.env.VITE_CANVAS_HEIGHT || '1080');
   private readonly FPS = parseInt(import.meta.env.VITE_CANVAS_FPS || '30');
 
   // Performance tracking
   private frameCount = 0;
   private lastFrameTime = 0;
+  private lastRenderTime = 0; // For FPS throttling
   private lastFpsReport = 0;
   private renderTimes: number[] = [];
   private droppedFrames = 0;
@@ -371,6 +379,181 @@ class CompositorService {
   }
 
   /**
+   * Play intro video
+   * @param videoUrl - URL of the intro video (defaults to StreamLick intro)
+   * @param duration - Optional duration in seconds (defaults to video duration)
+   * @returns Promise that resolves when video finishes
+   */
+  async playIntroVideo(videoUrl: string = '/backgrounds/videos/StreamLick.mp4', duration?: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const videoElement = document.createElement('video');
+      videoElement.src = videoUrl;
+      videoElement.muted = false; // Keep unmuted so audio can be captured by Web Audio API
+      videoElement.autoplay = false;
+      videoElement.preload = 'auto'; // FIX FLICKERING: Preload entire video for smooth playback
+      // Note: crossOrigin removed - not needed for same-origin video files and can cause issues
+
+      logger.info(`Loading intro video: ${videoUrl}`);
+
+      // Wait for metadata (dimensions) to load first
+      videoElement.addEventListener('loadedmetadata', () => {
+        logger.info(`Intro video metadata loaded: ${videoUrl}, dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}, duration: ${videoElement.duration}s`);
+
+        // Ensure video has valid dimensions
+        if (!videoElement.videoWidth || !videoElement.videoHeight) {
+          logger.error('Intro video has invalid dimensions:', videoElement.videoWidth, videoElement.videoHeight);
+          reject(new Error('Invalid video dimensions'));
+          return;
+        }
+
+        // CRITICAL FIX: Add intro video audio to the mixer BEFORE playing
+        // This ensures the audio is captured and included in the output stream
+        try {
+          logger.info('Adding intro video audio to mixer...');
+          audioMixerService.addMediaElement('intro-video', videoElement);
+          logger.info('Intro video audio added to mixer successfully');
+        } catch (error) {
+          logger.error('Failed to add intro video audio to mixer:', error);
+          // Continue anyway - video will play without audio in output stream
+        }
+
+        // FIX FLICKERING: Wait for video to have buffered data BEFORE setting as overlay
+        // This prevents flickering caused by drawing frames before they're ready
+        const setOverlayAndPlay = () => {
+          logger.info('Intro video has enough buffered data, setting as overlay...');
+
+          // Set as media clip overlay AFTER enough data is buffered
+          this.setMediaClipOverlay(videoElement);
+          logger.info('Intro video set as media clip overlay, starting playback...');
+
+          videoElement.play().catch((error) => {
+            logger.error('Failed to play intro video:', error);
+            this.clearMediaClipOverlay();
+            // Clean up audio on error
+            audioMixerService.removeStream('intro-video');
+            reject(error);
+          });
+        };
+
+        if (videoElement.readyState >= 3) {
+          // HAVE_FUTURE_DATA or better - can play smoothly
+          setOverlayAndPlay();
+        } else {
+          // Wait for enough buffered data before showing video
+          videoElement.addEventListener('canplaythrough', setOverlayAndPlay, { once: true });
+        }
+      });
+
+      // Clear overlay and remove audio when video ends
+      videoElement.addEventListener('ended', () => {
+        logger.info('Intro video ended, clearing overlay and removing audio from mixer');
+        this.clearMediaClipOverlay();
+        audioMixerService.removeStream('intro-video');
+        resolve();
+      });
+
+      // Handle errors
+      videoElement.addEventListener('error', (event) => {
+        const errorMsg = videoElement.error
+          ? `Code: ${videoElement.error.code}, Message: ${videoElement.error.message}`
+          : 'Unknown error';
+        logger.error(`Intro video error: ${errorMsg}`, event);
+        this.clearMediaClipOverlay();
+        audioMixerService.removeStream('intro-video');
+        reject(new Error(`Video error: ${errorMsg}`));
+      });
+
+      // If duration is specified, stop video after that duration
+      if (duration) {
+        setTimeout(() => {
+          logger.info(`Intro video duration limit reached (${duration}s), clearing overlay and removing audio`);
+          videoElement.pause();
+          this.clearMediaClipOverlay();
+          audioMixerService.removeStream('intro-video');
+          resolve();
+        }, duration * 1000);
+      }
+    });
+  }
+
+  /**
+   * Wait for compositor to be ready (first frame rendered)
+   * Similar to waiting for video metadata before displaying
+   * @returns Promise that resolves when compositor has rendered at least one frame
+   */
+  private async waitForCompositorReady(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // If not compositing, reject immediately
+      if (!this.isCompositing) {
+        reject(new Error('Compositor is not running'));
+        return;
+      }
+
+      // If compositor already running and has rendered frames, resolve immediately
+      if (this.frameCount > 0) {
+        logger.info('[Compositor] Already ready, frameCount:', this.frameCount);
+        resolve();
+        return;
+      }
+
+      logger.info('[Compositor] Waiting for first frame to be rendered...');
+
+      // Wait for first frame with timeout
+      const startTime = Date.now();
+      const checkInterval = setInterval(() => {
+        if (this.frameCount > 0) {
+          clearInterval(checkInterval);
+          logger.info('[Compositor] First frame rendered, compositor ready');
+          resolve();
+        } else if (Date.now() - startTime > 5000) {
+          clearInterval(checkInterval);
+          logger.warn('[Compositor] Timeout waiting for first frame, proceeding anyway');
+          resolve(); // Resolve anyway to prevent blocking
+        }
+      }, 50); // Check every 50ms
+    });
+  }
+
+  /**
+   * Start countdown timer
+   * CRITICAL FIX: Wait for compositor to be ready before starting countdown
+   * This ensures the countdown is actually visible on canvas (similar to video readiness check)
+   * @param seconds - Number of seconds to countdown from
+   * @returns Promise that resolves when countdown finishes
+   */
+  async startCountdown(seconds: number): Promise<void> {
+    // CRITICAL FIX: Ensure compositor is ready before starting countdown
+    // This prevents the "black canvas" issue where countdown is set but not rendered
+    try {
+      await this.waitForCompositorReady();
+    } catch (error) {
+      logger.error('[Compositor] Failed to wait for compositor ready:', error);
+      throw new Error('Compositor not ready for countdown');
+    }
+
+    return new Promise((resolve) => {
+      logger.info(`[Compositor] Starting ${seconds}-second countdown on canvas (frameCount: ${this.frameCount})`);
+      this.countdownValue = seconds;
+
+      // Log countdown value to verify it's being set
+      logger.info(`[Compositor] Countdown value set to: ${this.countdownValue}`);
+
+      const intervalId = setInterval(() => {
+        if (this.countdownValue === null || this.countdownValue <= 0) {
+          clearInterval(intervalId);
+          this.countdownValue = null;
+          logger.info('[Compositor] Countdown finished');
+          resolve();
+          return;
+        }
+
+        this.countdownValue--;
+        logger.info(`[Compositor] Countdown: ${this.countdownValue} (frameCount: ${this.frameCount})`);
+      }, 1000);
+    });
+  }
+
+  /**
    * Start compositing loop
    */
   start(): void {
@@ -379,9 +562,73 @@ class CompositorService {
     logger.info('Starting compositor');
     this.isCompositing = true;
 
-    // Capture stream from canvas
-    const frameRate = this.FPS;
-    this.outputStream = this.canvas!.captureStream(frameRate);
+    // Capture stream from canvas with AUTOMATIC frame capture at 30 fps
+    // Using automatic mode instead of manual (0 fps) to prevent browser from muting track
+    // Manual mode with requestFrame() was causing browser to detect "low activity" and mute the track
+    this.outputStream = this.canvas!.captureStream(30);
+
+    // DIAGNOSTIC: Monitor canvas video track state
+    const videoTrack = this.outputStream.getVideoTracks()[0];
+    if (videoTrack) {
+      logger.info('[Canvas Track] Initial state:', {
+        id: videoTrack.id,
+        enabled: videoTrack.enabled,
+        muted: videoTrack.muted,
+        readyState: videoTrack.readyState,
+      });
+
+      // Monitor track ended event
+      videoTrack.addEventListener('ended', () => {
+        logger.error('[Canvas Track] Video track ENDED unexpectedly!', {
+          id: videoTrack.id,
+          readyState: videoTrack.readyState,
+        });
+      });
+
+      // Monitor track muted event - CRITICAL FIX for browser auto-muting
+      videoTrack.addEventListener('mute', async () => {
+        logger.error('[Canvas Track] Video track MUTED! Recreating stream...', {
+          id: videoTrack.id,
+        });
+
+        // Browser has auto-muted the track (usually due to "static" content detection)
+        // We need to recreate the canvas stream to get an unmuted track
+        try {
+          // Stop old stream
+          if (this.outputStream) {
+            this.outputStream.getTracks().forEach(track => track.stop());
+          }
+
+          // Create new stream from canvas
+          this.outputStream = this.canvas!.captureStream(30);
+          const newVideoTrack = this.outputStream.getVideoTracks()[0];
+
+          logger.info('[Canvas Track] New stream created after mute', {
+            oldTrackId: videoTrack.id,
+            newTrackId: newVideoTrack.id,
+            newTrackMuted: newVideoTrack.muted,
+            newTrackState: newVideoTrack.readyState,
+          });
+
+          // Set up listeners on new track
+          newVideoTrack.addEventListener('mute', () => {
+            logger.error('[Canvas Track] New track also MUTED!', { id: newVideoTrack.id });
+          });
+
+          // TODO: Notify WebRTC service to replace track in producer
+          // For now, the stream recreation will help with future connections
+        } catch (error) {
+          logger.error('[Canvas Track] Failed to recreate stream after mute:', error);
+        }
+      });
+
+      // Monitor track unmuted event
+      videoTrack.addEventListener('unmute', () => {
+        logger.info('[Canvas Track] Video track UNMUTED!', {
+          id: videoTrack.id,
+        });
+      });
+    }
 
     // Start animation loop
     this.animate();
@@ -403,6 +650,20 @@ class CompositorService {
       this.outputStream.getTracks().forEach((track) => track.stop());
       this.outputStream = null;
     }
+
+    // CRITICAL FIX: Clean up video elements to prevent DOM memory leaks
+    this.videoElements.forEach((video, participantId) => {
+      // Stop video and clear srcObject
+      video.pause();
+      video.srcObject = null;
+      video.load(); // Force cleanup
+      // Remove from DOM if attached
+      if (video.parentNode) {
+        video.parentNode.removeChild(video);
+      }
+      logger.debug(`Cleaned up video element for participant ${participantId}`);
+    });
+    this.videoElements.clear();
 
     // Clean up cached images
     this.backgroundImage = null;
@@ -454,17 +715,39 @@ class CompositorService {
   }
 
   /**
-   * Main animation loop
+   * Main animation loop with FPS throttling
    */
   private animate = (): void => {
-    if (!this.isCompositing || !this.ctx) return;
+    if (!this.isCompositing) {
+      logger.error('❌ Animation loop stopped: isCompositing = false');
+      return;
+    }
 
-    const frameStartTime = performance.now();
+    if (!this.ctx) {
+      logger.error('❌ Animation loop stopped: ctx is null');
+      return;
+    }
 
-    // Track frame timing
+    // FPS throttling - only render if enough time has passed
+    const now = performance.now();
+    const elapsed = now - this.lastRenderTime;
+    const targetFrameTime = 1000 / this.FPS; // 33.33ms for 30fps
+
+    // If not enough time has passed, schedule next frame and skip rendering
+    if (this.lastRenderTime > 0 && elapsed < targetFrameTime - 1) {
+      this.animationFrameId = requestAnimationFrame(this.animate);
+      return;
+    }
+
+    // Update render time, accounting for any drift
+    this.lastRenderTime = now - (elapsed % targetFrameTime);
+
+    const frameStartTime = now;
+
+    // Track frame timing for performance metrics
     if (this.lastFrameTime > 0) {
       const frameDelta = frameStartTime - this.lastFrameTime;
-      const expectedFrameTime = 1000 / this.FPS;
+      const expectedFrameTime = targetFrameTime;
 
       // Detect dropped frames (frame took longer than expected + 50% tolerance)
       if (frameDelta > expectedFrameTime * 1.5) {
@@ -478,33 +761,69 @@ class CompositorService {
       this.ctx.fillStyle = '#000000';
       this.ctx.fillRect(0, 0, this.WIDTH, this.HEIGHT);
 
+      // CRITICAL FIX: Always draw participant video to prevent canvas track from being muted
+      // The browser auto-mutes canvas tracks with static/uniform content (like countdown-only)
+      // We must render real video content continuously to keep the track active
+
       // Draw background if exists
       if (this.background) {
         this.drawBackground();
       }
 
-      // Draw participants based on layout
+      // ALWAYS draw participants - this keeps canvas "active" with real video
       this.drawParticipants();
 
-      // Draw overlays (logos, banners, lower thirds)
-      this.drawOverlays();
+      // Draw overlays (logos, banners, lower thirds) - except during countdown/media clip
+      if (!this.countdownValue && !this.mediaClipOverlay) {
+        this.drawOverlays();
 
-      // Draw chat messages if enabled
-      if (this.showChat) {
-        this.drawChatMessages();
+        // Draw chat messages if enabled
+        if (this.showChat) {
+          this.drawChatMessages();
+        }
+
+        // Draw lower third if active
+        if (this.lowerThird) {
+          this.drawLowerThird();
+        }
       }
 
-      // Draw lower third if active
-      if (this.lowerThird) {
-        this.drawLowerThird();
-      }
-
-      // Draw media clip overlay if active (on top of everything)
-      if (this.mediaClipOverlay) {
+      // Draw fullscreen overlays LAST (on top of everything)
+      if (this.countdownValue !== null) {
+        // Countdown overlay - drawn over participant video
+        this.drawCountdown();
+      } else if (this.mediaClipOverlay) {
+        // Media clip overlay - drawn over participant video
         this.drawMediaClipOverlay();
       }
+
+      // CRITICAL FIX: Draw invisible anti-mute marker
+      // Browser auto-mutes canvas tracks with "static" content to save resources
+      // By drawing a single changing pixel every frame, we prevent auto-muting
+      // This pixel is practically invisible but ensures continuous canvas changes
+      const antiMuteColor = this.frameCount % 2 === 0 ? 0 : 1;
+      this.ctx.fillStyle = `rgb(${antiMuteColor}, ${antiMuteColor}, ${antiMuteColor})`;
+      this.ctx.fillRect(this.WIDTH - 1, this.HEIGHT - 1, 1, 1);
     } catch (error) {
       logger.error('Compositor animation error:', error);
+    }
+
+    // DIAGNOSTIC: Monitor canvas track state periodically
+    // Using automatic frame capture now (30 fps), so no manual requestFrame() needed
+    if (this.outputStream) {
+      const videoTrack = this.outputStream.getVideoTracks()[0];
+      if (videoTrack) {
+        // Log track state every 5 seconds (150 frames at 30fps)
+        if (this.frameCount % 150 === 0) {
+          logger.info('[Canvas Track] State check:', {
+            frameCount: this.frameCount,
+            enabled: videoTrack.enabled,
+            muted: videoTrack.muted,
+            readyState: videoTrack.readyState,
+            trackId: videoTrack.id,
+          });
+        }
+      }
     }
 
     // Track render time
@@ -520,10 +839,10 @@ class CompositorService {
     this.frameCount++;
 
     // Report performance metrics every 5 seconds
-    const now = Date.now();
-    if (now - this.lastFpsReport >= 5000) {
+    const metricsTime = Date.now();
+    if (metricsTime - this.lastFpsReport >= 5000) {
       this.reportPerformanceMetrics();
-      this.lastFpsReport = now;
+      this.lastFpsReport = metricsTime;
     }
 
     // Continue loop
@@ -1003,37 +1322,141 @@ class CompositorService {
 
     const element = this.mediaClipOverlay;
 
-    // Calculate dimensions to maintain aspect ratio
-    let drawWidth = this.WIDTH;
-    let drawHeight = this.HEIGHT;
-    let drawX = 0;
-    let drawY = 0;
-
-    if (element instanceof HTMLVideoElement || element instanceof HTMLImageElement) {
-      const videoWidth = element instanceof HTMLVideoElement ? element.videoWidth : element.naturalWidth;
-      const videoHeight = element instanceof HTMLVideoElement ? element.videoHeight : element.naturalHeight;
-
-      if (videoWidth && videoHeight) {
-        const aspectRatio = videoWidth / videoHeight;
-        const canvasAspectRatio = this.WIDTH / this.HEIGHT;
-
-        if (aspectRatio > canvasAspectRatio) {
-          // Video is wider than canvas
-          drawWidth = this.WIDTH;
-          drawHeight = this.WIDTH / aspectRatio;
-          drawX = 0;
-          drawY = (this.HEIGHT - drawHeight) / 2;
-        } else {
-          // Video is taller than canvas
-          drawHeight = this.HEIGHT;
-          drawWidth = this.HEIGHT * aspectRatio;
-          drawX = (this.WIDTH - drawWidth) / 2;
-          drawY = 0;
-        }
+    // CRITICAL FIX: Check if video is ready before attempting to draw
+    if (element instanceof HTMLVideoElement) {
+      // Video must have metadata loaded (readyState >= 2) to draw properly
+      if (element.readyState < 2) {
+        // Video metadata not loaded yet - skip drawing this frame
+        return;
       }
 
-      // Draw the media clip
-      this.ctx.drawImage(element, drawX, drawY, drawWidth, drawHeight);
+      // Validate video dimensions are non-zero
+      if (element.videoWidth === 0 || element.videoHeight === 0) {
+        console.warn('[Compositor] Video dimensions not yet available:', {
+          videoWidth: element.videoWidth,
+          videoHeight: element.videoHeight,
+          readyState: element.readyState,
+        });
+        return;
+      }
+
+      // Calculate dimensions to maintain aspect ratio - FILL ENTIRE CANVAS
+      const videoAspect = element.videoWidth / element.videoHeight;
+      const canvasAspect = this.WIDTH / this.HEIGHT;
+
+      let drawWidth: number;
+      let drawHeight: number;
+      let drawX: number;
+      let drawY: number;
+
+      if (videoAspect > canvasAspect) {
+        // Video is wider - fit to canvas width
+        drawWidth = this.WIDTH;
+        drawHeight = this.WIDTH / videoAspect;
+        drawX = 0;
+        drawY = (this.HEIGHT - drawHeight) / 2;
+      } else {
+        // Video is taller - fit to canvas height
+        drawHeight = this.HEIGHT;
+        drawWidth = this.HEIGHT * videoAspect;
+        drawX = (this.WIDTH - drawWidth) / 2;
+        drawY = 0;
+      }
+
+      // Draw the video fullscreen on canvas
+      try {
+        this.ctx.drawImage(element, drawX, drawY, drawWidth, drawHeight);
+      } catch (error) {
+        console.error('[Compositor] Failed to draw video to canvas:', error);
+      }
+    } else if (element instanceof HTMLImageElement) {
+      // Handle image overlays
+      if (!element.complete || element.naturalWidth === 0) {
+        // Image not loaded yet
+        return;
+      }
+
+      const imageAspect = element.naturalWidth / element.naturalHeight;
+      const canvasAspect = this.WIDTH / this.HEIGHT;
+
+      let drawWidth: number;
+      let drawHeight: number;
+      let drawX: number;
+      let drawY: number;
+
+      if (imageAspect > canvasAspect) {
+        drawWidth = this.WIDTH;
+        drawHeight = this.WIDTH / imageAspect;
+        drawX = 0;
+        drawY = (this.HEIGHT - drawHeight) / 2;
+      } else {
+        drawHeight = this.HEIGHT;
+        drawWidth = this.HEIGHT * imageAspect;
+        drawX = (this.WIDTH - drawWidth) / 2;
+        drawY = 0;
+      }
+
+      try {
+        this.ctx.drawImage(element, drawX, drawY, drawWidth, drawHeight);
+      } catch (error) {
+        console.error('[Compositor] Failed to draw image to canvas:', error);
+      }
+    }
+  }
+
+  /**
+   * Draw countdown timer
+   * Renders large countdown number centered on canvas
+   * ENHANCED: Added logging and validation to debug countdown display issues
+   */
+  private drawCountdown(): void {
+    if (!this.ctx) {
+      logger.warn('[Compositor] Cannot draw countdown - no canvas context');
+      return;
+    }
+
+    if (this.countdownValue === null) {
+      return; // Countdown not active
+    }
+
+    // Log every 30 frames (once per second at 30fps) to avoid spam
+    if (this.frameCount % 30 === 0) {
+      logger.debug(`[Compositor] Drawing countdown: ${this.countdownValue} (frame ${this.frameCount})`);
+    }
+
+    try {
+      // Semi-transparent black overlay to ensure countdown is visible
+      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      this.ctx.fillRect(0, 0, this.WIDTH, this.HEIGHT);
+
+      // Draw countdown number
+      const fontSize = Math.floor(this.HEIGHT / 4); // Large font size (25% of canvas height)
+      this.ctx.font = `bold ${fontSize}px Arial`;
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+
+      // White text with black outline for visibility
+      this.ctx.strokeStyle = '#000000';
+      this.ctx.lineWidth = 20;
+      this.ctx.strokeText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
+
+      this.ctx.fillStyle = '#FFFFFF';
+      this.ctx.fillText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
+
+      // Draw "Going Live..." text below countdown
+      const subFontSize = Math.floor(this.HEIGHT / 15);
+      this.ctx.font = `${subFontSize}px Arial`;
+
+      const subTextY = this.HEIGHT / 2 + fontSize / 2 + subFontSize + 40;
+
+      this.ctx.strokeStyle = '#000000';
+      this.ctx.lineWidth = 10;
+      this.ctx.strokeText('Going Live...', this.WIDTH / 2, subTextY);
+
+      this.ctx.fillStyle = '#FFFFFF';
+      this.ctx.fillText('Going Live...', this.WIDTH / 2, subTextY);
+    } catch (error) {
+      logger.error('[Compositor] Error drawing countdown:', error);
     }
   }
 }

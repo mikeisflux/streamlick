@@ -59,8 +59,16 @@ services:
       - "1935:1935"  # RTMP
       - "40000-40100:40000-40100/udp"  # WebRTC
     environment:
+      MEDIA_SERVER_PORT: 3001
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3002}
+      MEDIASOUP_ANNOUNCED_IP: ${MEDIASOUP_ANNOUNCED_IP:-127.0.0.1}
+      EXTERNAL_FFMPEG: ${EXTERNAL_FFMPEG:-false}
+      MEDIASOUP_WORKERS: ${MEDIASOUP_WORKERS:-2}
+      MEDIASOUP_RTC_MIN_PORT: ${MEDIASOUP_RTC_MIN_PORT:-40000}
+      MEDIASOUP_RTC_MAX_PORT: ${MEDIASOUP_RTC_MAX_PORT:-40100}
       REDIS_URL: redis://redis:6379
       NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       - redis
     volumes:

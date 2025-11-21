@@ -52,11 +52,27 @@ validateEnvironment();
 
 const app = express();
 const server = http.createServer(app);
+
+logger.info('========== SOCKET.IO INITIALIZATION ==========');
+logger.info(`CORS origin: ${process.env.FRONTEND_URL || 'http://localhost:3002'}`);
+
 const io = new SocketServer(server, {
   cors: {
     origin: process.env.FRONTEND_URL || 'http://localhost:3002',
     credentials: true,
   },
+});
+
+logger.info('✅ Socket.io server created');
+
+// Debug middleware to log ALL incoming connection attempts
+io.use((socket, next) => {
+  logger.info(`[Socket.io Middleware] ========== NEW CONNECTION ATTEMPT ==========`);
+  logger.info(`[Socket.io Middleware] Socket ID: ${socket.id}`);
+  logger.info(`[Socket.io Middleware] Origin: ${socket.handshake.headers.origin}`);
+  logger.info(`[Socket.io Middleware] Referer: ${socket.handshake.headers.referer}`);
+  logger.info(`[Socket.io Middleware] User-Agent: ${socket.handshake.headers['user-agent']}`);
+  next();
 });
 
 const PORT = process.env.MEDIA_SERVER_PORT || 3001;
@@ -72,6 +88,7 @@ interface BroadcastData {
   sockets: Set<string>; // Track connected sockets
   createdAt: Date;
   lastActivity: Date;
+  isRtmpStreaming?: boolean; // Track if RTMP is currently active
 }
 
 // Store active rooms and their transports/producers/consumers
@@ -309,7 +326,19 @@ app.get('/broadcasts/:broadcastId/rtp-capabilities', async (req: express.Request
 
 // Socket.io handlers
 io.on('connection', (socket) => {
-  logger.info(`Media socket connected: ${socket.id}`);
+  logger.info(`========== SOCKET CONNECTION ESTABLISHED ==========`);
+  logger.info(`Socket ID: ${socket.id}`);
+  logger.info(`Client IP: ${socket.handshake.address}`);
+  logger.info(`Origin: ${socket.handshake.headers.origin}`);
+
+  // Log all incoming events using onAny
+  socket.onAny((eventName, ...args) => {
+    logger.info(`[Event Received] "${eventName}" on socket ${socket.id}`);
+    if (args.length > 0 && typeof args[0] === 'object') {
+      const data = JSON.stringify(args[0]).substring(0, 500);
+      logger.info(`[Event Data Preview] ${data}${args[0].length > 500 ? '...' : ''}`);
+    }
+  });
 
   // Create transport
   socket.on('create-transport', async ({ broadcastId, direction }, callback) => {
@@ -477,46 +506,130 @@ io.on('connection', (socket) => {
   // Start RTMP streaming with compositor pipeline
   socket.on('start-rtmp', async ({ broadcastId, destinations, compositeProducers }) => {
     try {
-      logger.info(`Starting RTMP stream for broadcast ${broadcastId}`);
+      logger.info(`========== START-RTMP EVENT RECEIVED ==========`);
+      logger.info(`Broadcast ID: ${broadcastId}`);
+      logger.info(`Socket ID: ${socket.id}`);
+      logger.info(`Destinations count: ${destinations?.length || 0}`);
+      logger.info(`Destinations:`, JSON.stringify(destinations, null, 2));
+      logger.info(`Composite producers:`, JSON.stringify(compositeProducers, null, 2));
+
+      // VALIDATION: Ensure at least one destination is provided
+      if (!destinations || destinations.length === 0) {
+        logger.error(`❌ VALIDATION FAILED: No RTMP destinations provided`);
+        logger.error(`Cannot start FFmpeg with empty destinations - would result in "Invalid output" error`);
+        throw new Error('Invalid output: No RTMP destinations provided. At least one destination is required.');
+      }
+      logger.info(`✅ VALIDATION PASSED: ${destinations.length} destination(s) provided`);
 
       const broadcast = broadcasts.get(broadcastId);
       if (!broadcast) {
+        logger.error(`❌ Broadcast ${broadcastId} not found in broadcasts map`);
         throw new Error('Broadcast not found');
       }
+      logger.info(`✅ Broadcast found in map`);
+
+      // Guard against duplicate start-rtmp calls
+      if (broadcast.isRtmpStreaming) {
+        logger.warn(`⚠️  RTMP already streaming for broadcast ${broadcastId}, ignoring duplicate start-rtmp event`);
+        if (socket.connected) {
+          socket.emit('rtmp-started', { broadcastId, method: 'already-streaming', note: 'RTMP was already active' });
+        }
+        return;
+      }
+
+      // Mark as streaming immediately to prevent race conditions
+      broadcast.isRtmpStreaming = true;
+      logger.info(`✅ Marked broadcast as streaming`);
 
       const router = getRouter(broadcastId);
       if (!router) {
+        logger.error(`❌ Router not found for broadcast ${broadcastId}`);
         throw new Error('Router not found');
       }
+      logger.info(`✅ Router found`);
+
+      // CRITICAL: Deduplicate destinations to prevent multiple stream keys for the same broadcast
+      // Deduplicate based on unique combination of rtmpUrl + streamKey
+      const destinationKeys = new Set();
+      const deduplicatedDestinations = destinations.filter((dest: any) => {
+        const key = `${dest.platform}:${dest.rtmpUrl}:${dest.streamKey}`;
+        if (destinationKeys.has(key)) {
+          logger.warn(`⚠️  [Media Server] Duplicate destination detected: ${dest.platform} - ${dest.rtmpUrl} (stream key: ${dest.streamKey?.substring(0, 10)}...)`);
+          return false;
+        }
+        destinationKeys.add(key);
+        return true;
+      });
+
+      if (deduplicatedDestinations.length !== destinations.length) {
+        logger.warn(`⚠️  [Media Server] Deduplicated ${destinations.length} destinations to ${deduplicatedDestinations.length} (removed ${destinations.length - deduplicatedDestinations.length} duplicates)`);
+        logger.warn(`⚠️  [Media Server] Original destinations: ${JSON.stringify(destinations.map((d: any) => ({ platform: d.platform, streamKey: d.streamKey?.substring(0, 10) })))}`);
+        logger.warn(`⚠️  [Media Server] Deduplicated destinations: ${JSON.stringify(deduplicatedDestinations.map((d: any) => ({ platform: d.platform, streamKey: d.streamKey?.substring(0, 10) })))}`);
+      }
+
+      // Use deduplicated array for the rest of the function
+      const finalDestinations = deduplicatedDestinations;
 
       // If composite producers are specified, use compositor pipeline
       if (compositeProducers?.videoProducerId && compositeProducers?.audioProducerId) {
+        logger.info(`[Compositor Pipeline] Video producer ID: ${compositeProducers.videoProducerId}`);
+        logger.info(`[Compositor Pipeline] Audio producer ID: ${compositeProducers.audioProducerId}`);
+
         const videoProducer = broadcast.producers.get(compositeProducers.videoProducerId);
         const audioProducer = broadcast.producers.get(compositeProducers.audioProducerId);
 
+        logger.info(`[Compositor Pipeline] Video producer found: ${!!videoProducer}`);
+        logger.info(`[Compositor Pipeline] Audio producer found: ${!!audioProducer}`);
+        logger.info(`[Compositor Pipeline] Available producers in map: ${Array.from(broadcast.producers.keys()).join(', ')}`);
+
         if (videoProducer && audioProducer) {
-          await createCompositorPipeline(router, broadcastId, videoProducer, audioProducer, destinations);
+          logger.info(`🚀 Starting compositor pipeline for ${finalDestinations.length} destination(s)...`);
+
+          // Log each destination details
+          finalDestinations.forEach((dest: any, index: number) => {
+            logger.info(`[Destination ${index + 1}] Platform: ${dest.platform}`);
+            logger.info(`[Destination ${index + 1}] RTMP URL: ${dest.rtmpUrl}`);
+            logger.info(`[Destination ${index + 1}] Stream Key length: ${dest.streamKey?.length || 0}`);
+            logger.info(`[Destination ${index + 1}] Full RTMP: ${dest.rtmpUrl}/${dest.streamKey?.substring(0, 10)}...`);
+          });
+
+          await createCompositorPipeline(router, broadcastId, videoProducer, audioProducer, finalDestinations);
+
           if (socket.connected) {
             socket.emit('rtmp-started', { broadcastId, method: 'compositor-pipeline' });
           }
-          logger.info('RTMP started with compositor pipeline');
+          logger.info('✅ RTMP started with compositor pipeline');
         } else {
-          logger.warn('Composite producers not found, falling back to legacy RTMP');
-          startRTMPStream(broadcastId, destinations);
+          logger.warn('⚠️  Composite producers not found, falling back to legacy RTMP');
+          logger.warn(`Available producers: ${Array.from(broadcast.producers.keys()).join(', ')}`);
+          startRTMPStream(broadcastId, finalDestinations);
           if (socket.connected) {
             socket.emit('rtmp-started', { broadcastId, method: 'legacy' });
           }
         }
       } else {
         // Fallback to legacy RTMP (for backwards compatibility)
-        logger.info('Using legacy RTMP streaming');
-        startRTMPStream(broadcastId, destinations);
+        logger.info('⚠️  No composite producers specified, using legacy RTMP streaming');
+        logger.info(`Video producer ID: ${compositeProducers?.videoProducerId || 'undefined'}`);
+        logger.info(`Audio producer ID: ${compositeProducers?.audioProducerId || 'undefined'}`);
+        startRTMPStream(broadcastId, finalDestinations);
         if (socket.connected) {
           socket.emit('rtmp-started', { broadcastId, method: 'legacy' });
         }
       }
+
+      logger.info(`========== START-RTMP COMPLETED ==========`);
     } catch (error) {
-      logger.error('Start RTMP error:', error);
+      logger.error('❌ Start RTMP error:', error);
+      logger.error('Error stack:', (error as Error).stack);
+
+      // Clear streaming flag on error
+      const broadcast = broadcasts.get(broadcastId);
+      if (broadcast) {
+        broadcast.isRtmpStreaming = false;
+        logger.info(`Cleared streaming flag due to error`);
+      }
+
       if (socket.connected) {
         socket.emit('rtmp-error', { error: 'Failed to start RTMP stream' });
       }
@@ -526,11 +639,20 @@ io.on('connection', (socket) => {
   // Stop RTMP streaming
   socket.on('stop-rtmp', async ({ broadcastId }) => {
     try {
+      logger.info(`Stop RTMP requested for broadcast ${broadcastId}`);
+
       // Stop compositor pipeline (if active)
       await stopCompositorPipeline(broadcastId);
 
       // Stop legacy RTMP (if active)
       stopRTMPStream(broadcastId);
+
+      // Clear streaming flag
+      const broadcast = broadcasts.get(broadcastId);
+      if (broadcast) {
+        broadcast.isRtmpStreaming = false;
+        logger.info(`Cleared streaming flag for broadcast ${broadcastId}`);
+      }
 
       if (socket.connected) {
         socket.emit('rtmp-stopped', { broadcastId });
@@ -557,16 +679,48 @@ io.on('connection', (socket) => {
 // Initialize and start server
 async function start() {
   try {
+    logger.info('========================================');
+    logger.info('🚀 MEDIA SERVER STARTING...');
+    logger.info(`⏰ Time: ${new Date().toISOString()}`);
+    logger.info(`📦 Node version: ${process.version}`);
+    logger.info(`📁 CWD: ${process.cwd()}`);
+    logger.info('========================================');
+
+    logger.info('[Startup] Loading .env configuration...');
+    logger.info('[Startup] .env loaded successfully');
+
+    logger.info('[Startup] Running environment validation...');
+    logger.info('[Startup] Validating environment variables...');
+    logger.info(`[Startup] Checking MEDIASOUP_ANNOUNCED_IP: ${process.env.MEDIASOUP_ANNOUNCED_IP}`);
+    logger.info(`[Startup] Checking FRONTEND_URL: ${process.env.FRONTEND_URL}`);
+    logger.info('[Startup] ✓ Environment validation passed');
+
+    logger.info('[Startup] Creating Express app...');
+    logger.info('[Startup] Creating HTTP server...');
+    logger.info(`[Startup] Creating Socket.IO server with CORS: ${process.env.FRONTEND_URL || 'http://localhost:3002'}`);
+    logger.info('[Startup] ✓ Socket.IO server created');
+
+    logger.info('[Startup] Setting up Socket.IO connection handler...');
+
     // Create mediasoup workers (at least 2 for redundancy)
     const numWorkers = parseInt(process.env.MEDIASOUP_WORKERS || '2');
+    logger.info('[Startup] Calling start() function...');
+    logger.info('[Startup] ========== STARTING MEDIA SERVER ==========');
+    logger.info(`[Startup] Creating ${numWorkers} mediasoup workers...`);
+
     await createWorkers(numWorkers);
 
+    logger.info('[Startup] ✓ Mediasoup workers created');
+
+    logger.info('[Startup] Starting HTTP server on port ' + PORT + '...');
     server.listen(PORT, () => {
-      logger.info(`🎥 Streamlick Media Server running on port ${PORT}`);
-      logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      logger.info('========== ✅ SERVER LISTENING ON PORT ' + PORT + ' ==========');
+      logger.info(`[Startup] Environment: ${process.env.NODE_ENV || 'development'}`);
+      logger.info(`[Startup] FRONTEND_URL: ${process.env.FRONTEND_URL || 'http://localhost:3002'}`);
+      logger.info(`[Startup] Time: ${new Date().toISOString()}`);
     });
   } catch (error) {
-    logger.error('Failed to start media server:', error);
+    logger.error('❌ Failed to start media server:', error);
     process.exit(1);
   }
 }

@@ -16,7 +16,7 @@ const ALLOWED_TYPES = {
 // Maximum file sizes (in bytes)
 const MAX_SIZES = {
   image: 10 * 1024 * 1024, // 10 MB
-  video: 500 * 1024 * 1024, // 500 MB
+  video: 2 * 1024 * 1024 * 1024, // 2 GB
   audio: 50 * 1024 * 1024, // 50 MB
 };
 

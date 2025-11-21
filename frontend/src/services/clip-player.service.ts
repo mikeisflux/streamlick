@@ -3,6 +3,8 @@
  * Handles playback of media clips (video, audio, images) during live streams
  */
 
+import { audioMixerService } from './audio-mixer.service';
+
 export interface MediaClip {
   id: string;
   name: string;
@@ -18,25 +20,15 @@ interface PlaybackState {
   element: HTMLVideoElement | HTMLAudioElement | HTMLImageElement;
   startTime: number;
   endTime?: number;
-  audioContext?: AudioContext;
-  gainNode?: GainNode;
-  sourceNode?: MediaElementAudioSourceNode;
 }
 
 class ClipPlayerService {
   private activeClips: Map<string, PlaybackState> = new Map();
-  private audioContext: AudioContext | null = null;
-  private masterGainNode: GainNode | null = null;
   private onPlayCallback?: (clipId: string) => void;
   private onStopCallback?: (clipId: string) => void;
 
   constructor() {
-    // Initialize audio context
-    if (typeof window !== 'undefined' && window.AudioContext) {
-      this.audioContext = new AudioContext();
-      this.masterGainNode = this.audioContext.createGain();
-      this.masterGainNode.connect(this.audioContext.destination);
-    }
+    // Audio is now handled by audioMixerService - no separate AudioContext needed
   }
 
   /**
@@ -53,30 +45,10 @@ class ClipPlayerService {
     const video = document.createElement('video');
     video.src = clip.url;
     video.crossOrigin = 'anonymous';
-    video.muted = false;
+    video.muted = false; // Keep unmuted so audio can be captured
     video.volume = clip.volume / 100;
     video.autoplay = true;
     video.loop = false;
-
-    // Connect audio to audio context if available
-    let audioContext: AudioContext | undefined;
-    let gainNode: GainNode | undefined;
-    let sourceNode: MediaElementAudioSourceNode | undefined;
-
-    if (this.audioContext && this.masterGainNode) {
-      try {
-        sourceNode = this.audioContext.createMediaElementSource(video);
-        gainNode = this.audioContext.createGain();
-        gainNode.gain.value = clip.volume / 100;
-
-        sourceNode.connect(gainNode);
-        gainNode.connect(this.masterGainNode);
-
-        audioContext = this.audioContext;
-      } catch (error) {
-        console.warn('Failed to connect video audio to context:', error);
-      }
-    }
 
     const startTime = Date.now();
     const endTime = clip.duration ? startTime + clip.duration : undefined;
@@ -86,17 +58,41 @@ class ClipPlayerService {
       element: video,
       startTime,
       endTime,
-      audioContext,
-      gainNode,
-      sourceNode,
     };
 
     this.activeClips.set(clip.id, state);
 
-    // Register with compositor if provided
-    if (compositorService) {
-      compositorService.setMediaClipOverlay(video);
-    }
+    // CRITICAL FIX: Wait for video metadata to load before registering with compositor
+    // This prevents the black canvas issue where compositor tries to draw before video is ready
+    const metadataLoaded = new Promise<void>((resolve, reject) => {
+      if (video.readyState >= 2) {
+        // Metadata already loaded
+        resolve();
+      } else {
+        // Wait for loadedmetadata event
+        video.addEventListener('loadedmetadata', () => {
+          console.log('[ClipPlayer] Video metadata loaded:', {
+            width: video.videoWidth,
+            height: video.videoHeight,
+            duration: video.duration,
+            readyState: video.readyState,
+          });
+          resolve();
+        }, { once: true });
+
+        video.addEventListener('error', (e) => {
+          console.error('[ClipPlayer] Video load error:', e);
+          reject(new Error('Failed to load video metadata'));
+        }, { once: true });
+
+        // Timeout after 10 seconds
+        setTimeout(() => {
+          if (video.readyState < 2) {
+            reject(new Error('Video metadata load timeout'));
+          }
+        }, 10000);
+      }
+    });
 
     // Handle video end
     video.addEventListener('ended', () => {
@@ -118,7 +114,37 @@ class ClipPlayerService {
       }, clip.duration!);
     }
 
+    // Start playing the video
     await video.play();
+
+    // Wait for metadata to be loaded before registering with compositor
+    try {
+      await metadataLoaded;
+      console.log('[ClipPlayer] Video ready to display on canvas');
+
+      // CRITICAL FIX: Add video audio to the compositor's audio mixer
+      // This ensures the clip's audio is included in the output stream to YouTube
+      try {
+        console.log('[ClipPlayer] Adding video clip audio to mixer...');
+        audioMixerService.addMediaElement(`clip-${clip.id}`, video);
+        // Apply volume via mixer
+        audioMixerService.setStreamVolume(`clip-${clip.id}`, clip.volume / 100);
+        console.log('[ClipPlayer] Video clip audio added to mixer successfully');
+      } catch (audioError) {
+        console.error('[ClipPlayer] Failed to add video audio to mixer:', audioError);
+        // Continue anyway - video will play without audio in output stream
+      }
+
+      // NOW register with compositor - video is guaranteed to be ready
+      if (compositorService) {
+        compositorService.setMediaClipOverlay(video);
+      }
+    } catch (error) {
+      console.error('[ClipPlayer] Failed to load video metadata:', error);
+      // Clean up on error
+      this.stopClip(clip.id);
+      throw error;
+    }
 
     if (this.onPlayCallback) {
       this.onPlayCallback(clip.id);
@@ -139,24 +165,17 @@ class ClipPlayerService {
     audio.crossOrigin = 'anonymous';
     audio.volume = clip.volume / 100;
 
-    // Connect to audio context if available
-    let audioContext: AudioContext | undefined;
-    let gainNode: GainNode | undefined;
-    let sourceNode: MediaElementAudioSourceNode | undefined;
-
-    if (this.audioContext && this.masterGainNode) {
-      try {
-        sourceNode = this.audioContext.createMediaElementSource(audio);
-        gainNode = this.audioContext.createGain();
-        gainNode.gain.value = clip.volume / 100;
-
-        sourceNode.connect(gainNode);
-        gainNode.connect(this.masterGainNode);
-
-        audioContext = this.audioContext;
-      } catch (error) {
-        console.warn('Failed to connect audio to context:', error);
-      }
+    // CRITICAL FIX: Add audio to the compositor's audio mixer
+    // This ensures the clip's audio is included in the output stream to YouTube
+    try {
+      console.log('[ClipPlayer] Adding audio clip to mixer...');
+      audioMixerService.addMediaElement(`clip-${clip.id}`, audio);
+      // Apply volume via mixer
+      audioMixerService.setStreamVolume(`clip-${clip.id}`, clip.volume / 100);
+      console.log('[ClipPlayer] Audio clip added to mixer successfully');
+    } catch (error) {
+      console.error('[ClipPlayer] Failed to add audio to mixer:', error);
+      // Continue anyway - audio will play locally but not in output stream
     }
 
     const startTime = Date.now();
@@ -167,9 +186,6 @@ class ClipPlayerService {
       element: audio,
       startTime,
       endTime,
-      audioContext,
-      gainNode,
-      sourceNode,
     };
 
     this.activeClips.set(clip.id, state);
@@ -262,15 +278,8 @@ class ClipPlayerService {
       state.element.currentTime = 0;
     }
 
-    // Disconnect audio nodes
-    if (state.sourceNode && state.gainNode) {
-      try {
-        state.sourceNode.disconnect();
-        state.gainNode.disconnect();
-      } catch (error) {
-        // Already disconnected
-      }
-    }
+    // CRITICAL FIX: Remove audio from mixer
+    audioMixerService.removeStream(`clip-${clipId}`);
 
     this.activeClips.delete(clipId);
 
@@ -328,11 +337,11 @@ class ClipPlayerService {
 
   /**
    * Set master volume for all clips
+   * NOTE: This is now handled by the audio mixer service
    */
   setMasterVolume(volume: number): void {
-    if (this.masterGainNode) {
-      this.masterGainNode.gain.value = Math.max(0, Math.min(1, volume / 100));
-    }
+    // Master volume control is now handled by the broadcast audio mixer
+    console.log('[ClipPlayer] Master volume control delegated to audio mixer service');
   }
 
   /**
@@ -344,12 +353,12 @@ class ClipPlayerService {
 
     const normalizedVolume = Math.max(0, Math.min(1, volume / 100));
 
+    // Update volume via audio mixer
+    audioMixerService.setStreamVolume(`clip-${clipId}`, normalizedVolume);
+
+    // Also update element volume as fallback
     if (state.element instanceof HTMLVideoElement || state.element instanceof HTMLAudioElement) {
       state.element.volume = normalizedVolume;
-    }
-
-    if (state.gainNode) {
-      state.gainNode.gain.value = normalizedVolume;
     }
   }
 
@@ -371,17 +380,8 @@ class ClipPlayerService {
    * Cleanup
    */
   destroy(): void {
+    // Stop all active clips (which will remove them from the audio mixer)
     this.stopAll();
-
-    if (this.masterGainNode) {
-      this.masterGainNode.disconnect();
-      this.masterGainNode = null;
-    }
-
-    if (this.audioContext) {
-      this.audioContext.close();
-      this.audioContext = null;
-    }
   }
 }
 

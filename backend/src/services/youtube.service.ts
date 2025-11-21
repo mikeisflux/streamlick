@@ -8,6 +8,72 @@ const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 const YOUTUBE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
 /**
+ * Wait for YouTube stream to become active by polling the stream status
+ * YouTube requires the RTMP stream to be actively receiving video before allowing broadcast transitions
+ *
+ * @param streamId - The YouTube stream ID to poll
+ * @param accessToken - Valid YouTube access token
+ * @param maxAttempts - Maximum number of polling attempts (default: 12 = 60 seconds)
+ * @param delayMs - Delay between polling attempts in milliseconds (default: 5000 = 5 seconds)
+ * @returns true if stream becomes active, false if timeout reached
+ */
+async function waitForStreamActive(
+  streamId: string,
+  accessToken: string,
+  maxAttempts: number = 12,
+  delayMs: number = 5000
+): Promise<boolean> {
+  logger.info(`[YouTube Stream Poll] Starting to poll stream ${streamId} (max ${maxAttempts * delayMs / 1000}s)`);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      logger.info(`[YouTube Stream Poll] Attempt ${attempt}/${maxAttempts} - Checking stream status...`);
+
+      const response = await axios.get(`${YOUTUBE_API_BASE}/liveStreams`, {
+        params: {
+          part: 'status',
+          id: streamId,
+        },
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      const stream = response.data.items?.[0];
+      if (!stream) {
+        logger.error(`[YouTube Stream Poll] Stream ${streamId} not found`);
+        return false;
+      }
+
+      const streamStatus = stream.status?.streamStatus;
+      const healthStatus = stream.status?.healthStatus?.status;
+
+      logger.info(`[YouTube Stream Poll] Stream status: ${streamStatus}, Health: ${healthStatus || 'N/A'}`);
+
+      // Stream is active when it's receiving video data
+      if (streamStatus === 'active') {
+        logger.info(`[YouTube Stream Poll] ✅ Stream is ACTIVE after ${attempt} attempts (${attempt * delayMs / 1000}s)`);
+        return true;
+      }
+
+      // If not active yet, wait before next poll
+      if (attempt < maxAttempts) {
+        logger.info(`[YouTube Stream Poll] ⏳ Stream not active yet, waiting ${delayMs / 1000}s before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    } catch (error: any) {
+      logger.error(`[YouTube Stream Poll] Error checking stream status:`, error.response?.data || error.message);
+
+      // If we can't check status, wait and retry
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  logger.warn(`[YouTube Stream Poll] ⏱️  Timeout reached after ${maxAttempts} attempts (${maxAttempts * delayMs / 1000}s)`);
+  return false;
+}
+
+/**
  * Refresh YouTube access token using refresh token
  */
 export async function refreshYouTubeToken(
@@ -148,6 +214,8 @@ export async function createYouTubeLiveBroadcast(
 
     // Step 1: Create liveBroadcast
     logger.info('[YouTube Step 1/4] Creating liveBroadcast...');
+    logger.info(`[YouTube Step 1/4] Request payload: title="${title}", description="${description || ''}", privacy=${privacyStatus}`);
+
     const broadcastResponse = await axios.post(
       `${YOUTUBE_API_BASE}/liveBroadcasts`,
       {
@@ -174,6 +242,8 @@ export async function createYouTubeLiveBroadcast(
         headers: { Authorization: `Bearer ${accessToken}` },
       }
     );
+
+    logger.info(`[YouTube Step 1/4] Response: broadcastId=${broadcastResponse.data.id}, title="${broadcastResponse.data.snippet?.title}"`);
 
     const broadcastId = broadcastResponse.data.id;
     logger.info(`[YouTube Step 1/4] ✓ LiveBroadcast created successfully`, {
@@ -207,12 +277,17 @@ export async function createYouTubeLiveBroadcast(
 
     const streamId = streamResponse.data.id;
     const ingestionInfo = streamResponse.data.cdn.ingestionInfo;
-    const rtmpUrl = ingestionInfo.ingestionAddress;
+
+    // Use plain RTMP (not RTMPS) for FFmpeg compatibility
+    // FFmpeg has issues with rtmps:// URLs - use standard rtmp:// on port 1935
+    // YouTube supports both rtmp:// and rtmps:// endpoints
+    const rtmpUrl = ingestionInfo.ingestionAddress; // Plain RTMP (e.g., rtmp://a.rtmp.youtube.com/live2)
     const streamKey = ingestionInfo.streamName;
 
     logger.info(`[YouTube Step 2/4] ✓ LiveStream created successfully`, {
       streamId,
       rtmpUrl,
+      protocol: rtmpUrl.startsWith('rtmps://') ? 'RTMPS' : 'RTMP',
       streamKeyLength: streamKey?.length,
       resolution: streamResponse.data.cdn.resolution,
       frameRate: streamResponse.data.cdn.frameRate
@@ -238,25 +313,11 @@ export async function createYouTubeLiveBroadcast(
       streamId
     });
 
-    // Step 4: Transition to "testing" status (allows RTMP stream to connect)
-    logger.info('[YouTube Step 4/4] Transitioning broadcast to testing...');
-    await axios.post(
-      `${YOUTUBE_API_BASE}/liveBroadcasts/transition`,
-      null,
-      {
-        params: {
-          id: broadcastId,
-          broadcastStatus: 'testing',
-          part: 'status',
-        },
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
-    );
-
-    logger.info(`[YouTube Step 4/4] ✓ Broadcast transitioned to testing`, {
-      broadcastId,
-      status: 'testing'
-    });
+    // Step 4: Return immediately - background monitoring will handle transition
+    // The monitorAndTransitionYouTubeBroadcast function (called from broadcasts.routes.ts)
+    // will poll the stream status and transition when active
+    logger.info('[YouTube Step 4/4] ✓ Broadcast created and bound to stream');
+    logger.info('[YouTube Step 4/4] Background monitoring will transition to live when stream is active');
 
     logger.info('✓ YouTube live broadcast created successfully', {
       broadcastId,
@@ -298,7 +359,9 @@ export async function transitionYouTubeBroadcastToLive(
   accessToken: string
 ): Promise<void> {
   try {
-    logger.info(`[YouTube Transition] Transitioning broadcast to live`, { broadcastId });
+    logger.info(`[YouTube Transition] ========== TRANSITIONING TO LIVE ==========`);
+    logger.info(`[YouTube Transition] Broadcast ID: ${broadcastId}`);
+    logger.info(`[YouTube Transition] Calling liveBroadcasts.transition with broadcastStatus="live"`);
 
     const response = await axios.post(
       `${YOUTUBE_API_BASE}/liveBroadcasts/transition`,
@@ -313,10 +376,12 @@ export async function transitionYouTubeBroadcastToLive(
       }
     );
 
+    logger.info(`[YouTube Transition] ========== TRANSITION SUCCESSFUL ==========`);
     logger.info(`[YouTube Transition] ✓ Broadcast is now LIVE`, {
       broadcastId,
       lifeCycleStatus: response.data?.status?.lifeCycleStatus,
-      privacyStatus: response.data?.status?.privacyStatus
+      privacyStatus: response.data?.status?.privacyStatus,
+      recordingStatus: response.data?.status?.recordingStatus
     });
   } catch (error: any) {
     const errorDetails = {
@@ -324,10 +389,13 @@ export async function transitionYouTubeBroadcastToLive(
       status: error.response?.status,
       statusText: error.response?.statusText,
       apiError: error.response?.data?.error,
+      apiErrorMessage: error.response?.data?.error?.message,
+      apiErrorCode: error.response?.data?.error?.code,
       message: error.message
     };
 
-    logger.error('[YouTube Transition] ✗ Failed to transition to live', errorDetails);
+    logger.error('[YouTube Transition] ========== TRANSITION FAILED ==========', errorDetails);
+    logger.error(`[YouTube Transition] Full error response: ${JSON.stringify(error.response?.data)}`);
     throw new Error(
       `Failed to transition YouTube broadcast to live: ${error.response?.data?.error?.message || error.message}`
     );
@@ -395,11 +463,12 @@ export async function deleteYouTubeLiveBroadcast(
 
 /**
  * Get YouTube broadcast status
+ * BEST PRACTICE: Also fetch the bound stream status to check if it's actively receiving data
  */
 export async function getYouTubeBroadcastStatus(
   broadcastId: string,
   accessToken: string
-): Promise<{ lifeCycleStatus: string; healthStatus?: any }> {
+): Promise<{ lifeCycleStatus: string; healthStatus?: any; streamStatus?: string; streamId?: string }> {
   try {
     const response = await axios.get(`${YOUTUBE_API_BASE}/liveBroadcasts`, {
       params: {
@@ -414,10 +483,36 @@ export async function getYouTubeBroadcastStatus(
       throw new Error('Broadcast not found');
     }
 
-    return {
+    const result: any = {
       lifeCycleStatus: broadcast.status.lifeCycleStatus,
       healthStatus: broadcast.contentDetails?.monitorStream?.healthStatus,
     };
+
+    // BEST PRACTICE: Check the bound stream's status
+    // YouTube recommends verifying streamStatus is 'active' before transitioning to live
+    const boundStreamId = broadcast.contentDetails?.boundStreamId;
+    if (boundStreamId) {
+      try {
+        const streamResponse = await axios.get(`${YOUTUBE_API_BASE}/liveStreams`, {
+          params: {
+            part: 'status',
+            id: boundStreamId,
+          },
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+
+        const stream = streamResponse.data.items?.[0];
+        if (stream) {
+          result.streamStatus = stream.status?.streamStatus;
+          result.streamId = boundStreamId;
+        }
+      } catch (streamError) {
+        // Don't fail if we can't get stream status, just log it
+        logger.warn(`Could not fetch stream status for ${boundStreamId}`);
+      }
+    }
+
+    return result;
   } catch (error: any) {
     logger.error('Error getting YouTube broadcast status:', error.response?.data || error.message);
     throw new Error(
@@ -486,28 +581,48 @@ export async function monitorAndTransitionYouTubeBroadcast(
       }
 
       const status = await getYouTubeBroadcastStatus(broadcastId, accessToken);
-      logger.info(`[YouTube Monitor] Status check ${attempt}/${maxAttempts}`, {
-        broadcastId,
-        lifeCycleStatus: status.lifeCycleStatus,
-        streamHealth: status.healthStatus?.status || 'unknown',
-        configurationIssues: status.healthStatus?.configurationIssues
-      });
+      logger.info(`[YouTube Monitor] ========== STATUS CHECK ${attempt}/${maxAttempts} ==========`);
+      logger.info(`[YouTube Monitor] Broadcast ID: ${broadcastId}`);
+      logger.info(`[YouTube Monitor] Lifecycle Status: ${status.lifeCycleStatus}`);
+      logger.info(`[YouTube Monitor] Stream Status: ${status.streamStatus || 'unknown'}`);
+      logger.info(`[YouTube Monitor] Stream Health: ${status.healthStatus?.status || 'unknown'}`);
+      if (status.healthStatus?.configurationIssues) {
+        logger.warn(`[YouTube Monitor] Configuration Issues:`, status.healthStatus.configurationIssues);
+      }
 
-      // Check if stream is receiving data
-      if (status.healthStatus?.status === 'good' || status.healthStatus?.status === 'ok') {
-        logger.info(`[YouTube Monitor] ✓ Stream detected! Initiating transition to live`, {
-          broadcastId,
-          attempt,
-          streamHealth: status.healthStatus.status
-        });
+      // BEST PRACTICE: Check stream status is 'active' before transitioning
+      // YouTube documentation recommends verifying the bound stream is actively receiving data
+      // Check if we should transition to live:
+      // 1. Health status is good/ok (YouTube explicitly validated stream), OR
+      // 2. Lifecycle status is liveStarting (YouTube detected stream and is ready to go live), OR
+      // 3. Stream status is 'active' AND we've waited at least 10 seconds (stream is receiving data)
+      const healthIsGood = status.healthStatus?.status === 'good' || status.healthStatus?.status === 'ok';
+      const lifecycleIsReady = status.lifeCycleStatus === 'liveStarting';
+      const streamIsActive = status.streamStatus === 'active';
+      const healthIsUnknownButStreamActive = streamIsActive && attempt >= 5; // Stream active for 10+ seconds
+
+      const shouldTransition = healthIsGood || lifecycleIsReady || healthIsUnknownButStreamActive;
+
+      if (shouldTransition) {
+        let reason = '';
+        if (healthIsGood) {
+          reason = `Stream health is ${status.healthStatus.status.toUpperCase()}`;
+        } else if (lifecycleIsReady) {
+          reason = 'Lifecycle status is liveStarting';
+        } else if (healthIsUnknownButStreamActive) {
+          reason = `Stream status is ACTIVE (${status.streamStatus}) and has been running for 10+ seconds`;
+        }
+
+        logger.info(`[YouTube Monitor] ========== STREAM DETECTED! ==========`);
+        logger.info(`[YouTube Monitor] ✓ ${reason}`);
+        logger.info(`[YouTube Monitor] Initiating transition to live after ${attempt} attempt(s)...`);
 
         try {
           await transitionYouTubeBroadcastToLive(broadcastId, accessToken);
-          logger.info(`[YouTube Monitor] ✓ Successfully transitioned to live!`, {
-            broadcastId,
-            totalAttempts: attempt,
-            totalWaitTime: `${(attempt * pollIntervalMs) / 1000}s`
-          });
+          logger.info(`[YouTube Monitor] ========== SUCCESS! ==========`);
+          logger.info(`[YouTube Monitor] ✓ Successfully transitioned to live!`);
+          logger.info(`[YouTube Monitor] Total attempts: ${attempt}`);
+          logger.info(`[YouTube Monitor] Total wait time: ${(attempt * pollIntervalMs) / 1000}s`);
           return;
         } catch (transitionError: any) {
           // Handle specific YouTube API errors
@@ -515,24 +630,21 @@ export async function monitorAndTransitionYouTubeBroadcast(
           const errorMessage = transitionError.response?.data?.error?.message || transitionError.message;
 
           // Error 400 with "transition" in message usually means invalid state transition
-          if (errorCode === 400 && errorMessage.includes('transition')) {
-            logger.warn(`[YouTube Monitor] Transition rejected, retrying...`, {
-              broadcastId,
-              attempt,
-              errorCode,
-              errorMessage
-            });
+          if (errorCode === 400 && errorMessage.toLowerCase().includes('transition')) {
+            logger.warn(`[YouTube Monitor] Transition rejected (attempt ${attempt}), will retry...`);
+            logger.warn(`[YouTube Monitor] Error: ${errorMessage}`);
             continue;
           }
 
           // Other errors are more serious
-          logger.error(`[YouTube Monitor] ✗ Transition failed with non-retryable error`, {
-            broadcastId,
-            errorCode,
-            errorMessage
-          });
+          logger.error(`[YouTube Monitor] ========== TRANSITION ERROR ==========`);
+          logger.error(`[YouTube Monitor] ✗ Non-retryable error on attempt ${attempt}`);
+          logger.error(`[YouTube Monitor] Error code: ${errorCode}`);
+          logger.error(`[YouTube Monitor] Error message: ${errorMessage}`);
           throw transitionError;
         }
+      } else {
+        logger.info(`[YouTube Monitor] Waiting for stream... (streamStatus: ${status.streamStatus || 'unknown'}, health: ${status.healthStatus?.status || 'unknown'}, lifecycle: ${status.lifeCycleStatus})`);
       }
 
       // Check for error states

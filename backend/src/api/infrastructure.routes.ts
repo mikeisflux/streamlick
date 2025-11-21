@@ -100,7 +100,7 @@ router.post('/deploy', async (req, res) => {
     }
 
     // Validate role
-    const validRoles = ['media-server', 'api-server', 'frontend-server', 'load-balancer', 'database-server', 'redis-server'];
+    const validRoles = ['media-server', 'api-server', 'frontend-server', 'load-balancer', 'database-server', 'redis-server', 'turn-server'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({
         error: `Invalid role. Must be one of: ${validRoles.join(', ')}`
@@ -197,6 +197,48 @@ router.post('/deploy', async (req, res) => {
         'Restrict Redis access via firewall rules (only allow backend servers)',
         'Enable Redis TLS in production'
       ];
+    } else if (role === 'turn-server') {
+      // Generate secure credentials for TURN server
+      const turnUsername = generateToken(16); // 32-char hex username
+      const turnPassword = generateToken(32); // 64-char hex password
+      const turnSecret = generateToken(32); // 64-char hex secret for long-term auth
+
+      logger.info(`TURN server deployed. Credentials generated (not logged for security).`);
+
+      responseData.server.host = server.public_net.ipv4.ip;
+      responseData.server.ports = {
+        turn: 3478,
+        turnTls: 5349,
+        udpRange: '49152-65535'
+      };
+      responseData.server.username = turnUsername;
+      responseData.server.password = turnPassword;
+      responseData.server.secret = turnSecret;
+      responseData.server.urls = [
+        `turn:${server.public_net.ipv4.ip}:3478`,
+        `turns:${server.public_net.ipv4.ip}:5349`
+      ];
+      responseData.server.webrtcConfig = {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          {
+            urls: [
+              `turn:${server.public_net.ipv4.ip}:3478`,
+              `turns:${server.public_net.ipv4.ip}:5349`
+            ],
+            username: turnUsername,
+            credential: turnPassword
+          }
+        ]
+      };
+      responseData.notes = [
+        'CRITICAL: Save credentials immediately - they will not be shown again!',
+        'Add these to your frontend WebRTC configuration',
+        'Firewall configured: UDP/TCP 3478, TCP 5349, UDP 49152-65535',
+        'TURN server uses Coturn with secure authentication',
+        'For TLS (turns://), install SSL certificate for this domain',
+        'Monitor logs: journalctl -u coturn -f'
+      ];
     }
 
     res.json(responseData);
@@ -251,7 +293,7 @@ router.post('/servers/:id/labels', async (req, res) => {
     }
 
     // Validate role
-    const validRoles = ['media-server', 'api-server', 'frontend-server', 'load-balancer', 'database-server', 'redis-server'];
+    const validRoles = ['media-server', 'api-server', 'frontend-server', 'load-balancer', 'database-server', 'redis-server', 'turn-server'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({
         error: `Invalid role. Must be one of: ${validRoles.join(', ')}`

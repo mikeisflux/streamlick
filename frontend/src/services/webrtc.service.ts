@@ -13,6 +13,20 @@ interface TransportOptions {
   dtlsParameters: unknown; // mediasoup DtlsParameters
 }
 
+interface WebRTCStats {
+  packetsLost: number;
+  jitter: number;
+  bitrate: number;
+  framesDecoded?: number;
+  timestamp: number;
+}
+
+interface ConnectionState {
+  send: string;
+  recv: string;
+  lastCheck: number;
+}
+
 class WebRTCService {
   private device: Device | null = null;
   private sendTransport: mediasoupClient.types.Transport | null = null;
@@ -21,6 +35,15 @@ class WebRTCService {
   private consumers: Map<string, mediasoupClient.types.Consumer> = new Map();
   private broadcastId: string | null = null;
   private closed: boolean = false;
+
+  // Enhanced monitoring
+  private connectionState: ConnectionState = { send: 'new', recv: 'new', lastCheck: Date.now() };
+  private statsInterval: NodeJS.Timeout | null = null;
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 5;
+  private reconnecting: boolean = false;
+  private onConnectionStateChange?: (state: ConnectionState) => void;
+  private onStatsUpdate?: (stats: WebRTCStats) => void;
 
   async initialize(broadcastId: string): Promise<void> {
     this.broadcastId = broadcastId;
@@ -113,8 +136,26 @@ class WebRTCService {
           }
         });
 
+        // Enhanced connection state monitoring with reconnection logic
         this.sendTransport.on('connectionstatechange', (state) => {
-          logger.debug('Send transport connection state:', state);
+          this.connectionState.send = state;
+          this.connectionState.lastCheck = Date.now();
+
+          logger.info(`🔌 Send transport connection state: ${state}`);
+
+          // Notify callback if registered
+          if (this.onConnectionStateChange) {
+            this.onConnectionStateChange(this.connectionState);
+          }
+
+          // Handle disconnected/failed states
+          if (state === 'disconnected' || state === 'failed') {
+            logger.warn(`❌ Send transport ${state} - attempting reconnection...`);
+            this.attemptReconnection('send');
+          } else if (state === 'connected') {
+            logger.info('✅ Send transport connected successfully');
+            this.reconnectAttempts = 0; // Reset counter on successful connection
+          }
         });
 
         resolve();
@@ -150,8 +191,26 @@ class WebRTCService {
           }
         });
 
+        // Enhanced connection state monitoring with reconnection logic
         this.recvTransport.on('connectionstatechange', (state) => {
-          logger.debug('Recv transport connection state:', state);
+          this.connectionState.recv = state;
+          this.connectionState.lastCheck = Date.now();
+
+          logger.info(`🔌 Recv transport connection state: ${state}`);
+
+          // Notify callback if registered
+          if (this.onConnectionStateChange) {
+            this.onConnectionStateChange(this.connectionState);
+          }
+
+          // Handle disconnected/failed states
+          if (state === 'disconnected' || state === 'failed') {
+            logger.warn(`❌ Recv transport ${state} - attempting reconnection...`);
+            this.attemptReconnection('recv');
+          } else if (state === 'connected') {
+            logger.info('✅ Recv transport connected successfully');
+            this.reconnectAttempts = 0;
+          }
         });
 
         resolve();
@@ -164,10 +223,76 @@ class WebRTCService {
       throw new Error('Send transport not created');
     }
 
-    const producer = await this.sendTransport.produce({ track });
+    if (!this.device) {
+      throw new Error('Device not initialized');
+    }
+
+    // Force H.264 codec for video to avoid transcoding on media server
+    // H.264 is natively supported by RTMP, so FFmpeg can use -vcodec copy
+    let codecOptions: any = { track };
+
+    if (track.kind === 'video') {
+      // Find H.264 codec in device capabilities
+      const h264Codec = this.device.rtpCapabilities.codecs?.find(
+        codec => codec.mimeType.toLowerCase() === 'video/h264'
+      );
+
+      if (h264Codec) {
+        codecOptions.codec = h264Codec;
+        logger.info('Using H.264 codec for video (avoids transcoding)');
+      } else {
+        logger.warn('H.264 codec not available, falling back to default (VP8)');
+      }
+    }
+
+    const producer = await this.sendTransport.produce(codecOptions);
     this.producers.set(producer.id, producer);
 
-    logger.info('Producer created:', producer.id, producer.kind);
+    logger.info('Producer created:', producer.id, producer.kind, producer.rtpParameters.codecs[0]?.mimeType);
+
+    // DIAGNOSTIC: Monitor producer track for video
+    if (track.kind === 'video') {
+      logger.info('[WebRTC Producer] Video track initial state:', {
+        producerId: producer.id,
+        trackId: track.id,
+        enabled: track.enabled,
+        muted: track.muted,
+        readyState: track.readyState,
+      });
+
+      // Monitor track events
+      track.addEventListener('ended', () => {
+        logger.error('[WebRTC Producer] Video track ENDED!', {
+          producerId: producer.id,
+          trackId: track.id,
+          readyState: track.readyState,
+        });
+      });
+
+      track.addEventListener('mute', () => {
+        logger.warn('[WebRTC Producer] Video track MUTED!', {
+          producerId: producer.id,
+          trackId: track.id,
+        });
+      });
+
+      track.addEventListener('unmute', () => {
+        logger.info('[WebRTC Producer] Video track UNMUTED!', {
+          producerId: producer.id,
+          trackId: track.id,
+        });
+      });
+
+      // Monitor producer events
+      producer.on('transportclose', () => {
+        logger.warn('[WebRTC Producer] Transport closed for producer', producer.id);
+      });
+
+      producer.on('trackended', () => {
+        logger.error('[WebRTC Producer] Track ended for producer', producer.id);
+      });
+    }
+
     return producer.id;
   }
 
@@ -268,6 +393,9 @@ class WebRTCService {
 
     this.closed = true;
 
+    // Stop stats monitoring
+    this.stopStatsMonitoring();
+
     // Close all producers and consumers with error handling
     try {
       this.producers.forEach((producer) => {
@@ -350,6 +478,193 @@ class WebRTCService {
 
   getConsumers(): Map<string, mediasoupClient.types.Consumer> {
     return this.consumers;
+  }
+
+  /**
+   * Attempt to reconnect transport on failure
+   * Implements exponential backoff strategy
+   */
+  private async attemptReconnection(direction: 'send' | 'recv'): Promise<void> {
+    if (this.reconnecting || this.closed) {
+      logger.warn('Already reconnecting or closed, skipping');
+      return;
+    }
+
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      logger.error(`Max reconnection attempts (${this.maxReconnectAttempts}) reached - giving up`);
+      return;
+    }
+
+    this.reconnecting = true;
+    this.reconnectAttempts++;
+
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+    const backoffDelay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 16000);
+    logger.info(`Reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${backoffDelay}ms...`);
+
+    await new Promise(resolve => setTimeout(resolve, backoffDelay));
+
+    try {
+      if (direction === 'send') {
+        logger.info('Recreating send transport...');
+        await this.createSendTransport();
+        logger.info('✅ Send transport reconnected successfully');
+      } else {
+        logger.info('Recreating recv transport...');
+        await this.createRecvTransport();
+        logger.info('✅ Recv transport reconnected successfully');
+      }
+
+      this.reconnectAttempts = 0;
+      this.reconnecting = false;
+    } catch (error) {
+      logger.error(`Reconnection attempt ${this.reconnectAttempts} failed:`, error);
+      this.reconnecting = false;
+      // Will retry on next connection state change
+    }
+  }
+
+  /**
+   * Start monitoring WebRTC stats (packet loss, jitter, bitrate)
+   * Runs every 3 seconds
+   */
+  startStatsMonitoring(intervalMs: number = 3000): void {
+    if (this.statsInterval) {
+      logger.warn('Stats monitoring already running');
+      return;
+    }
+
+    logger.info(`Starting WebRTC stats monitoring (interval: ${intervalMs}ms)`);
+
+    this.statsInterval = setInterval(async () => {
+      await this.collectAndReportStats();
+    }, intervalMs);
+  }
+
+  /**
+   * Stop stats monitoring
+   */
+  stopStatsMonitoring(): void {
+    if (this.statsInterval) {
+      clearInterval(this.statsInterval);
+      this.statsInterval = null;
+      logger.info('Stats monitoring stopped');
+    }
+  }
+
+  /**
+   * Collect stats from all transports and consumers
+   */
+  private async collectAndReportStats(): Promise<void> {
+    if (!this.sendTransport && !this.recvTransport) {
+      return;
+    }
+
+    try {
+      const stats: WebRTCStats = {
+        packetsLost: 0,
+        jitter: 0,
+        bitrate: 0,
+        timestamp: Date.now(),
+      };
+
+      // Get stats from send transport
+      if (this.sendTransport) {
+        const sendStats = await this.sendTransport.getStats();
+        sendStats.forEach((report: any) => {
+          if (report.type === 'outbound-rtp') {
+            stats.packetsLost += report.packetsLost || 0;
+            stats.bitrate += report.bytesSent || 0;
+          }
+        });
+      }
+
+      // Get stats from recv transport
+      if (this.recvTransport) {
+        const recvStats = await this.recvTransport.getStats();
+        recvStats.forEach((report: any) => {
+          if (report.type === 'inbound-rtp') {
+            stats.packetsLost += report.packetsLost || 0;
+            stats.jitter = Math.max(stats.jitter, report.jitter || 0);
+            stats.framesDecoded = report.framesDecoded;
+          }
+        });
+      }
+
+      // Log warnings for poor connection quality
+      if (stats.packetsLost > 100) {
+        logger.warn(`⚠️ High packet loss detected: ${stats.packetsLost} packets`);
+      }
+
+      if (stats.jitter > 30) {
+        logger.warn(`⚠️ High jitter detected: ${stats.jitter}ms`);
+      }
+
+      // Notify callback if registered
+      if (this.onStatsUpdate) {
+        this.onStatsUpdate(stats);
+      }
+
+      logger.debug('WebRTC Stats:', stats);
+    } catch (error) {
+      logger.error('Failed to collect stats:', error);
+    }
+  }
+
+  /**
+   * Get current connection state
+   */
+  getConnectionState(): ConnectionState {
+    return { ...this.connectionState };
+  }
+
+  /**
+   * Register callback for connection state changes
+   */
+  setConnectionStateCallback(callback: (state: ConnectionState) => void): void {
+    this.onConnectionStateChange = callback;
+  }
+
+  /**
+   * Register callback for stats updates
+   */
+  setStatsCallback(callback: (stats: WebRTCStats) => void): void {
+    this.onStatsUpdate = callback;
+  }
+
+  /**
+   * Get manual stats snapshot (for debugging)
+   */
+  async getStats(): Promise<WebRTCStats> {
+    const stats: WebRTCStats = {
+      packetsLost: 0,
+      jitter: 0,
+      bitrate: 0,
+      timestamp: Date.now(),
+    };
+
+    if (this.sendTransport) {
+      const sendStats = await this.sendTransport.getStats();
+      sendStats.forEach((report: any) => {
+        if (report.type === 'outbound-rtp') {
+          stats.packetsLost += report.packetsLost || 0;
+          stats.bitrate += report.bytesSent || 0;
+        }
+      });
+    }
+
+    if (this.recvTransport) {
+      const recvStats = await this.recvTransport.getStats();
+      recvStats.forEach((report: any) => {
+        if (report.type === 'inbound-rtp') {
+          stats.packetsLost += report.packetsLost || 0;
+          stats.jitter = Math.max(stats.jitter, report.jitter || 0);
+          stats.framesDecoded = report.framesDecoded;
+        }
+      });
+    }
+
+    return stats;
   }
 }
 
