@@ -152,7 +152,7 @@ export function BrandSettingsPanel() {
                   <strong>Video Backgrounds:</strong> 1280×720 px (up to 1-2 min)
                 </div>
                 <div>
-                  <strong>File Size:</strong> Videos &lt;200MB, Images &lt;20MB
+                  <strong>File Size:</strong> Videos &lt;2GB, Images &lt;20MB
                 </div>
               </div>
               <p className="mt-2 text-xs italic">

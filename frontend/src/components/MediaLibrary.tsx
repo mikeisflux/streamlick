@@ -16,7 +16,9 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [failedMedia, setFailedMedia] = useState<Set<string>>(new Set());
+  const [playingClips, setPlayingClips] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
 
   useEffect(() => {
     fetchClips();
@@ -134,6 +136,26 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
     }
   };
 
+  const handlePreviewClick = (clipId: string) => {
+    const videoElement = videoRefs.current.get(clipId);
+    if (!videoElement) return;
+
+    if (playingClips.has(clipId)) {
+      // Stop playing
+      videoElement.pause();
+      videoElement.currentTime = 0;
+      setPlayingClips(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(clipId);
+        return newSet;
+      });
+    } else {
+      // Start playing
+      videoElement.play();
+      setPlayingClips(prev => new Set(prev).add(clipId));
+    }
+  };
+
   const filteredClips = selectedType === 'all'
     ? clips
     : clips.filter((c) => c.type === selectedType);
@@ -200,72 +222,80 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredClips.map((clip) => (
           <div key={clip.id} className="bg-gray-700 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">{getTypeIcon(clip.type)}</span>
-                <div>
-                  <div className="text-white font-medium truncate">{clip.name}</div>
-                  {clip.duration && (
-                    <div className="text-xs text-gray-400">
-                      {(clip.duration / 1000).toFixed(1)}s
+            {/* Header with clip name */}
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-2xl">{getTypeIcon(clip.type)}</span>
+              <div className="flex-1">
+                <div className="text-white font-medium truncate">{clip.name}</div>
+                {clip.duration && (
+                  <div className="text-xs text-gray-400">
+                    {(clip.duration / 1000).toFixed(1)}s
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Preview with hover delete X */}
+            <div className="relative group">
+              {/* Delete button - appears on hover */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteClip(clip.id);
+                }}
+                className="absolute top-1 right-1 z-10 bg-red-600 text-white w-5 h-5 flex items-center justify-center rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                title="Delete"
+              >
+                ×
+              </button>
+
+              {/* Image Preview */}
+              {clip.type === 'image' && (
+                <SafeMediaPreview
+                  src={clip.url}
+                  alt={clip.name}
+                  type="image"
+                  className="w-full h-32 object-cover rounded cursor-pointer"
+                  fallbackClassName="w-full h-32 rounded"
+                  onError={(e) => handleMediaError(clip.id, e)}
+                  onRetry={() => handleRetryMedia(clip.id)}
+                />
+              )}
+
+              {/* Video Preview - Click to play/stop */}
+              {clip.type === 'video' && (
+                <div onClick={() => handlePreviewClick(clip.id)} className="cursor-pointer relative">
+                  <video
+                    ref={(el) => {
+                      if (el) videoRefs.current.set(clip.id, el);
+                    }}
+                    src={clip.url}
+                    className="w-full h-48 object-cover rounded"
+                    muted={false}
+                    preload="metadata"
+                    onEnded={() => {
+                      setPlayingClips(prev => {
+                        const newSet = new Set(prev);
+                        newSet.delete(clip.id);
+                        return newSet;
+                      });
+                    }}
+                    data-exclude-global-mute="true"
+                  />
+                  {!playingClips.has(clip.id) && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded">
+                      <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center">
+                        <div className="w-0 h-0 border-l-[20px] border-l-gray-800 border-t-[12px] border-t-transparent border-b-[12px] border-b-transparent ml-1"></div>
+                      </div>
                     </div>
                   )}
                 </div>
-              </div>
-              <button
-                onClick={() => handleDeleteClip(clip.id)}
-                className="text-red-400 hover:text-red-300 text-sm"
-                title="Delete"
-              >
-                🗑️
-              </button>
-            </div>
+              )}
 
-            {/* Thumbnail/Preview with Error Handling */}
-            {clip.type === 'image' && (
-              <SafeMediaPreview
-                src={clip.url}
-                alt={clip.name}
-                type="image"
-                className="w-full h-32 object-cover rounded mb-3"
-                fallbackClassName="w-full h-32 rounded mb-3"
-                onError={(e) => handleMediaError(clip.id, e)}
-                onRetry={() => handleRetryMedia(clip.id)}
-              />
-            )}
-            {clip.type === 'video' && (
-              <SafeMediaPreview
-                src={clip.url}
-                alt={clip.name}
-                type="video"
-                className="w-full h-48 object-cover rounded mb-3"
-                fallbackClassName="w-full h-48 rounded mb-3"
-                muted={false}
-                controls
-                preload="metadata"
-                onError={(e) => handleMediaError(clip.id, e)}
-                onRetry={() => handleRetryMedia(clip.id)}
-              />
-            )}
-            {clip.type === 'audio' && (
-              <div className="w-full h-32 bg-gray-600 rounded mb-3 flex items-center justify-center">
-                <span className="text-4xl">🎵</span>
-              </div>
-            )}
-
-            {/* Controls */}
-            <div className="flex gap-2">
-              <Button
-                onClick={() => handleTriggerClip(clip)}
-                variant="primary"
-                size="sm"
-                className="flex-1"
-              >
-                ▶️ Play
-              </Button>
-              {clip.hotkey && (
-                <div className="px-3 py-2 bg-gray-600 rounded text-xs font-mono text-white">
-                  {clip.hotkey}
+              {/* Audio Preview */}
+              {clip.type === 'audio' && (
+                <div className="w-full h-32 bg-gray-600 rounded flex items-center justify-center">
+                  <span className="text-4xl">🎵</span>
                 </div>
               )}
             </div>
