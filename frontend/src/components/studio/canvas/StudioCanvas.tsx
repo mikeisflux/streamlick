@@ -215,12 +215,10 @@ export function StudioCanvas({
 
   // Load stream background
   useEffect(() => {
-    const loadBackground = () => {
-      const bg = localStorage.getItem('streamBackground');
-      setStreamBackground(bg);
-    };
-
-    loadBackground();
+    // CRITICAL FIX: Don't load blob URLs from localStorage - they're not persistent
+    // MediaAssetsPanel will dispatch backgroundUpdated event with correct URL from IndexedDB
+    // const bg = localStorage.getItem('streamBackground'); // REMOVED - causes ERR_FILE_NOT_FOUND
+    // setStreamBackground(bg); // REMOVED
 
     // Listen for custom event for background updates
     const handleBackgroundUpdated = ((e: CustomEvent) => {
@@ -299,24 +297,14 @@ export function StudioCanvas({
   }, [customLayoutPositions, editMode]);
 
   useEffect(() => {
-    const loadLogo = () => {
-      const logo = localStorage.getItem('streamLogo');
-      setStreamLogo(logo);
-    };
-
-    const loadOverlay = () => {
-      const overlay = localStorage.getItem('streamOverlay');
-      setStreamOverlay(overlay);
-    };
-
-    const loadVideoClip = () => {
-      const clip = localStorage.getItem('streamVideoClip');
-      setVideoClip(clip);
-    };
-
-    loadLogo();
-    loadOverlay();
-    loadVideoClip();
+    // CRITICAL FIX: Don't load blob URLs from localStorage - they're not persistent
+    // MediaAssetsPanel will dispatch events with correct URLs from IndexedDB
+    // const logo = localStorage.getItem('streamLogo'); // REMOVED - causes ERR_FILE_NOT_FOUND
+    // const overlay = localStorage.getItem('streamOverlay'); // REMOVED
+    // const clip = localStorage.getItem('streamVideoClip'); // REMOVED
+    // setStreamLogo(logo); // REMOVED
+    // setStreamOverlay(overlay); // REMOVED
+    // setVideoClip(clip); // REMOVED
 
     // Listen for custom event for logo updates
     const handleLogoUpdated = ((e: CustomEvent) => {

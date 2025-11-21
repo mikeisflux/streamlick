@@ -68,20 +68,16 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   const [isLoadingAssets, setIsLoadingAssets] = useState(true);
   const objectURLsRef = useRef<string[]>([]);
 
-  // Track active overlay asset
-  const [activeOverlayUrl, setActiveOverlayUrl] = useState<string | null>(() => {
-    return localStorage.getItem('streamOverlay');
-  });
+  // Track active overlay asset - DO NOT initialize from localStorage blob URLs
+  // Blob URLs are not persistent across page reloads and will cause ERR_FILE_NOT_FOUND errors
+  // Assets will be loaded from IndexedDB using asset IDs in the useEffect below
+  const [activeOverlayUrl, setActiveOverlayUrl] = useState<string | null>(null);
 
   // Track active background asset
-  const [activeBackgroundUrl, setActiveBackgroundUrl] = useState<string | null>(() => {
-    return localStorage.getItem('streamBackground');
-  });
+  const [activeBackgroundUrl, setActiveBackgroundUrl] = useState<string | null>(null);
 
   // Track active logo asset
-  const [activeLogoUrl, setActiveLogoUrl] = useState<string | null>(() => {
-    return localStorage.getItem('streamLogo');
-  });
+  const [activeLogoUrl, setActiveLogoUrl] = useState<string | null>(null);
 
   // Load assets from localStorage metadata only
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -90,6 +86,18 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   useEffect(() => {
     const loadAssets = async () => {
       try {
+        // CRITICAL FIX: Clean up stale blob URLs from localStorage
+        // Blob URLs are not persistent and cause ERR_FILE_NOT_FOUND errors after page reload
+        // Only asset IDs should be persisted
+        const blobUrlKeys = ['streamLogo', 'streamOverlay', 'streamBackground', 'streamVideoClip'];
+        blobUrlKeys.forEach(key => {
+          const value = localStorage.getItem(key);
+          if (value && value.startsWith('blob:')) {
+            console.warn(`[Media Assets] Removing stale blob URL from localStorage: ${key}`);
+            localStorage.removeItem(key);
+          }
+        });
+
         // Initialize IndexedDB
         await mediaStorageService.initialize();
 
@@ -582,9 +590,10 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
                 const objectURL = URL.createObjectURL(mediaData.blob);
                 objectURLsRef.current.push(objectURL);
 
-                localStorage.setItem('streamVideoClip', objectURL);
+                // CRITICAL FIX: Don't save blob URLs to localStorage - they're not persistent
                 localStorage.setItem('streamVideoClipAssetId', asset.id);
                 localStorage.setItem('streamVideoClipName', asset.name);
+                localStorage.removeItem('streamVideoClip'); // Remove any stale blob URLs
                 window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: objectURL, name: asset.name } }));
                 toast.success(`Playing: ${asset.name}`);
               }
@@ -593,6 +602,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               toast.error('Failed to play video clip');
             }
           } else {
+            // For non-IndexedDB assets (data URLs), we can store them
             localStorage.setItem('streamVideoClip', asset.url);
             localStorage.setItem('streamVideoClipName', asset.name);
             localStorage.removeItem('streamVideoClipAssetId');
