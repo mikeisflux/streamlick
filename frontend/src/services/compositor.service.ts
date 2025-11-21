@@ -391,7 +391,7 @@ class CompositorService {
       videoElement.muted = false; // Keep unmuted so audio can be captured by Web Audio API
       videoElement.autoplay = false;
       videoElement.preload = 'auto'; // FIX FLICKERING: Preload entire video for smooth playback
-      videoElement.crossOrigin = 'anonymous'; // Allow CORS for local files
+      // Note: crossOrigin removed - not needed for same-origin video files and can cause issues
 
       logger.info(`Loading intro video: ${videoUrl}`);
 
