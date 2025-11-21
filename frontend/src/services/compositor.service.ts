@@ -794,15 +794,29 @@ class CompositorService {
         }
       }
 
-      // CRITICAL FIX: Draw DRAMATIC anti-throttle marker EVERY frame
+      // CRITICAL FIX: Draw DRAMATIC anti-throttle markers EVERY frame
       // Browser aggressively mutes canvas streams with minimal activity
-      // Use random RGB colors (not just grayscale) to ensure maximum encoder detection
-      // This forces the encoder to treat every frame as unique content
-      const r = (this.frameCount * 67) % 256;  // Prime number multiplier for pseudo-random
-      const g = (this.frameCount * 139) % 256; // Different prime for different color
-      const b = (this.frameCount * 211) % 256; // Third prime for blue channel
-      this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-      this.ctx.fillRect(this.WIDTH - 1, this.HEIGHT - 1, 1, 1);
+      // During countdown/intro overlays, add MORE random pixels to prevent muting
+      if (showingFullscreenOverlay) {
+        // Aggressive mode: Draw 100 random pixels scattered across canvas
+        // This prevents browser from detecting "static content" during countdown
+        for (let i = 0; i < 100; i++) {
+          const x = ((this.frameCount * 67 + i * 13) % this.WIDTH);
+          const y = ((this.frameCount * 139 + i * 17) % this.HEIGHT);
+          const r = (this.frameCount * 67 + i * 11) % 256;
+          const g = (this.frameCount * 139 + i * 23) % 256;
+          const b = (this.frameCount * 211 + i * 31) % 256;
+          this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+          this.ctx.fillRect(x, y, 1, 1);
+        }
+      } else {
+        // Normal mode: Single pixel is enough when participants are drawing
+        const r = (this.frameCount * 67) % 256;
+        const g = (this.frameCount * 139) % 256;
+        const b = (this.frameCount * 211) % 256;
+        this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        this.ctx.fillRect(this.WIDTH - 1, this.HEIGHT - 1, 1, 1);
+      }
     } catch (error) {
       logger.error('Compositor animation error:', error);
     }
