@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { mediaStorageService } from '../services/media-storage.service';
+import { compositorService } from '../services/compositor.service';
 
 // Helper function to generate thumbnail from video
 const generateVideoThumbnail = (videoDataUrl: string): Promise<{ thumbnail: string; duration: number }> => {
@@ -78,6 +79,10 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
 
   // Track active logo asset
   const [activeLogoUrl, setActiveLogoUrl] = useState<string | null>(null);
+
+  // Track active video clip and its stop function
+  const [activeVideoClipId, setActiveVideoClipId] = useState<string | null>(null);
+  const videoClipStopRef = useRef<(() => void) | null>(null);
 
   // Load assets from localStorage metadata only
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -582,32 +587,56 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
           break;
 
         case 'videoClip':
-          // Play video clip on canvas
-          if (asset.storedInIndexedDB) {
-            try {
-              const mediaData = await mediaStorageService.getMedia(asset.id);
-              if (mediaData) {
-                const objectURL = URL.createObjectURL(mediaData.blob);
-                objectURLsRef.current.push(objectURL);
+          // Check if this clip is already playing
+          const isActiveClip = activeVideoClipId === asset.id;
 
-                // CRITICAL FIX: Don't save blob URLs to localStorage - they're not persistent
-                localStorage.setItem('streamVideoClipAssetId', asset.id);
-                localStorage.setItem('streamVideoClipName', asset.name);
-                localStorage.removeItem('streamVideoClip'); // Remove any stale blob URLs
-                window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: objectURL, name: asset.name } }));
-                toast.success(`Playing: ${asset.name}`);
-              }
-            } catch (error) {
-              console.error('Failed to load video clip from IndexedDB:', error);
-              toast.error('Failed to play video clip');
+          if (isActiveClip) {
+            // Stop the currently playing clip
+            if (videoClipStopRef.current) {
+              videoClipStopRef.current();
+              videoClipStopRef.current = null;
             }
-          } else {
-            // For non-IndexedDB assets (data URLs), we can store them
-            localStorage.setItem('streamVideoClip', asset.url);
-            localStorage.setItem('streamVideoClipName', asset.name);
+            setActiveVideoClipId(null);
             localStorage.removeItem('streamVideoClipAssetId');
-            window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: asset.url, name: asset.name } }));
-            toast.success(`Playing: ${asset.name}`);
+            localStorage.removeItem('streamVideoClipName');
+            toast.success('Video clip stopped');
+          } else {
+            // Stop any currently playing clip first
+            if (videoClipStopRef.current) {
+              videoClipStopRef.current();
+              videoClipStopRef.current = null;
+            }
+
+            // Play the new clip with audio through compositor
+            try {
+              let videoUrl: string;
+
+              if (asset.storedInIndexedDB) {
+                const mediaData = await mediaStorageService.getMedia(asset.id);
+                if (!mediaData) {
+                  throw new Error('Media data not found');
+                }
+                videoUrl = URL.createObjectURL(mediaData.blob);
+                objectURLsRef.current.push(videoUrl);
+              } else {
+                videoUrl = asset.url;
+              }
+
+              // Use compositor service to play with audio
+              const { stop } = compositorService.playUserVideoClip(videoUrl, false);
+              videoClipStopRef.current = stop;
+
+              // Track active clip
+              setActiveVideoClipId(asset.id);
+              localStorage.setItem('streamVideoClipAssetId', asset.id);
+              localStorage.setItem('streamVideoClipName', asset.name);
+
+              toast.success(`Playing: ${asset.name}`);
+            } catch (error) {
+              console.error('Failed to play video clip:', error);
+              toast.error('Failed to play video clip');
+              setActiveVideoClipId(null);
+            }
           }
           break;
 
@@ -634,7 +663,8 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
 
     const isActive = (asset.type === 'logo' && (activeLogoUrl === asset.url || logoAssetId === asset.id)) ||
                      (asset.type === 'overlay' && (activeOverlayUrl === asset.url || overlayAssetId === asset.id)) ||
-                     ((asset.type === 'background' || asset.type === 'videoBackground') && (activeBackgroundUrl === asset.url || backgroundAssetId === asset.id));
+                     ((asset.type === 'background' || asset.type === 'videoBackground') && (activeBackgroundUrl === asset.url || backgroundAssetId === asset.id)) ||
+                     (asset.type === 'videoClip' && activeVideoClipId === asset.id);
 
     return (
       <div

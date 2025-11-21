@@ -477,6 +477,91 @@ class CompositorService {
   }
 
   /**
+   * Play user video clip with audio
+   * @param videoUrl - URL of the video clip (can be blob URL)
+   * @param loop - Whether to loop the video (default: false)
+   * @returns Object with stop() method to stop playback
+   */
+  playUserVideoClip(videoUrl: string, loop: boolean = false): { stop: () => void } {
+    logger.info(`Loading user video clip: ${videoUrl}, loop: ${loop}`);
+
+    const videoElement = document.createElement('video');
+    videoElement.src = videoUrl;
+    videoElement.muted = false; // CRITICAL: Keep unmuted so audio can be captured by Web Audio API
+    videoElement.autoplay = false;
+    videoElement.loop = loop;
+    videoElement.preload = 'auto';
+    videoElement.playsInline = true;
+
+    // Wait for metadata to load
+    videoElement.addEventListener('loadedmetadata', () => {
+      logger.info(`User video clip metadata loaded: ${videoUrl}, dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}, duration: ${videoElement.duration}s`);
+
+      // Validate dimensions
+      if (!videoElement.videoWidth || !videoElement.videoHeight) {
+        logger.error('User video clip has invalid dimensions:', videoElement.videoWidth, videoElement.videoHeight);
+        return;
+      }
+
+      // CRITICAL: Add video audio to mixer for dual output (stream + local speakers)
+      try {
+        logger.info('Adding user video clip audio to mixer...');
+        audioMixerService.addMediaElement('user-video-clip', videoElement);
+        logger.info('User video clip audio added to mixer successfully');
+      } catch (error) {
+        logger.error('Failed to add user video clip audio to mixer:', error);
+      }
+
+      // Set as media clip overlay and play when ready
+      const setOverlayAndPlay = () => {
+        logger.info('User video clip ready, setting as overlay...');
+        this.setMediaClipOverlay(videoElement);
+
+        videoElement.play().catch((error) => {
+          logger.error('Failed to play user video clip:', error);
+          this.clearMediaClipOverlay();
+          audioMixerService.removeStream('user-video-clip');
+        });
+      };
+
+      if (videoElement.readyState >= 3) {
+        setOverlayAndPlay();
+      } else {
+        videoElement.addEventListener('canplaythrough', setOverlayAndPlay, { once: true });
+      }
+    });
+
+    // Auto-cleanup when video ends (if not looping)
+    if (!loop) {
+      videoElement.addEventListener('ended', () => {
+        logger.info('User video clip ended, clearing overlay and removing audio');
+        this.clearMediaClipOverlay();
+        audioMixerService.removeStream('user-video-clip');
+      });
+    }
+
+    // Handle errors
+    videoElement.addEventListener('error', (event) => {
+      const errorMsg = videoElement.error
+        ? `Code: ${videoElement.error.code}, Message: ${videoElement.error.message}`
+        : 'Unknown error';
+      logger.error(`User video clip error: ${errorMsg}`, event);
+      this.clearMediaClipOverlay();
+      audioMixerService.removeStream('user-video-clip');
+    });
+
+    // Return stop function
+    return {
+      stop: () => {
+        logger.info('Stopping user video clip manually');
+        videoElement.pause();
+        this.clearMediaClipOverlay();
+        audioMixerService.removeStream('user-video-clip');
+      }
+    };
+  }
+
+  /**
    * Wait for compositor to be ready (first frame rendered)
    * Similar to waiting for video metadata before displaying
    * @returns Promise that resolves when compositor has rendered at least one frame
