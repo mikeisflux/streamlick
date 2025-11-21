@@ -393,6 +393,13 @@ class CompositorService {
    */
   async playIntroVideo(videoUrl: string = '/backgrounds/videos/StreamLick.mp4', duration?: number): Promise<void> {
     return new Promise((resolve, reject) => {
+      // CRITICAL: Start compositor if not already running
+      // Video won't be visible without the render loop
+      if (!this.isCompositing) {
+        logger.info('Starting compositor for intro video playback');
+        this.start();
+      }
+
       const videoElement = document.createElement('video');
       videoElement.muted = false; // Keep unmuted so audio can be captured by Web Audio API
       videoElement.autoplay = false;
@@ -501,6 +508,13 @@ class CompositorService {
       audioMixerService.initialize();
     } catch (error) {
       logger.warn('Audio mixer already initialized or initialization failed:', error);
+    }
+
+    // CRITICAL: Start compositor if not already running
+    // Video won't be visible without the render loop
+    if (!this.isCompositing) {
+      logger.info('Starting compositor for video playback');
+      this.start();
     }
 
     const videoElement = document.createElement('video');
