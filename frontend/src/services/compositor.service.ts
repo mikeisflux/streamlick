@@ -730,25 +730,20 @@ class CompositorService {
       this.ctx.fillStyle = '#000000';
       this.ctx.fillRect(0, 0, this.WIDTH, this.HEIGHT);
 
-      // CRITICAL FIX: When countdown or media clip is active, ONLY show that (fullscreen, exclusive)
-      // This prevents flickering caused by drawing participants underneath
-      if (this.countdownValue !== null) {
-        // Countdown is active - show ONLY countdown (no participants, no overlays)
-        this.drawCountdown();
-      } else if (this.mediaClipOverlay) {
-        // Media clip (intro video) is active - show ONLY the video (no participants, no overlays)
-        this.drawMediaClipOverlay();
-      } else {
-        // Normal mode - draw participants and all overlays
-        // Draw background if exists
-        if (this.background) {
-          this.drawBackground();
-        }
+      // CRITICAL FIX: Always draw participant video to prevent canvas track from being muted
+      // The browser auto-mutes canvas tracks with static/uniform content (like countdown-only)
+      // We must render real video content continuously to keep the track active
 
-        // Draw participants based on layout
-        this.drawParticipants();
+      // Draw background if exists
+      if (this.background) {
+        this.drawBackground();
+      }
 
-        // Draw overlays (logos, banners, lower thirds)
+      // ALWAYS draw participants - this keeps canvas "active" with real video
+      this.drawParticipants();
+
+      // Draw overlays (logos, banners, lower thirds) - except during countdown/media clip
+      if (!this.countdownValue && !this.mediaClipOverlay) {
         this.drawOverlays();
 
         // Draw chat messages if enabled
@@ -760,6 +755,15 @@ class CompositorService {
         if (this.lowerThird) {
           this.drawLowerThird();
         }
+      }
+
+      // Draw fullscreen overlays LAST (on top of everything)
+      if (this.countdownValue !== null) {
+        // Countdown overlay - drawn over participant video
+        this.drawCountdown();
+      } else if (this.mediaClipOverlay) {
+        // Media clip overlay - drawn over participant video
+        this.drawMediaClipOverlay();
       }
     } catch (error) {
       logger.error('Compositor animation error:', error);
