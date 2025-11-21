@@ -128,6 +128,16 @@ class ClipPlayerService {
       // This ensures the clip's audio is included in the output stream to YouTube
       try {
         console.log('[ClipPlayer] Adding video clip audio to mixer...');
+
+        // CRITICAL: Resume AudioContext to enable audio playback
+        // Browser autoplay policies suspend AudioContext by default
+        const audioContext = (audioMixerService as any).audioContext;
+        if (audioContext && audioContext.state === 'suspended') {
+          console.log('[ClipPlayer] Resuming suspended AudioContext...');
+          await audioContext.resume();
+          console.log('[ClipPlayer] AudioContext resumed');
+        }
+
         audioMixerService.addMediaElement(`clip-${clip.id}`, video);
         // Apply volume via mixer
         audioMixerService.setStreamVolume(`clip-${clip.id}`, clip.volume / 100);
