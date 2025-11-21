@@ -7,79 +7,136 @@ import { compositorService } from '../services/compositor.service';
 const generateVideoThumbnail = (videoDataUrl: string): Promise<{ thumbnail: string; duration: number }> => {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
-    video.preload = 'auto'; // Load frames, not just metadata
     video.muted = true;
     video.playsInline = true;
-    // NOTE: Do NOT set crossOrigin for blob URLs - it breaks them!
+    video.preload = 'metadata'; // Start with metadata, then upgrade if needed
 
     let timeoutId: NodeJS.Timeout;
+    let hasResolved = false;
 
     const cleanup = () => {
       if (timeoutId) clearTimeout(timeoutId);
-      video.src = '';
-      video.load();
+      if (!hasResolved) {
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+      }
     };
 
     // Timeout after 10 seconds
     timeoutId = setTimeout(() => {
-      cleanup();
-      reject(new Error('Thumbnail generation timed out'));
+      if (!hasResolved) {
+        cleanup();
+        console.error('[Thumbnail] Timeout generating thumbnail');
+        reject(new Error('Thumbnail generation timed out after 10 seconds'));
+      }
     }, 10000);
 
+    let metadataLoaded = false;
+
     video.onloadedmetadata = () => {
-      console.log('[Thumbnail] Video metadata loaded, duration:', video.duration);
-      // Seek to first frame (0.1 seconds to avoid black frames at start)
+      metadataLoaded = true;
+      console.log('[Thumbnail] Metadata loaded:', {
+        duration: video.duration,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        readyState: video.readyState
+      });
+
+      // Validate dimensions
+      if (!video.videoWidth || !video.videoHeight) {
+        cleanup();
+        console.error('[Thumbnail] Invalid video dimensions:', video.videoWidth, video.videoHeight);
+        reject(new Error('Video has invalid dimensions'));
+        return;
+      }
+
+      // For thumbnail, we just need to seek to a frame
       video.currentTime = 0.1;
     };
 
-    video.onseeked = () => {
-      console.log('[Thumbnail] Video seeked to:', video.currentTime);
+    video.onloadeddata = () => {
+      console.log('[Thumbnail] Video data loaded, readyState:', video.readyState);
+    };
 
-      // Wait a bit for the frame to be ready
-      setTimeout(() => {
+    video.onseeked = () => {
+      if (hasResolved) return;
+
+      console.log('[Thumbnail] Seeked to:', video.currentTime, 'readyState:', video.readyState);
+
+      // Give browser time to decode the frame
+      requestAnimationFrame(() => {
         try {
-          // Ensure video has valid dimensions
-          if (!video.videoWidth || !video.videoHeight) {
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d', { willReadFrequently: false });
+
+          if (!ctx) {
             cleanup();
-            reject(new Error('Video has no dimensions'));
+            reject(new Error('Failed to get canvas context'));
             return;
           }
 
-          const canvas = document.createElement('canvas');
-          // Use actual video dimensions for better quality
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          const ctx = canvas.getContext('2d');
+          // Draw the current frame
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-          if (ctx) {
-            // Draw the video frame
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          // Convert to JPEG
+          const thumbnail = canvas.toDataURL('image/jpeg', 0.75);
 
-            // Convert to data URL
-            const thumbnail = canvas.toDataURL('image/jpeg', 0.8);
+          console.log('[Thumbnail] Generated successfully, size:', thumbnail.length, 'bytes');
 
-            console.log('[Thumbnail] Generated successfully:', thumbnail.substring(0, 50) + '...');
-
-            cleanup();
-            resolve({ thumbnail, duration: video.duration });
-          } else {
-            cleanup();
-            reject(new Error('Failed to get canvas context'));
-          }
+          hasResolved = true;
+          cleanup();
+          resolve({ thumbnail, duration: video.duration });
         } catch (error) {
           cleanup();
+          console.error('[Thumbnail] Error drawing frame:', error);
           reject(error);
         }
-      }, 100); // Small delay to ensure frame is rendered
+      });
     };
 
     video.onerror = (e) => {
-      console.error('[Thumbnail] Video error:', e);
       cleanup();
-      reject(new Error('Failed to load video for thumbnail'));
+      const error = video.error;
+      console.error('[Thumbnail] Video error:', {
+        error,
+        code: error?.code,
+        message: error?.message,
+        mediaError: {
+          MEDIA_ERR_ABORTED: error?.MEDIA_ERR_ABORTED,
+          MEDIA_ERR_NETWORK: error?.MEDIA_ERR_NETWORK,
+          MEDIA_ERR_DECODE: error?.MEDIA_ERR_DECODE,
+          MEDIA_ERR_SRC_NOT_SUPPORTED: error?.MEDIA_ERR_SRC_NOT_SUPPORTED,
+        },
+        src: video.src.substring(0, 50),
+        event: e
+      });
+
+      let errorMsg = 'Failed to load video';
+      if (error) {
+        switch(error.code) {
+          case error.MEDIA_ERR_ABORTED:
+            errorMsg = 'Video loading aborted';
+            break;
+          case error.MEDIA_ERR_NETWORK:
+            errorMsg = 'Network error loading video';
+            break;
+          case error.MEDIA_ERR_DECODE:
+            errorMsg = 'Video decoding failed - unsupported codec';
+            break;
+          case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
+            errorMsg = 'Video format not supported';
+            break;
+        }
+      }
+
+      reject(new Error(errorMsg));
     };
 
-    // Set source and start loading
+    // Set source and trigger load
+    console.log('[Thumbnail] Starting load for:', videoDataUrl.substring(0, 50));
     video.src = videoDataUrl;
     video.load();
   });
