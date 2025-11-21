@@ -363,6 +363,13 @@ class CompositorService {
   setMediaClipOverlay(element: HTMLVideoElement | HTMLImageElement): void {
     this.mediaClipOverlay = element;
     const isVideo = element instanceof HTMLVideoElement;
+    console.log('[COMPOSITOR] Media clip overlay set!', {
+      type: isVideo ? 'video' : 'image',
+      videoWidth: isVideo ? (element as HTMLVideoElement).videoWidth : 'N/A',
+      videoHeight: isVideo ? (element as HTMLVideoElement).videoHeight : 'N/A',
+      readyState: isVideo ? (element as HTMLVideoElement).readyState : 'N/A',
+      isCompositing: this.isCompositing,
+    });
     logger.info(`[Compositor] Media clip overlay set - Type: ${isVideo ? 'video' : 'image'}`, {
       isVideo,
       videoWidth: isVideo ? (element as HTMLVideoElement).videoWidth : 'N/A',
@@ -522,8 +529,11 @@ class CompositorService {
     videoElement.preload = 'auto';
     videoElement.playsInline = true;
 
+    console.log('[VIDEO CLIP] Video element created, src:', videoUrl, 'readyState:', videoElement.readyState);
+
     // Wait for metadata to load
     videoElement.addEventListener('loadedmetadata', () => {
+      console.log('[VIDEO CLIP] Metadata loaded!', videoElement.videoWidth, 'x', videoElement.videoHeight, 'duration:', videoElement.duration);
       logger.info(`User video clip metadata loaded: ${videoUrl}, dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}, duration: ${videoElement.duration}s`);
 
       // Validate dimensions
@@ -543,19 +553,26 @@ class CompositorService {
 
       // Set as media clip overlay and play when ready
       const setOverlayAndPlay = () => {
+        console.log('[VIDEO CLIP] Setting as overlay and playing...');
         logger.info('User video clip ready, setting as overlay...');
         this.setMediaClipOverlay(videoElement);
 
-        videoElement.play().catch((error) => {
+        videoElement.play().then(() => {
+          console.log('[VIDEO CLIP] Video playing successfully!');
+        }).catch((error) => {
+          console.error('[VIDEO CLIP] Failed to play:', error);
           logger.error('Failed to play user video clip:', error);
           this.clearMediaClipOverlay();
           audioMixerService.removeStream('user-video-clip');
         });
       };
 
+      console.log('[VIDEO CLIP] ReadyState:', videoElement.readyState, '(need >= 3 for immediate play)');
       if (videoElement.readyState >= 3) {
+        console.log('[VIDEO CLIP] Ready now, playing immediately');
         setOverlayAndPlay();
       } else {
+        console.log('[VIDEO CLIP] Not ready, waiting for canplaythrough event');
         videoElement.addEventListener('canplaythrough', setOverlayAndPlay, { once: true });
       }
     });
@@ -574,6 +591,7 @@ class CompositorService {
       const errorMsg = videoElement.error
         ? `Code: ${videoElement.error.code}, Message: ${videoElement.error.message}`
         : 'Unknown error';
+      console.error('[VIDEO CLIP] VIDEO ERROR:', errorMsg, 'event:', event, 'src:', videoElement.src);
       logger.error(`User video clip error: ${errorMsg}`, event);
       this.clearMediaClipOverlay();
       audioMixerService.removeStream('user-video-clip');
