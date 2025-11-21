@@ -401,6 +401,7 @@ class CompositorService {
       }
 
       const videoElement = document.createElement('video');
+      videoElement.src = videoUrl; // Set src FIRST to start loading immediately
       videoElement.muted = false; // Keep unmuted so audio can be captured by Web Audio API
       videoElement.autoplay = false;
       videoElement.preload = 'auto'; // FIX FLICKERING: Preload entire video for smooth playback
@@ -486,10 +487,6 @@ class CompositorService {
           resolve();
         }, duration * 1000);
       }
-
-      // Set src and load after event listeners are attached
-      videoElement.src = videoUrl;
-      videoElement.load(); // Force browser to start loading video
     });
   }
 
@@ -518,6 +515,7 @@ class CompositorService {
     }
 
     const videoElement = document.createElement('video');
+    videoElement.src = videoUrl; // Set src FIRST to start loading immediately
     videoElement.muted = false; // CRITICAL: Keep unmuted so audio can be captured by Web Audio API
     videoElement.autoplay = false;
     videoElement.loop = loop;
@@ -580,10 +578,6 @@ class CompositorService {
       this.clearMediaClipOverlay();
       audioMixerService.removeStream('user-video-clip');
     });
-
-    // CRITICAL: Set src and load after event listeners are attached
-    videoElement.src = videoUrl;
-    videoElement.load(); // Force browser to start loading video
 
     // Return stop function
     return {
