@@ -50,6 +50,9 @@ export function Studio() {
   // Countdown state
   const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
 
+  // Track if video clip is playing
+  const [hasMediaClipPlaying, setHasMediaClipPlaying] = useState(false);
+
   // Refs
   const micButtonRef = useRef<HTMLDivElement>(null);
   const cameraButtonRef = useRef<HTMLDivElement>(null);
@@ -171,6 +174,16 @@ export function Studio() {
       socketService.off('countdown-tick', handleCountdownTick);
       socketService.off('countdown-complete', handleCountdownComplete);
     };
+  }, []);
+
+  // Check if compositor has media clip playing (poll every 100ms)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const hasClip = !!compositorService.getMediaClipOverlay();
+      setHasMediaClipPlaying(hasClip);
+    }, 100);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Sidebar management
@@ -354,9 +367,9 @@ export function Studio() {
         <main className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#F5F5F5' }}>
           {/* Canvas Container - constrained to leave room for Layout Selector and Preview Area */}
           <div className="flex items-center justify-center px-6 pb-20 relative" style={{ minHeight: 0, maxHeight: 'calc(100% - 350px)', flexShrink: 1, paddingTop: '144px' }}>
-            {/* CRITICAL FIX: Show CompositorPreview when live, StudioCanvas when not live */}
-            {/* This ensures users can see countdown, intro video, and compositor output */}
-            {isLive ? (
+            {/* CRITICAL FIX: Show CompositorPreview when live OR when video clip is playing, StudioCanvas otherwise */}
+            {/* This ensures users can see countdown, intro video, video clips, and compositor output */}
+            {isLive || hasMediaClipPlaying ? (
               <CompositorPreview orientation={canvasSettings.orientation} />
             ) : (
               <StudioCanvas
