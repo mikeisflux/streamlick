@@ -585,11 +585,41 @@ class CompositorService {
         });
       });
 
-      // Monitor track muted event
-      videoTrack.addEventListener('mute', () => {
-        logger.warn('[Canvas Track] Video track MUTED!', {
+      // Monitor track muted event - CRITICAL FIX for browser auto-muting
+      videoTrack.addEventListener('mute', async () => {
+        logger.error('[Canvas Track] Video track MUTED! Recreating stream...', {
           id: videoTrack.id,
         });
+
+        // Browser has auto-muted the track (usually due to "static" content detection)
+        // We need to recreate the canvas stream to get an unmuted track
+        try {
+          // Stop old stream
+          if (this.outputStream) {
+            this.outputStream.getTracks().forEach(track => track.stop());
+          }
+
+          // Create new stream from canvas
+          this.outputStream = this.canvas!.captureStream(30);
+          const newVideoTrack = this.outputStream.getVideoTracks()[0];
+
+          logger.info('[Canvas Track] New stream created after mute', {
+            oldTrackId: videoTrack.id,
+            newTrackId: newVideoTrack.id,
+            newTrackMuted: newVideoTrack.muted,
+            newTrackState: newVideoTrack.readyState,
+          });
+
+          // Set up listeners on new track
+          newVideoTrack.addEventListener('mute', () => {
+            logger.error('[Canvas Track] New track also MUTED!', { id: newVideoTrack.id });
+          });
+
+          // TODO: Notify WebRTC service to replace track in producer
+          // For now, the stream recreation will help with future connections
+        } catch (error) {
+          logger.error('[Canvas Track] Failed to recreate stream after mute:', error);
+        }
       });
 
       // Monitor track unmuted event
@@ -766,6 +796,14 @@ class CompositorService {
         // Media clip overlay - drawn over participant video
         this.drawMediaClipOverlay();
       }
+
+      // CRITICAL FIX: Draw invisible anti-mute marker
+      // Browser auto-mutes canvas tracks with "static" content to save resources
+      // By drawing a single changing pixel every frame, we prevent auto-muting
+      // This pixel is practically invisible but ensures continuous canvas changes
+      const antiMuteColor = this.frameCount % 2 === 0 ? 0 : 1;
+      this.ctx.fillStyle = `rgb(${antiMuteColor}, ${antiMuteColor}, ${antiMuteColor})`;
+      this.ctx.fillRect(this.WIDTH - 1, this.HEIGHT - 1, 1, 1);
     } catch (error) {
       logger.error('Compositor animation error:', error);
     }
