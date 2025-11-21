@@ -785,23 +785,13 @@ export function StudioCanvas({
           </div>
         )}
 
-        {/* Fullscreen Button - Top Right */}
+        {/* Fullscreen Button - Bottom Right */}
         <button
           onClick={toggleFullscreen}
-          className="absolute top-2 right-2 z-50 p-2 bg-black bg-opacity-60 hover:bg-opacity-80 text-white rounded-lg transition-all"
+          className="absolute bottom-2 right-2 z-50 px-2 py-1 bg-black bg-opacity-60 hover:bg-opacity-80 text-white rounded transition-all text-sm font-mono"
           title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
         >
-          {isFullscreen ? (
-            // Exit fullscreen icon
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
-            </svg>
-          ) : (
-            // Enter fullscreen icon
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5.25 5.25M20 8V4m0 0h-4m4 0l-5.25 5.25M4 16v4m0 0h4m-4 0l5.25-5.25M20 16v4m0 0h-4m4 0l-5.25-5.25" />
-            </svg>
-          )}
+          [ ]
         </button>
 
         {/* Audio Volume Control - Bottom Center */}
