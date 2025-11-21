@@ -7,10 +7,10 @@ import { compositorService } from '../services/compositor.service';
 const generateVideoThumbnail = (videoDataUrl: string): Promise<{ thumbnail: string; duration: number }> => {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
-    video.preload = 'auto'; // Changed from 'metadata' to ensure frames are loaded
+    video.preload = 'auto'; // Load frames, not just metadata
     video.muted = true;
     video.playsInline = true;
-    video.crossOrigin = 'anonymous'; // Prevent CORS issues
+    // NOTE: Do NOT set crossOrigin for blob URLs - it breaks them!
 
     let timeoutId: NodeJS.Timeout;
 
