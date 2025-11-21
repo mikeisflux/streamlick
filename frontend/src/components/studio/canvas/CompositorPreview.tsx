@@ -103,17 +103,17 @@ export function CompositorPreview({ orientation = 'landscape' }: CompositorPrevi
       {/* Fullscreen button - bottom right */}
       <button
         onClick={handleFullscreen}
-        className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 text-white p-2 rounded text-lg transition-opacity"
+        className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 text-white p-2 rounded text-lg opacity-0 group-hover:opacity-100 transition-opacity"
         title="Fullscreen"
-        style={{ zIndex: 100 }}
       >
         [ ]
       </button>
 
-      {/* Volume control - bottom center */}
+      {/* Volume control - center */}
       <div
-        className="absolute bottom-2 left-1/2 transform -translate-x-1/2 transition-opacity"
-        style={{ zIndex: 100 }}
+        className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+        onMouseEnter={() => setShowVolumeSlider(true)}
+        onMouseLeave={() => setShowVolumeSlider(false)}
       >
         <div className="bg-black/70 rounded-lg p-4 flex flex-col items-center gap-2">
           <div className="text-white text-sm font-medium">Volume</div>

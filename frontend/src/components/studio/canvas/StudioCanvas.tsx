@@ -823,7 +823,7 @@ export function StudioCanvas({
       {/* Fullscreen button - bottom right */}
       <button
         onClick={handleFullscreen}
-        className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 text-white p-2 rounded text-lg transition-opacity"
+        className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 text-white p-2 rounded text-lg opacity-0 group-hover:opacity-100 transition-opacity"
         title="Fullscreen"
         style={{ zIndex: 50 }}
       >
@@ -832,7 +832,7 @@ export function StudioCanvas({
 
       {/* Volume control - bottom center */}
       <div
-        className="absolute bottom-2 left-1/2 transform -translate-x-1/2 transition-opacity"
+        className="absolute bottom-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
         style={{ zIndex: 50 }}
       >
         <div className="bg-black/70 rounded-lg p-4 flex flex-col items-center gap-2">
