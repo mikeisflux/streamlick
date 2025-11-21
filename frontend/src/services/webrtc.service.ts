@@ -249,6 +249,50 @@ class WebRTCService {
     this.producers.set(producer.id, producer);
 
     logger.info('Producer created:', producer.id, producer.kind, producer.rtpParameters.codecs[0]?.mimeType);
+
+    // DIAGNOSTIC: Monitor producer track for video
+    if (track.kind === 'video') {
+      logger.info('[WebRTC Producer] Video track initial state:', {
+        producerId: producer.id,
+        trackId: track.id,
+        enabled: track.enabled,
+        muted: track.muted,
+        readyState: track.readyState,
+      });
+
+      // Monitor track events
+      track.addEventListener('ended', () => {
+        logger.error('[WebRTC Producer] Video track ENDED!', {
+          producerId: producer.id,
+          trackId: track.id,
+          readyState: track.readyState,
+        });
+      });
+
+      track.addEventListener('mute', () => {
+        logger.warn('[WebRTC Producer] Video track MUTED!', {
+          producerId: producer.id,
+          trackId: track.id,
+        });
+      });
+
+      track.addEventListener('unmute', () => {
+        logger.info('[WebRTC Producer] Video track UNMUTED!', {
+          producerId: producer.id,
+          trackId: track.id,
+        });
+      });
+
+      // Monitor producer events
+      producer.on('transportclose', () => {
+        logger.warn('[WebRTC Producer] Transport closed for producer', producer.id);
+      });
+
+      producer.on('trackended', () => {
+        logger.error('[WebRTC Producer] Track ended for producer', producer.id);
+      });
+    }
+
     return producer.id;
   }
 
