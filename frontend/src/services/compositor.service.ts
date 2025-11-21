@@ -797,12 +797,12 @@ class CompositorService {
         this.drawMediaClipOverlay();
       }
 
-      // CRITICAL FIX: Draw invisible anti-mute marker
-      // Browser auto-mutes canvas tracks with "static" content to save resources
-      // By drawing a single changing pixel every frame, we prevent auto-muting
-      // This pixel is practically invisible but ensures continuous canvas changes
-      const antiMuteColor = this.frameCount % 2 === 0 ? 0 : 1;
-      this.ctx.fillStyle = `rgb(${antiMuteColor}, ${antiMuteColor}, ${antiMuteColor})`;
+      // CRITICAL FIX: Draw unique anti-throttle marker EVERY frame
+      // Browser/encoder throttles canvas streams with static content
+      // By drawing a truly unique pixel value every frame, we force encoder to detect changes
+      // Using frameCount ensures every single frame is unique to prevent ANY throttling
+      const uniqueColor = this.frameCount % 256; // 0-255 range, cycles through all values
+      this.ctx.fillStyle = `rgb(${uniqueColor}, ${uniqueColor}, ${uniqueColor})`;
       this.ctx.fillRect(this.WIDTH - 1, this.HEIGHT - 1, 1, 1);
     } catch (error) {
       logger.error('Compositor animation error:', error);
