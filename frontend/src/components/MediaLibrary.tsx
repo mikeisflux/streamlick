@@ -238,8 +238,8 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
                 src={clip.url}
                 alt={clip.name}
                 type="video"
-                className="w-full h-32 object-cover rounded mb-3"
-                fallbackClassName="w-full h-32 rounded mb-3"
+                className="w-full h-48 object-cover rounded mb-3"
+                fallbackClassName="w-full h-48 rounded mb-3"
                 muted={false}
                 controls
                 preload="metadata"
