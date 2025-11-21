@@ -717,29 +717,11 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
       >
         <div className="aspect-video bg-gray-100 rounded mb-2 overflow-hidden relative">
           {asset.thumbnailUrl ? (
-            <>
-              <img
-                src={asset.thumbnailUrl}
-                alt={asset.name}
-                className="w-full h-full object-cover"
-              />
-              {/* Video play icon indicator */}
-              {(asset.type === 'videoBackground' || asset.type === 'videoClip') && !isActive && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-12 h-12 bg-black bg-opacity-60 rounded-full flex items-center justify-center">
-                    <div className="w-0 h-0 border-l-[16px] border-l-white border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent ml-1"></div>
-                  </div>
-                </div>
-              )}
-              {/* Stop icon for active videos */}
-              {(asset.type === 'videoBackground' || asset.type === 'videoClip') && isActive && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-12 h-12 bg-red-600 bg-opacity-80 rounded-full flex items-center justify-center">
-                    <div className="w-4 h-4 bg-white"></div>
-                  </div>
-                </div>
-              )}
-            </>
+            <img
+              src={asset.thumbnailUrl}
+              alt={asset.name}
+              className="w-full h-full object-cover"
+            />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-400">
               {asset.type === 'music' ? '🎵' : (asset.type === 'logo' || asset.type === 'overlay' || asset.type === 'banner') ? '🖼️' : '🎬'}
