@@ -232,8 +232,8 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
       let maxSizeLabel: string;
 
       if (file.type.startsWith('video/')) {
-        maxSize = 200 * 1024 * 1024; // 200MB for videos
-        maxSizeLabel = '200MB';
+        maxSize = 2 * 1024 * 1024 * 1024; // 2GB for videos
+        maxSizeLabel = '2GB';
       } else if (file.type.startsWith('audio/')) {
         maxSize = 50 * 1024 * 1024; // 50MB for audio
         maxSizeLabel = '50MB';
@@ -817,7 +817,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
             <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
               <h4 className="text-sm font-semibold text-indigo-900 mb-2">🎬 Video Backgrounds</h4>
               <p className="text-xs text-indigo-700 mb-2">
-                Looping video backgrounds (no audio). Recommended size: 1280×720 px. Maximum file size: 200MB.
+                Looping video backgrounds (no audio). Recommended size: 1280×720 px. Maximum file size: 2GB.
                 Videos automatically loop continuously.
               </p>
               <p className="text-xs text-indigo-600 italic">
@@ -830,7 +830,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               <label className="aspect-video bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-colors">
                 <div className="text-3xl mb-2">🎬</div>
                 <div className="text-xs text-gray-600 font-medium">Upload Video BG</div>
-                <div className="text-xs text-gray-500 mt-1">MP4, GIF (&lt;200MB)</div>
+                <div className="text-xs text-gray-500 mt-1">MP4, GIF (&lt;2GB)</div>
                 <input type="file" accept="video/mp4,image/gif" onChange={handleFileUpload} className="hidden" />
               </label>
             </div>
@@ -844,7 +844,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               <h4 className="text-sm font-semibold text-orange-900 mb-2">🎥 Video Clips</h4>
               <p className="text-xs text-orange-700 mb-2">
                 Intro/outro videos and pre-recorded segments with audio. Recommended sizes: 1920×1080 px or 1280×720 px (16:9).
-                Maximum file size: 200MB.
+                Maximum file size: 2GB.
               </p>
               <p className="text-xs text-orange-600 italic">
                 Tip: Video clips play once when triggered, perfect for intros, outros, and announcements.
