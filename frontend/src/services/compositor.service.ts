@@ -562,9 +562,10 @@ class CompositorService {
     logger.info('Starting compositor');
     this.isCompositing = true;
 
-    // Capture stream from canvas with MANUAL frame capture (0 fps = manual mode)
-    // This allows us to control exactly when frames are captured via requestFrame()
-    this.outputStream = this.canvas!.captureStream(0);
+    // Capture stream from canvas with AUTOMATIC frame capture at 30 fps
+    // Using automatic mode instead of manual (0 fps) to prevent browser from muting track
+    // Manual mode with requestFrame() was causing browser to detect "low activity" and mute the track
+    this.outputStream = this.canvas!.captureStream(30);
 
     // DIAGNOSTIC: Monitor canvas video track state
     const videoTrack = this.outputStream.getVideoTracks()[0];
@@ -769,13 +770,13 @@ class CompositorService {
       logger.error('Compositor animation error:', error);
     }
 
-    // CRITICAL: Request frame capture after rendering (manual frame capture mode)
-    // This ensures we only capture frames we actually rendered, preventing duplication
+    // DIAGNOSTIC: Monitor canvas track state periodically
+    // Using automatic frame capture now (30 fps), so no manual requestFrame() needed
     if (this.outputStream) {
       const videoTrack = this.outputStream.getVideoTracks()[0];
       if (videoTrack) {
-        // DIAGNOSTIC: Log track state every 5 seconds (300 frames at 60fps, 150 frames at 30fps)
-        if (this.frameCount % 300 === 0) {
+        // Log track state every 5 seconds (150 frames at 30fps)
+        if (this.frameCount % 150 === 0) {
           logger.info('[Canvas Track] State check:', {
             frameCount: this.frameCount,
             enabled: videoTrack.enabled,
@@ -784,32 +785,7 @@ class CompositorService {
             trackId: videoTrack.id,
           });
         }
-
-        if (typeof (videoTrack as any).requestFrame === 'function') {
-          try {
-            (videoTrack as CanvasCaptureMediaStreamTrack).requestFrame();
-          } catch (error) {
-            logger.error('[Canvas Track] requestFrame() error:', error, {
-              frameCount: this.frameCount,
-              readyState: videoTrack.readyState,
-              enabled: videoTrack.enabled,
-            });
-          }
-        } else {
-          // Log once if requestFrame is not available
-          if (this.frameCount === 1) {
-            logger.error('[Canvas Track] requestFrame() method not available on track!');
-          }
-        }
-      } else {
-        logger.error('[Canvas Track] No video track found in outputStream!', {
-          frameCount: this.frameCount,
-        });
       }
-    } else {
-      logger.error('[Canvas Track] No outputStream available!', {
-        frameCount: this.frameCount,
-      });
     }
 
     // Track render time
