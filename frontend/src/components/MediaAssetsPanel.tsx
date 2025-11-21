@@ -7,138 +7,40 @@ import { compositorService } from '../services/compositor.service';
 const generateVideoThumbnail = (videoDataUrl: string): Promise<{ thumbnail: string; duration: number }> => {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
+    video.preload = 'metadata';
     video.muted = true;
     video.playsInline = true;
-    video.preload = 'metadata'; // Start with metadata, then upgrade if needed
-
-    let timeoutId: NodeJS.Timeout;
-    let hasResolved = false;
-
-    const cleanup = () => {
-      if (timeoutId) clearTimeout(timeoutId);
-      if (!hasResolved) {
-        video.pause();
-        video.removeAttribute('src');
-        video.load();
-      }
-    };
-
-    // Timeout after 10 seconds
-    timeoutId = setTimeout(() => {
-      if (!hasResolved) {
-        cleanup();
-        console.error('[Thumbnail] Timeout generating thumbnail');
-        reject(new Error('Thumbnail generation timed out after 10 seconds'));
-      }
-    }, 10000);
-
-    let metadataLoaded = false;
 
     video.onloadedmetadata = () => {
-      metadataLoaded = true;
-      console.log('[Thumbnail] Metadata loaded:', {
-        duration: video.duration,
-        videoWidth: video.videoWidth,
-        videoHeight: video.videoHeight,
-        readyState: video.readyState
-      });
-
-      // Validate dimensions
-      if (!video.videoWidth || !video.videoHeight) {
-        cleanup();
-        console.error('[Thumbnail] Invalid video dimensions:', video.videoWidth, video.videoHeight);
-        reject(new Error('Video has invalid dimensions'));
-        return;
-      }
-
-      // For thumbnail, we just need to seek to a frame
-      video.currentTime = 0.1;
-    };
-
-    video.onloadeddata = () => {
-      console.log('[Thumbnail] Video data loaded, readyState:', video.readyState);
+      // Seek to 1 second or 10% of video duration, whichever is earlier
+      const seekTime = Math.min(1, video.duration * 0.1);
+      video.currentTime = seekTime;
     };
 
     video.onseeked = () => {
-      if (hasResolved) return;
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 320;
+        canvas.height = 180;
+        const ctx = canvas.getContext('2d');
 
-      console.log('[Thumbnail] Seeked to:', video.currentTime, 'readyState:', video.readyState);
-
-      // Give browser time to decode the frame
-      requestAnimationFrame(() => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          const ctx = canvas.getContext('2d', { willReadFrequently: false });
-
-          if (!ctx) {
-            cleanup();
-            reject(new Error('Failed to get canvas context'));
-            return;
-          }
-
-          // Draw the current frame
+        if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-          // Convert to JPEG
-          const thumbnail = canvas.toDataURL('image/jpeg', 0.75);
-
-          console.log('[Thumbnail] Generated successfully, size:', thumbnail.length, 'bytes');
-
-          hasResolved = true;
-          cleanup();
+          const thumbnail = canvas.toDataURL('image/jpeg', 0.7);
           resolve({ thumbnail, duration: video.duration });
-        } catch (error) {
-          cleanup();
-          console.error('[Thumbnail] Error drawing frame:', error);
-          reject(error);
+        } else {
+          reject(new Error('Failed to get canvas context'));
         }
-      });
-    };
-
-    video.onerror = (e) => {
-      cleanup();
-      const error = video.error;
-      console.error('[Thumbnail] Video error:', {
-        error,
-        code: error?.code,
-        message: error?.message,
-        mediaError: {
-          MEDIA_ERR_ABORTED: error?.MEDIA_ERR_ABORTED,
-          MEDIA_ERR_NETWORK: error?.MEDIA_ERR_NETWORK,
-          MEDIA_ERR_DECODE: error?.MEDIA_ERR_DECODE,
-          MEDIA_ERR_SRC_NOT_SUPPORTED: error?.MEDIA_ERR_SRC_NOT_SUPPORTED,
-        },
-        src: video.src.substring(0, 50),
-        event: e
-      });
-
-      let errorMsg = 'Failed to load video';
-      if (error) {
-        switch(error.code) {
-          case error.MEDIA_ERR_ABORTED:
-            errorMsg = 'Video loading aborted';
-            break;
-          case error.MEDIA_ERR_NETWORK:
-            errorMsg = 'Network error loading video';
-            break;
-          case error.MEDIA_ERR_DECODE:
-            errorMsg = 'Video decoding failed - unsupported codec';
-            break;
-          case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
-            errorMsg = 'Video format not supported';
-            break;
-        }
+      } catch (error) {
+        reject(error);
       }
-
-      reject(new Error(errorMsg));
     };
 
-    // Set source and trigger load
-    console.log('[Thumbnail] Starting load for:', videoDataUrl.substring(0, 50));
+    video.onerror = () => {
+      reject(new Error('Failed to load video'));
+    };
+
     video.src = videoDataUrl;
-    video.load();
   });
 };
 
