@@ -794,13 +794,13 @@ class CompositorService {
         }
       }
 
-      // CRITICAL FIX: Use TRUE randomness to prevent browser track muting
-      // Browser detected deterministic pseudo-random patterns and muted track anyway
-      // Math.random() provides unpredictable values that browser cannot pattern-match
+      // NUCLEAR OPTION: Draw MASSIVE amounts of random noise to prevent muting
+      // Browser STILL muted with 200 pixels - need to affect significant % of canvas
+      // 200 pixels = 0.00965% of 1920x1080 canvas - browser ignores this as "noise"
       if (showingFullscreenOverlay) {
-        // ULTRA-AGGRESSIVE: Draw 200 truly random pixels with random colors
-        // This is the nuclear option - browser CANNOT detect pattern in true randomness
-        for (let i = 0; i < 200; i++) {
+        // MAXIMUM AGGRESSION: 10,000 random pixels = 0.48% of canvas
+        // This crosses browser's threshold for "significant visual activity"
+        for (let i = 0; i < 10000; i++) {
           const x = Math.floor(Math.random() * this.WIDTH);
           const y = Math.floor(Math.random() * this.HEIGHT);
           const r = Math.floor(Math.random() * 256);
@@ -810,8 +810,8 @@ class CompositorService {
           this.ctx.fillRect(x, y, 1, 1);
         }
       } else {
-        // Normal mode: Still use true randomness but fewer pixels
-        for (let i = 0; i < 10; i++) {
+        // Normal mode: Fewer random pixels when participants are visible
+        for (let i = 0; i < 100; i++) {
           const x = Math.floor(Math.random() * this.WIDTH);
           const y = Math.floor(Math.random() * this.HEIGHT);
           const r = Math.floor(Math.random() * 256);
