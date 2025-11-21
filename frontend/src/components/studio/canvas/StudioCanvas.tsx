@@ -4,6 +4,7 @@ import { ParticipantBox } from './ParticipantBox';
 import { TeleprompterOverlay } from './TeleprompterOverlay';
 import { CommentOverlay } from './CommentOverlay';
 import { Caption } from '../../../services/caption.service';
+import { audioMixerService } from '../../../services/audio-mixer.service';
 
 interface Banner {
   id: string;
@@ -235,6 +236,14 @@ export function StudioCanvas({
   // Load stream overlay from localStorage
   const [streamOverlay, setStreamOverlay] = useState<string | null>(null);
 
+  // Master volume control
+  const [masterVolume, setMasterVolume] = useState<number>(1.0);
+  const [showVolumeSlider, setShowVolumeSlider] = useState<boolean>(false);
+
+  // Fullscreen control
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
   // Custom layout positions for edit mode
   interface ParticipantPosition {
     id: string;
@@ -320,6 +329,36 @@ export function StudioCanvas({
     };
   }, []);
 
+  // Handle master volume changes
+  useEffect(() => {
+    audioMixerService.setMasterVolume(masterVolume);
+  }, [masterVolume]);
+
+  // Handle fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  // Toggle fullscreen
+  const toggleFullscreen = async () => {
+    if (!canvasContainerRef.current) return;
+
+    try {
+      if (!isFullscreen) {
+        await canvasContainerRef.current.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (error) {
+      console.error('Fullscreen error:', error);
+    }
+  };
+
   // Calculate total participants (local user if on stage + remote on-stage)
   const onStageParticipants = Array.from(remoteParticipants.values()).filter(
     (p) => p.role !== 'backstage' && p.id !== 'screen-share'
@@ -387,6 +426,7 @@ export function StudioCanvas({
 
   return (
     <div
+      ref={canvasContainerRef}
       className="relative"
       style={{
         width: '100%',
@@ -744,6 +784,76 @@ export function StudioCanvas({
             />
           </div>
         )}
+
+        {/* Fullscreen Button - Top Right */}
+        <button
+          onClick={toggleFullscreen}
+          className="absolute top-2 right-2 z-50 p-2 bg-black bg-opacity-60 hover:bg-opacity-80 text-white rounded-lg transition-all"
+          title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+        >
+          {isFullscreen ? (
+            // Exit fullscreen icon
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+            </svg>
+          ) : (
+            // Enter fullscreen icon
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5.25 5.25M20 8V4m0 0h-4m4 0l-5.25 5.25M4 16v4m0 0h4m-4 0l5.25-5.25M20 16v4m0 0h-4m4 0l-5.25-5.25" />
+            </svg>
+          )}
+        </button>
+
+        {/* Audio Volume Control - Bottom Center */}
+        <div
+          className="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-50"
+          onMouseEnter={() => setShowVolumeSlider(true)}
+          onMouseLeave={() => setShowVolumeSlider(false)}
+        >
+          {/* Volume Icon Button */}
+          <button
+            className="p-2 bg-black bg-opacity-60 hover:bg-opacity-80 text-white rounded-lg transition-all"
+            title={`Master Volume: ${Math.round(masterVolume * 100)}%`}
+          >
+            {masterVolume === 0 ? (
+              // Muted icon
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+              </svg>
+            ) : masterVolume < 0.5 ? (
+              // Low volume icon
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              </svg>
+            ) : (
+              // High volume icon
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              </svg>
+            )}
+          </button>
+
+          {/* Volume Slider - Appears on Hover */}
+          {showVolumeSlider && (
+            <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-80 p-3 rounded-lg">
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-white text-xs font-medium">{Math.round(masterVolume * 100)}%</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={masterVolume * 100}
+                  onChange={(e) => setMasterVolume(parseInt(e.target.value) / 100)}
+                  className="w-32 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider-thumb"
+                  style={{
+                    background: `linear-gradient(to right, #3B82F6 0%, #3B82F6 ${masterVolume * 100}%, #4B5563 ${masterVolume * 100}%, #4B5563 100%)`
+                  }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -7,6 +7,7 @@
 class AudioMixerService {
   private audioContext: AudioContext | null = null;
   private destination: MediaStreamAudioDestinationNode | null = null;
+  private masterGainNode: GainNode | null = null;
   private sources: Map<string, MediaStreamAudioSourceNode> = new Map();
   private gainNodes: Map<string, GainNode> = new Map();
 
@@ -24,17 +25,24 @@ class AudioMixerService {
       sampleRate: 48000,
     });
 
+    // Create master gain node for overall volume control
+    this.masterGainNode = this.audioContext.createGain();
+    this.masterGainNode.gain.value = 1.0; // Full volume by default
+
     // Create destination node
     this.destination = this.audioContext.createMediaStreamDestination();
 
-    console.log('Audio mixer initialized');
+    // Connect master gain to destination
+    this.masterGainNode.connect(this.destination);
+
+    console.log('Audio mixer initialized with master volume control');
   }
 
   /**
    * Add an audio stream to the mix
    */
   addStream(id: string, stream: MediaStream): void {
-    if (!this.audioContext || !this.destination) {
+    if (!this.audioContext || !this.masterGainNode) {
       throw new Error('Audio mixer not initialized');
     }
 
@@ -48,9 +56,9 @@ class AudioMixerService {
     const gainNode = this.audioContext.createGain();
     gainNode.gain.value = 1.0; // Full volume
 
-    // Connect: source -> gain -> destination
+    // Connect: source -> gain -> master gain -> destination
     source.connect(gainNode);
-    gainNode.connect(this.destination);
+    gainNode.connect(this.masterGainNode);
 
     // Store source and gain node
     this.sources.set(id, source);
@@ -64,7 +72,7 @@ class AudioMixerService {
    * Uses MediaElementSource for direct element audio capture
    */
   addMediaElement(id: string, element: HTMLVideoElement | HTMLAudioElement): void {
-    if (!this.audioContext || !this.destination) {
+    if (!this.audioContext || !this.masterGainNode) {
       throw new Error('Audio mixer not initialized');
     }
 
@@ -79,10 +87,10 @@ class AudioMixerService {
     const gainNode = this.audioContext.createGain();
     gainNode.gain.value = 1.0; // Full volume
 
-    // CRITICAL FIX: Connect to BOTH destinations
-    // 1. Connect to mixer destination (for stream output to YouTube/etc)
+    // CRITICAL: Connect to BOTH destinations through master gain
+    // 1. Connect to master gain -> mixer destination (for stream output to YouTube/etc)
     source.connect(gainNode);
-    gainNode.connect(this.destination);
+    gainNode.connect(this.masterGainNode);
 
     // 2. Connect to local speakers (so user can hear the audio)
     gainNode.connect(this.audioContext.destination);
@@ -133,6 +141,31 @@ class AudioMixerService {
   }
 
   /**
+   * Set master volume for entire stream (affects all audio sources)
+   */
+  setMasterVolume(volume: number): void {
+    // Volume should be 0-1
+    const clampedVolume = Math.max(0, Math.min(1, volume));
+
+    if (this.masterGainNode) {
+      this.masterGainNode.gain.value = clampedVolume;
+      console.log(`Master volume set to: ${clampedVolume}`);
+    } else {
+      console.warn('Cannot set master volume: audio mixer not initialized');
+    }
+  }
+
+  /**
+   * Get current master volume
+   */
+  getMasterVolume(): number {
+    if (this.masterGainNode) {
+      return this.masterGainNode.gain.value;
+    }
+    return 1.0; // Default if not initialized
+  }
+
+  /**
    * Get the mixed output stream
    */
   getOutputStream(): MediaStream | null {
@@ -159,6 +192,12 @@ class AudioMixerService {
       gainNode.disconnect();
     });
     this.gainNodes.clear();
+
+    // Disconnect master gain
+    if (this.masterGainNode) {
+      this.masterGainNode.disconnect();
+      this.masterGainNode = null;
+    }
 
     // Close audio context
     if (this.audioContext && this.audioContext.state !== 'closed') {
