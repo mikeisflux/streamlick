@@ -5,9 +5,6 @@ import { compositorService } from '../services/compositor.service';
 
 // Helper function to generate thumbnail from video
 const generateVideoThumbnail = (videoDataUrl: string): Promise<{ thumbnail: string; duration: number }> => {
-  console.log('[Thumbnail] Starting thumbnail generation for video');
-  console.log('[Thumbnail] Video data URL type:', videoDataUrl.substring(0, 50));
-
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
     video.preload = 'metadata';
@@ -15,15 +12,12 @@ const generateVideoThumbnail = (videoDataUrl: string): Promise<{ thumbnail: stri
     video.playsInline = true;
 
     video.onloadedmetadata = () => {
-      console.log('[Thumbnail] Video metadata loaded - duration:', video.duration, 'dimensions:', video.videoWidth, 'x', video.videoHeight);
       // Seek to 3 seconds or video duration minus 0.5s, whichever is smaller
       const seekTime = Math.min(3, Math.max(0.1, video.duration - 0.5));
-      console.log('[Thumbnail] Seeking to:', seekTime);
       video.currentTime = seekTime;
     };
 
     video.onseeked = () => {
-      console.log('[Thumbnail] Video seeked successfully, generating thumbnail');
       try {
         const canvas = document.createElement('canvas');
         canvas.width = 320;
@@ -33,26 +27,21 @@ const generateVideoThumbnail = (videoDataUrl: string): Promise<{ thumbnail: stri
         if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const thumbnail = canvas.toDataURL('image/jpeg', 0.7);
-          console.log('[Thumbnail] Thumbnail generated successfully, length:', thumbnail.length);
           resolve({ thumbnail, duration: video.duration });
         } else {
-          console.error('[Thumbnail] Failed to get canvas context');
           reject(new Error('Failed to get canvas context'));
         }
       } catch (error) {
-        console.error('[Thumbnail] Error during thumbnail generation:', error);
         reject(error);
       }
     };
 
-    video.onerror = (e) => {
-      console.error('[Thumbnail] Video error event:', e);
-      console.error('[Thumbnail] Video error code:', video.error?.code, 'message:', video.error?.message);
-      reject(new Error('Failed to load video'));
+    video.onerror = () => {
+      reject(new Error(`Failed to load video: ${video.error?.message || 'unknown error'}`));
     };
 
     video.src = videoDataUrl;
-    console.log('[Thumbnail] Video src set, waiting for metadata...');
+    video.load(); // Force browser to start loading video
   });
 };
 
@@ -349,21 +338,17 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
 
             // Generate thumbnail
             if (file.type.startsWith('video/')) {
-              console.log('[Upload] File is video, generating thumbnail for:', file.name);
               try {
                 const videoResult = await generateVideoThumbnail(dataUrl);
                 thumbnailUrl = videoResult.thumbnail;
                 duration = videoResult.duration;
-                console.log('[Upload] Thumbnail generated successfully for:', file.name, 'Duration:', duration);
               } catch (error) {
-                console.error('[Upload] Failed to generate video thumbnail for:', file.name, error);
+                console.error('Failed to generate video thumbnail:', error);
               }
             } else if (file.type.startsWith('image/')) {
-              console.log('[Upload] File is image, using data URL as thumbnail:', file.name);
               thumbnailUrl = dataUrl;
             }
 
-            console.log('[Upload] Asset thumbnailUrl:', thumbnailUrl ? thumbnailUrl.substring(0, 50) : 'null');
             toast.success(`${file.name} uploaded successfully!`);
           }
 

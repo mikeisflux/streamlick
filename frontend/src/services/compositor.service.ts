@@ -362,6 +362,13 @@ class CompositorService {
    */
   setMediaClipOverlay(element: HTMLVideoElement | HTMLImageElement): void {
     this.mediaClipOverlay = element;
+    const isVideo = element instanceof HTMLVideoElement;
+    logger.info(`[Compositor] Media clip overlay set - Type: ${isVideo ? 'video' : 'image'}`, {
+      isVideo,
+      videoWidth: isVideo ? (element as HTMLVideoElement).videoWidth : 'N/A',
+      videoHeight: isVideo ? (element as HTMLVideoElement).videoHeight : 'N/A',
+      readyState: isVideo ? (element as HTMLVideoElement).readyState : 'N/A',
+    });
   }
 
   /**
@@ -387,7 +394,6 @@ class CompositorService {
   async playIntroVideo(videoUrl: string = '/backgrounds/videos/StreamLick.mp4', duration?: number): Promise<void> {
     return new Promise((resolve, reject) => {
       const videoElement = document.createElement('video');
-      videoElement.src = videoUrl;
       videoElement.muted = false; // Keep unmuted so audio can be captured by Web Audio API
       videoElement.autoplay = false;
       videoElement.preload = 'auto'; // FIX FLICKERING: Preload entire video for smooth playback
@@ -473,6 +479,10 @@ class CompositorService {
           resolve();
         }, duration * 1000);
       }
+
+      // Set src and load after event listeners are attached
+      videoElement.src = videoUrl;
+      videoElement.load(); // Force browser to start loading video
     });
   }
 
@@ -494,7 +504,6 @@ class CompositorService {
     }
 
     const videoElement = document.createElement('video');
-    videoElement.src = videoUrl;
     videoElement.muted = false; // CRITICAL: Keep unmuted so audio can be captured by Web Audio API
     videoElement.autoplay = false;
     videoElement.loop = loop;
@@ -557,6 +566,10 @@ class CompositorService {
       this.clearMediaClipOverlay();
       audioMixerService.removeStream('user-video-clip');
     });
+
+    // CRITICAL: Set src and load after event listeners are attached
+    videoElement.src = videoUrl;
+    videoElement.load(); // Force browser to start loading video
 
     // Return stop function
     return {
