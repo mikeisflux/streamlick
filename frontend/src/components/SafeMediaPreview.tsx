@@ -136,6 +136,7 @@ export function SafeMediaPreview({
         preload={preload}
         onError={handleError}
         crossOrigin="anonymous"
+        data-exclude-global-mute="true"
       />
     );
   }

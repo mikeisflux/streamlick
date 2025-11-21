@@ -160,6 +160,8 @@ export function useMediaDevices() {
       const newMuted = !prev;
       const audioElements = document.querySelectorAll('audio, video');
       audioElements.forEach((element: any) => {
+        // Skip preview elements that should control their own mute state
+        if (element.dataset.excludeGlobalMute === 'true') return;
         element.muted = newMuted;
       });
       return newMuted;
