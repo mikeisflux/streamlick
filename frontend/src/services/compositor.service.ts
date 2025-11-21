@@ -485,6 +485,14 @@ class CompositorService {
   playUserVideoClip(videoUrl: string, loop: boolean = false): { stop: () => void } {
     logger.info(`Loading user video clip: ${videoUrl}, loop: ${loop}`);
 
+    // CRITICAL: Initialize audio mixer if not already initialized
+    // This allows video clips to be played before going live
+    try {
+      audioMixerService.initialize();
+    } catch (error) {
+      logger.warn('Audio mixer already initialized or initialization failed:', error);
+    }
+
     const videoElement = document.createElement('video');
     videoElement.src = videoUrl;
     videoElement.muted = false; // CRITICAL: Keep unmuted so audio can be captured by Web Audio API

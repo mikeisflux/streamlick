@@ -7,40 +7,81 @@ import { compositorService } from '../services/compositor.service';
 const generateVideoThumbnail = (videoDataUrl: string): Promise<{ thumbnail: string; duration: number }> => {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
-    video.preload = 'metadata';
+    video.preload = 'auto'; // Changed from 'metadata' to ensure frames are loaded
     video.muted = true;
     video.playsInline = true;
+    video.crossOrigin = 'anonymous'; // Prevent CORS issues
+
+    let timeoutId: NodeJS.Timeout;
+
+    const cleanup = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      video.src = '';
+      video.load();
+    };
+
+    // Timeout after 10 seconds
+    timeoutId = setTimeout(() => {
+      cleanup();
+      reject(new Error('Thumbnail generation timed out'));
+    }, 10000);
 
     video.onloadedmetadata = () => {
-      // Seek to 1 second or 10% of video duration, whichever is earlier
-      const seekTime = Math.min(1, video.duration * 0.1);
-      video.currentTime = seekTime;
+      console.log('[Thumbnail] Video metadata loaded, duration:', video.duration);
+      // Seek to first frame (0.1 seconds to avoid black frames at start)
+      video.currentTime = 0.1;
     };
 
     video.onseeked = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = 320;
-        canvas.height = 180;
-        const ctx = canvas.getContext('2d');
+      console.log('[Thumbnail] Video seeked to:', video.currentTime);
 
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const thumbnail = canvas.toDataURL('image/jpeg', 0.7);
-          resolve({ thumbnail, duration: video.duration });
-        } else {
-          reject(new Error('Failed to get canvas context'));
+      // Wait a bit for the frame to be ready
+      setTimeout(() => {
+        try {
+          // Ensure video has valid dimensions
+          if (!video.videoWidth || !video.videoHeight) {
+            cleanup();
+            reject(new Error('Video has no dimensions'));
+            return;
+          }
+
+          const canvas = document.createElement('canvas');
+          // Use actual video dimensions for better quality
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+
+          if (ctx) {
+            // Draw the video frame
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Convert to data URL
+            const thumbnail = canvas.toDataURL('image/jpeg', 0.8);
+
+            console.log('[Thumbnail] Generated successfully:', thumbnail.substring(0, 50) + '...');
+
+            cleanup();
+            resolve({ thumbnail, duration: video.duration });
+          } else {
+            cleanup();
+            reject(new Error('Failed to get canvas context'));
+          }
+        } catch (error) {
+          cleanup();
+          reject(error);
         }
-      } catch (error) {
-        reject(error);
-      }
+      }, 100); // Small delay to ensure frame is rendered
     };
 
-    video.onerror = () => {
-      reject(new Error('Failed to load video'));
+    video.onerror = (e) => {
+      console.error('[Thumbnail] Video error:', e);
+      cleanup();
+      reject(new Error('Failed to load video for thumbnail'));
     };
 
+    // Set source and start loading
     video.src = videoDataUrl;
+    video.load();
   });
 };
 

@@ -331,6 +331,12 @@ export function StudioCanvas({
 
   // Handle master volume changes
   useEffect(() => {
+    // Initialize audio mixer if not already initialized
+    try {
+      audioMixerService.initialize();
+    } catch (error) {
+      // Already initialized, ignore
+    }
     audioMixerService.setMasterVolume(masterVolume);
   }, [masterVolume]);
 
