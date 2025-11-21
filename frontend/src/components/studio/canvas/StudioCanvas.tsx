@@ -117,6 +117,8 @@ export function StudioCanvas({
 }: StudioCanvasProps) {
   const mainVideoRef = useRef<HTMLVideoElement>(null);
   const screenShareVideoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [volume, setVolume] = useState(100);
 
   // Load banners from localStorage
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -409,9 +411,31 @@ export function StudioCanvas({
   // Calculate aspect ratio based on orientation
   const aspectRatio = orientation === 'portrait' ? '9 / 16' : '16 / 9';
 
+  const handleFullscreen = () => {
+    if (containerRef.current) {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else {
+        containerRef.current.requestFullscreen();
+      }
+    }
+  };
+
+  const handleVolumeChange = (newVolume: number) => {
+    setVolume(newVolume);
+    // Set volume on all audio elements except preview videos
+    const audioElements = document.querySelectorAll('audio, video');
+    audioElements.forEach((element: any) => {
+      if (element.dataset.excludeGlobalMute !== 'true') {
+        element.volume = newVolume / 100;
+      }
+    });
+  };
+
   return (
     <div
-      className="relative"
+      ref={containerRef}
+      className="relative group"
       style={{
         width: '100%',
         maxWidth: orientation === 'portrait' ? '563px' : '1001px',
@@ -794,6 +818,39 @@ export function StudioCanvas({
             />
           </div>
         )}
+      </div>
+
+      {/* Fullscreen button - bottom right */}
+      <button
+        onClick={handleFullscreen}
+        className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 text-white p-2 rounded text-lg opacity-0 group-hover:opacity-100 transition-opacity"
+        title="Fullscreen"
+        style={{ zIndex: 50 }}
+      >
+        [ ]
+      </button>
+
+      {/* Volume control - bottom center */}
+      <div
+        className="absolute bottom-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+        style={{ zIndex: 50 }}
+      >
+        <div className="bg-black/70 rounded-lg p-4 flex flex-col items-center gap-2">
+          <div className="text-white text-sm font-medium">Volume</div>
+          <div className="flex items-center gap-3">
+            <span className="text-white text-xs">0</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={volume}
+              onChange={(e) => handleVolumeChange(parseInt(e.target.value))}
+              className="w-32 h-2"
+            />
+            <span className="text-white text-xs">100</span>
+          </div>
+          <div className="text-white text-sm">{volume}%</div>
+        </div>
       </div>
     </div>
   );

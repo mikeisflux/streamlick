@@ -49,6 +49,8 @@ class ClipPlayerService {
     video.volume = clip.volume / 100;
     video.autoplay = true;
     video.loop = false;
+    // Exclude from global speaker mute - clip volumes controlled independently
+    (video as any).dataset.excludeGlobalMute = 'true';
 
     const startTime = Date.now();
     const endTime = clip.duration ? startTime + clip.duration : undefined;
@@ -164,6 +166,8 @@ class ClipPlayerService {
     const audio = new Audio(clip.url);
     audio.crossOrigin = 'anonymous';
     audio.volume = clip.volume / 100;
+    // Exclude from global speaker mute - clip volumes controlled independently
+    (audio as any).dataset.excludeGlobalMute = 'true';
 
     // CRITICAL FIX: Add audio to the compositor's audio mixer
     // This ensures the clip's audio is included in the output stream to YouTube

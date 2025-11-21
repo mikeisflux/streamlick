@@ -313,26 +313,6 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
                 </button>
               </div>
             )}
-
-            {/* Volume Control for Audio/Video */}
-            {(clip.type === 'audio' || clip.type === 'video') && (
-              <div className="mt-3">
-                <label className="text-xs text-gray-400 block mb-1">Volume: {clip.volume}%</label>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={clip.volume}
-                  onChange={(e) => {
-                    const newVolume = parseInt(e.target.value);
-                    setClips(clips.map((c) =>
-                      c.id === clip.id ? { ...c, volume: newVolume } : c
-                    ));
-                  }}
-                  className="w-full"
-                />
-              </div>
-            )}
           </div>
         ))}
       </div>

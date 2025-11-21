@@ -629,6 +629,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
     return (
       <div
         key={asset.id}
+        onClick={() => handleUseAsset(asset)}
         className={`p-3 bg-white rounded-lg hover:shadow-md transition-shadow cursor-pointer group relative ${
           isActive ? 'border-2 border-blue-500' : 'border border-gray-200'
         }`}
@@ -657,34 +658,21 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
           )}
           {/* Active indicator */}
           {isActive && (
-            <div className="absolute top-2 right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded font-medium">
+            <div className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded font-medium">
               Active
             </div>
           )}
-          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleUseAsset(asset);
-              }}
-              className={`px-3 py-1 rounded text-sm font-medium ${
-                isActive
-                  ? 'bg-red-600 hover:bg-red-700 text-white'
-                  : 'bg-white text-gray-900 hover:bg-gray-100'
-              }`}
-            >
-              {isActive ? 'Remove' : 'Use'}
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeleteAsset(asset.id);
-              }}
-              className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium"
-            >
-              Delete
-            </button>
-          </div>
+          {/* Delete button - top right on hover */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteAsset(asset.id);
+            }}
+            className="absolute top-1 right-1 z-10 bg-red-600 text-white w-5 h-5 flex items-center justify-center rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+            title="Delete"
+          >
+            ×
+          </button>
         </div>
         <p className="text-xs font-medium text-gray-900 truncate">{asset.name}</p>
         {asset.duration && (
@@ -903,7 +891,8 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               {assets.filter((a) => a.type === 'music').map((asset) => (
                 <div
                   key={asset.id}
-                  className="p-3 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow"
+                  onClick={() => handleUseAsset(asset)}
+                  className="p-3 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow cursor-pointer group relative"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-purple-100 rounded flex items-center justify-center text-2xl">
@@ -922,21 +911,18 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
                         </p>
                       )}
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleUseAsset(asset)}
-                        className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded transition-colors"
-                      >
-                        Use
-                      </button>
-                      <button
-                        onClick={() => handleDeleteAsset(asset.id)}
-                        className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
-                      >
-                        Delete
-                      </button>
-                    </div>
                   </div>
+                  {/* Delete button - top right on hover */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteAsset(asset.id);
+                    }}
+                    className="absolute top-1 right-1 z-10 bg-red-600 text-white w-5 h-5 flex items-center justify-center rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                    title="Delete"
+                  >
+                    ×
+                  </button>
                 </div>
               ))}
             </div>
