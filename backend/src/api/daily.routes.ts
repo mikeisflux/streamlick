@@ -96,9 +96,9 @@ router.post('/broadcasts/:broadcastId/streaming/start', async (req: AuthRequest,
 
     const roomName = `streamlick-broadcast-${broadcastId}`;
 
-    // Format endpoints for Daily API - must use 'endpoint' property
+    // Format endpoints for Daily API - must use 'url' property
     const endpoints = destinations.map((dest: any) => ({
-      endpoint: `${dest.rtmpUrl}/${dest.streamKey}`, // Daily API requires 'endpoint', not 'rtmpUrl'
+      url: `${dest.rtmpUrl}/${dest.streamKey}`, // Daily API requires objects with 'url' property
     }));
 
     await dailyServiceBackend.startLiveStreaming(roomName, {

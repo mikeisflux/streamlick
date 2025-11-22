@@ -36,7 +36,7 @@ interface DailyRoom {
 }
 
 interface LiveStreamingEndpoint {
-  endpoint: string;
+  url: string;
 }
 
 interface StartLiveStreamingParams {
