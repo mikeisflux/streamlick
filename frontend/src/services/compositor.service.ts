@@ -587,7 +587,8 @@ class CompositorService {
   private createSilentAudioTrack(): MediaStreamTrack {
     const ctx = new AudioContext();
     const oscillator = ctx.createOscillator();
-    const dst = oscillator.connect(ctx.createMediaStreamDestination());
+    const dst = ctx.createMediaStreamDestination();
+    oscillator.connect(dst);
     oscillator.start();
     return dst.stream.getAudioTracks()[0];
   }
