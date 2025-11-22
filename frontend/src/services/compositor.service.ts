@@ -554,6 +554,18 @@ class CompositorService {
   }
 
   /**
+   * Create a silent audio track to boost MediaStream priority
+   * Browsers are less likely to suspend streams with audio present
+   */
+  private createSilentAudioTrack(): MediaStreamTrack {
+    const ctx = new AudioContext();
+    const oscillator = ctx.createOscillator();
+    const dst = oscillator.connect(ctx.createMediaStreamDestination());
+    oscillator.start();
+    return dst.stream.getAudioTracks()[0];
+  }
+
+  /**
    * Start compositing loop
    */
   start(): void {
@@ -566,6 +578,12 @@ class CompositorService {
     // Using automatic mode instead of manual (0 fps) to prevent browser from muting track
     // Manual mode with requestFrame() was causing browser to detect "low activity" and mute the track
     this.outputStream = this.canvas!.captureStream(30);
+
+    // Add silent audio track to boost stream priority in browser's scheduling engine
+    // Even though composite stream has mixed audio, having audio on the raw canvas stream
+    // signals to the browser that this is an active multimedia source
+    const silentAudio = this.createSilentAudioTrack();
+    this.outputStream.addTrack(silentAudio);
 
     // CRITICAL: Set contentHint to tell browser this is motion video content
     // This prevents browser optimization that auto-mutes "static" canvas tracks
@@ -605,6 +623,11 @@ class CompositorService {
 
           // Create new stream from canvas
           this.outputStream = this.canvas!.captureStream(30);
+
+          // Add silent audio track to boost stream priority
+          const silentAudio = this.createSilentAudioTrack();
+          this.outputStream.addTrack(silentAudio);
+
           const newVideoTrack = this.outputStream.getVideoTracks()[0];
 
           // CRITICAL: Set contentHint on recreated track too
