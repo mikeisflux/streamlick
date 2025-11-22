@@ -220,10 +220,9 @@ class DailyServiceBackend {
       logger.info(`[Daily Backend] Starting live streaming for room ${roomName} with ${params.endpoints.length} endpoint(s)`);
 
       const response = await this.apiClient.post(`/rooms/${roomName}/live-streaming/start`, {
-        rtmp_url: params.endpoints[0]?.endpoint, // Primary endpoint
-        endpoints: params.endpoints, // All endpoints
+        endpoints: params.endpoints,
         layout: params.layout,
-        instance_id: params.instanceId,
+        instanceId: params.instanceId,
       });
 
       logger.info('[Daily Backend] Live streaming started successfully:', response.data);
@@ -244,7 +243,7 @@ class DailyServiceBackend {
 
       const body: any = {};
       if (instanceId) {
-        body.instance_id = instanceId;
+        body.instanceId = instanceId;
       }
 
       await this.apiClient.post(`/rooms/${roomName}/live-streaming/stop`, body);
@@ -271,7 +270,7 @@ class DailyServiceBackend {
 
       const body: any = { endpoints };
       if (instanceId) {
-        body.instance_id = instanceId;
+        body.instanceId = instanceId;
       }
 
       await this.apiClient.post(`/rooms/${roomName}/live-streaming/update`, body);
