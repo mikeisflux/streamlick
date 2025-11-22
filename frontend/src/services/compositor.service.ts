@@ -10,6 +10,7 @@
  */
 
 import { audioMixerService } from './audio-mixer.service';
+import { webrtcService } from './webrtc.service';
 import type { PerformanceMetrics } from '../types';
 import logger from '../utils/logger';
 
@@ -648,8 +649,14 @@ class CompositorService {
             logger.error('[Canvas Track] New track also MUTED!', { id: newVideoTrack.id });
           });
 
-          // TODO: Notify WebRTC service to replace track in producer
-          // For now, the stream recreation will help with future connections
+          // Replace the track in the WebRTC producer
+          // This is CRITICAL - without this, the old muted track keeps sending to server
+          try {
+            await webrtcService.replaceVideoTrack(newVideoTrack);
+            logger.info('[Canvas Track] Successfully replaced track in WebRTC producer');
+          } catch (error) {
+            logger.error('[Canvas Track] Failed to replace track in WebRTC producer:', error);
+          }
         } catch (error) {
           logger.error('[Canvas Track] Failed to recreate stream after mute:', error);
         }

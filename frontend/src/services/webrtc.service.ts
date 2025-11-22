@@ -468,6 +468,45 @@ class WebRTCService {
     logger.info('WebRTC service closed and cleaned up');
   }
 
+  /**
+   * Replace the track in a video producer (e.g., after canvas track gets muted)
+   * This is critical for handling browser-initiated track muting
+   */
+  async replaceVideoTrack(newTrack: MediaStreamTrack): Promise<void> {
+    // Find the video producer
+    let videoProducer: mediasoupClient.types.Producer | null = null;
+
+    for (const [_, producer] of this.producers) {
+      if (producer.kind === 'video' && !producer.closed) {
+        videoProducer = producer;
+        break;
+      }
+    }
+
+    if (!videoProducer) {
+      logger.error('[WebRTC] No active video producer found to replace track');
+      return;
+    }
+
+    try {
+      logger.info('[WebRTC] Replacing video track in producer:', {
+        producerId: videoProducer.id,
+        oldTrackId: videoProducer.track?.id,
+        newTrackId: newTrack.id,
+      });
+
+      await videoProducer.replaceTrack({ track: newTrack });
+
+      logger.info('[WebRTC] Video track successfully replaced', {
+        producerId: videoProducer.id,
+        newTrackId: newTrack.id,
+      });
+    } catch (error) {
+      logger.error('[WebRTC] Failed to replace video track:', error);
+      throw error;
+    }
+  }
+
   getDevice(): Device | null {
     return this.device;
   }
