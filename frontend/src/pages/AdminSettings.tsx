@@ -33,6 +33,7 @@ interface SystemConfig {
   max_broadcast_participants?: string;
   max_concurrent_broadcasts?: string;
   hetzner_api_key?: string;
+  daily_api_key?: string;
 }
 
 export default function AdminSettings() {
@@ -288,6 +289,7 @@ export default function AdminSettings() {
         category: 'Infrastructure & Deployment',
         fields: [
           { key: 'hetzner_api_key', label: 'Hetzner Cloud API Key', type: 'password', description: 'For automatic server provisioning and scaling' },
+          { key: 'daily_api_key', label: 'Daily.co API Key', type: 'password', description: 'For RTMP streaming output via Daily.co (replaces FFmpeg)' },
         ],
       },
       {

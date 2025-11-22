@@ -34,6 +34,7 @@ import tokenWarningsRoutes from './api/token-warnings.routes';
 import pageContentRoutes from './api/page-content.routes';
 import emailsRoutes from './api/emails.routes';
 import commentsRoutes from './api/comments.routes';
+import dailyRoutes, { initializeDailyService } from './api/daily.routes';
 
 import initializeSocket from './socket';
 import logger from './utils/logger';
@@ -206,6 +207,7 @@ app.use('/api/infrastructure', infrastructureRoutes);
 app.use('/api/branding', publicBrandingRouter); // Public branding endpoint
 app.use('/api/token-warnings', tokenWarningsRoutes);
 app.use('/api/page-content', pageContentRoutes); // Public endpoint for getting page content
+app.use('/api/daily', dailyRoutes); // Daily.co integration routes
 app.use('/api/emails', emailsRoutes); // Email management routes
 app.use('/api/comments', commentsRoutes); // Comment posting routes
 
@@ -229,9 +231,16 @@ app.use((req, res) => {
 });
 
 // Start server
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   logger.info(`🚀 Streamlick API server running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+
+  // Initialize Daily.co service
+  try {
+    await initializeDailyService();
+  } catch (error) {
+    logger.warn('Daily.co service initialization failed - streaming via Daily will not be available:', error);
+  }
 });
 
 // Graceful shutdown

@@ -1,0 +1,341 @@
+/**
+ * Daily.co Backend Service
+ *
+ * Handles Daily.co REST API operations:
+ * - Create/delete rooms
+ * - Generate meeting tokens
+ * - Start/stop live streaming via REST API
+ * - Manage room configuration
+ */
+
+import axios, { AxiosInstance } from 'axios';
+import logger from '../utils/logger';
+import prisma from '../database/prisma';
+import { decrypt } from '../utils/crypto';
+
+interface DailyRoomConfig {
+  name?: string;
+  privacy?: 'public' | 'private';
+  properties?: {
+    enable_screenshare?: boolean;
+    enable_chat?: boolean;
+    start_video_off?: boolean;
+    start_audio_off?: boolean;
+    max_participants?: number;
+  };
+}
+
+interface DailyRoom {
+  id: string;
+  name: string;
+  api_created: boolean;
+  privacy: string;
+  url: string;
+  created_at: string;
+  config: any;
+}
+
+interface LiveStreamingEndpoint {
+  rtmpUrl: string;
+}
+
+interface StartLiveStreamingParams {
+  endpoints: LiveStreamingEndpoint[];
+  layout?: {
+    preset?: 'default' | 'single-participant' | 'active-participant' | 'gallery';
+  };
+  instanceId?: string;
+}
+
+class DailyServiceBackend {
+  private apiKey: string | null = null;
+  private apiClient: AxiosInstance;
+  private readonly baseUrl = 'https://api.daily.co/v1';
+
+  constructor() {
+    // Initialize axios client with base config
+    this.apiClient = axios.create({
+      baseURL: this.baseUrl,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  }
+
+  /**
+   * Initialize the service with API key from database
+   */
+  async initialize(): Promise<void> {
+    try {
+      // Fetch Daily API key from system settings
+      const setting = await prisma.systemSetting.findUnique({
+        where: {
+          category_key: {
+            category: 'system',
+            key: 'daily_api_key',
+          },
+        },
+      });
+
+      if (!setting || !setting.value) {
+        logger.warn('[Daily Backend] API key not configured in system settings');
+        return;
+      }
+
+      // Decrypt if encrypted
+      this.apiKey = setting.isEncrypted ? decrypt(setting.value) : setting.value;
+
+      // Update axios client with authorization header
+      this.apiClient.defaults.headers.common['Authorization'] = `Bearer ${this.apiKey}`;
+
+      logger.info('[Daily Backend] Service initialized successfully');
+    } catch (error) {
+      logger.error('[Daily Backend] Failed to initialize:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Ensure API key is loaded
+   */
+  private ensureInitialized(): void {
+    if (!this.apiKey) {
+      throw new Error('Daily service not initialized. Call initialize() first.');
+    }
+  }
+
+  /**
+   * Create a new Daily room
+   */
+  async createRoom(config: DailyRoomConfig = {}): Promise<DailyRoom> {
+    this.ensureInitialized();
+
+    try {
+      logger.info('[Daily Backend] Creating room:', config);
+
+      const response = await this.apiClient.post('/rooms', {
+        name: config.name,
+        privacy: config.privacy || 'private',
+        properties: {
+          enable_screenshare: false, // Broadcaster only
+          enable_chat: false,
+          start_video_off: false,
+          start_audio_off: false,
+          max_participants: 1, // Only broadcaster
+          ...config.properties,
+        },
+      });
+
+      const room: DailyRoom = response.data;
+
+      logger.info('[Daily Backend] Room created successfully:', {
+        id: room.id,
+        name: room.name,
+        url: room.url,
+      });
+
+      return room;
+    } catch (error: any) {
+      logger.error('[Daily Backend] Failed to create room:', error.response?.data || error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get room information
+   */
+  async getRoom(roomName: string): Promise<DailyRoom | null> {
+    this.ensureInitialized();
+
+    try {
+      const response = await this.apiClient.get(`/rooms/${roomName}`);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return null;
+      }
+      logger.error('[Daily Backend] Failed to get room:', error.response?.data || error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a Daily room
+   */
+  async deleteRoom(roomName: string): Promise<void> {
+    this.ensureInitialized();
+
+    try {
+      logger.info('[Daily Backend] Deleting room:', roomName);
+      await this.apiClient.delete(`/rooms/${roomName}`);
+      logger.info('[Daily Backend] Room deleted successfully');
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        logger.warn(`[Daily Backend] Room ${roomName} not found, already deleted`);
+        return;
+      }
+      logger.error('[Daily Backend] Failed to delete room:', error.response?.data || error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a meeting token for a room
+   * Tokens provide access control and can set permissions
+   */
+  async createMeetingToken(roomName: string, properties: any = {}): Promise<string> {
+    this.ensureInitialized();
+
+    try {
+      logger.info('[Daily Backend] Creating meeting token for room:', roomName);
+
+      const response = await this.apiClient.post('/meeting-tokens', {
+        properties: {
+          room_name: roomName,
+          is_owner: true, // Broadcaster is owner
+          enable_screenshare: true,
+          start_video_on: true,
+          start_audio_on: true,
+          ...properties,
+        },
+      });
+
+      const token: string = response.data.token;
+
+      logger.info('[Daily Backend] Meeting token created successfully');
+
+      return token;
+    } catch (error: any) {
+      logger.error('[Daily Backend] Failed to create meeting token:', error.response?.data || error);
+      throw error;
+    }
+  }
+
+  /**
+   * Start live streaming via REST API
+   * Alternative to using JavaScript API from frontend
+   */
+  async startLiveStreaming(roomName: string, params: StartLiveStreamingParams): Promise<void> {
+    this.ensureInitialized();
+
+    try {
+      logger.info(`[Daily Backend] Starting live streaming for room ${roomName} with ${params.endpoints.length} endpoint(s)`);
+
+      const response = await this.apiClient.post(`/rooms/${roomName}/live-streaming/start`, {
+        rtmp_url: params.endpoints[0]?.rtmpUrl, // Primary endpoint
+        endpoints: params.endpoints, // All endpoints
+        layout: params.layout,
+        instance_id: params.instanceId,
+      });
+
+      logger.info('[Daily Backend] Live streaming started successfully:', response.data);
+    } catch (error: any) {
+      logger.error('[Daily Backend] Failed to start live streaming:', error.response?.data || error);
+      throw error;
+    }
+  }
+
+  /**
+   * Stop live streaming via REST API
+   */
+  async stopLiveStreaming(roomName: string, instanceId?: string): Promise<void> {
+    this.ensureInitialized();
+
+    try {
+      logger.info('[Daily Backend] Stopping live streaming for room:', roomName);
+
+      const body: any = {};
+      if (instanceId) {
+        body.instance_id = instanceId;
+      }
+
+      await this.apiClient.post(`/rooms/${roomName}/live-streaming/stop`, body);
+
+      logger.info('[Daily Backend] Live streaming stopped successfully');
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        logger.warn(`[Daily Backend] No active stream found for room ${roomName}`);
+        return;
+      }
+      logger.error('[Daily Backend] Failed to stop live streaming:', error.response?.data || error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update live streaming endpoints (add new destinations)
+   */
+  async updateLiveStreamingEndpoints(roomName: string, endpoints: LiveStreamingEndpoint[], instanceId?: string): Promise<void> {
+    this.ensureInitialized();
+
+    try {
+      logger.info(`[Daily Backend] Updating live streaming endpoints for room ${roomName}`);
+
+      const body: any = { endpoints };
+      if (instanceId) {
+        body.instance_id = instanceId;
+      }
+
+      await this.apiClient.post(`/rooms/${roomName}/live-streaming/update`, body);
+
+      logger.info('[Daily Backend] Live streaming endpoints updated successfully');
+    } catch (error: any) {
+      logger.error('[Daily Backend] Failed to update endpoints:', error.response?.data || error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get live streaming status for a room
+   */
+  async getLiveStreamingStatus(roomName: string): Promise<any> {
+    this.ensureInitialized();
+
+    try {
+      const response = await this.apiClient.get(`/rooms/${roomName}/live-streaming`);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return { is_streaming: false };
+      }
+      logger.error('[Daily Backend] Failed to get streaming status:', error.response?.data || error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get or create a room for a broadcast
+   * Room name format: streamlick-broadcast-{broadcastId}
+   */
+  async getOrCreateBroadcastRoom(broadcastId: string): Promise<DailyRoom> {
+    const roomName = `streamlick-broadcast-${broadcastId}`;
+
+    try {
+      // Try to get existing room
+      const existingRoom = await this.getRoom(roomName);
+      if (existingRoom) {
+        logger.info(`[Daily Backend] Using existing room: ${roomName}`);
+        return existingRoom;
+      }
+
+      // Create new room
+      logger.info(`[Daily Backend] Creating new room: ${roomName}`);
+      return await this.createRoom({
+        name: roomName,
+        privacy: 'private',
+        properties: {
+          max_participants: 1, // Only broadcaster
+          enable_screenshare: false,
+          enable_chat: false,
+        },
+      });
+    } catch (error) {
+      logger.error(`[Daily Backend] Failed to get/create broadcast room:`, error);
+      throw error;
+    }
+  }
+}
+
+// Export singleton instance
+export const dailyServiceBackend = new DailyServiceBackend();
+export default dailyServiceBackend;
