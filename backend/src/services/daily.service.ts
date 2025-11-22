@@ -36,7 +36,7 @@ interface DailyRoom {
 }
 
 interface LiveStreamingEndpoint {
-  rtmpUrl: string;
+  endpoint: string;
 }
 
 interface StartLiveStreamingParams {
@@ -220,7 +220,7 @@ class DailyServiceBackend {
       logger.info(`[Daily Backend] Starting live streaming for room ${roomName} with ${params.endpoints.length} endpoint(s)`);
 
       const response = await this.apiClient.post(`/rooms/${roomName}/live-streaming/start`, {
-        rtmp_url: params.endpoints[0]?.rtmpUrl, // Primary endpoint
+        rtmp_url: params.endpoints[0]?.endpoint, // Primary endpoint
         endpoints: params.endpoints, // All endpoints
         layout: params.layout,
         instance_id: params.instanceId,
