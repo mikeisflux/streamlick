@@ -804,8 +804,14 @@ class CompositorService {
         }
       }
 
-      // contentHint='motion' set on track creation prevents browser auto-muting
-      // No need for visual hacks like random pixels/rectangles
+      // ANTI-MUTE: Draw 1 invisible pixel in bottom-right corner that changes every frame
+      // contentHint='motion' alone is NOT sufficient - browser still detects static canvas during countdown
+      // This minimal pixel change prevents auto-muting without visible artifacts
+      const x = this.canvas!.width - 1;
+      const y = this.canvas!.height - 1;
+      const brightness = (this.frameCount % 2) * 255; // Alternates 0/255 every frame
+      this.ctx!.fillStyle = `rgb(${brightness},${brightness},${brightness})`;
+      this.ctx!.fillRect(x, y, 1, 1);
     } catch (error) {
       logger.error('Compositor animation error:', error);
     }
