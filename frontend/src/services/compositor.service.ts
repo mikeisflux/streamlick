@@ -567,14 +567,18 @@ class CompositorService {
     // Manual mode with requestFrame() was causing browser to detect "low activity" and mute the track
     this.outputStream = this.canvas!.captureStream(30);
 
-    // DIAGNOSTIC: Monitor canvas video track state
+    // CRITICAL: Set contentHint to tell browser this is motion video content
+    // This prevents browser optimization that auto-mutes "static" canvas tracks
+    // https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamTrack/contentHint
     const videoTrack = this.outputStream.getVideoTracks()[0];
     if (videoTrack) {
+      videoTrack.contentHint = 'motion';
       logger.info('[Canvas Track] Initial state:', {
         id: videoTrack.id,
         enabled: videoTrack.enabled,
         muted: videoTrack.muted,
         readyState: videoTrack.readyState,
+        contentHint: videoTrack.contentHint,
       });
 
       // Monitor track ended event
@@ -603,11 +607,17 @@ class CompositorService {
           this.outputStream = this.canvas!.captureStream(30);
           const newVideoTrack = this.outputStream.getVideoTracks()[0];
 
+          // CRITICAL: Set contentHint on recreated track too
+          if (newVideoTrack) {
+            newVideoTrack.contentHint = 'motion';
+          }
+
           logger.info('[Canvas Track] New stream created after mute', {
             oldTrackId: videoTrack.id,
             newTrackId: newVideoTrack.id,
             newTrackMuted: newVideoTrack.muted,
             newTrackState: newVideoTrack.readyState,
+            contentHint: newVideoTrack.contentHint,
           });
 
           // Set up listeners on new track
