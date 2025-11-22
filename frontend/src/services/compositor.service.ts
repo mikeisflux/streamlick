@@ -379,13 +379,20 @@ class CompositorService {
    */
   setMediaClipOverlay(element: HTMLVideoElement | HTMLImageElement): void {
     this.mediaClipOverlay = element;
+    const elementType = element instanceof HTMLVideoElement ? 'video' : 'image';
+    const src = element instanceof HTMLVideoElement ? element.src : (element as HTMLImageElement).src;
+    logger.info(`[Media Clip] Overlay set - ${elementType}: ${src.substring(src.lastIndexOf('/') + 1)}`);
   }
 
   /**
    * Clear media clip overlay
    */
   clearMediaClipOverlay(): void {
+    const wasActive = this.mediaClipOverlay !== null;
     this.mediaClipOverlay = null;
+    if (wasActive) {
+      logger.info('[Media Clip] Overlay cleared - participants should now be visible');
+    }
   }
 
   /**
