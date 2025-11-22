@@ -70,19 +70,12 @@ class DailyMediaServerService {
 
       logger.info(`[Daily Media Server] Room created: ${this.roomName}`);
 
-      // Step 2: Create Daily call object (server-side)
-      // Note: Server-side Daily doesn't use iframe - it's a headless client
-      this.callObject = DailyIframe.createCallObject({
-        // Server-side: no video/audio by default
-        // We'll set custom streams later
-        audioSource: false,
-        videoSource: false,
-      });
+      // Step 2: SKIP creating Daily call object
+      // The media server only orchestrates via REST API, it doesn't join the room.
+      // Daily's RTMP streaming works server-side without needing a WebRTC client.
+      // The backend API will handle starting/stopping streams via Daily's REST API.
 
-      // Setup event listeners
-      this.setupEventListeners();
-
-      logger.info('[Daily Media Server] Call object created successfully');
+      logger.info('[Daily Media Server] Initialization complete (REST API mode - no WebRTC client)');
     } catch (error: any) {
       logger.error('[Daily Media Server] Failed to initialize:', {
         message: error.message,

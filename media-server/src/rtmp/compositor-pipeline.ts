@@ -706,19 +706,16 @@ async function createDailyPipeline(
     logger.info(`[Daily Pipeline] Using backend API URL: ${backendApiUrl}`);
     logger.info(`[Daily Pipeline] BACKEND_API_URL env var: ${process.env.BACKEND_API_URL || 'NOT SET'}`);
 
-    // Step 1: Initialize Daily service and create room
+    // Step 1: Initialize Daily service and create room via REST API
     await dailyMediaServerService.initialize({
       apiBaseUrl: backendApiUrl,
       broadcastId,
     });
 
-    // Step 2: Join Daily room
-    await dailyMediaServerService.joinRoom();
+    // Step 2: SKIP joining room - we use REST API only, not WebRTC client
+    // The media server orchestrates streaming via backend API calls
 
-    // Step 3: Store media streams (for future enhancements)
-    await dailyMediaServerService.setMediaStreams(router, videoProducer, audioProducer);
-
-    // Step 4: Start RTMP streaming via Daily
+    // Step 3: Start RTMP streaming via Daily REST API
     const dailyDestinations = destinations.map((dest) => ({
       rtmpUrl: dest.rtmpUrl,
       streamKey: dest.streamKey,
