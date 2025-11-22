@@ -967,31 +967,35 @@ class CompositorService {
 
       // ANTI-MUTE: Draw imperceptible noise to prevent browser from detecting static canvas
       // contentHint='motion' alone is NOT sufficient - browser still detects static canvas during countdown
-      // Using 0.01 alpha with random position/color creates variance the browser can't ignore
-      // ENHANCED: More aggressive when tab is hidden (browsers throttle backgrounded tabs more)
+      // CRITICAL FIX: Previous alpha (0.01) was TOO subtle - frozen detection couldn't detect change
+      // New approach: Draw many more pixels with higher alpha but distributed across canvas
+      // This creates enough delta for frozen detection while remaining imperceptible to viewers
       this.ctx!.save();
 
       if (this.isTabVisible) {
-        // Normal mode: single imperceptible pixel
-        this.ctx!.globalAlpha = 0.01;
-        this.ctx!.fillStyle = `rgb(${Math.floor(Math.random() * 255)},0,0)`;
-        this.ctx!.fillRect(
-          Math.random() * this.canvas!.width,
-          Math.random() * this.canvas!.height,
-          1,
-          1
-        );
-      } else {
-        // AGGRESSIVE MODE: Tab is hidden, browser may throttle more aggressively
-        // Draw 10 pixels with higher alpha and larger size
-        this.ctx!.globalAlpha = 0.05; // 5x more visible (but still imperceptible)
-        for (let i = 0; i < 10; i++) {
+        // Normal mode: Draw 50 noise pixels across canvas
+        // Alpha 0.03 = 97% transparent, still invisible but creates measurable delta
+        this.ctx!.globalAlpha = 0.03;
+        for (let i = 0; i < 50; i++) {
           this.ctx!.fillStyle = `rgb(${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)})`;
           this.ctx!.fillRect(
             Math.random() * this.canvas!.width,
             Math.random() * this.canvas!.height,
-            2, // 2x2 pixels instead of 1x1
+            2, // 2x2 pixels for better coverage
             2
+          );
+        }
+      } else {
+        // AGGRESSIVE MODE: Tab is hidden, browser may throttle more aggressively
+        // Draw 100 pixels with higher alpha and larger size
+        this.ctx!.globalAlpha = 0.08; // More visible when backgrounded
+        for (let i = 0; i < 100; i++) {
+          this.ctx!.fillStyle = `rgb(${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)})`;
+          this.ctx!.fillRect(
+            Math.random() * this.canvas!.width,
+            Math.random() * this.canvas!.height,
+            3, // 3x3 pixels
+            3
           );
         }
       }
