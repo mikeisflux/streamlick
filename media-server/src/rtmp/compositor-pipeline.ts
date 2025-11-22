@@ -35,16 +35,20 @@ export async function createCompositorPipeline(
   try {
     logger.info(`Creating compositor pipeline for broadcast ${broadcastId}`);
 
-    // Always use Daily.co for RTMP output
-    const streamingMethod = process.env.STREAMING_METHOD || 'daily';
+    // Check streaming method from environment variable
+    const streamingMethod = process.env.STREAMING_METHOD || 'ffmpeg';
     logger.info(`[Compositor Pipeline] Streaming method: ${streamingMethod}`);
 
-    if (streamingMethod === 'ffmpeg') {
-      logger.warn('[Compositor Pipeline] FFmpeg mode is deprecated. Falling back to Daily mode.');
+    // Use Daily.co pipeline only if explicitly enabled
+    // Daily.co requires active participants in the room before starting RTMP streaming
+    // For direct RTMP streaming without Daily.co, use FFmpeg pipeline
+    if (streamingMethod === 'daily') {
+      logger.info('[Compositor Pipeline] Using Daily.co pipeline for RTMP streaming');
+      return await createDailyPipeline(router, broadcastId, videoProducer, audioProducer, destinations);
     }
 
-    // Use Daily.co pipeline (recommended)
-    return await createDailyPipeline(router, broadcastId, videoProducer, audioProducer, destinations);
+    // Default: Use FFmpeg pipeline for direct RTMP streaming
+    logger.info('[Compositor Pipeline] Using FFmpeg pipeline for direct RTMP streaming');
 
     // Create separate Plain RTP transports for video and audio
     // This is required because FFmpeg cannot bind to the same port twice
@@ -690,6 +694,20 @@ export async function stopCompositorPipeline(broadcastId: string): Promise<void>
  * 3. Starts RTMP streaming via Daily REST API
  *
  * Note: Media still flows through mediasoup, but output goes via Daily
+ *
+ * ⚠️  IMPORTANT LIMITATION:
+ * Daily.co's REST API requires an active participant in the room before starting RTMP streaming.
+ * Without an active participant, the API returns a 400 error: "Cannot start live streaming without participants"
+ *
+ * Current issue: This code creates a Daily room but doesn't connect any participants to it,
+ * causing the RTMP streaming to fail. This is why FFmpeg pipeline is now the default method.
+ *
+ * To fix Daily.co integration, you need to:
+ * 1. Create the room via REST API
+ * 2. Connect a participant to the room using Daily's client SDK
+ * 3. Ensure the participant has active video/audio tracks
+ * 4. Wait for the participant to be fully connected
+ * 5. Then start RTMP streaming via REST API
  */
 async function createDailyPipeline(
   router: Router,
