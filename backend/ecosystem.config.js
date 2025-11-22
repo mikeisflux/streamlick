@@ -2,11 +2,11 @@ module.exports = {
   apps: [{
     name: 'streamlick-backend',
     script: 'dist/index.js',
-    cwd: '/home/streamlick/backend',
-    env_file: '/home/streamlick/backend/.env',
+    cwd: '/home/user/streamlick/backend',
+    env_file: '/home/user/streamlick/backend/.env',
     env: {
       NODE_ENV: 'production',
-      NODE_PATH: '/home/streamlick/backend/node_modules'
+      NODE_PATH: '/home/user/streamlick/backend/node_modules'
     },
     exec_mode: 'fork',
     instances: 1,
