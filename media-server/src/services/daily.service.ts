@@ -43,10 +43,14 @@ class DailyMediaServerService {
   async initialize(config: DailyMediaServerConfig): Promise<void> {
     try {
       logger.info(`[Daily Media Server] Initializing for broadcast ${config.broadcastId}`);
+      logger.info(`[Daily Media Server] Backend API URL: ${config.apiBaseUrl}`);
 
       // Step 1: Create Daily room via backend API
+      const url = `${config.apiBaseUrl}/api/daily/broadcasts/${config.broadcastId}/room`;
+      logger.info(`[Daily Media Server] Creating room via: ${url}`);
+
       const response = await axios.post(
-        `${config.apiBaseUrl}/api/daily/broadcasts/${config.broadcastId}/room`,
+        url,
         {},
         {
           headers: {
@@ -76,7 +80,17 @@ class DailyMediaServerService {
 
       logger.info('[Daily Media Server] Call object created successfully');
     } catch (error: any) {
-      logger.error('[Daily Media Server] Failed to initialize:', error.message);
+      logger.error('[Daily Media Server] Failed to initialize:', {
+        message: error.message,
+        code: error.code,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+        },
+      });
       throw error;
     }
   }

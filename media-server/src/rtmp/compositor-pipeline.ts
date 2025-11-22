@@ -703,6 +703,8 @@ async function createDailyPipeline(
 
     // Get backend API URL from environment
     const backendApiUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
+    logger.info(`[Daily Pipeline] Using backend API URL: ${backendApiUrl}`);
+    logger.info(`[Daily Pipeline] BACKEND_API_URL env var: ${process.env.BACKEND_API_URL || 'NOT SET'}`);
 
     // Step 1: Initialize Daily service and create room
     await dailyMediaServerService.initialize({
