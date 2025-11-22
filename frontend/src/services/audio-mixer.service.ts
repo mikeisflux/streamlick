@@ -175,6 +175,27 @@ class AudioMixerService {
   getStreamCount(): number {
     return this.sources.size;
   }
+
+  /**
+   * Set master volume for all streams
+   * This applies a volume multiplier to all existing streams
+   */
+  setMasterVolume(volume: number): void {
+    const clampedVolume = Math.max(0, Math.min(1, volume));
+
+    console.log(`Setting master volume to ${clampedVolume} for ${this.gainNodes.size} streams`);
+
+    this.gainNodes.forEach((gainNode, id) => {
+      gainNode.gain.value = clampedVolume;
+    });
+  }
+
+  /**
+   * Get all stream IDs currently in the mixer
+   */
+  getStreamIds(): string[] {
+    return Array.from(this.sources.keys());
+  }
 }
 
 // Export singleton instance

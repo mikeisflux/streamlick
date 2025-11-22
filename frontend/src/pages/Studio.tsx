@@ -288,6 +288,11 @@ export function Studio() {
   // Canvas Settings (persisted to localStorage)
   const canvasSettings = useCanvasSettings();
 
+  // Apply input volume to compositor when it changes
+  useEffect(() => {
+    compositorService.setInputVolume(canvasSettings.inputVolume);
+  }, [canvasSettings.inputVolume]);
+
   // Broadcast title update handler
   const handleTitleChange = async (newTitle: string) => {
     if (!broadcastId) return;

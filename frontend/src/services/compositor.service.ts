@@ -169,36 +169,60 @@ class CompositorService {
     // Set the stream source
     video.srcObject = participant.stream;
 
+    // DIAGNOSTIC: Log initial video element state
+    logger.debug('[Compositor] Video element setup:', {
+      participantId: participant.id,
+      videoEnabled: participant.videoEnabled,
+      hasVideoTracks,
+      initialReadyState: video.readyState,
+    });
+
     // Only wait for metadata if video is enabled and has video tracks
     if (participant.videoEnabled && hasVideoTracks) {
       try {
-        // Wait for video to be ready with 2 second timeout (reduced from 5s)
+        // Wait for video to have CURRENT_DATA (readyState >= 2) with 3 second timeout
         await Promise.race([
           new Promise<void>((resolve) => {
-            // If already loaded, resolve immediately
-            if (video.readyState >= 1) {
+            // If already at readyState >= 2, resolve immediately
+            if (video.readyState >= 2) {
+              logger.info(`Video already ready for participant ${participant.id}, readyState: ${video.readyState}`);
               video.play().catch(err => logger.error('Failed to play video:', err));
               resolve();
               return;
             }
-            video.onloadedmetadata = () => {
+
+            // Wait for loadeddata event (readyState = 2 or higher)
+            const onLoadedData = () => {
+              logger.info(`Video data loaded for participant ${participant.id}, readyState: ${video.readyState}`);
               video.play().catch(err => logger.error('Failed to play video:', err));
               resolve();
             };
+
+            // Also handle metadata as fallback
+            const onMetadata = () => {
+              logger.info(`Video metadata loaded for participant ${participant.id}, readyState: ${video.readyState}`);
+              // Don't resolve yet - wait for loadeddata
+            };
+
+            video.addEventListener('loadeddata', onLoadedData, { once: true });
+            video.addEventListener('loadedmetadata', onMetadata, { once: true });
+
+            // Note: Don't call video.load() for MediaStream sources - it can cause issues
+            // The stream should start flowing automatically when srcObject is set
           }),
           new Promise<void>((resolve) => setTimeout(() => {
-            logger.warn(`Video metadata load timeout for participant ${participant.id} - continuing anyway`);
-            // Try to play anyway
+            logger.warn(`Video data load timeout for participant ${participant.id} - readyState: ${video.readyState}`);
+            // Try to play anyway - drawing will show placeholder if readyState < 2
             video.play().catch(err => logger.error('Failed to play video after timeout:', err));
             resolve();
-          }, 2000))
+          }, 3000))
         ]);
       } catch (error) {
         logger.error(`Error loading video for participant ${participant.id}:`, error);
         // Continue anyway - don't fail the whole broadcast
       }
     } else {
-      logger.info(`Skipping video metadata wait for participant ${participant.id} (videoEnabled: ${participant.videoEnabled}, hasVideoTracks: ${hasVideoTracks})`);
+      logger.info(`Skipping video data wait for participant ${participant.id} (videoEnabled: ${participant.videoEnabled}, hasVideoTracks: ${hasVideoTracks})`);
     }
 
     this.videoElements.set(participant.id, video);
@@ -227,6 +251,17 @@ class CompositorService {
   setLayout(layout: LayoutConfig): void {
     logger.info('Updating compositor layout:', layout.type);
     this.layout = layout;
+  }
+
+  /**
+   * Set input volume for all audio streams
+   * @param volume Volume level (0-100)
+   */
+  setInputVolume(volume: number): void {
+    // Convert from 0-100 to 0-1 range
+    const normalizedVolume = Math.max(0, Math.min(100, volume)) / 100;
+    logger.info(`Setting input volume to ${volume}% (${normalizedVolume.toFixed(2)})`);
+    audioMixerService.setMasterVolume(normalizedVolume);
   }
 
   /**
@@ -843,6 +878,17 @@ class CompositorService {
       // The RGB anti-throttle pixel below is sufficient to keep track active
       const showingFullscreenOverlay = this.countdownValue !== null || this.mediaClipOverlay !== null;
 
+      // DIAGNOSTIC: Log state changes every 30 frames
+      if (this.frameCount % 30 === 0) {
+        logger.debug('[Compositor] Render state:', {
+          showingFullscreenOverlay,
+          countdownValue: this.countdownValue,
+          hasMediaClipOverlay: this.mediaClipOverlay !== null,
+          participantCount: this.participants.size,
+          videoElementCount: this.videoElements.size,
+        });
+      }
+
       if (!showingFullscreenOverlay) {
         // Normal mode: Draw background, participants, and overlays
         if (this.background) {
@@ -1117,6 +1163,20 @@ class CompositorService {
   private drawParticipants(): void {
     const participantArray = Array.from(this.participants.values());
 
+    // DIAGNOSTIC: Log participant state every 60 frames when we have participants
+    if (this.frameCount % 60 === 0 && participantArray.length > 0) {
+      logger.debug('[Compositor] Drawing participants:', {
+        count: participantArray.length,
+        layout: this.layout.type,
+        participants: participantArray.map(p => ({
+          id: p.id,
+          name: p.name,
+          videoEnabled: p.videoEnabled,
+          hasVideoElement: this.videoElements.has(p.id),
+        })),
+      });
+    }
+
     switch (this.layout.type) {
       case 'grid':
         this.drawGridLayout(participantArray);
@@ -1243,11 +1303,36 @@ class CompositorService {
     const video = this.videoElements.get(participantId);
     const participant = this.participants.get(participantId);
 
-    if (!video || !participant) return;
+    if (!video || !participant) {
+      // DIAGNOSTIC: Log missing video/participant every 60 frames
+      if (this.frameCount % 60 === 0) {
+        logger.warn('[Compositor] Cannot draw participant video:', {
+          participantId,
+          hasVideo: !!video,
+          hasParticipant: !!participant,
+        });
+      }
+      return;
+    }
 
     // Draw black background
     this.ctx.fillStyle = '#1a1a1a';
     this.ctx.fillRect(x, y, width, height);
+
+    // DIAGNOSTIC: Log video element state every 60 frames
+    if (this.frameCount % 60 === 0) {
+      logger.debug('[Compositor] Participant video state:', {
+        participantId,
+        videoEnabled: participant.videoEnabled,
+        readyState: video.readyState,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        paused: video.paused,
+        ended: video.ended,
+        currentTime: video.currentTime,
+        srcObject: !!video.srcObject,
+      });
+    }
 
     // Draw video if enabled
     if (participant.videoEnabled && video.readyState >= 2) {
@@ -1272,6 +1357,16 @@ class CompositorService {
 
       this.ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
     } else {
+      // DIAGNOSTIC: Log why video is not being drawn every 60 frames
+      if (this.frameCount % 60 === 0) {
+        logger.warn('[Compositor] Video not drawn - showing placeholder:', {
+          participantId,
+          videoEnabled: participant.videoEnabled,
+          readyState: video.readyState,
+          reason: !participant.videoEnabled ? 'video disabled' : 'readyState < 2',
+        });
+      }
+
       // Video disabled - show placeholder
       this.ctx.fillStyle = '#333333';
       this.ctx.fillRect(x, y, width, height);
