@@ -236,7 +236,7 @@ a=recvonly`;
         // Global options
         .addOptions([
           '-loglevel', 'info',            // Info level (less noisy than debug)
-          '-fflags', '+genpts+discardcorrupt', // Generate timestamps if missing, discard corrupted packets
+          '-fflags', '+nobuffer+genpts+discardcorrupt', // Disable buffering (lower latency), generate PTS, discard corrupted packets
         ])
         // UNIFIED INPUT: ONE SDP file with both video and audio streams
         .input(sdpPath)
@@ -244,11 +244,11 @@ a=recvonly`;
           '-protocol_whitelist', 'file,rtp,udp',
           '-f', 'sdp',
           '-rtbufsize', '50M',            // 50MB RTP buffer (moderate buffering)
-          '-analyzeduration', '2000000',  // 2s analysis duration
+          '-analyzeduration', '10000000', // 10s analysis duration (gives FFmpeg more time to validate stream before erroring)
           '-probesize', '5000000',        // 5MB probe size
           '-reorder_queue_size', '1000',  // 1000 packet reorder queue (increased for stability)
           '-thread_queue_size', '1024',   // Standard thread queue
-          '-max_delay', '5000000',        // 5 second max delay (increased for stability)
+          '-max_delay', '5000000',        // 5 second max delay (allows higher latency before dropping packets)
           '-err_detect', 'ignore_err',    // CRITICAL: Ignore decoder errors (missing SPS/PPS) and wait for keyframe
           '-ec', '3',                     // Error concealment: guess missing data from surrounding frames
         ])
@@ -322,7 +322,7 @@ a=recvonly`;
         // Global options
         .addOptions([
           '-loglevel', 'info',            // Info level (less noisy than debug)
-          '-fflags', '+genpts+discardcorrupt', // Generate timestamps if missing, discard corrupted packets
+          '-fflags', '+nobuffer+genpts+discardcorrupt', // Disable buffering (lower latency), generate PTS, discard corrupted packets
         ])
         // UNIFIED INPUT: ONE SDP file with both video and audio streams
         .input(sdpPath)
@@ -330,11 +330,11 @@ a=recvonly`;
           '-protocol_whitelist', 'file,rtp,udp',
           '-f', 'sdp',
           '-rtbufsize', '50M',            // 50MB RTP buffer (moderate buffering)
-          '-analyzeduration', '2000000',  // 2s analysis duration
+          '-analyzeduration', '10000000', // 10s analysis duration (gives FFmpeg more time to validate stream before erroring)
           '-probesize', '5000000',        // 5MB probe size
           '-reorder_queue_size', '1000',  // 1000 packet reorder queue (increased for stability)
           '-thread_queue_size', '1024',   // Standard thread queue
-          '-max_delay', '5000000',        // 5 second max delay (increased for stability)
+          '-max_delay', '5000000',        // 5 second max delay (allows higher latency before dropping packets)
           '-err_detect', 'ignore_err',    // CRITICAL: Ignore decoder errors (missing SPS/PPS) and wait for keyframe
           '-ec', '3',                     // Error concealment: guess missing data from surrounding frames
         ])
