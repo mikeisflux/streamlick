@@ -1010,6 +1010,14 @@ class CompositorService {
   private checkCanvasFrozen(): void {
     if (!this.ctx || !this.canvas) return;
 
+    // Skip frozen detection when video/image overlay is playing
+    // Video content (especially timer.mp4) may have low pixel delta but is NOT frozen
+    if (this.mediaClipOverlay !== null) {
+      // Reset frozen counter since we're skipping checks during video playback
+      this.frozenFrameCount = 0;
+      return;
+    }
+
     const now = Date.now();
     if (now - this.lastPixelSampleTime < this.pixelSampleInterval) {
       return; // Not time to check yet
@@ -1042,7 +1050,7 @@ class CompositorService {
 
         // Threshold: if average pixel change is less than 0.5 (out of 255), canvas is frozen
         // This accounts for the imperceptible noise pixel (0.01 alpha) which won't create much delta
-        // But countdown animation, intro video, or participant motion should create significant delta
+        // But participant video with motion should create significant delta
         if (avgDelta < 0.5) {
           this.frozenFrameCount++;
           logger.warn(`[Canvas Frozen Detection] Canvas appears frozen! Delta: ${avgDelta.toFixed(3)}, consecutive frozen: ${this.frozenFrameCount}`);
