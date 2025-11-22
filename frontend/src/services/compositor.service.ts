@@ -424,7 +424,39 @@ class CompositorService {
    */
   clearMediaClipOverlay(): void {
     const wasActive = this.mediaClipOverlay !== null;
+
+    // CRITICAL FIX: Properly clean up video/image element before clearing reference
+    if (this.mediaClipOverlay) {
+      if (this.mediaClipOverlay instanceof HTMLVideoElement) {
+        // Stop video playback
+        this.mediaClipOverlay.pause();
+        this.mediaClipOverlay.currentTime = 0;
+
+        // Clear video source to free resources
+        this.mediaClipOverlay.src = '';
+        this.mediaClipOverlay.load(); // Force cleanup
+
+        // Remove from DOM if attached
+        if (this.mediaClipOverlay.parentNode) {
+          this.mediaClipOverlay.parentNode.removeChild(this.mediaClipOverlay);
+        }
+
+        logger.info('[Media Clip] Video element cleaned up and stopped');
+      } else if (this.mediaClipOverlay instanceof HTMLImageElement) {
+        // Clear image source
+        this.mediaClipOverlay.src = '';
+
+        // Remove from DOM if attached
+        if (this.mediaClipOverlay.parentNode) {
+          this.mediaClipOverlay.parentNode.removeChild(this.mediaClipOverlay);
+        }
+
+        logger.info('[Media Clip] Image element cleaned up');
+      }
+    }
+
     this.mediaClipOverlay = null;
+
     if (wasActive) {
       logger.info('[Media Clip] Overlay cleared - participants should now be visible');
     }
@@ -454,13 +486,26 @@ class CompositorService {
 
       logger.info(`Loading intro video: ${videoUrl}`);
 
+      // CRITICAL FIX: Add timeout for video loading to prevent infinite hang
+      const loadingTimeout = setTimeout(() => {
+        logger.error(`[Media Clip] Video loading timeout after 10s: ${videoUrl}`);
+        this.clearMediaClipOverlay();
+        audioMixerService.removeStream('intro-video');
+        reject(new Error('Video loading timeout'));
+      }, 10000); // 10 second timeout
+
       // Wait for metadata (dimensions) to load first
       videoElement.addEventListener('loadedmetadata', () => {
+        // Clear loading timeout since metadata loaded successfully
+        clearTimeout(loadingTimeout);
         logger.info(`Intro video metadata loaded: ${videoUrl}, dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}, duration: ${videoElement.duration}s`);
 
         // Ensure video has valid dimensions
         if (!videoElement.videoWidth || !videoElement.videoHeight) {
           logger.error('Intro video has invalid dimensions:', videoElement.videoWidth, videoElement.videoHeight);
+          clearTimeout(loadingTimeout); // Clear loading timeout
+          this.clearMediaClipOverlay();
+          audioMixerService.removeStream('intro-video');
           reject(new Error('Invalid video dimensions'));
           return;
         }
@@ -487,6 +532,7 @@ class CompositorService {
 
           videoElement.play().catch((error) => {
             logger.error('Failed to play intro video:', error);
+            clearTimeout(loadingTimeout); // Clear loading timeout
             this.clearMediaClipOverlay();
             // Clean up audio on error
             audioMixerService.removeStream('intro-video');
@@ -506,6 +552,7 @@ class CompositorService {
       // Clear overlay and remove audio when video ends
       videoElement.addEventListener('ended', () => {
         logger.info('Intro video ended, clearing overlay and removing audio from mixer');
+        clearTimeout(loadingTimeout); // Clear loading timeout
         this.clearMediaClipOverlay();
         audioMixerService.removeStream('intro-video');
         resolve();
@@ -517,6 +564,7 @@ class CompositorService {
           ? `Code: ${videoElement.error.code}, Message: ${videoElement.error.message}`
           : 'Unknown error';
         logger.error(`Intro video error: ${errorMsg}`, event);
+        clearTimeout(loadingTimeout); // Clear loading timeout
         this.clearMediaClipOverlay();
         audioMixerService.removeStream('intro-video');
         reject(new Error(`Video error: ${errorMsg}`));
@@ -526,6 +574,7 @@ class CompositorService {
       if (duration) {
         setTimeout(() => {
           logger.info(`Intro video duration limit reached (${duration}s), clearing overlay and removing audio`);
+          clearTimeout(loadingTimeout); // Clear loading timeout
           videoElement.pause();
           this.clearMediaClipOverlay();
           audioMixerService.removeStream('intro-video');
