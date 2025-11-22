@@ -49,12 +49,16 @@ class DailyMediaServerService {
       const url = `${config.apiBaseUrl}/api/daily/broadcasts/${config.broadcastId}/room`;
       logger.info(`[Daily Media Server] Creating room via: ${url}`);
 
+      // Get media server secret for authentication
+      const mediaServerSecret = process.env.MEDIA_SERVER_SECRET || 'streamlick-media-server-secret';
+
       const response = await axios.post(
         url,
         {},
         {
           headers: {
             'Content-Type': 'application/json',
+            'x-media-server-secret': mediaServerSecret,
           },
           timeout: 30000,
         }
@@ -220,6 +224,9 @@ class DailyMediaServerService {
     try {
       logger.info(`[Daily Media Server] Starting RTMP streaming for ${destinations.length} destination(s)`);
 
+      // Get media server secret for authentication
+      const mediaServerSecret = process.env.MEDIA_SERVER_SECRET || 'streamlick-media-server-secret';
+
       // Use backend API to start Daily RTMP streaming
       await axios.post(
         `${apiBaseUrl}/api/daily/broadcasts/${broadcastId}/streaming/start`,
@@ -232,6 +239,7 @@ class DailyMediaServerService {
         {
           headers: {
             'Content-Type': 'application/json',
+            'x-media-server-secret': mediaServerSecret,
           },
           timeout: 30000,
         }
@@ -251,12 +259,16 @@ class DailyMediaServerService {
     try {
       logger.info('[Daily Media Server] Stopping RTMP streaming');
 
+      // Get media server secret for authentication
+      const mediaServerSecret = process.env.MEDIA_SERVER_SECRET || 'streamlick-media-server-secret';
+
       await axios.post(
         `${apiBaseUrl}/api/daily/broadcasts/${broadcastId}/streaming/stop`,
         {},
         {
           headers: {
             'Content-Type': 'application/json',
+            'x-media-server-secret': mediaServerSecret,
           },
           timeout: 30000,
         }

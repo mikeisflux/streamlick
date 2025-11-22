@@ -4,15 +4,33 @@
  * Endpoints for managing Daily rooms and live streaming
  */
 
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate, AuthRequest } from '../auth/middleware';
 import { dailyServiceBackend } from '../services/daily.service';
 import logger from '../utils/logger';
 
 const router = Router();
 
-// Apply authentication to all routes
-router.use(authenticate);
+/**
+ * Middleware to allow media server to call Daily endpoints without user auth
+ * Media server requests include a special header
+ */
+const authenticateOrMediaServer = (req: Request, res: Response, next: NextFunction) => {
+  // Check if this is a media server request
+  const mediaServerSecret = req.headers['x-media-server-secret'];
+  const expectedSecret = process.env.MEDIA_SERVER_SECRET || 'streamlick-media-server-secret';
+
+  if (mediaServerSecret === expectedSecret) {
+    // Media server authenticated - continue without user auth
+    return next();
+  }
+
+  // Otherwise require user authentication
+  return authenticate(req as AuthRequest, res, next);
+};
+
+// Apply authentication to all routes (user auth OR media server auth)
+router.use(authenticateOrMediaServer);
 
 /**
  * Initialize Daily service (should be called on server startup)
