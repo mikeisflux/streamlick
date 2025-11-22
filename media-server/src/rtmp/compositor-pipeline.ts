@@ -9,6 +9,7 @@ import { Router, PlainTransport, Producer } from 'mediasoup/node/lib/types';
 import ffmpeg from 'fluent-ffmpeg';
 import { RTMPDestination } from './streamer';
 import logger from '../utils/logger';
+import { dailyMediaServerService } from '../services/daily.service';
 
 interface Pipeline {
   videoPlainTransport: PlainTransport | null;
@@ -33,6 +34,18 @@ export async function createCompositorPipeline(
 ): Promise<void> {
   try {
     logger.info(`Creating compositor pipeline for broadcast ${broadcastId}`);
+
+    // Check streaming method from environment
+    const streamingMethod = process.env.STREAMING_METHOD || 'ffmpeg';
+    logger.info(`[Compositor Pipeline] Streaming method: ${streamingMethod}`);
+
+    if (streamingMethod === 'daily') {
+      // Use Daily.co for RTMP output
+      return await createDailyPipeline(router, broadcastId, videoProducer, audioProducer, destinations);
+    }
+
+    // Default: Use FFmpeg pipeline (existing code below)
+    logger.info(`[Compositor Pipeline] Using FFmpeg mode`);
 
     // Create separate Plain RTP transports for video and audio
     // This is required because FFmpeg cannot bind to the same port twice
@@ -593,6 +606,14 @@ a=recvonly`;
 export async function stopCompositorPipeline(broadcastId: string): Promise<void> {
   logger.info(`Stopping compositor pipeline for broadcast ${broadcastId}`);
 
+  // Check streaming method to determine which pipeline to stop
+  const streamingMethod = process.env.STREAMING_METHOD || 'ffmpeg';
+
+  if (streamingMethod === 'daily') {
+    return await stopDailyPipeline(broadcastId);
+  }
+
+  // Default: FFmpeg pipeline cleanup (existing code)
   const pipeline = activePipelines.get(broadcastId);
   if (!pipeline) {
     logger.warn(`No pipeline found for broadcast ${broadcastId}`);
@@ -659,6 +680,91 @@ export async function stopCompositorPipeline(broadcastId: string): Promise<void>
 
   activePipelines.delete(broadcastId);
   logger.info(`Compositor pipeline stopped for broadcast ${broadcastId}`);
+}
+
+/**
+ * Create Daily.co pipeline (alternative to FFmpeg)
+ *
+ * This function:
+ * 1. Initializes Daily connection for the broadcast
+ * 2. Joins Daily room (server-side)
+ * 3. Starts RTMP streaming via Daily REST API
+ *
+ * Note: Media still flows through mediasoup, but output goes via Daily
+ */
+async function createDailyPipeline(
+  router: Router,
+  broadcastId: string,
+  videoProducer: Producer,
+  audioProducer: Producer,
+  destinations: RTMPDestination[]
+): Promise<void> {
+  try {
+    logger.info(`[Daily Pipeline] Creating Daily pipeline for broadcast ${broadcastId}`);
+
+    // Get backend API URL from environment
+    const backendApiUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
+
+    // Step 1: Initialize Daily service and create room
+    await dailyMediaServerService.initialize({
+      apiBaseUrl: backendApiUrl,
+      broadcastId,
+    });
+
+    // Step 2: Join Daily room
+    await dailyMediaServerService.joinRoom();
+
+    // Step 3: Store media streams (for future enhancements)
+    await dailyMediaServerService.setMediaStreams(router, videoProducer, audioProducer);
+
+    // Step 4: Start RTMP streaming via Daily
+    const dailyDestinations = destinations.map((dest) => ({
+      rtmpUrl: dest.rtmpUrl,
+      streamKey: dest.streamKey,
+      platform: dest.platform,
+    }));
+
+    await dailyMediaServerService.startStreaming(backendApiUrl, broadcastId, dailyDestinations);
+
+    // Step 5: Store pipeline reference (simplified for Daily mode)
+    activePipelines.set(broadcastId, {
+      videoPlainTransport: null, // Not used in Daily mode
+      audioPlainTransport: null, // Not used in Daily mode
+      videoConsumer: null,
+      audioConsumer: null,
+      ffmpegProcesses: new Map(), // No FFmpeg in Daily mode
+    });
+
+    logger.info(`[Daily Pipeline] ✅ Daily pipeline created successfully for broadcast ${broadcastId}`);
+  } catch (error) {
+    logger.error('[Daily Pipeline] Failed to create Daily pipeline:', error);
+    throw error;
+  }
+}
+
+/**
+ * Stop Daily pipeline
+ */
+async function stopDailyPipeline(broadcastId: string): Promise<void> {
+  try {
+    logger.info(`[Daily Pipeline] Stopping Daily pipeline for broadcast ${broadcastId}`);
+
+    const backendApiUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
+
+    // Stop RTMP streaming
+    await dailyMediaServerService.stopStreaming(backendApiUrl, broadcastId);
+
+    // Cleanup Daily connection
+    await dailyMediaServerService.destroy();
+
+    // Remove from active pipelines
+    activePipelines.delete(broadcastId);
+
+    logger.info(`[Daily Pipeline] ✅ Daily pipeline stopped for broadcast ${broadcastId}`);
+  } catch (error) {
+    logger.error('[Daily Pipeline] Failed to stop Daily pipeline:', error);
+    throw error;
+  }
 }
 
 /**
