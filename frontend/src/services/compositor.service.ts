@@ -548,36 +548,12 @@ class CompositorService {
       throw new Error('Compositor not ready for countdown');
     }
 
-    // ANTI-MUTE: Play timer.mp4 video instead of drawing countdown text
+    // ANTI-MUTE: Play timer.mp4 video - ONLY METHOD, no fallback
     // Video with audio is MUCH better for preventing browser track muting
     // The video has both visual motion AND audio, making it impossible for browser to detect as "static"
     logger.info(`[Compositor] Starting countdown using timer.mp4 video (requested duration: ${seconds}s)`);
-
-    try {
-      await this.playIntroVideo('/backgrounds/timer.mp4', seconds);
-      logger.info('[Compositor] Countdown video finished');
-    } catch (error) {
-      logger.error('[Compositor] Countdown video failed, falling back to text countdown:', error);
-
-      // Fallback: Use text-based countdown if video fails
-      return new Promise((resolve) => {
-        this.countdownValue = seconds;
-        logger.info(`[Compositor] Fallback text countdown started: ${this.countdownValue}`);
-
-        const intervalId = setInterval(() => {
-          if (this.countdownValue === null || this.countdownValue <= 0) {
-            clearInterval(intervalId);
-            this.countdownValue = null;
-            logger.info('[Compositor] Fallback countdown finished');
-            resolve();
-            return;
-          }
-
-          this.countdownValue--;
-          logger.info(`[Compositor] Fallback countdown: ${this.countdownValue} (frameCount: ${this.frameCount})`);
-        }, 1000);
-      });
-    }
+    await this.playIntroVideo('/backgrounds/timer.mp4', seconds);
+    logger.info('[Compositor] Countdown video finished');
   }
 
   /**
@@ -881,10 +857,8 @@ class CompositorService {
         }
       } else {
         // Fullscreen overlay mode: Skip participants to prevent bleeding through
-        // Draw countdown or intro video directly on black canvas
-        if (this.countdownValue !== null) {
-          this.drawCountdown();
-        } else if (this.mediaClipOverlay) {
+        // Draw intro video or countdown video (both use mediaClipOverlay) directly on black canvas
+        if (this.mediaClipOverlay) {
           this.drawMediaClipOverlay();
         }
       }
@@ -1609,99 +1583,6 @@ class CompositorService {
       } catch (error) {
         console.error('[Compositor] Failed to draw image to canvas:', error);
       }
-    }
-  }
-
-  /**
-   * Draw countdown timer
-   * Renders large countdown number centered on canvas
-   * ENHANCED: Pulsing/glowing animation to ensure visible motion (prevents browser auto-mute)
-   */
-  private drawCountdown(): void {
-    if (!this.ctx) {
-      logger.warn('[Compositor] Cannot draw countdown - no canvas context');
-      return;
-    }
-
-    if (this.countdownValue === null) {
-      return; // Countdown not active
-    }
-
-    // Log every 30 frames (once per second at 30fps) to avoid spam
-    if (this.frameCount % 30 === 0) {
-      logger.debug(`[Compositor] Drawing countdown: ${this.countdownValue} (frame ${this.frameCount})`);
-    }
-
-    try {
-      // Canvas is already black (cleared at start of animate loop)
-      // No need for semi-transparent overlay that caused flickering
-
-      // ANTI-MUTE: Pulsing glow animation to ensure visible motion every frame
-      // This prevents browser from detecting "static" content during countdown
-      const time = Date.now() / 1000; // Time in seconds
-      const pulse = Math.sin(time * 2) * 0.5 + 0.5; // Oscillates 0-1, 2 pulses per second
-      const glowIntensity = 20 + pulse * 60; // Varies 20-80px blur
-      const glowAlpha = 0.6 + pulse * 0.4; // Varies 0.6-1.0 opacity
-      const scaleMultiplier = 1 + pulse * 0.05; // Slight size pulse (1.0-1.05x)
-
-      // Draw countdown number with pulsing glow
-      const fontSize = Math.floor(this.HEIGHT / 4 * scaleMultiplier); // Large font size with pulse
-      this.ctx.font = `bold ${fontSize}px Arial`;
-      this.ctx.textAlign = 'center';
-      this.ctx.textBaseline = 'middle';
-
-      // Draw glowing shadow (multiple layers for stronger glow)
-      this.ctx.shadowColor = `rgba(255, 255, 255, ${glowAlpha})`;
-      this.ctx.shadowBlur = glowIntensity;
-      this.ctx.fillStyle = '#FFFFFF';
-      this.ctx.fillText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
-
-      // Draw second glow layer (blue tint for visual interest)
-      this.ctx.shadowColor = `rgba(59, 130, 246, ${glowAlpha * 0.8})`; // blue-500
-      this.ctx.shadowBlur = glowIntensity * 1.5;
-      this.ctx.fillText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
-
-      // Draw black outline for contrast (no shadow)
-      this.ctx.shadowBlur = 0;
-      this.ctx.strokeStyle = '#000000';
-      this.ctx.lineWidth = 20;
-      this.ctx.strokeText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
-
-      // Draw final white text on top (with subtle glow)
-      this.ctx.shadowColor = `rgba(255, 255, 255, ${glowAlpha * 0.5})`;
-      this.ctx.shadowBlur = glowIntensity * 0.5;
-      this.ctx.fillStyle = '#FFFFFF';
-      this.ctx.fillText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
-
-      // Draw "Going Live..." text below countdown with matching pulse
-      const subFontSize = Math.floor(this.HEIGHT / 15);
-      this.ctx.font = `${subFontSize}px Arial`;
-
-      const subTextY = this.HEIGHT / 2 + fontSize / 2 + subFontSize + 40;
-
-      // Pulsing glow on subtitle too
-      this.ctx.shadowColor = `rgba(255, 255, 255, ${glowAlpha * 0.7})`;
-      this.ctx.shadowBlur = glowIntensity * 0.6;
-      this.ctx.fillStyle = '#FFFFFF';
-      this.ctx.fillText('Going Live...', this.WIDTH / 2, subTextY);
-
-      // Black outline for subtitle
-      this.ctx.shadowBlur = 0;
-      this.ctx.strokeStyle = '#000000';
-      this.ctx.lineWidth = 10;
-      this.ctx.strokeText('Going Live...', this.WIDTH / 2, subTextY);
-
-      // Final white text
-      this.ctx.shadowColor = `rgba(255, 255, 255, ${glowAlpha * 0.5})`;
-      this.ctx.shadowBlur = glowIntensity * 0.3;
-      this.ctx.fillStyle = '#FFFFFF';
-      this.ctx.fillText('Going Live...', this.WIDTH / 2, subTextY);
-
-      // Reset shadow for other drawing operations
-      this.ctx.shadowBlur = 0;
-      this.ctx.shadowColor = 'transparent';
-    } catch (error) {
-      logger.error('[Compositor] Error drawing countdown:', error);
     }
   }
 
