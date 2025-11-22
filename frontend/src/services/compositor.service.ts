@@ -1506,15 +1506,30 @@ class CompositorService {
 
     // CRITICAL FIX: Check if video is ready before attempting to draw
     if (element instanceof HTMLVideoElement) {
+      // DIAGNOSTIC: Log video state every 30 frames to debug why it's not drawing
+      if (this.frameCount % 30 === 0) {
+        logger.debug('[Media Clip] Video state:', {
+          readyState: element.readyState,
+          videoWidth: element.videoWidth,
+          videoHeight: element.videoHeight,
+          paused: element.paused,
+          ended: element.ended,
+          currentTime: element.currentTime,
+          duration: element.duration,
+          src: element.src.substring(0, 50),
+        });
+      }
+
       // Video must have metadata loaded (readyState >= 2) to draw properly
       if (element.readyState < 2) {
         // Video metadata not loaded yet - skip drawing this frame
+        logger.warn('[Media Clip] Skipping draw - readyState < 2:', element.readyState);
         return;
       }
 
       // Validate video dimensions are non-zero
       if (element.videoWidth === 0 || element.videoHeight === 0) {
-        console.warn('[Compositor] Video dimensions not yet available:', {
+        logger.warn('[Media Clip] Skipping draw - invalid dimensions:', {
           videoWidth: element.videoWidth,
           videoHeight: element.videoHeight,
           readyState: element.readyState,
