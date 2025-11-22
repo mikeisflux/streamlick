@@ -533,9 +533,9 @@ class CompositorService {
 
   /**
    * Start countdown timer
-   * CRITICAL FIX: Wait for compositor to be ready before starting countdown
-   * This ensures the countdown is actually visible on canvas (similar to video readiness check)
-   * @param seconds - Number of seconds to countdown from
+   * ANTI-MUTE: Uses timer.mp4 video with audio instead of canvas animation
+   * Video files with audio are much less likely to be muted by browser
+   * @param seconds - Number of seconds to countdown from (video duration may override)
    * @returns Promise that resolves when countdown finishes
    */
   async startCountdown(seconds: number): Promise<void> {
@@ -548,26 +548,36 @@ class CompositorService {
       throw new Error('Compositor not ready for countdown');
     }
 
-    return new Promise((resolve) => {
-      logger.info(`[Compositor] Starting ${seconds}-second countdown on canvas (frameCount: ${this.frameCount})`);
-      this.countdownValue = seconds;
+    // ANTI-MUTE: Play timer.mp4 video instead of drawing countdown text
+    // Video with audio is MUCH better for preventing browser track muting
+    // The video has both visual motion AND audio, making it impossible for browser to detect as "static"
+    logger.info(`[Compositor] Starting countdown using timer.mp4 video (requested duration: ${seconds}s)`);
 
-      // Log countdown value to verify it's being set
-      logger.info(`[Compositor] Countdown value set to: ${this.countdownValue}`);
+    try {
+      await this.playIntroVideo('/backgrounds/timer.mp4', seconds);
+      logger.info('[Compositor] Countdown video finished');
+    } catch (error) {
+      logger.error('[Compositor] Countdown video failed, falling back to text countdown:', error);
 
-      const intervalId = setInterval(() => {
-        if (this.countdownValue === null || this.countdownValue <= 0) {
-          clearInterval(intervalId);
-          this.countdownValue = null;
-          logger.info('[Compositor] Countdown finished');
-          resolve();
-          return;
-        }
+      // Fallback: Use text-based countdown if video fails
+      return new Promise((resolve) => {
+        this.countdownValue = seconds;
+        logger.info(`[Compositor] Fallback text countdown started: ${this.countdownValue}`);
 
-        this.countdownValue--;
-        logger.info(`[Compositor] Countdown: ${this.countdownValue} (frameCount: ${this.frameCount})`);
-      }, 1000);
-    });
+        const intervalId = setInterval(() => {
+          if (this.countdownValue === null || this.countdownValue <= 0) {
+            clearInterval(intervalId);
+            this.countdownValue = null;
+            logger.info('[Compositor] Fallback countdown finished');
+            resolve();
+            return;
+          }
+
+          this.countdownValue--;
+          logger.info(`[Compositor] Fallback countdown: ${this.countdownValue} (frameCount: ${this.frameCount})`);
+        }, 1000);
+      });
+    }
   }
 
   /**
