@@ -36,7 +36,7 @@ interface DailyRoom {
 }
 
 interface LiveStreamingEndpoint {
-  url: string;
+  endpoint: string;
 }
 
 interface StartLiveStreamingParams {
@@ -227,7 +227,14 @@ class DailyServiceBackend {
 
       logger.info('[Daily Backend] Live streaming started successfully:', response.data);
     } catch (error: any) {
-      logger.error('[Daily Backend] Failed to start live streaming:', error.response?.data || error);
+      logger.error('[Daily Backend] Failed to start live streaming:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message,
+        roomName,
+        endpointCount: params.endpoints.length,
+      });
       throw error;
     }
   }
