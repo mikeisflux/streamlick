@@ -794,32 +794,30 @@ class CompositorService {
         }
       }
 
-      // NUCLEAR OPTION: Draw MASSIVE amounts of random noise to prevent muting
-      // Browser STILL muted with 200 pixels - need to affect significant % of canvas
-      // 200 pixels = 0.00965% of 1920x1080 canvas - browser ignores this as "noise"
+      // OPTIMIZED: Draw random rectangles instead of individual pixels
+      // Previous attempts failed:
+      // - 10,000 fillRect(1x1): Too slow, video froze at 42s
+      // - ImageData manipulation: 8MB read/write per frame too expensive
+      // Solution: Draw 500 random 10x10 rectangles = 50,000 pixels affected
       if (showingFullscreenOverlay) {
-        // MAXIMUM AGGRESSION: 10,000 random pixels = 0.48% of canvas
-        // This crosses browser's threshold for "significant visual activity"
-        for (let i = 0; i < 10000; i++) {
-          const x = Math.floor(Math.random() * this.WIDTH);
-          const y = Math.floor(Math.random() * this.HEIGHT);
+        // Draw 500 random rectangles (10x10 each) = 0.24% of canvas
+        // Much faster than 10,000 individual pixel calls
+        for (let i = 0; i < 500; i++) {
+          const x = Math.floor(Math.random() * (this.WIDTH - 10));
+          const y = Math.floor(Math.random() * (this.HEIGHT - 10));
           const r = Math.floor(Math.random() * 256);
           const g = Math.floor(Math.random() * 256);
           const b = Math.floor(Math.random() * 256);
           this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-          this.ctx.fillRect(x, y, 1, 1);
+          this.ctx.fillRect(x, y, 10, 10);
         }
       } else {
-        // Normal mode: Fewer random pixels when participants are visible
-        for (let i = 0; i < 100; i++) {
-          const x = Math.floor(Math.random() * this.WIDTH);
-          const y = Math.floor(Math.random() * this.HEIGHT);
-          const r = Math.floor(Math.random() * 256);
-          const g = Math.floor(Math.random() * 256);
-          const b = Math.floor(Math.random() * 256);
-          this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-          this.ctx.fillRect(x, y, 1, 1);
-        }
+        // Normal mode: Single pixel is enough when participants are drawing
+        const r = (this.frameCount * 67) % 256;
+        const g = (this.frameCount * 139) % 256;
+        const b = (this.frameCount * 211) % 256;
+        this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        this.ctx.fillRect(this.WIDTH - 1, this.HEIGHT - 1, 1, 1);
       }
     } catch (error) {
       logger.error('Compositor animation error:', error);
