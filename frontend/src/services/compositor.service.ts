@@ -1331,7 +1331,15 @@ class CompositorService {
         ended: video.ended,
         currentTime: video.currentTime,
         srcObject: !!video.srcObject,
+        srcObjectActive: video.srcObject ? (video.srcObject as MediaStream).active : false,
+        videoTracks: video.srcObject ? (video.srcObject as MediaStream).getVideoTracks().length : 0,
       });
+
+      // CRITICAL FIX: If video is paused but should be playing, force play
+      if (video.paused && video.srcObject) {
+        console.warn('[Compositor] Video element is PAUSED! Forcing play...');
+        video.play().catch(err => console.error('[Compositor] Failed to play paused video:', err));
+      }
     }
 
     // Draw video if enabled

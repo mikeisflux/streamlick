@@ -9,6 +9,7 @@ class AudioMixerService {
   private destination: MediaStreamAudioDestinationNode | null = null;
   private sources: Map<string, MediaStreamAudioSourceNode> = new Map();
   private gainNodes: Map<string, GainNode> = new Map();
+  private currentMasterVolume: number = 1.0; // Store current master volume
 
   /**
    * Initialize the audio mixer
@@ -46,7 +47,7 @@ class AudioMixerService {
 
     // Create gain node for volume control
     const gainNode = this.audioContext.createGain();
-    gainNode.gain.value = 1.0; // Full volume
+    gainNode.gain.value = this.currentMasterVolume; // Apply current master volume
 
     // Connect: source -> gain -> destination
     source.connect(gainNode);
@@ -56,7 +57,7 @@ class AudioMixerService {
     this.sources.set(id, source);
     this.gainNodes.set(id, gainNode);
 
-    console.log(`Audio stream added: ${id}`);
+    console.log(`Audio stream added: ${id} (volume: ${this.currentMasterVolume})`);
   }
 
   /**
@@ -77,7 +78,7 @@ class AudioMixerService {
 
     // Create gain node for volume control
     const gainNode = this.audioContext.createGain();
-    gainNode.gain.value = 1.0; // Full volume
+    gainNode.gain.value = this.currentMasterVolume; // Apply current master volume
 
     // CRITICAL FIX: Connect to BOTH destinations
     // 1. Connect to mixer destination (for stream output to YouTube/etc)
@@ -91,7 +92,7 @@ class AudioMixerService {
     this.sources.set(id, source as any);
     this.gainNodes.set(id, gainNode);
 
-    console.log(`Media element audio added: ${id} (dual output: stream + local)`);
+    console.log(`Media element audio added: ${id} (dual output: stream + local, volume: ${this.currentMasterVolume})`);
   }
 
   /**
@@ -178,13 +179,17 @@ class AudioMixerService {
 
   /**
    * Set master volume for all streams
-   * This applies a volume multiplier to all existing streams
+   * This applies a volume multiplier to all existing streams AND stores it for future streams
    */
   setMasterVolume(volume: number): void {
     const clampedVolume = Math.max(0, Math.min(1, volume));
 
-    console.log(`Setting master volume to ${clampedVolume} for ${this.gainNodes.size} streams`);
+    // Store for future streams
+    this.currentMasterVolume = clampedVolume;
 
+    console.log(`Setting master volume to ${clampedVolume} for ${this.gainNodes.size} existing streams`);
+
+    // Apply to all existing streams
     this.gainNodes.forEach((gainNode, id) => {
       gainNode.gain.value = clampedVolume;
     });
