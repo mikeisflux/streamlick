@@ -94,6 +94,22 @@ class CompositorService {
   private droppedFrames = 0;
   private performanceCallback?: (metrics: PerformanceMetrics) => void;
 
+  // Pixel delta monitoring for frozen canvas detection
+  private lastPixelSample: Uint8ClampedArray | null = null;
+  private lastPixelSampleTime = 0;
+  private pixelSampleInterval = 1000; // Check every 1 second
+  private frozenFrameCount = 0;
+  private readonly PIXEL_SAMPLE_SIZE = 100; // 100x100 pixel sample region
+  private readonly MAX_FROZEN_FRAMES = 3; // Alert after 3 consecutive frozen samples
+
+  // Tab visibility detection for aggressive anti-mute
+  private isTabVisible = true;
+  private visibilityChangeHandler = this.handleVisibilityChange.bind(this);
+
+  // Failover overlay for stream reconnection
+  private showReconnectingOverlay = false;
+  private reconnectingOverlayStartTime = 0;
+
   constructor() {
     this.canvas = document.createElement('canvas');
     this.canvas.width = this.WIDTH;
@@ -575,6 +591,12 @@ class CompositorService {
     logger.info('Starting compositor');
     this.isCompositing = true;
 
+    // ANTI-MUTE: Listen for tab visibility changes
+    // When tab is hidden, browsers throttle canvas activity more aggressively
+    document.addEventListener('visibilitychange', this.visibilityChangeHandler);
+    this.isTabVisible = !document.hidden;
+    logger.info(`[Tab Visibility] Initial state: ${this.isTabVisible ? 'visible' : 'hidden'}`);
+
     // Capture stream from canvas with AUTOMATIC frame capture at 30 fps
     // Using automatic mode instead of manual (0 fps) to prevent browser from muting track
     // Manual mode with requestFrame() was causing browser to detect "low activity" and mute the track
@@ -613,6 +635,10 @@ class CompositorService {
         logger.error('[Canvas Track] Video track MUTED! Recreating stream...', {
           id: videoTrack.id,
         });
+
+        // FAILOVER: Show "Stream reconnecting..." overlay to viewers
+        this.showReconnectingOverlay = true;
+        this.reconnectingOverlayStartTime = Date.now();
 
         // Browser has auto-muted the track (usually due to "static" content detection)
         // We need to recreate the canvas stream to get an unmuted track
@@ -654,11 +680,26 @@ class CompositorService {
           try {
             await webrtcService.replaceVideoTrack(newVideoTrack);
             logger.info('[Canvas Track] Successfully replaced track in WebRTC producer');
+
+            // FAILOVER: Hide reconnecting overlay after successful recovery
+            // Keep it visible for at least 2 seconds so viewers see the message
+            const elapsed = Date.now() - this.reconnectingOverlayStartTime;
+            if (elapsed < 2000) {
+              setTimeout(() => {
+                this.showReconnectingOverlay = false;
+                logger.info('[Failover] Reconnecting overlay hidden after successful recovery');
+              }, 2000 - elapsed);
+            } else {
+              this.showReconnectingOverlay = false;
+              logger.info('[Failover] Reconnecting overlay hidden after successful recovery');
+            }
           } catch (error) {
             logger.error('[Canvas Track] Failed to replace track in WebRTC producer:', error);
+            // Keep overlay showing if track replacement failed
           }
         } catch (error) {
           logger.error('[Canvas Track] Failed to recreate stream after mute:', error);
+          // Keep overlay showing if stream recreation failed
         }
       });
 
@@ -680,6 +721,9 @@ class CompositorService {
   stop(): void {
     logger.info('Stopping compositor');
     this.isCompositing = false;
+
+    // ANTI-MUTE: Remove visibility change listener
+    document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
 
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);
@@ -837,16 +881,40 @@ class CompositorService {
       // ANTI-MUTE: Draw imperceptible noise to prevent browser from detecting static canvas
       // contentHint='motion' alone is NOT sufficient - browser still detects static canvas during countdown
       // Using 0.01 alpha with random position/color creates variance the browser can't ignore
+      // ENHANCED: More aggressive when tab is hidden (browsers throttle backgrounded tabs more)
       this.ctx!.save();
-      this.ctx!.globalAlpha = 0.01;
-      this.ctx!.fillStyle = `rgb(${Math.floor(Math.random() * 255)},0,0)`;
-      this.ctx!.fillRect(
-        Math.random() * this.canvas!.width,
-        Math.random() * this.canvas!.height,
-        1,
-        1
-      );
+
+      if (this.isTabVisible) {
+        // Normal mode: single imperceptible pixel
+        this.ctx!.globalAlpha = 0.01;
+        this.ctx!.fillStyle = `rgb(${Math.floor(Math.random() * 255)},0,0)`;
+        this.ctx!.fillRect(
+          Math.random() * this.canvas!.width,
+          Math.random() * this.canvas!.height,
+          1,
+          1
+        );
+      } else {
+        // AGGRESSIVE MODE: Tab is hidden, browser may throttle more aggressively
+        // Draw 10 pixels with higher alpha and larger size
+        this.ctx!.globalAlpha = 0.05; // 5x more visible (but still imperceptible)
+        for (let i = 0; i < 10; i++) {
+          this.ctx!.fillStyle = `rgb(${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)})`;
+          this.ctx!.fillRect(
+            Math.random() * this.canvas!.width,
+            Math.random() * this.canvas!.height,
+            2, // 2x2 pixels instead of 1x1
+            2
+          );
+        }
+      }
+
       this.ctx!.restore();
+
+      // FAILOVER: Draw reconnecting overlay on top of everything if track is being recovered
+      if (this.showReconnectingOverlay) {
+        this.drawReconnectingOverlay();
+      }
     } catch (error) {
       logger.error('Compositor animation error:', error);
     }
@@ -887,6 +955,9 @@ class CompositorService {
       this.reportPerformanceMetrics();
       this.lastFpsReport = metricsTime;
     }
+
+    // ANTI-MUTE: Check if canvas is actually frozen (pixel delta monitoring)
+    this.checkCanvasFrozen();
 
     // Continue loop
     this.animationFrameId = requestAnimationFrame(this.animate);
@@ -944,6 +1015,89 @@ class CompositorService {
       dropRate: ((this.droppedFrames / this.frameCount) * 100).toFixed(2),
       participantCount: this.participants.size,
     };
+  }
+
+  /**
+   * ANTI-MUTE: Check if canvas is actually frozen by comparing pixel deltas
+   * Even if requestAnimationFrame is running, the canvas content might be frozen
+   * This detects that scenario and triggers alerts/recovery
+   */
+  private checkCanvasFrozen(): void {
+    if (!this.ctx || !this.canvas) return;
+
+    const now = Date.now();
+    if (now - this.lastPixelSampleTime < this.pixelSampleInterval) {
+      return; // Not time to check yet
+    }
+
+    this.lastPixelSampleTime = now;
+
+    try {
+      // Sample a region from the center of the canvas
+      const sampleX = Math.floor((this.WIDTH - this.PIXEL_SAMPLE_SIZE) / 2);
+      const sampleY = Math.floor((this.HEIGHT - this.PIXEL_SAMPLE_SIZE) / 2);
+
+      const imageData = this.ctx.getImageData(
+        sampleX,
+        sampleY,
+        this.PIXEL_SAMPLE_SIZE,
+        this.PIXEL_SAMPLE_SIZE
+      );
+
+      const currentSample = imageData.data;
+
+      if (this.lastPixelSample !== null) {
+        // Compare with previous sample
+        let totalDelta = 0;
+        for (let i = 0; i < currentSample.length; i++) {
+          totalDelta += Math.abs(currentSample[i] - this.lastPixelSample[i]);
+        }
+
+        const avgDelta = totalDelta / currentSample.length;
+
+        // Threshold: if average pixel change is less than 0.5 (out of 255), canvas is frozen
+        // This accounts for the imperceptible noise pixel (0.01 alpha) which won't create much delta
+        // But countdown animation, intro video, or participant motion should create significant delta
+        if (avgDelta < 0.5) {
+          this.frozenFrameCount++;
+          logger.warn(`[Canvas Frozen Detection] Canvas appears frozen! Delta: ${avgDelta.toFixed(3)}, consecutive frozen: ${this.frozenFrameCount}`);
+
+          if (this.frozenFrameCount >= this.MAX_FROZEN_FRAMES) {
+            logger.error(`[Canvas Frozen Detection] CRITICAL: Canvas frozen for ${this.frozenFrameCount} consecutive checks!`, {
+              avgDelta,
+              frameCount: this.frameCount,
+              isCompositing: this.isCompositing,
+              countdownActive: this.countdownValue !== null,
+              mediaClipActive: this.mediaClipOverlay !== null,
+            });
+
+            // Could trigger track recreation here if needed
+            // For now, just alert - the track mute listener will handle recreation
+          }
+        } else {
+          // Canvas is changing - reset frozen counter
+          if (this.frozenFrameCount > 0) {
+            logger.info(`[Canvas Frozen Detection] Canvas motion detected, delta: ${avgDelta.toFixed(3)}, resetting frozen count`);
+          }
+          this.frozenFrameCount = 0;
+        }
+      }
+
+      // Store current sample for next comparison
+      this.lastPixelSample = new Uint8ClampedArray(currentSample);
+    } catch (error) {
+      logger.error('[Canvas Frozen Detection] Error checking canvas frozen state:', error);
+    }
+  }
+
+  /**
+   * ANTI-MUTE: Handle tab visibility changes
+   * When tab is hidden, browsers are more aggressive about suspending canvas activity
+   * We need more aggressive anti-mute measures when backgrounded
+   */
+  private handleVisibilityChange(): void {
+    this.isTabVisible = !document.hidden;
+    logger.info(`[Tab Visibility] Tab is now ${this.isTabVisible ? 'visible' : 'hidden'} - adjusting anti-mute strategy`);
   }
 
   /**
@@ -1450,7 +1604,7 @@ class CompositorService {
   /**
    * Draw countdown timer
    * Renders large countdown number centered on canvas
-   * ENHANCED: Added logging and validation to debug countdown display issues
+   * ENHANCED: Pulsing/glowing animation to ensure visible motion (prevents browser auto-mute)
    */
   private drawCountdown(): void {
     if (!this.ctx) {
@@ -1471,34 +1625,114 @@ class CompositorService {
       // Canvas is already black (cleared at start of animate loop)
       // No need for semi-transparent overlay that caused flickering
 
-      // Draw countdown number
-      const fontSize = Math.floor(this.HEIGHT / 4); // Large font size (25% of canvas height)
+      // ANTI-MUTE: Pulsing glow animation to ensure visible motion every frame
+      // This prevents browser from detecting "static" content during countdown
+      const time = Date.now() / 1000; // Time in seconds
+      const pulse = Math.sin(time * 2) * 0.5 + 0.5; // Oscillates 0-1, 2 pulses per second
+      const glowIntensity = 20 + pulse * 60; // Varies 20-80px blur
+      const glowAlpha = 0.6 + pulse * 0.4; // Varies 0.6-1.0 opacity
+      const scaleMultiplier = 1 + pulse * 0.05; // Slight size pulse (1.0-1.05x)
+
+      // Draw countdown number with pulsing glow
+      const fontSize = Math.floor(this.HEIGHT / 4 * scaleMultiplier); // Large font size with pulse
       this.ctx.font = `bold ${fontSize}px Arial`;
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
 
-      // White text with black outline for visibility
+      // Draw glowing shadow (multiple layers for stronger glow)
+      this.ctx.shadowColor = `rgba(255, 255, 255, ${glowAlpha})`;
+      this.ctx.shadowBlur = glowIntensity;
+      this.ctx.fillStyle = '#FFFFFF';
+      this.ctx.fillText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
+
+      // Draw second glow layer (blue tint for visual interest)
+      this.ctx.shadowColor = `rgba(59, 130, 246, ${glowAlpha * 0.8})`; // blue-500
+      this.ctx.shadowBlur = glowIntensity * 1.5;
+      this.ctx.fillText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
+
+      // Draw black outline for contrast (no shadow)
+      this.ctx.shadowBlur = 0;
       this.ctx.strokeStyle = '#000000';
       this.ctx.lineWidth = 20;
       this.ctx.strokeText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
 
+      // Draw final white text on top (with subtle glow)
+      this.ctx.shadowColor = `rgba(255, 255, 255, ${glowAlpha * 0.5})`;
+      this.ctx.shadowBlur = glowIntensity * 0.5;
       this.ctx.fillStyle = '#FFFFFF';
       this.ctx.fillText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
 
-      // Draw "Going Live..." text below countdown
+      // Draw "Going Live..." text below countdown with matching pulse
       const subFontSize = Math.floor(this.HEIGHT / 15);
       this.ctx.font = `${subFontSize}px Arial`;
 
       const subTextY = this.HEIGHT / 2 + fontSize / 2 + subFontSize + 40;
 
+      // Pulsing glow on subtitle too
+      this.ctx.shadowColor = `rgba(255, 255, 255, ${glowAlpha * 0.7})`;
+      this.ctx.shadowBlur = glowIntensity * 0.6;
+      this.ctx.fillStyle = '#FFFFFF';
+      this.ctx.fillText('Going Live...', this.WIDTH / 2, subTextY);
+
+      // Black outline for subtitle
+      this.ctx.shadowBlur = 0;
       this.ctx.strokeStyle = '#000000';
       this.ctx.lineWidth = 10;
       this.ctx.strokeText('Going Live...', this.WIDTH / 2, subTextY);
 
+      // Final white text
+      this.ctx.shadowColor = `rgba(255, 255, 255, ${glowAlpha * 0.5})`;
+      this.ctx.shadowBlur = glowIntensity * 0.3;
       this.ctx.fillStyle = '#FFFFFF';
       this.ctx.fillText('Going Live...', this.WIDTH / 2, subTextY);
+
+      // Reset shadow for other drawing operations
+      this.ctx.shadowBlur = 0;
+      this.ctx.shadowColor = 'transparent';
     } catch (error) {
       logger.error('[Compositor] Error drawing countdown:', error);
+    }
+  }
+
+  /**
+   * FAILOVER: Draw "Stream reconnecting..." overlay
+   * Displayed when video track gets muted and is being recovered
+   * Provides visual feedback to viewers that we're fixing the issue
+   */
+  private drawReconnectingOverlay(): void {
+    if (!this.ctx) return;
+
+    try {
+      // Semi-transparent dark overlay at top of screen (doesn't block content completely)
+      const bannerHeight = 100;
+      const gradient = this.ctx.createLinearGradient(0, 0, 0, bannerHeight);
+      gradient.addColorStop(0, 'rgba(220, 38, 38, 0.95)'); // red-600
+      gradient.addColorStop(1, 'rgba(185, 28, 28, 0.95)'); // red-700
+      this.ctx.fillStyle = gradient;
+      this.ctx.fillRect(0, 0, this.WIDTH, bannerHeight);
+
+      // Pulsing animation for urgency
+      const time = Date.now() / 1000;
+      const pulse = Math.sin(time * 3) * 0.5 + 0.5; // Fast pulse (3 Hz)
+      const glowAlpha = 0.5 + pulse * 0.5;
+
+      // Main message
+      const fontSize = 48;
+      this.ctx.font = `bold ${fontSize}px Arial`;
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+
+      // Pulsing glow
+      this.ctx.shadowColor = `rgba(255, 255, 255, ${glowAlpha})`;
+      this.ctx.shadowBlur = 30;
+      this.ctx.fillStyle = '#FFFFFF';
+      this.ctx.fillText('Stream Reconnecting...', this.WIDTH / 2, bannerHeight / 2);
+
+      // Reset shadow
+      this.ctx.shadowBlur = 0;
+      this.ctx.shadowColor = 'transparent';
+    } catch (error) {
+      logger.error('[Failover] Error drawing reconnecting overlay:', error);
     }
   }
 }
