@@ -35,17 +35,16 @@ export async function createCompositorPipeline(
   try {
     logger.info(`Creating compositor pipeline for broadcast ${broadcastId}`);
 
-    // Check streaming method from environment
-    const streamingMethod = process.env.STREAMING_METHOD || 'ffmpeg';
+    // Always use Daily.co for RTMP output
+    const streamingMethod = process.env.STREAMING_METHOD || 'daily';
     logger.info(`[Compositor Pipeline] Streaming method: ${streamingMethod}`);
 
-    if (streamingMethod === 'daily') {
-      // Use Daily.co for RTMP output
-      return await createDailyPipeline(router, broadcastId, videoProducer, audioProducer, destinations);
+    if (streamingMethod === 'ffmpeg') {
+      logger.warn('[Compositor Pipeline] FFmpeg mode is deprecated. Falling back to Daily mode.');
     }
 
-    // Default: Use FFmpeg pipeline (existing code below)
-    logger.info(`[Compositor Pipeline] Using FFmpeg mode`);
+    // Use Daily.co pipeline (recommended)
+    return await createDailyPipeline(router, broadcastId, videoProducer, audioProducer, destinations);
 
     // Create separate Plain RTP transports for video and audio
     // This is required because FFmpeg cannot bind to the same port twice

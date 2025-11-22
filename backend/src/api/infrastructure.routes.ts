@@ -91,12 +91,21 @@ router.get('/ssh-keys', async (req, res) => {
  */
 router.post('/deploy', async (req, res) => {
   try {
-    const { name, serverType, location, role, sshKeys, backendUrl, upstreamServers } = req.body;
+    const { name, serverType, location, role, sshKeys, backendUrl, upstreamServers, streamingMethod, backendApiUrl } = req.body;
 
     if (!name || !serverType || !location || !role) {
       return res.status(400).json({
         error: 'Missing required fields: name, serverType, location, role'
       });
+    }
+
+    // Validate media server specific config
+    if (role === 'media-server') {
+      if (!backendApiUrl) {
+        return res.status(400).json({
+          error: 'Media servers require backendApiUrl for Daily.co integration'
+        });
+      }
     }
 
     // Validate role
@@ -118,6 +127,8 @@ router.post('/deploy', async (req, res) => {
       sshKeys: sshKeys || [],
       backendUrl,
       upstreamServers,
+      streamingMethod: 'daily', // Always use Daily
+      backendApiUrl: backendApiUrl || backendUrl,
     });
 
     // Wait for server to be ready (max 2 minutes)
@@ -141,6 +152,15 @@ router.post('/deploy', async (req, res) => {
     if (role === 'media-server') {
       const mediaServerUrl = `http://${server.public_net.ipv4.ip}:3001`;
       responseData.server.url = mediaServerUrl;
+      responseData.server.streamingMethod = 'daily';
+
+      responseData.notes = [
+        '✓ Media server configured with Daily.co streaming',
+        `• Backend API: ${backendApiUrl}`,
+        '• Ensure Daily API key is set in /admin/settings',
+        '• Cost: ~$1-2/hour per active broadcast',
+        '• Zero CPU usage for RTMP - all handled by Daily',
+      ];
 
       try {
         const serverId = mediaServerPool.addServer(mediaServerUrl);

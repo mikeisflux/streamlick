@@ -50,6 +50,8 @@ export function AdminInfrastructure() {
     location: 'nbg1',
     role: '' as ServerRole,
     sshKeys: [] as number[],
+    streamingMethod: 'daily' as const,
+    backendApiUrl: '',
   });
   const [deploying, setDeploying] = useState(false);
   const [availableSSHKeys, setAvailableSSHKeys] = useState<any[]>([]);
@@ -129,6 +131,8 @@ export function AdminInfrastructure() {
         location: 'nbg1',
         role: '' as ServerRole,
         sshKeys: [],
+        streamingMethod: 'daily',
+        backendApiUrl: '',
       });
       await loadServers();
     } catch (error: any) {
@@ -626,6 +630,47 @@ export function AdminInfrastructure() {
                     <option value="ash">Ashburn, USA (ash)</option>
                   </select>
                 </div>
+
+                {/* Media Server Specific Configuration */}
+                {deployConfig.role === 'media-server' && (
+                  <>
+                    <div className="pt-4 border-t border-gray-200">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Media Server Configuration</h4>
+
+                      <div className="space-y-3">
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                          <p className="text-xs text-green-900 mb-2">
+                            <strong>✓ Daily.co Streaming</strong>
+                          </p>
+                          <ul className="text-xs text-green-800 space-y-1">
+                            <li>• Zero CPU usage for RTMP output</li>
+                            <li>• Automatic reconnection built-in</li>
+                            <li>• Professional quality streaming</li>
+                            <li>• Cost: ~$1-2/hour per broadcast</li>
+                            <li>• Requires Daily API key in Settings</li>
+                          </ul>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Backend API URL <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={deployConfig.backendApiUrl}
+                            onChange={(e) => setDeployConfig({ ...deployConfig, backendApiUrl: e.target.value })}
+                            placeholder="https://api.streamlick.com"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                            disabled={deploying}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            URL where your backend API is running (required for Daily integration)
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <p className="text-xs text-blue-900">
