@@ -194,8 +194,6 @@ class DailyServiceBackend {
           room_name: roomName,
           is_owner: true, // Broadcaster is owner
           enable_screenshare: true,
-          start_video_on: true,
-          start_audio_on: true,
           ...properties,
         },
       });
