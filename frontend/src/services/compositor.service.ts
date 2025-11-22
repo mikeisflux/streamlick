@@ -170,7 +170,7 @@ class CompositorService {
     video.srcObject = participant.stream;
 
     // DIAGNOSTIC: Log initial video element state
-    logger.debug('[Compositor] Video element setup:', {
+    console.log('[Compositor] Video element setup:', {
       participantId: participant.id,
       videoEnabled: participant.videoEnabled,
       hasVideoTracks,
@@ -880,7 +880,7 @@ class CompositorService {
 
       // DIAGNOSTIC: Log state changes every 30 frames
       if (this.frameCount % 30 === 0) {
-        logger.debug('[Compositor] Render state:', {
+        console.log('[Compositor] Render state:', {
           showingFullscreenOverlay,
           countdownValue: this.countdownValue,
           hasMediaClipOverlay: this.mediaClipOverlay !== null,
@@ -1165,7 +1165,7 @@ class CompositorService {
 
     // DIAGNOSTIC: Log participant state every 60 frames when we have participants
     if (this.frameCount % 60 === 0 && participantArray.length > 0) {
-      logger.debug('[Compositor] Drawing participants:', {
+      console.log('[Compositor] Drawing participants:', {
         count: participantArray.length,
         layout: this.layout.type,
         participants: participantArray.map(p => ({
@@ -1306,7 +1306,7 @@ class CompositorService {
     if (!video || !participant) {
       // DIAGNOSTIC: Log missing video/participant every 60 frames
       if (this.frameCount % 60 === 0) {
-        logger.warn('[Compositor] Cannot draw participant video:', {
+        console.log('[Compositor] Cannot draw participant video:', {
           participantId,
           hasVideo: !!video,
           hasParticipant: !!participant,
@@ -1321,7 +1321,7 @@ class CompositorService {
 
     // DIAGNOSTIC: Log video element state every 60 frames
     if (this.frameCount % 60 === 0) {
-      logger.debug('[Compositor] Participant video state:', {
+      console.log('[Compositor] Participant video state:', {
         participantId,
         videoEnabled: participant.videoEnabled,
         readyState: video.readyState,
@@ -1359,7 +1359,7 @@ class CompositorService {
     } else {
       // DIAGNOSTIC: Log why video is not being drawn every 60 frames
       if (this.frameCount % 60 === 0) {
-        logger.warn('[Compositor] Video not drawn - showing placeholder:', {
+        console.log('[Compositor] Video not drawn - showing placeholder:', {
           participantId,
           videoEnabled: participant.videoEnabled,
           readyState: video.readyState,
@@ -1618,7 +1618,7 @@ class CompositorService {
     if (element instanceof HTMLVideoElement) {
       // DIAGNOSTIC: Log video state every 30 frames to debug why it's not drawing
       if (this.frameCount % 30 === 0) {
-        logger.debug('[Media Clip] Video state:', {
+        console.log('[Media Clip] Video state:', {
           readyState: element.readyState,
           videoWidth: element.videoWidth,
           videoHeight: element.videoHeight,
