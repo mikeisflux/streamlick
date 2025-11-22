@@ -155,7 +155,6 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req: Reques
       data: {
         userId,
         name: name || file.originalname,
-        description: description || null,
         type: clipType,
         fileUrl: fileUrl,
         thumbnailUrl: null,
@@ -247,7 +246,6 @@ router.post('/link', authMiddleware, async (req: Request, res: Response) => {
       data: {
         userId,
         name,
-        description: description || null,
         type,
         fileUrl: url,
         thumbnailUrl: null,
@@ -277,7 +275,7 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
     const { id } = req.params;
-    const { name, description, hotkey, volume, isActive } = req.body;
+    const { name, hotkey, volume, isActive } = req.body;
 
     // CRITICAL FIX: Verify ownership before update (IDOR protection)
     const clip = await prisma.mediaClip.findUnique({
@@ -305,7 +303,6 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
       where: { id },
       data: {
         ...(name !== undefined && { name }),
-        ...(description !== undefined && { description }),
         ...(hotkey !== undefined && { hotkey }),
         ...(volume !== undefined && { volume: parseInt(volume) }),
         ...(isActive !== undefined && { isActive }),
