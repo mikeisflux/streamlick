@@ -125,10 +125,9 @@ router.post('/deploy', async (req, res) => {
       location,
       role,
       sshKeys: sshKeys || [],
-      backendUrl,
+      backendUrl: backendApiUrl || backendUrl, // Media servers use this to connect to backend
       upstreamServers,
-      streamingMethod: 'daily', // Always use Daily
-      backendApiUrl: backendApiUrl || backendUrl,
+      // Note: streamingMethod is always 'daily' - configured via environment in cloud-init
     });
 
     // Wait for server to be ready (max 2 minutes)

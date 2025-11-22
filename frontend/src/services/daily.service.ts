@@ -241,17 +241,26 @@ class DailyService {
     try {
       logger.info(`[Daily] Starting RTMP streaming to ${destinations.length} destination(s)`);
 
-      // Format endpoints for Daily API
+      // Format endpoints for Daily API - must use 'endpoint' property
       const endpoints = destinations.map((dest) => ({
-        // Full RTMP URL with stream key
-        rtmpUrl: `${dest.rtmpUrl}/${dest.streamKey}`,
+        // Full RTMP URL with stream key - property must be named 'endpoint'
+        endpoint: `${dest.rtmpUrl}/${dest.streamKey}`,
       }));
 
       logger.info('[Daily] RTMP endpoints:', endpoints.map((e, i) => ({
         index: i,
         platform: destinations[i].platform,
-        url: e.rtmpUrl.substring(0, 50) + '...', // Log partial URL for security
+        url: e.endpoint.substring(0, 50) + '...', // Log partial URL for security
       })));
+
+      // Get local participant session ID for layout
+      const participants = this.callObject.participants();
+      const localParticipant = participants.local;
+      const sessionId = localParticipant?.session_id;
+
+      if (!sessionId) {
+        throw new Error('No local participant session ID available');
+      }
 
       // Start live streaming via Daily's JavaScript API
       await this.callObject.startLiveStreaming({
@@ -259,6 +268,7 @@ class DailyService {
         // Optional: configure streaming layout and quality
         layout: {
           preset: 'single-participant', // Show only the broadcaster
+          session_id: sessionId, // Required: which participant to show
         },
         // Video quality settings (default is 1920x1080 @ 5Mbps)
         // Can be customized if needed
@@ -287,7 +297,7 @@ class DailyService {
       logger.info(`[Daily] Adding ${destinations.length} additional destination(s)`);
 
       const endpoints = destinations.map((dest) => ({
-        rtmpUrl: `${dest.rtmpUrl}/${dest.streamKey}`,
+        endpoint: `${dest.rtmpUrl}/${dest.streamKey}`, // Must use 'endpoint' property
       }));
 
       await this.callObject.addLiveStreamingEndpoints({ endpoints });
