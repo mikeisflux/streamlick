@@ -804,31 +804,8 @@ class CompositorService {
         }
       }
 
-      // OPTIMIZED: Draw random rectangles instead of individual pixels
-      // Previous attempts failed:
-      // - 10,000 fillRect(1x1): Too slow, video froze at 42s
-      // - ImageData manipulation: 8MB read/write per frame too expensive
-      // Solution: Draw 500 random 10x10 rectangles = 50,000 pixels affected
-      if (showingFullscreenOverlay) {
-        // Draw 500 random rectangles (10x10 each) = 0.24% of canvas
-        // Much faster than 10,000 individual pixel calls
-        for (let i = 0; i < 500; i++) {
-          const x = Math.floor(Math.random() * (this.WIDTH - 10));
-          const y = Math.floor(Math.random() * (this.HEIGHT - 10));
-          const r = Math.floor(Math.random() * 256);
-          const g = Math.floor(Math.random() * 256);
-          const b = Math.floor(Math.random() * 256);
-          this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-          this.ctx.fillRect(x, y, 10, 10);
-        }
-      } else {
-        // Normal mode: Single pixel is enough when participants are drawing
-        const r = (this.frameCount * 67) % 256;
-        const g = (this.frameCount * 139) % 256;
-        const b = (this.frameCount * 211) % 256;
-        this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-        this.ctx.fillRect(this.WIDTH - 1, this.HEIGHT - 1, 1, 1);
-      }
+      // contentHint='motion' set on track creation prevents browser auto-muting
+      // No need for visual hacks like random pixels/rectangles
     } catch (error) {
       logger.error('Compositor animation error:', error);
     }
