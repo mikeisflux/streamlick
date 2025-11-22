@@ -804,14 +804,19 @@ class CompositorService {
         }
       }
 
-      // ANTI-MUTE: Draw 1 invisible pixel in bottom-right corner that changes every frame
+      // ANTI-MUTE: Draw imperceptible noise to prevent browser from detecting static canvas
       // contentHint='motion' alone is NOT sufficient - browser still detects static canvas during countdown
-      // This minimal pixel change prevents auto-muting without visible artifacts
-      const x = this.canvas!.width - 1;
-      const y = this.canvas!.height - 1;
-      const brightness = (this.frameCount % 2) * 255; // Alternates 0/255 every frame
-      this.ctx!.fillStyle = `rgb(${brightness},${brightness},${brightness})`;
-      this.ctx!.fillRect(x, y, 1, 1);
+      // Using 0.01 alpha with random position/color creates variance the browser can't ignore
+      this.ctx!.save();
+      this.ctx!.globalAlpha = 0.01;
+      this.ctx!.fillStyle = `rgb(${Math.floor(Math.random() * 255)},0,0)`;
+      this.ctx!.fillRect(
+        Math.random() * this.canvas!.width,
+        Math.random() * this.canvas!.height,
+        1,
+        1
+      );
+      this.ctx!.restore();
     } catch (error) {
       logger.error('Compositor animation error:', error);
     }
