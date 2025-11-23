@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { playTestTone } from '../../../utils/audioTest';
+import { audioProcessorService } from '../../../services/audio-processor.service';
 import toast from 'react-hot-toast';
 
 interface MediaDevice {
@@ -700,9 +701,7 @@ function AudioSettings({ props }: { props: CanvasSettingsModalProps }) {
                 onChange={(e) => {
                   const dB = parseInt(e.target.value);
                   // Update threshold in audio processor
-                  import('../../../services/audio-processor.service').then(({ audioProcessorService }) => {
-                    audioProcessorService.setNoiseGateThreshold(dB);
-                  });
+                  audioProcessorService.setNoiseGateThreshold(dB);
                   // Update display
                   const span = e.target.parentElement?.querySelector('span');
                   if (span) span.textContent = `${dB} dB`;
