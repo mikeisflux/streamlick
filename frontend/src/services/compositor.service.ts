@@ -428,18 +428,24 @@ class CompositorService {
     // CRITICAL FIX: Properly clean up video/image element before clearing reference
     if (this.mediaClipOverlay) {
       if (this.mediaClipOverlay instanceof HTMLVideoElement) {
+        // Remove ALL event listeners FIRST to prevent error cascades
+        this.mediaClipOverlay.onended = null;
+        this.mediaClipOverlay.onerror = null;
+        this.mediaClipOverlay.oncanplaythrough = null;
+        this.mediaClipOverlay.onloadedmetadata = null;
+
         // Stop video playback
         this.mediaClipOverlay.pause();
         this.mediaClipOverlay.currentTime = 0;
 
-        // Clear video source to free resources
-        this.mediaClipOverlay.src = '';
-        this.mediaClipOverlay.load(); // Force cleanup
-
-        // Remove from DOM if attached
+        // Remove from DOM if attached (should not be, but check anyway)
         if (this.mediaClipOverlay.parentNode) {
           this.mediaClipOverlay.parentNode.removeChild(this.mediaClipOverlay);
         }
+
+        // Clear video source to free resources (do this AFTER removing event listeners)
+        this.mediaClipOverlay.src = '';
+        this.mediaClipOverlay.load(); // Force cleanup
 
         logger.info('[Media Clip] Video element cleaned up and stopped');
       } else if (this.mediaClipOverlay instanceof HTMLImageElement) {
@@ -459,6 +465,8 @@ class CompositorService {
 
     if (wasActive) {
       logger.info('[Media Clip] Overlay cleared - participants should now be visible');
+      // Force a render to ensure participants appear immediately
+      requestAnimationFrame(() => this.render());
     }
   }
 
