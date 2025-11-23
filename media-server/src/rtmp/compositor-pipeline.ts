@@ -756,11 +756,12 @@ async function createDailyPipeline(
     await dailyBotService.startLiveStreaming(dailyDestinations);
 
     // Store pipeline
+    // Note: Consumers are created internally in RTP bridge, not stored here
     activePipelines.set(broadcastId, {
       videoPlainTransport: null,
       audioPlainTransport: null,
-      videoConsumer,
-      audioConsumer,
+      videoConsumer: null, // Created internally in RTP bridge
+      audioConsumer: null, // Created internally in RTP bridge
       ffmpegProcesses: new Map(),
       rtpBridgePeerConnection: bridgeResult.peerConnection,
     });
