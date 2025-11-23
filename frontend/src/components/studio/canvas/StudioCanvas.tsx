@@ -23,6 +23,7 @@ import { Caption } from '../../../services/caption.service';
 import { compositorService } from '../../../services/compositor.service';
 import { mediaStorageService } from '../../../services/media-storage.service';
 import { audioMixerService } from '../../../services/audio-mixer.service';
+import { useAudioLevel } from '../../../hooks/studio/useAudioLevel';
 
 interface Banner {
   id: string;
@@ -138,6 +139,9 @@ export function StudioCanvas({
   const screenShareVideoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [volume, setVolume] = useState(100);
+
+  // Detect if local user is speaking (for voice animations)
+  const isLocalSpeaking = useAudioLevel(localStream, audioEnabled);
 
   // Load banners from localStorage
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -662,6 +666,7 @@ export function StudioCanvas({
                     stream={localStream}
                     videoEnabled={videoEnabled}
                     audioEnabled={audioEnabled}
+                    isSpeaking={isLocalSpeaking}
                     name="You"
                     positionNumber={1}
                     isHost={true}
@@ -807,6 +812,7 @@ export function StudioCanvas({
                       stream={localStream}
                       videoEnabled={videoEnabled}
                       audioEnabled={audioEnabled}
+                      isSpeaking={isLocalSpeaking}
                       name="You"
                       positionNumber={1}
                       isHost={true}

@@ -4,6 +4,7 @@ interface ParticipantBoxProps {
   stream: MediaStream | null;
   videoEnabled: boolean;
   audioEnabled?: boolean;
+  isSpeaking?: boolean; // Audio level detection - true when actively speaking
   name: string;
   title?: string;
   positionNumber?: number;
@@ -31,6 +32,7 @@ export function ParticipantBox({
   stream,
   videoEnabled,
   audioEnabled = true,
+  isSpeaking = false,
   name,
   title,
   positionNumber,
@@ -301,8 +303,8 @@ export function ParticipantBox({
                   className="w-full h-full object-cover"
                 />
 
-                {/* Voice animation rings when speaking */}
-                {audioEnabled && (
+                {/* Voice animation rings when speaking - only shows when actively speaking */}
+                {isSpeaking && (
                   <div className="absolute inset-0 flex items-center justify-center">
                     {/* Pulsating ring for speaking animation */}
                     <div
