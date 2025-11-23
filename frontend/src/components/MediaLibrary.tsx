@@ -151,33 +151,34 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
         return newSet;
       });
     } else {
-      // CRITICAL FIX: Resume AudioContext before playing to enable audio
-      // Browser autoplay policies suspend AudioContext by default
-      try {
-        const audioContext = (audioMixerService as any).audioContext;
-        if (audioContext && audioContext.state === 'suspended') {
-          console.log('[MediaLibrary] Resuming suspended AudioContext...');
-          await audioContext.resume();
-          console.log('[MediaLibrary] AudioContext resumed');
-        }
-      } catch (error) {
-        console.error('[MediaLibrary] Failed to resume AudioContext:', error);
-      }
-
       // CRITICAL: Force unmute and set volume IMMEDIATELY before playing
+      // Must happen synchronously within click handler to satisfy browser autoplay policies
       videoElement.muted = false;
       videoElement.volume = 1.0;
       console.log(`[MediaLibrary] Video settings - muted: ${videoElement.muted}, volume: ${videoElement.volume}`);
 
-      // Start playing
-      try {
-        await videoElement.play();
-        console.log('[MediaLibrary] Video playing - you should hear audio now!');
-        setPlayingClips(prev => new Set(prev).add(clipId));
-      } catch (error) {
-        console.error('[MediaLibrary] Failed to play video:', error);
-        toast.error('Failed to play video');
-      }
+      // Start playing FIRST (within user gesture), THEN resume audio context
+      // This ensures the play() call happens synchronously within the click event
+      videoElement.play()
+        .then(() => {
+          console.log('[MediaLibrary] Video playing with audio!');
+          setPlayingClips(prev => new Set(prev).add(clipId));
+
+          // Resume AudioContext AFTER play starts (non-blocking)
+          const audioContext = (audioMixerService as any).audioContext;
+          if (audioContext && audioContext.state === 'suspended') {
+            console.log('[MediaLibrary] Resuming suspended AudioContext...');
+            audioContext.resume().then(() => {
+              console.log('[MediaLibrary] AudioContext resumed');
+            }).catch((error: any) => {
+              console.error('[MediaLibrary] Failed to resume AudioContext:', error);
+            });
+          }
+        })
+        .catch((error) => {
+          console.error('[MediaLibrary] Failed to play video:', error);
+          toast.error('Failed to play video');
+        });
     }
   };
 
