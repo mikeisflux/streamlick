@@ -52,8 +52,6 @@ class DailyBotPuppeteerService {
       await context.overridePermissions('https://api.daily.co', [
         'camera',
         'microphone',
-        'audio-capture',
-        'video-capture',
       ]);
 
       logger.info('[Puppeteer Bot] Browser launched');
