@@ -1026,9 +1026,11 @@ class CompositorService {
     });
     this.videoElements.clear();
 
-    // Clean up cached images
-    this.backgroundImage = null;
-    this.overlayImages.clear();
+    // NOTE: Do NOT clear overlay images here! Backgrounds/logos/overlays should
+    // persist across compositor stop/start cycles (e.g., when going live/stopping).
+    // Only clear them when explicitly removed via removeOverlay().
+    // this.backgroundImage = null;
+    // this.overlayImages.clear();
 
     // Stop audio mixer
     audioMixerService.stop();
