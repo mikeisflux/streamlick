@@ -4,6 +4,7 @@ import { compositorService } from '../services/compositor.service';
 import { broadcastService } from '../services/broadcast.service';
 import { useMedia } from '../hooks/useMedia';
 import { useStudioStore } from '../store/studioStore';
+import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { HotkeyReference } from '../components/HotkeyReference';
 import { HotkeyFeedback, useHotkeyFeedback } from '../components/HotkeyFeedback';
@@ -46,10 +47,14 @@ import { socketService } from '../services/socket.service';
 
 export function Studio() {
   const { broadcastId } = useParams<{ broadcastId: string }>();
+  const { user } = useAuthStore();
   const { messages: hotkeyMessages } = useHotkeyFeedback();
 
   // Countdown state
   const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
+
+  // Background Effects state
+  const [backgroundEffect, setBackgroundEffect] = useState<{type: 'none' | 'blur' | 'greenscreen' | 'virtual'}>({ type: 'none' });
 
   // Refs
   const micButtonRef = useRef<HTMLDivElement>(null);
@@ -282,7 +287,7 @@ export function Studio() {
   const { mediaClips, handlePlayClip } = useMediaClips();
   const { showAnalyticsDashboard, setShowAnalyticsDashboard, analyticsDashboardPosition, analyticsDashboardSize, handleAnalyticsDashboardDragStart, handleAnalyticsDashboardResizeStart } = useAnalyticsDashboard();
   const { showDestinationsDrawer, setShowDestinationsDrawer, showInviteDrawer, setShowInviteDrawer, showBannerDrawer, setShowBannerDrawer, showBrandDrawer, setShowBrandDrawer, showRecordingDrawer, setShowRecordingDrawer } = useDrawers();
-  const { showClipManager, setShowClipManager, showProducerMode, setShowProducerMode, showClipDurationSelector, setShowClipDurationSelector, showLanguageSelector, setShowLanguageSelector, showBackgroundSettings, setShowBackgroundSettings, showSceneManager, setShowSceneManager } = useModals();
+  const { showClipManager, setShowClipManager, showProducerMode, setShowProducerMode, showClipDurationSelector, setShowClipDurationSelector, showLanguageSelector, setShowLanguageSelector, showBackgroundSettings, setShowBackgroundSettings, showSceneManager, setShowSceneManager, showChatLayoutCustomizer, setShowChatLayoutCustomizer, chatLayoutConfig, setChatLayoutConfig, showScreenShareManager, setShowScreenShareManager, showBackgroundEffects, setShowBackgroundEffects } = useModals();
 
   // Teleprompter
   const teleprompterState = useTeleprompter();
@@ -552,6 +557,7 @@ export function Studio() {
             setBackgroundRemovalEnabled={setBackgroundRemovalEnabled}
             showBackgroundSettings={showBackgroundSettings}
             setShowBackgroundSettings={setShowBackgroundSettings}
+            setShowBackgroundEffects={setShowBackgroundEffects}
             verticalSimulcastEnabled={verticalSimulcastEnabled}
             setVerticalSimulcastEnabled={setVerticalSimulcastEnabled}
             analyticsEnabled={analyticsEnabled}
@@ -566,6 +572,7 @@ export function Studio() {
             isSharingScreen={isSharingScreen}
             startScreenShare={handleToggleScreenShare}
             stopScreenShare={handleToggleScreenShare}
+            setShowScreenShareManager={setShowScreenShareManager}
             speakerMuted={speakerMuted}
             toggleSpeaker={toggleSpeaker}
             showMicSelector={showMicSelector}
@@ -657,6 +664,19 @@ export function Studio() {
         captionLanguage={captionLanguage}
         setCaptionLanguage={setCaptionLanguage}
         captionsEnabled={captionsEnabled}
+        showChatLayoutCustomizer={showChatLayoutCustomizer}
+        setShowChatLayoutCustomizer={setShowChatLayoutCustomizer}
+        chatLayoutConfig={chatLayoutConfig}
+        setChatLayoutConfig={setChatLayoutConfig}
+        showScreenShareManager={showScreenShareManager}
+        setShowScreenShareManager={setShowScreenShareManager}
+        isHost={user?.id === broadcast?.userId}
+        participantId={user?.id || ''}
+        participantName={user?.name || 'User'}
+        showBackgroundEffects={showBackgroundEffects}
+        setShowBackgroundEffects={setShowBackgroundEffects}
+        backgroundEffect={backgroundEffect}
+        setBackgroundEffect={setBackgroundEffect}
       />
 
       {/* Canvas Settings Modal */}

@@ -6,6 +6,9 @@ import {
   BackgroundSettingsDropdown,
   LanguageSelectorDropdown,
 } from './modals';
+import { ChatLayoutCustomizer, ChatLayoutConfig } from '../ChatLayoutCustomizer';
+import { ScreenShareManager } from '../ScreenShareManager';
+import { BackgroundEffects } from '../BackgroundEffects';
 
 interface StudioModalsProps {
   // Clip Manager
@@ -57,6 +60,25 @@ interface StudioModalsProps {
   captionLanguage: string;
   setCaptionLanguage: (lang: string) => void;
   captionsEnabled: boolean;
+
+  // Chat Layout Customizer
+  showChatLayoutCustomizer: boolean;
+  setShowChatLayoutCustomizer: (show: boolean) => void;
+  chatLayoutConfig: ChatLayoutConfig;
+  setChatLayoutConfig: (config: ChatLayoutConfig) => void;
+
+  // Screen Share Manager
+  showScreenShareManager: boolean;
+  setShowScreenShareManager: (show: boolean) => void;
+  isHost: boolean;
+  participantId: string;
+  participantName: string;
+
+  // Background Effects
+  showBackgroundEffects: boolean;
+  setShowBackgroundEffects: (show: boolean) => void;
+  backgroundEffect: any;
+  setBackgroundEffect: (effect: any) => void;
 }
 
 export function StudioModals({
@@ -96,6 +118,19 @@ export function StudioModals({
   captionLanguage,
   setCaptionLanguage,
   captionsEnabled,
+  showChatLayoutCustomizer,
+  setShowChatLayoutCustomizer,
+  chatLayoutConfig,
+  setChatLayoutConfig,
+  showScreenShareManager,
+  setShowScreenShareManager,
+  isHost,
+  participantId,
+  participantName,
+  showBackgroundEffects,
+  setShowBackgroundEffects,
+  backgroundEffect,
+  setBackgroundEffect,
 }: StudioModalsProps) {
   return (
     <>
@@ -185,6 +220,82 @@ export function StudioModals({
         setLanguage={setCaptionLanguage}
         captionsEnabled={captionsEnabled}
       />
+
+      {/* Chat Layout Customizer Modal */}
+      {showChatLayoutCustomizer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Chat Layout Customizer</h2>
+              <button
+                onClick={() => setShowChatLayoutCustomizer(false)}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6">
+              <ChatLayoutCustomizer
+                config={chatLayoutConfig}
+                onChange={setChatLayoutConfig}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Screen Share Manager Modal */}
+      {showScreenShareManager && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-gray-900 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gray-900 border-b border-gray-700 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white">Screen Share Manager</h2>
+              <button
+                onClick={() => setShowScreenShareManager(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6">
+              <ScreenShareManager
+                isHost={isHost}
+                participantId={participantId}
+                participantName={participantName}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Background Effects Modal */}
+      {showBackgroundEffects && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-gray-900 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gray-900 border-b border-gray-700 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white">Background Effects</h2>
+              <button
+                onClick={() => setShowBackgroundEffects(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6">
+              <BackgroundEffects
+                currentEffect={backgroundEffect}
+                onEffectChange={setBackgroundEffect}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
