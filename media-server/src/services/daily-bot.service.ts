@@ -7,12 +7,35 @@
  * This bridges mediasoup → Daily → RTMP
  */
 
-// Inject wrtc into global scope for Daily.co SDK
+// Inject wrtc and browser APIs into global scope for Daily.co SDK
 import wrtc from 'wrtc';
 (global as any).RTCPeerConnection = wrtc.RTCPeerConnection;
 (global as any).RTCSessionDescription = wrtc.RTCSessionDescription;
 (global as any).RTCIceCandidate = wrtc.RTCIceCandidate;
 (global as any).MediaStream = wrtc.MediaStream;
+(global as any).MediaStreamTrack = wrtc.MediaStreamTrack;
+
+// Create minimal browser-like environment
+if (typeof window === 'undefined') {
+  (global as any).window = global;
+}
+if (typeof document === 'undefined') {
+  (global as any).document = {
+    createElement: () => ({ addEventListener: () => {}, removeEventListener: () => {} }),
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    readyState: 'complete',
+  };
+}
+if (typeof navigator === 'undefined') {
+  (global as any).navigator = {
+    userAgent: 'Node.js Daily Bot',
+    mediaDevices: {
+      getUserMedia: () => Promise.reject(new Error('Not available')),
+      enumerateDevices: () => Promise.resolve([]),
+    },
+  };
+}
 
 import DailyIframe from '@daily-co/daily-js';
 import logger from '../utils/logger';
