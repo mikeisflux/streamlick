@@ -64,7 +64,7 @@ class AudioMixerService {
    * Add an HTML media element (video/audio) to the mix
    * Uses MediaElementSource for direct element audio capture
    */
-  addMediaElement(id: string, element: HTMLVideoElement | HTMLAudioElement): void {
+  async addMediaElement(id: string, element: HTMLVideoElement | HTMLAudioElement): Promise<void> {
     if (!this.audioContext || !this.destination) {
       throw new Error('Audio mixer not initialized');
     }
@@ -76,11 +76,13 @@ class AudioMixerService {
     // This MUST remain for proper audio routing to both speakers and output stream
     if (this.audioContext.state === 'suspended') {
       console.log('[Audio Mixer] Resuming suspended audio context...');
-      this.audioContext.resume().then(() => {
+      try {
+        await this.audioContext.resume();
         console.log('[Audio Mixer] Audio context resumed successfully');
-      }).catch((error) => {
+      } catch (error) {
         console.error('[Audio Mixer] Failed to resume audio context:', error);
-      });
+        throw error;
+      }
     }
 
     // Remove existing source if any

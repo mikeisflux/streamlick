@@ -165,36 +165,26 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
       audioMixerService.initialize();
       console.log('[MediaLibrary] Audio mixer initialized');
 
-      // Resume AudioContext (synchronously within user gesture)
-      const audioContext = (audioMixerService as any).audioContext;
-      if (audioContext && audioContext.state === 'suspended') {
-        console.log('[MediaLibrary] Resuming AudioContext BEFORE play (synchronous in user gesture)...');
-        audioContext.resume(); // Call synchronously, don't await
-      }
+      // CRITICAL: Add video element to audio mixer and AWAIT AudioContext resume
+      // This must complete BEFORE playing the video for audio to work
+      audioMixerService.addMediaElement(clipId, videoElement)
+        .then(() => {
+          console.log('[MediaLibrary] Video element added to audio mixer, AudioContext resumed');
 
-      // CRITICAL: Add video element to audio mixer BEFORE playing
-      // This routes the video audio through the Web Audio context
-      try {
-        audioMixerService.addMediaElement(clipId, videoElement);
-        console.log('[MediaLibrary] Video element added to audio mixer for dual output (stream + local speakers)');
-      } catch (error) {
-        console.error('[MediaLibrary] Failed to add video to audio mixer:', error);
-        // If audio mixer fails, video will still play with default browser audio
-      }
+          // Set volume and unmute
+          videoElement.muted = false;
+          videoElement.volume = 1.0;
+          console.log(`[MediaLibrary] Video settings - muted: ${videoElement.muted}, volume: ${videoElement.volume}`);
 
-      // Set volume and unmute
-      videoElement.muted = false;
-      videoElement.volume = 1.0;
-      console.log(`[MediaLibrary] Video settings - muted: ${videoElement.muted}, volume: ${videoElement.volume}`);
-
-      // Start playing (synchronously within user gesture)
-      videoElement.play()
+          // Start playing AFTER AudioContext is resumed and connections are set up
+          return videoElement.play();
+        })
         .then(() => {
           console.log('[MediaLibrary] Video playing with audio!');
           setPlayingClips(prev => new Set(prev).add(clipId));
         })
         .catch((error) => {
-          console.error('[MediaLibrary] Failed to play video:', error);
+          console.error('[MediaLibrary] Failed to setup audio or play video:', error);
           toast.error('Failed to play video');
         });
     }
