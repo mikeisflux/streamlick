@@ -1142,16 +1142,16 @@ class CompositorService {
       // The RGB anti-throttle pixel below is sufficient to keep track active
       const showingFullscreenOverlay = this.countdownValue !== null || this.mediaClipOverlay !== null;
 
-      // DIAGNOSTIC: Log state changes every 30 frames
-      if (this.frameCount % 30 === 0) {
-        console.log('[Compositor] Render state:', {
-          showingFullscreenOverlay,
-          countdownValue: this.countdownValue,
-          hasMediaClipOverlay: this.mediaClipOverlay !== null,
-          participantCount: this.participants.size,
-          videoElementCount: this.videoElements.size,
-        });
-      }
+      // DIAGNOSTIC LOGS DISABLED (too spammy)
+      // if (this.frameCount % 30 === 0) {
+      //   console.log('[Compositor] Render state:', {
+      //     showingFullscreenOverlay,
+      //     countdownValue: this.countdownValue,
+      //     hasMediaClipOverlay: this.mediaClipOverlay !== null,
+      //     participantCount: this.participants.size,
+      //     videoElementCount: this.videoElements.size,
+      //   });
+      // }
 
       if (!showingFullscreenOverlay) {
         // Normal mode: Draw background, participants, and overlays
@@ -1605,23 +1605,25 @@ class CompositorService {
     this.ctx.fillStyle = '#1a1a1a';
     this.ctx.fillRect(x, y, width, height);
 
-    // DIAGNOSTIC: Log video element state every 60 frames
-    if (this.frameCount % 60 === 0) {
-      console.log('[Compositor] Participant video state:', {
-        participantId,
-        videoEnabled: participant.videoEnabled,
-        readyState: video.readyState,
-        videoWidth: video.videoWidth,
-        videoHeight: video.videoHeight,
-        paused: video.paused,
-        ended: video.ended,
-        currentTime: video.currentTime,
-        srcObject: !!video.srcObject,
-        srcObjectActive: video.srcObject ? (video.srcObject as MediaStream).active : false,
-        videoTracks: video.srcObject ? (video.srcObject as MediaStream).getVideoTracks().length : 0,
-      });
+    // DIAGNOSTIC LOGS DISABLED (too spammy)
+    // if (this.frameCount % 60 === 0) {
+    //   console.log('[Compositor] Participant video state:', {
+    //     participantId,
+    //     videoEnabled: participant.videoEnabled,
+    //     readyState: video.readyState,
+    //     videoWidth: video.videoWidth,
+    //     videoHeight: video.videoHeight,
+    //     paused: video.paused,
+    //     ended: video.ended,
+    //     currentTime: video.currentTime,
+    //     srcObject: !!video.srcObject,
+    //     srcObjectActive: video.srcObject ? (video.srcObject as MediaStream).active : false,
+    //     videoTracks: video.srcObject ? (video.srcObject as MediaStream).getVideoTracks().length : 0,
+    //   });
+    // }
 
-      // CRITICAL FIX: If video is paused but should be playing, force play
+    // CRITICAL FIX: Check if video is paused (not in diagnostic block anymore)
+    if (this.frameCount % 60 === 0) {
       if (video.paused && video.srcObject) {
         console.warn('[Compositor] Video element is PAUSED! Forcing play...');
         video.play().catch(err => console.error('[Compositor] Failed to play paused video:', err));
