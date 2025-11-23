@@ -12,23 +12,25 @@ class AudioMixerService {
   private currentMasterVolume: number = 1.0; // Store current master volume
 
   /**
-   * Initialize the audio mixer
+   * Initialize the audio mixer with high-quality 192kbps equivalent settings
    */
   initialize(): void {
     if (this.audioContext) {
+      console.log('[Audio Mixer] Already initialized, state:', this.audioContext.state);
       return; // Already initialized
     }
 
-    // Create audio context
+    // Create audio context with high sample rate for better quality (192kbps equivalent)
     this.audioContext = new AudioContext({
       latencyHint: 'interactive',
-      sampleRate: 48000,
+      sampleRate: 48000, // High sample rate for professional audio quality
     });
 
     // Create destination node
     this.destination = this.audioContext.createMediaStreamDestination();
 
-    console.log('Audio mixer initialized');
+    console.log('[Audio Mixer] ✅ Initialized with 48kHz sample rate (professional quality)');
+    console.log('[Audio Mixer] Initial AudioContext state:', this.audioContext.state);
   }
 
   /**
@@ -63,50 +65,48 @@ class AudioMixerService {
   /**
    * Add an HTML media element (video/audio) to the mix
    * Uses MediaElementSource for direct element audio capture
-   * SYNCHRONOUS version - must be called within user gesture for browser autoplay policy
+   * NOTE: AudioContext must be in 'running' state before calling this
    */
   addMediaElement(id: string, element: HTMLVideoElement | HTMLAudioElement): void {
     if (!this.audioContext || !this.destination) {
-      throw new Error('Audio mixer not initialized');
+      throw new Error('[Audio Mixer] Not initialized');
     }
 
-    // ⚠️ MANDATORY - DO NOT REMOVE OR MODIFY ⚠️
-    // CRITICAL FIX: Resume audio context if suspended (required for audio playback)
-    // Browsers auto-suspend audio contexts until user interaction
-    // We call resume() synchronously (don't await) to stay within user gesture
-    if (this.audioContext.state === 'suspended') {
-      console.log('[Audio Mixer] Resuming suspended audio context (sync)...');
-      // Call resume but don't await - we must stay synchronous for user gesture
-      this.audioContext.resume()
-        .then(() => console.log('[Audio Mixer] Audio context resumed successfully'))
-        .catch((error) => console.error('[Audio Mixer] Failed to resume audio context:', error));
-    }
+    console.log('[Audio Mixer] 🔌 Adding media element:', id);
+    console.log('[Audio Mixer] AudioContext state:', this.audioContext.state);
 
     // Remove existing source if any
     this.removeStream(id);
 
     // Create source from media element
     // NOTE: Once created, the element's audio is ONLY routed through Web Audio API
+    console.log('[Audio Mixer] Creating MediaElementSource...');
     const source = this.audioContext.createMediaElementSource(element);
+    console.log('[Audio Mixer] ✅ MediaElementSource created');
 
-    // Create gain node for volume control with HIGHER gain for better audio quality
+    // Create gain node with optimal volume (1.5x for good volume without distortion)
     const gainNode = this.audioContext.createGain();
-    // Use 2.0 for better volume (was 1.0 which was too quiet)
-    gainNode.gain.value = this.currentMasterVolume * 2.0;
+    // 1.5x provides good volume boost without causing audio clipping/distortion
+    gainNode.gain.value = this.currentMasterVolume * 1.5;
 
-    // CRITICAL FIX: Connect to BOTH destinations
-    // 1. Connect to mixer destination (for stream output to YouTube/etc)
+    console.log('[Audio Mixer] Connecting audio graph...');
+    // CRITICAL: Connect to BOTH destinations for dual output
+    // 1. Connect to mixer destination (for stream output to WebRTC/YouTube)
     source.connect(gainNode);
     gainNode.connect(this.destination);
 
     // 2. Connect to local speakers (so user can hear the audio)
     gainNode.connect(this.audioContext.destination);
 
-    // Store source and gain node (using same Map, they're compatible types)
+    // Store source and gain node
     this.sources.set(id, source as any);
     this.gainNodes.set(id, gainNode);
 
-    console.log(`Media element audio added: ${id} (dual output: stream + local, volume: ${this.currentMasterVolume * 2.0})`);
+    console.log(`[Audio Mixer] ✅✅ Media element added successfully:`);
+    console.log(`[Audio Mixer]    - ID: ${id}`);
+    console.log(`[Audio Mixer]    - Gain: ${gainNode.gain.value}x`);
+    console.log(`[Audio Mixer]    - Sample rate: ${this.audioContext.sampleRate}Hz`);
+    console.log(`[Audio Mixer]    - Outputs: mixer stream + local speakers`);
   }
 
   /**

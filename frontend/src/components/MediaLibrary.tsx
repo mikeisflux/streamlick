@@ -139,56 +139,91 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
 
   const handlePreviewClick = async (clipId: string) => {
     const videoElement = videoRefs.current.get(clipId);
-    if (!videoElement) return;
+    if (!videoElement) {
+      console.error('[MediaLibrary] ❌ No video element found for clip:', clipId);
+      return;
+    }
 
     if (playingClips.has(clipId)) {
-      // Stop playing
+      console.log('[MediaLibrary] ⏹️  STOPPING VIDEO', clipId);
       videoElement.pause();
       videoElement.currentTime = 0;
-
-      // CRITICAL: Remove video from audio mixer when stopping
-      try {
-        audioMixerService.removeMediaElement(clipId);
-        console.log('[MediaLibrary] Video element removed from audio mixer');
-      } catch (error) {
-        console.error('[MediaLibrary] Failed to remove video from audio mixer:', error);
-      }
-
       setPlayingClips(prev => {
         const newSet = new Set(prev);
         newSet.delete(clipId);
         return newSet;
       });
     } else {
-      // CRITICAL: All audio setup must happen SYNCHRONOUSLY within user gesture
-      // for browser autoplay policy to allow audio playback
+      console.log('[MediaLibrary] ========================================');
+      console.log('[MediaLibrary] ▶️  STARTING VIDEO PLAYBACK:', clipId);
+      console.log('[MediaLibrary] ========================================');
+
+      // DIAGNOSTIC: Check video element state
+      console.log('[MediaLibrary] 📊 Initial video state:', {
+        paused: videoElement.paused,
+        muted: videoElement.muted,
+        volume: videoElement.volume,
+        readyState: videoElement.readyState,
+        networkState: videoElement.networkState,
+        src: videoElement.src?.substring(0, 50) + '...',
+      });
+
       try {
-        // 1. Initialize audio mixer (safe to call multiple times)
-        audioMixerService.initialize();
-        console.log('[MediaLibrary] Audio mixer initialized');
-
-        // 2. Add video to audio mixer SYNCHRONOUSLY (routes audio through Web Audio)
-        audioMixerService.addMediaElement(clipId, videoElement);
-        console.log('[MediaLibrary] Video element added to audio mixer');
-
-        // 3. Set volume and unmute SYNCHRONOUSLY
-        videoElement.muted = false;
+        // STEP 1: Set video properties
+        console.log('[MediaLibrary] 🔊 Step 1: Setting volume=1.0, muted=false');
         videoElement.volume = 1.0;
-        console.log(`[MediaLibrary] Video settings - muted: ${videoElement.muted}, volume: ${videoElement.volume}`);
+        videoElement.muted = false;
 
-        // 4. Start playing SYNCHRONOUSLY (within user gesture)
-        videoElement.play()
-          .then(() => {
-            console.log('[MediaLibrary] Video playing with audio!');
-            setPlayingClips(prev => new Set(prev).add(clipId));
-          })
-          .catch((error) => {
-            console.error('[MediaLibrary] Failed to play video:', error);
-            toast.error('Failed to play video');
-          });
-      } catch (error) {
-        console.error('[MediaLibrary] Failed to setup audio mixer:', error);
-        toast.error('Failed to setup audio');
+        // STEP 2: Initialize AudioContext and verify it's running
+        console.log('[MediaLibrary] 🎵 Step 2: Initializing Audio Mixer');
+        audioMixerService.initialize();
+
+        // Get audioContext to check state
+        const audioContext = (audioMixerService as any).audioContext;
+        console.log('[MediaLibrary] 📡 AudioContext state BEFORE resume:', audioContext?.state);
+
+        // STEP 3: Resume AudioContext and WAIT for it
+        if (audioContext && audioContext.state === 'suspended') {
+          console.log('[MediaLibrary] ⏳ Step 3: Resuming AudioContext...');
+          await audioContext.resume();
+          console.log('[MediaLibrary] ✅ AudioContext resumed! New state:', audioContext.state);
+        } else {
+          console.log('[MediaLibrary] ℹ️  AudioContext already running:', audioContext?.state);
+        }
+
+        // STEP 4: Create MediaElementSource
+        console.log('[MediaLibrary] 🔌 Step 4: Creating MediaElementSource');
+        audioMixerService.addMediaElement(clipId, videoElement);
+        console.log('[MediaLibrary] ✅ MediaElementSource created and connected');
+
+        // STEP 5: Verify video state again before playing
+        console.log('[MediaLibrary] 📊 Video state before play():', {
+          muted: videoElement.muted,
+          volume: videoElement.volume,
+          paused: videoElement.paused,
+        });
+
+        // STEP 6: Play the video
+        console.log('[MediaLibrary] ▶️  Step 6: Calling play()...');
+        await videoElement.play();
+
+        console.log('[MediaLibrary] ✅✅✅ SUCCESS: Video playing!');
+        console.log('[MediaLibrary] 📊 Final video state:', {
+          paused: videoElement.paused,
+          muted: videoElement.muted,
+          volume: videoElement.volume,
+          currentTime: videoElement.currentTime,
+        });
+
+        setPlayingClips(prev => new Set(prev).add(clipId));
+        toast.success('Video playing with audio!');
+
+      } catch (error: any) {
+        console.error('[MediaLibrary] ❌❌❌ PLAYBACK FAILED');
+        console.error('[MediaLibrary] Error details:', error);
+        console.error('[MediaLibrary] Error name:', error?.name);
+        console.error('[MediaLibrary] Error message:', error?.message);
+        toast.error('Failed to play video: ' + error?.message);
       }
     }
   };
