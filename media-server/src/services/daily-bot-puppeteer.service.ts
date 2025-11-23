@@ -72,7 +72,7 @@ class DailyBotPuppeteerService {
       logger.info('[Puppeteer Bot] Page content set');
 
       // Wait for Daily SDK to load
-      await this.page.waitForFunction(() => typeof window.DailyIframe !== 'undefined', { timeout: 10000 });
+      await this.page.waitForFunction(() => typeof (window as any).DailyIframe !== 'undefined', { timeout: 10000 });
 
       logger.info('[Puppeteer Bot] Daily SDK loaded');
 
@@ -125,13 +125,14 @@ class DailyBotPuppeteerService {
     await this.page!.evaluate(
       async (params) => {
         const { transportParams, videoConsumerParams, audioConsumerParams } = params;
+        const win = window as any;
 
         // Create RTCPeerConnection
         const pc = new RTCPeerConnection({
           iceServers: [],
         });
 
-        window.mediasoupPeerConnection = pc;
+        win.mediasoupPeerConnection = pc;
 
         // Add transceivers
         pc.addTransceiver('video', { direction: 'recvonly' });
@@ -139,21 +140,21 @@ class DailyBotPuppeteerService {
 
         // Set remote description from mediasoup
         // This is simplified - full implementation would construct proper SDP
-        window.botLog.push({ message: 'Mediasoup connection setup', transportParams });
+        win.botLog.push({ message: 'Mediasoup connection setup', transportParams });
 
         // Store tracks when they arrive
-        window.mediaTracks = { video: null, audio: null };
+        win.mediaTracks = { video: null, audio: null };
 
-        pc.ontrack = (event) => {
-          window.botLog.push({ message: 'Track received', kind: event.track.kind });
+        pc.ontrack = (event: any) => {
+          win.botLog.push({ message: 'Track received', kind: event.track.kind });
           if (event.track.kind === 'video') {
-            window.mediaTracks.video = event.track;
+            win.mediaTracks.video = event.track;
           } else {
-            window.mediaTracks.audio = event.track;
+            win.mediaTracks.audio = event.track;
           }
 
           // Display in video element
-          const videoEl = document.getElementById('localVideo');
+          const videoEl = document.getElementById('localVideo') as any;
           if (videoEl && event.streams[0]) {
             videoEl.srcObject = event.streams[0];
           }
@@ -171,28 +172,29 @@ class DailyBotPuppeteerService {
     await this.page!.evaluate(
       async (params) => {
         const { roomUrl, token } = params;
+        const win = window as any;
 
         // Create Daily call object
-        window.dailyCall = window.DailyIframe.createCallObject();
+        win.dailyCall = win.DailyIframe.createCallObject();
 
-        window.dailyCall.on('joined-meeting', () => {
-          window.botLog.push({ message: 'Joined Daily meeting' });
+        win.dailyCall.on('joined-meeting', () => {
+          win.botLog.push({ message: 'Joined Daily meeting' });
         });
 
-        window.dailyCall.on('error', (error) => {
-          window.botLog.push({ message: 'Daily error', error });
+        win.dailyCall.on('error', (error: any) => {
+          win.botLog.push({ message: 'Daily error', error });
         });
 
         // Join the room
-        await window.dailyCall.join({ url: roomUrl, token });
+        await win.dailyCall.join({ url: roomUrl, token });
 
         // Set custom tracks from mediasoup
-        if (window.mediaTracks.video && window.mediaTracks.audio) {
-          await window.dailyCall.setInputDevicesAsync({
-            videoSource: window.mediaTracks.video,
-            audioSource: window.mediaTracks.audio,
+        if (win.mediaTracks.video && win.mediaTracks.audio) {
+          await win.dailyCall.setInputDevicesAsync({
+            videoSource: win.mediaTracks.video,
+            audioSource: win.mediaTracks.audio,
           });
-          window.botLog.push({ message: 'Set custom tracks from mediasoup' });
+          win.botLog.push({ message: 'Set custom tracks from mediasoup' });
         }
       },
       { roomUrl: config.roomUrl, token: config.token }
@@ -206,14 +208,15 @@ class DailyBotPuppeteerService {
 
     await this.page!.evaluate(
       async (destinations) => {
+        const win = window as any;
         const rtmpUrl = `${destinations[0].rtmpUrl}/${destinations[0].streamKey}`;
 
-        await window.dailyCall.startLiveStreaming({
+        await win.dailyCall.startLiveStreaming({
           rtmpUrl,
           layout: { preset: 'single-participant' },
         });
 
-        window.botLog.push({ message: 'RTMP streaming started', rtmpUrl });
+        win.botLog.push({ message: 'RTMP streaming started', rtmpUrl });
       },
       config.rtmpDestinations
     );
@@ -226,13 +229,14 @@ class DailyBotPuppeteerService {
 
     if (this.page) {
       await this.page.evaluate(() => {
-        if (window.dailyCall) {
-          window.dailyCall.stopLiveStreaming();
-          window.dailyCall.leave();
-          window.dailyCall.destroy();
+        const win = window as any;
+        if (win.dailyCall) {
+          win.dailyCall.stopLiveStreaming();
+          win.dailyCall.leave();
+          win.dailyCall.destroy();
         }
-        if (window.mediasoupPeerConnection) {
-          window.mediasoupPeerConnection.close();
+        if (win.mediasoupPeerConnection) {
+          win.mediasoupPeerConnection.close();
         }
       }).catch((err) => logger.warn('[Puppeteer Bot] Error stopping in page:', err));
     }
@@ -255,7 +259,7 @@ class DailyBotPuppeteerService {
   async getLogs(): Promise<any[]> {
     if (!this.page) return [];
 
-    return await this.page.evaluate(() => window.botLog || []);
+    return await this.page.evaluate(() => (window as any).botLog || []);
   }
 }
 
