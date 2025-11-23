@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
+import { useAudioLevel } from '../../../hooks/studio/useAudioLevel';
 
 interface RemoteParticipant {
   id: string;
@@ -34,6 +35,9 @@ export function PreviewArea({
 }: PreviewAreaProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
+
+  // Detect if local user is speaking (for voice animations)
+  const isLocalSpeaking = useAudioLevel(localStream, audioEnabled);
 
   // Load selected avatar from localStorage
   useEffect(() => {
@@ -100,6 +104,29 @@ export function PreviewArea({
                     <line x1="5" y1="5" x2="19" y2="19" stroke="currentColor" strokeWidth={2} />
                   </svg>
                 )}
+              </div>
+            )}
+
+            {/* Voice animation rings - overlays entire preview when camera off and speaking */}
+            {!videoEnabled && isLocalSpeaking && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
+                {/* Pulsating ring for speaking animation */}
+                <div
+                  className="absolute rounded-full border-2 border-blue-500 animate-ping"
+                  style={{
+                    width: 'min(70%, 60px)',
+                    aspectRatio: '1/1',
+                    animationDuration: '1s',
+                  }}
+                />
+                <div
+                  className="absolute rounded-full border border-blue-400"
+                  style={{
+                    width: 'min(65%, 55px)',
+                    aspectRatio: '1/1',
+                    animation: 'pulse 2s ease-in-out infinite',
+                  }}
+                />
               </div>
             )}
 

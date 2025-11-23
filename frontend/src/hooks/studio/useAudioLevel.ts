@@ -54,7 +54,14 @@ export function useAudioLevel(stream: MediaStream | null, audioEnabled: boolean)
         // Speaking threshold - adjust sensitivity here
         // Values typically range 0-255, threshold of 15-30 works well
         const speakingThreshold = 20;
-        setIsSpeaking(average > speakingThreshold);
+        const speaking = average > speakingThreshold;
+
+        // Debug logging
+        if (speaking) {
+          console.log('[Audio Level] Speaking detected:', { average, threshold: speakingThreshold });
+        }
+
+        setIsSpeaking(speaking);
 
         animationFrameRef.current = requestAnimationFrame(checkAudioLevel);
       };
