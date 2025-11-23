@@ -138,14 +138,16 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
   };
 
   const handlePreviewClick = async (clipId: string) => {
+    console.warn('🚨🚨🚨 VIDEO CLICKED!!! 🚨🚨🚨', clipId);
+
     const videoElement = videoRefs.current.get(clipId);
     if (!videoElement) {
-      console.error('[MediaLibrary] ❌ No video element found for clip:', clipId);
+      console.error('❌ NO VIDEO ELEMENT FOUND');
       return;
     }
 
     if (playingClips.has(clipId)) {
-      console.log('[MediaLibrary] ⏹️  STOPPING VIDEO', clipId);
+      console.warn('⏹️ STOPPING VIDEO', clipId);
       videoElement.pause();
       videoElement.currentTime = 0;
       setPlayingClips(prev => {
@@ -154,12 +156,12 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
         return newSet;
       });
     } else {
-      console.log('[MediaLibrary] ========================================');
-      console.log('[MediaLibrary] ▶️  STARTING VIDEO PLAYBACK:', clipId);
-      console.log('[MediaLibrary] ========================================');
+      console.warn('========================================');
+      console.warn('▶️ STARTING VIDEO PLAYBACK:', clipId);
+      console.warn('========================================');
 
       // DIAGNOSTIC: Check video element state
-      console.log('[MediaLibrary] 📊 Initial video state:', {
+      console.warn('📊 Initial video state:', {
         paused: videoElement.paused,
         muted: videoElement.muted,
         volume: videoElement.volume,
@@ -170,45 +172,45 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
 
       try {
         // STEP 1: Set video properties
-        console.log('[MediaLibrary] 🔊 Step 1: Setting volume=1.0, muted=false');
+        console.warn('🔊 Step 1: Setting volume=1.0, muted=false');
         videoElement.volume = 1.0;
         videoElement.muted = false;
 
         // STEP 2: Initialize AudioContext and verify it's running
-        console.log('[MediaLibrary] 🎵 Step 2: Initializing Audio Mixer');
+        console.warn('🎵 Step 2: Initializing Audio Mixer');
         audioMixerService.initialize();
 
         // Get audioContext to check state
         const audioContext = (audioMixerService as any).audioContext;
-        console.log('[MediaLibrary] 📡 AudioContext state BEFORE resume:', audioContext?.state);
+        console.warn('📡 AudioContext state BEFORE resume:', audioContext?.state);
 
         // STEP 3: Resume AudioContext and WAIT for it
         if (audioContext && audioContext.state === 'suspended') {
-          console.log('[MediaLibrary] ⏳ Step 3: Resuming AudioContext...');
+          console.warn('⏳ Step 3: Resuming AudioContext...');
           await audioContext.resume();
-          console.log('[MediaLibrary] ✅ AudioContext resumed! New state:', audioContext.state);
+          console.warn('✅ AudioContext resumed! New state:', audioContext.state);
         } else {
-          console.log('[MediaLibrary] ℹ️  AudioContext already running:', audioContext?.state);
+          console.warn('ℹ️ AudioContext already running:', audioContext?.state);
         }
 
         // STEP 4: Create MediaElementSource
-        console.log('[MediaLibrary] 🔌 Step 4: Creating MediaElementSource');
+        console.warn('🔌 Step 4: Creating MediaElementSource');
         audioMixerService.addMediaElement(clipId, videoElement);
-        console.log('[MediaLibrary] ✅ MediaElementSource created and connected');
+        console.warn('✅ MediaElementSource created and connected');
 
         // STEP 5: Verify video state again before playing
-        console.log('[MediaLibrary] 📊 Video state before play():', {
+        console.warn('📊 Video state before play():', {
           muted: videoElement.muted,
           volume: videoElement.volume,
           paused: videoElement.paused,
         });
 
         // STEP 6: Play the video
-        console.log('[MediaLibrary] ▶️  Step 6: Calling play()...');
+        console.warn('▶️ Step 6: Calling play()...');
         await videoElement.play();
 
-        console.log('[MediaLibrary] ✅✅✅ SUCCESS: Video playing!');
-        console.log('[MediaLibrary] 📊 Final video state:', {
+        console.warn('✅✅✅ SUCCESS: Video playing!');
+        console.warn('📊 Final video state:', {
           paused: videoElement.paused,
           muted: videoElement.muted,
           volume: videoElement.volume,
@@ -219,10 +221,10 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
         toast.success('Video playing with audio!');
 
       } catch (error: any) {
-        console.error('[MediaLibrary] ❌❌❌ PLAYBACK FAILED');
-        console.error('[MediaLibrary] Error details:', error);
-        console.error('[MediaLibrary] Error name:', error?.name);
-        console.error('[MediaLibrary] Error message:', error?.message);
+        console.error('❌❌❌ PLAYBACK FAILED');
+        console.error('Error details:', error);
+        console.error('Error name:', error?.name);
+        console.error('Error message:', error?.message);
         toast.error('Failed to play video: ' + error?.message);
       }
     }
