@@ -1,3 +1,19 @@
+/**
+ * ⚠️ MANDATORY - KEEP IN SYNC WITH COMPOSITOR SERVICE ⚠️
+ *
+ * StudioCanvas - Browser preview canvas using HTML/CSS layouts
+ *
+ * MUST stay in sync with compositor.service.ts (Canvas API output stream)
+ * When making changes to:
+ * - Layout logic (grid, spotlight, sidebar, pip)
+ * - Participant positioning
+ * - Audio animations (pulsating rings)
+ * - Overlay rendering (backgrounds, logos, lower thirds)
+ *
+ * ALWAYS update BOTH StudioCanvas.tsx AND compositor.service.ts to maintain
+ * visual consistency between preview and output stream!
+ */
+
 import { useRef, useEffect, useState } from 'react';
 import { CaptionOverlay } from './CanvasOverlay';
 import { ParticipantBox } from './ParticipantBox';

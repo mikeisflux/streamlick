@@ -1,5 +1,7 @@
 /**
- * Video Compositor Service
+ * ⚠️ MANDATORY - KEEP IN SYNC WITH STUDIOCANVAS ⚠️
+ *
+ * Video Compositor Service - Canvas API output stream compositor
  *
  * Combines multiple participant video streams into a single composite video
  * using Canvas API. Supports:
@@ -7,6 +9,17 @@
  * - Overlay graphics (logos, banners, lower thirds)
  * - Background images
  * - Recording and RTMP streaming
+ * - Audio animations (pulsating rings for camera-off participants)
+ *
+ * MUST stay in sync with StudioCanvas.tsx (Browser preview HTML/CSS)
+ * When making changes to:
+ * - Layout logic (grid, spotlight, sidebar, pip)
+ * - Participant positioning
+ * - Audio animations (pulsating rings)
+ * - Overlay rendering (backgrounds, logos, lower thirds)
+ *
+ * ALWAYS update BOTH compositor.service.ts AND StudioCanvas.tsx to maintain
+ * visual consistency between output stream and preview!
  */
 
 import { audioMixerService } from './audio-mixer.service';

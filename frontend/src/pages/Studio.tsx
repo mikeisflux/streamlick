@@ -297,6 +297,81 @@ export function Studio() {
     compositorService.setInputVolume(canvasSettings.inputVolume);
   }, [canvasSettings.inputVolume]);
 
+  // ⚠️ MANDATORY - KEEP IN SYNC ⚠️
+  // CRITICAL: Initialize compositor in preview mode when not live
+  // This enables audio animations, layout previews, and all compositor features
+  // even when not broadcasting
+  //
+  // MUST stay in sync with:
+  // 1. StudioCanvas.tsx - Browser preview canvas (HTML/CSS layout)
+  // 2. compositor.service.ts - Output stream canvas (Canvas API layout)
+  //
+  // When making changes to layout logic, participant rendering, or audio animations,
+  // ALWAYS update BOTH canvases to maintain visual consistency!
+  useEffect(() => {
+    // Skip if already live (handleGoLive will manage compositor)
+    if (isLive || !localStream) {
+      return;
+    }
+
+    console.log('[Studio] Initializing compositor in preview mode');
+
+    // Build participant list - local user + on-stage remote participants
+    const participantStreams = [
+      {
+        id: 'local',
+        name: 'You',
+        stream: localStream,
+        isLocal: true,
+        audioEnabled,
+        videoEnabled,
+      },
+      ...Array.from(remoteParticipants.values())
+        .filter((p) => p.role === 'host' || p.role === 'guest') // Only live participants
+        .filter((p) => p.stream) // Only participants with streams
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          stream: p.stream!,
+          isLocal: false,
+          audioEnabled: p.audioEnabled,
+          videoEnabled: p.videoEnabled,
+        })),
+    ];
+
+    // Initialize compositor with current participants
+    compositorService.initialize(participantStreams)
+      .then(() => {
+        console.log('[Studio] Compositor initialized in preview mode with', participantStreams.length, 'participants');
+
+        // Apply current layout
+        const layoutMap: { [key: number]: 'grid' | 'spotlight' | 'sidebar' | 'pip' } = {
+          1: 'grid',      // Solo
+          2: 'grid',      // Cropped
+          3: 'grid',      // Group
+          4: 'spotlight', // Spotlight
+          5: 'sidebar',   // News
+          6: 'sidebar',   // Screen
+          7: 'pip',       // Picture-in-Picture
+          8: 'sidebar',   // Cinema
+        };
+        const layoutType = layoutMap[selectedLayout] || 'grid';
+        compositorService.setLayout({ type: layoutType });
+        console.log('[Studio] Applied layout in preview mode:', layoutType);
+      })
+      .catch((error) => {
+        console.error('[Studio] Failed to initialize compositor in preview mode:', error);
+      });
+
+    // Cleanup when component unmounts or when going live
+    return () => {
+      if (!isLive) {
+        console.log('[Studio] Stopping compositor preview mode');
+        compositorService.stop();
+      }
+    };
+  }, [localStream, remoteParticipants, audioEnabled, videoEnabled, isLive, selectedLayout]);
+
   // Broadcast title update handler
   const handleTitleChange = async (newTitle: string) => {
     if (!broadcastId) return;
