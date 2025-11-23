@@ -483,8 +483,8 @@ class CompositorService {
 
     if (wasActive) {
       logger.info('[Media Clip] Overlay cleared - participants should now be visible');
-      // Force a render to ensure participants appear immediately
-      requestAnimationFrame(() => this.render());
+      // The animate() loop is already running via requestAnimationFrame
+      // The next frame will automatically render participants now that overlay is cleared
     }
   }
 
