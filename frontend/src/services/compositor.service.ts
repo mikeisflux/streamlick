@@ -266,11 +266,19 @@ class CompositorService {
       initialReadyState: video.readyState,
     });
 
-    // Only wait for metadata if video is enabled and has video tracks
+    // ⚠️ CRITICAL - DO NOT CHANGE: MediaStream readyState Polling Strategy ⚠️
+    //
+    // MediaStream sources (camera/microphone) do NOT fire 'loadeddata' events reliably.
+    // Event-based waiting causes video.play() to never be called, breaking audio playback.
+    //
+    // MANDATORY: Use readyState polling (every 100ms) to detect when video data is ready.
+    // This is the ONLY reliable way to ensure video.play() is called for MediaStream sources.
+    //
+    // Changing this back to event-based loading WILL BREAK AUDIO PLAYBACK.
+    //
     if (participant.videoEnabled && hasVideoTracks) {
       try {
-        // For MediaStream sources, events like 'loadeddata' often don't fire reliably.
-        // Instead, poll the readyState until it reaches >= 2 (HAVE_CURRENT_DATA)
+        // Poll the readyState until it reaches >= 2 (HAVE_CURRENT_DATA)
         const waitForVideoReady = new Promise<void>((resolve) => {
           // If already ready, play immediately
           if (video.readyState >= 2) {

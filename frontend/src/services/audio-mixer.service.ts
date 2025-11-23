@@ -9,6 +9,7 @@ class AudioMixerService {
   private destination: MediaStreamAudioDestinationNode | null = null;
   private sources: Map<string, MediaStreamAudioSourceNode> = new Map();
   private gainNodes: Map<string, GainNode> = new Map();
+  private connectedElements: Map<HTMLMediaElement, string> = new Map(); // Track connected media elements
   private currentMasterVolume: number = 1.0; // Store current master volume
 
   /**
@@ -75,7 +76,28 @@ class AudioMixerService {
     console.log('[Audio Mixer] 🔌 Adding media element:', id);
     console.log('[Audio Mixer] AudioContext state:', this.audioContext.state);
 
-    // Remove existing source if any
+    // Check if this element is already connected to a source
+    const existingId = this.connectedElements.get(element);
+    if (existingId) {
+      console.log(`[Audio Mixer] ⚠️ Element already connected as '${existingId}', skipping duplicate connection`);
+      // If the ID is different, we need to update our tracking
+      if (existingId !== id) {
+        console.log(`[Audio Mixer] Updating ID from '${existingId}' to '${id}'`);
+        const existingSource = this.sources.get(existingId);
+        const existingGain = this.gainNodes.get(existingId);
+        if (existingSource && existingGain) {
+          // Move the source and gain to the new ID
+          this.sources.delete(existingId);
+          this.gainNodes.delete(existingId);
+          this.sources.set(id, existingSource);
+          this.gainNodes.set(id, existingGain);
+          this.connectedElements.set(element, id);
+        }
+      }
+      return;
+    }
+
+    // Remove existing source if any (for the ID, not the element)
     this.removeStream(id);
 
     // Create source from media element
@@ -83,6 +105,9 @@ class AudioMixerService {
     console.log('[Audio Mixer] Creating MediaElementSource...');
     const source = this.audioContext.createMediaElementSource(element);
     console.log('[Audio Mixer] ✅ MediaElementSource created');
+
+    // Track this element
+    this.connectedElements.set(element, id);
 
     // Create gain node with optimal volume (1.5x for good volume without distortion)
     const gainNode = this.audioContext.createGain();
@@ -124,6 +149,14 @@ class AudioMixerService {
     if (gainNode) {
       gainNode.disconnect();
       this.gainNodes.delete(id);
+    }
+
+    // Clean up element tracking
+    for (const [element, elementId] of this.connectedElements.entries()) {
+      if (elementId === id) {
+        this.connectedElements.delete(element);
+        break;
+      }
     }
 
     if (source || gainNode) {
