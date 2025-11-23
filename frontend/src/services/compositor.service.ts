@@ -270,6 +270,9 @@ class CompositorService {
     if (participant.videoEnabled && hasVideoTracks) {
       try {
         // Wait for video to have CURRENT_DATA (readyState >= 2) with 3 second timeout
+        let onLoadedData: (() => void) | null = null;
+        let onMetadata: (() => void) | null = null;
+
         await Promise.race([
           new Promise<void>((resolve) => {
             // If already at readyState >= 2, resolve immediately
@@ -281,14 +284,14 @@ class CompositorService {
             }
 
             // Wait for loadeddata event (readyState = 2 or higher)
-            const onLoadedData = () => {
+            onLoadedData = () => {
               logger.info(`Video data loaded for participant ${participant.id}, readyState: ${video.readyState}`);
               video.play().catch(err => logger.error('Failed to play video:', err));
               resolve();
             };
 
             // Also handle metadata as fallback
-            const onMetadata = () => {
+            onMetadata = () => {
               logger.info(`Video metadata loaded for participant ${participant.id}, readyState: ${video.readyState}`);
               // Don't resolve yet - wait for loadeddata
             };
@@ -301,6 +304,9 @@ class CompositorService {
           }),
           new Promise<void>((resolve) => setTimeout(() => {
             logger.warn(`Video data load timeout for participant ${participant.id} - readyState: ${video.readyState}`);
+            // Clean up event listeners on timeout to prevent duplicate play() calls
+            if (onLoadedData) video.removeEventListener('loadeddata', onLoadedData);
+            if (onMetadata) video.removeEventListener('loadedmetadata', onMetadata);
             // Try to play anyway - drawing will show placeholder if readyState < 2
             video.play().catch(err => logger.error('Failed to play video after timeout:', err));
             resolve();
