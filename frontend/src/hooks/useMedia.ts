@@ -1,4 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { audioProcessorService } from '../services/audio-processor.service';
+import { logger } from '../utils/logger';
 
 export function useMedia() {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -9,6 +11,7 @@ export function useMedia() {
   // Use refs to avoid stale closures in callbacks
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
+  const rawStreamRef = useRef<MediaStream | null>(null); // Original unprocessed stream
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -38,9 +41,39 @@ export function useMedia() {
           channelCount: { ideal: 2 },
         },
       });
-      localStreamRef.current = stream;
-      setLocalStream(stream);
-      return stream;
+
+      // Store raw stream
+      rawStreamRef.current = stream;
+
+      // Process audio through noise gate (always active, even when not live)
+      logger.info('[useMedia] Processing audio through noise gate');
+      const audioTrack = stream.getAudioTracks()[0];
+      const videoTrack = stream.getVideoTracks()[0];
+
+      if (audioTrack) {
+        // Create stream with just audio for processing
+        const audioOnlyStream = new MediaStream([audioTrack]);
+
+        // Process through audio processor (noise gate, etc.)
+        const processedAudioStream = await audioProcessorService.initialize(audioOnlyStream);
+        const processedAudioTrack = processedAudioStream.getAudioTracks()[0];
+
+        // Create combined stream with processed audio + original video
+        const processedStream = new MediaStream([
+          processedAudioTrack,
+          ...(videoTrack ? [videoTrack] : []),
+        ]);
+
+        localStreamRef.current = processedStream;
+        setLocalStream(processedStream);
+        logger.info('[useMedia] Audio processing active - noise gate enabled');
+        return processedStream;
+      } else {
+        // No audio track - just use original stream
+        localStreamRef.current = stream;
+        setLocalStream(stream);
+        return stream;
+      }
     } catch (error) {
       console.error('Error accessing camera:', error);
       throw error;
@@ -48,11 +81,22 @@ export function useMedia() {
   }, []);
 
   const stopCamera = useCallback(() => {
+    // Stop audio processor
+    audioProcessorService.stop();
+
+    // Stop all tracks
+    if (rawStreamRef.current) {
+      rawStreamRef.current.getTracks().forEach((track) => track.stop());
+      rawStreamRef.current = null;
+    }
+
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
     }
+
     setLocalStream(null);
+    logger.info('[useMedia] Camera stopped, audio processing stopped');
   }, []); // No dependencies - uses ref
 
   const startScreenShare = useCallback(async () => {

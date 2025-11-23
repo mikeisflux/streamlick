@@ -675,6 +675,51 @@ function AudioSettings({ props }: { props: CanvasSettingsModalProps }) {
             onChange={props.onAutoAdjustMicrophoneChange}
           />
         </div>
+
+        {/* Noise Gate Settings */}
+        <div className="bg-gray-700/50 rounded-lg p-4">
+          <h4 className="text-sm font-medium text-white mb-3">Active Noise Gate</h4>
+          <p className="text-xs text-gray-400 mb-4">
+            Automatically cuts background noise below threshold (always active, even when not live)
+          </p>
+
+          <div className="space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-300">
+                  Noise Gate Threshold
+                </label>
+                <span className="text-sm text-gray-400">-50 dB</span>
+              </div>
+              <input
+                type="range"
+                min="-80"
+                max="-20"
+                defaultValue="-50"
+                className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
+                onChange={(e) => {
+                  const dB = parseInt(e.target.value);
+                  // Update threshold in audio processor
+                  import('../../../services/audio-processor.service').then(({ audioProcessorService }) => {
+                    audioProcessorService.setNoiseGateThreshold(dB);
+                  });
+                  // Update display
+                  const span = e.target.parentElement?.querySelector('span');
+                  if (span) span.textContent = `${dB} dB`;
+                }}
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>More sensitive (-80)</span>
+                <span>Less sensitive (-20)</span>
+              </div>
+            </div>
+
+            <div className="text-xs text-gray-400">
+              <p>💡 Lower values = more aggressive noise removal</p>
+              <p>💡 Higher values = preserves more quiet speech</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
