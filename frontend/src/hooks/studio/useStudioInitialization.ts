@@ -187,8 +187,7 @@ export function useStudioInitialization({
           id: 'background-restore',
           type: 'background',
           url: streamBackground,
-          position: { x: 0, y: 0 },
-          size: { width: 1920, height: 1080 },
+          position: { x: 0, y: 0, width: 1920, height: 1080 },
         });
       }
 
@@ -201,22 +200,20 @@ export function useStudioInitialization({
           id: streamLogoName || 'logo-restore',
           type: 'logo',
           url: streamLogo,
-          position: { x: 20, y: 20 },
-          size: { width: 100, height: 100 },
+          position: { x: 20, y: 20, width: 100, height: 100 },
         });
       }
 
-      // Restore overlay
+      // Restore overlay (saved as banner type)
       const streamOverlay = localStorage.getItem('streamOverlay');
       const streamOverlayName = localStorage.getItem('streamOverlayName');
       if (streamOverlay) {
         console.log('[Studio Init] Restoring overlay:', streamOverlayName || streamOverlay);
         await compositorService.addOverlay({
           id: streamOverlayName || 'overlay-restore',
-          type: 'image',
+          type: 'banner',
           url: streamOverlay,
-          position: { x: 0, y: 0 },
-          size: { width: 1920, height: 1080 },
+          position: { x: 0, y: 0, width: 1920, height: 1080 },
         });
       }
 
