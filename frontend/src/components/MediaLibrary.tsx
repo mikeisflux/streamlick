@@ -151,17 +151,25 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
         return newSet;
       });
     } else {
-      // CRITICAL: Force unmute and set volume IMMEDIATELY before playing
-      // Must happen synchronously within click handler to satisfy browser autoplay policies
-      videoElement.muted = false;
+      // CRITICAL: Automatic mute/unmute cycle to satisfy browser autoplay policy
+      // This simulates what the user does manually (mute button → unmute button)
+      // Start muted, then unmute after playing starts
+      videoElement.muted = true;
       videoElement.volume = 1.0;
-      console.log(`[MediaLibrary] Video settings - muted: ${videoElement.muted}, volume: ${videoElement.volume}`);
+      console.log(`[MediaLibrary] Starting video muted (autoplay workaround)`);
 
-      // Start playing FIRST (within user gesture), THEN resume audio context
+      // Start playing FIRST (within user gesture), THEN unmute
       // This ensures the play() call happens synchronously within the click event
       videoElement.play()
         .then(() => {
-          console.log('[MediaLibrary] Video playing with audio!');
+          console.log('[MediaLibrary] Video playing, now unmuting...');
+
+          // CRITICAL: Automatic unmute after video starts (simulates manual mute/unmute)
+          setTimeout(() => {
+            videoElement.muted = false;
+            console.log('[MediaLibrary] Video unmuted - audio should now play!');
+          }, 100);
+
           setPlayingClips(prev => new Set(prev).add(clipId));
 
           // Resume AudioContext AFTER play starts (non-blocking)
