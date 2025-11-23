@@ -32,46 +32,46 @@ export const useStudioStore = create<StudioState>((set, get) => ({
 
   setBroadcast: (broadcast) => set({ broadcast }),
 
-  addParticipant: (participant) =>
-    set((state) => {
+  addParticipant: (participant: Participant) =>
+    set((state: StudioState) => {
       const participants = new Map(state.participants);
       participants.set(participant.id, participant);
       return { participants };
     }),
 
-  removeParticipant: (participantId) =>
-    set((state) => {
+  removeParticipant: (participantId: string) =>
+    set((state: StudioState) => {
       const participants = new Map(state.participants);
       participants.delete(participantId);
       return { participants };
     }),
 
-  updateMediaState: (participantId, mediaState) =>
-    set((state) => {
+  updateMediaState: (participantId: string, mediaState: MediaState) =>
+    set((state: StudioState) => {
       const mediaStates = new Map(state.mediaStates);
       mediaStates.set(participantId, mediaState);
       return { mediaStates };
     }),
 
-  setLocalStream: (stream) =>
-    set((state) => {
+  setLocalStream: (stream: MediaStream | null) =>
+    set((state: StudioState) => {
       // Stop all tracks from previous stream to prevent memory leak
       if (state.localStream) {
-        state.localStream.getTracks().forEach((track) => track.stop());
+        state.localStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
       }
       return { localStream: stream };
     }),
 
-  setScreenStream: (stream) =>
-    set((state) => {
+  setScreenStream: (stream: MediaStream | null) =>
+    set((state: StudioState) => {
       // Stop all tracks from previous stream to prevent memory leak
       if (state.screenStream) {
-        state.screenStream.getTracks().forEach((track) => track.stop());
+        state.screenStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
       }
       return { screenStream: stream };
     }),
-  setIsLive: (isLive) => set({ isLive }),
-  setIsRecording: (isRecording) => set({ isRecording }),
+  setIsLive: (isLive: boolean) => set({ isLive }),
+  setIsRecording: (isRecording: boolean) => set({ isRecording }),
 
   // MAJOR FIX: Stop media tracks before resetting to prevent camera/mic LED staying on
   reset: () => {
