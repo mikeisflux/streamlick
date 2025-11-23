@@ -302,29 +302,6 @@ export function ParticipantBox({
                   alt={name}
                   className="w-full h-full object-cover"
                 />
-
-                {/* Voice animation rings when speaking - only shows when actively speaking */}
-                {isSpeaking && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    {/* Pulsating ring for speaking animation */}
-                    <div
-                      className="absolute rounded-full border-4 border-blue-500 animate-ping"
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        animationDuration: '1s',
-                      }}
-                    />
-                    <div
-                      className="absolute rounded-full border-2 border-blue-400"
-                      style={{
-                        width: '95%',
-                        height: '95%',
-                        animation: 'pulse 2s ease-in-out infinite',
-                      }}
-                    />
-                  </div>
-                )}
               </div>
             </div>
           ) : (
@@ -346,6 +323,29 @@ export function ParticipantBox({
               <p className={`text-gray-500 ${textSize}`}>Camera Off</p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Voice animation rings - overlays entire tile when camera off and speaking */}
+      {!videoEnabled && isSpeaking && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
+          {/* Pulsating ring for speaking animation */}
+          <div
+            className="absolute rounded-full border-4 border-blue-500 animate-ping"
+            style={{
+              width: 'min(80%, 400px)',
+              aspectRatio: '1/1',
+              animationDuration: '1s',
+            }}
+          />
+          <div
+            className="absolute rounded-full border-2 border-blue-400"
+            style={{
+              width: 'min(76%, 380px)',
+              aspectRatio: '1/1',
+              animation: 'pulse 2s ease-in-out infinite',
+            }}
+          />
         </div>
       )}
 
