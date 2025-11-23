@@ -63,11 +63,19 @@ class DailyBotService {
   async joinRoom(config: DailyBotConfig): Promise<void> {
     try {
       logger.info('[Daily Bot] Creating call object for room:', config.roomUrl);
+      logger.info('[Daily Bot] Environment check:', {
+        hasWindow: typeof window !== 'undefined',
+        hasDocument: typeof document !== 'undefined',
+        hasNavigator: typeof navigator !== 'undefined',
+        hasRTCPeerConnection: typeof RTCPeerConnection !== 'undefined',
+        hasMediaStream: typeof MediaStream !== 'undefined',
+      });
 
-      // Create Daily call object (works in Node.js)
+      // Create Daily call object with strictMode disabled
       this.callObject = DailyIframe.createCallObject({
         audioSource: false, // We'll set custom audio source
         videoSource: false, // We'll set custom video source
+        strictMode: false, // Allow non-browser environments
       });
 
       this.broadcastId = config.broadcastId;
