@@ -145,6 +145,15 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
       // Stop playing
       videoElement.pause();
       videoElement.currentTime = 0;
+
+      // CRITICAL: Remove video from audio mixer when stopping
+      try {
+        audioMixerService.removeMediaElement(clipId);
+        console.log('[MediaLibrary] Video element removed from audio mixer');
+      } catch (error) {
+        console.error('[MediaLibrary] Failed to remove video from audio mixer:', error);
+      }
+
       setPlayingClips(prev => {
         const newSet = new Set(prev);
         newSet.delete(clipId);
@@ -152,11 +161,19 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
       });
     } else {
       // CRITICAL: Resume AudioContext FIRST (synchronously within user gesture)
-      // This is the key - clicking "Mute Speaker" works because it's a user gesture that allows AudioContext.resume()
       const audioContext = (audioMixerService as any).audioContext;
       if (audioContext && audioContext.state === 'suspended') {
         console.log('[MediaLibrary] Resuming AudioContext BEFORE play (synchronous in user gesture)...');
         audioContext.resume(); // Call synchronously, don't await
+      }
+
+      // CRITICAL: Add video element to audio mixer BEFORE playing
+      // This routes the video audio through the Web Audio context
+      try {
+        audioMixerService.addMediaElement(clipId, videoElement);
+        console.log('[MediaLibrary] Video element added to audio mixer');
+      } catch (error) {
+        console.error('[MediaLibrary] Failed to add video to audio mixer:', error);
       }
 
       // Set volume and unmute
@@ -297,6 +314,14 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
                     muted={false}
                     preload="metadata"
                     onEnded={() => {
+                      // CRITICAL: Remove video from audio mixer when it ends
+                      try {
+                        audioMixerService.removeMediaElement(clip.id);
+                        console.log('[MediaLibrary] Video ended, removed from audio mixer');
+                      } catch (error) {
+                        console.error('[MediaLibrary] Failed to remove video from audio mixer:', error);
+                      }
+
                       setPlayingClips(prev => {
                         const newSet = new Set(prev);
                         newSet.delete(clip.id);
