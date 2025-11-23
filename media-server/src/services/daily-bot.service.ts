@@ -7,6 +7,13 @@
  * This bridges mediasoup → Daily → RTMP
  */
 
+// Inject wrtc into global scope for Daily.co SDK
+import wrtc from 'wrtc';
+(global as any).RTCPeerConnection = wrtc.RTCPeerConnection;
+(global as any).RTCSessionDescription = wrtc.RTCSessionDescription;
+(global as any).RTCIceCandidate = wrtc.RTCIceCandidate;
+(global as any).MediaStream = wrtc.MediaStream;
+
 import DailyIframe from '@daily-co/daily-js';
 import logger from '../utils/logger';
 import axios from 'axios';
