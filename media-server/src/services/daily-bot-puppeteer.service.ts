@@ -125,13 +125,13 @@ class DailyBotPuppeteerService {
 
       logger.info('[Puppeteer Bot] Daily SDK loaded');
 
-      // Skip connectToMediasoup - the user's browser will send media directly to Daily
-      // await this.connectToMediasoup(config);
+      // Wait for active video/audio in mediasoup before joining Daily
+      await this.waitForMediasoupProducers(config);
 
       // Join Daily room
       await this.joinDailyRoom(config);
 
-      // Wait for active video and audio before starting RTMP
+      // Wait for active video and audio in Daily before starting RTMP
       await this.waitForActiveMedia();
 
       // Start RTMP streaming
@@ -146,6 +146,35 @@ class DailyBotPuppeteerService {
       await this.cleanup();
       throw error;
     }
+  }
+
+  private async waitForMediasoupProducers(config: PuppeteerBotConfig): Promise<void> {
+    logger.info('[Puppeteer Bot] Waiting for active video/audio in mediasoup...');
+
+    const maxWaitTime = 30000; // 30 seconds
+    const startTime = Date.now();
+    const checkInterval = 500; // Check every 500ms
+
+    while (Date.now() - startTime < maxWaitTime) {
+      // Check if consumers are active (not paused)
+      const videoActive = !config.videoConsumer.paused && config.videoConsumer.producerPaused === false;
+      const audioActive = !config.audioConsumer.paused && config.audioConsumer.producerPaused === false;
+
+      logger.info(`[Puppeteer Bot] Mediasoup status: video=${videoActive}, audio=${audioActive}`);
+
+      if (videoActive && audioActive) {
+        logger.info('[Puppeteer Bot] ✅ Active video and audio detected in mediasoup');
+        logger.info('[Puppeteer Bot] Waiting 2 seconds for stability...');
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        logger.info('[Puppeteer Bot] ✅ Ready to join Daily room');
+        return;
+      }
+
+      // Wait before checking again
+      await new Promise((resolve) => setTimeout(resolve, checkInterval));
+    }
+
+    throw new Error('Timeout waiting for active video/audio in mediasoup');
   }
 
   private async connectToMediasoup(config: PuppeteerBotConfig): Promise<void> {
