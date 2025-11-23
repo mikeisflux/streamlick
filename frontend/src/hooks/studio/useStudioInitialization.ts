@@ -196,9 +196,20 @@ export function useStudioInitialization({
           if (mediaData) {
             const objectURL = URL.createObjectURL(mediaData.blob);
             console.log('[Studio Init] Restoring background from IndexedDB:', streamBackgroundName || streamBackgroundAssetId);
+
+            // Dispatch event for other listeners
             window.dispatchEvent(new CustomEvent('backgroundUpdated', {
               detail: { url: objectURL, name: streamBackgroundName }
             }));
+
+            // ALSO directly call compositor to ensure it's set
+            await compositorService.addOverlay({
+              id: 'background',
+              type: 'background',
+              url: objectURL,
+              position: { x: 0, y: 0, width: 1920, height: 1080 },
+            });
+            console.log('[Studio Init] Background set on compositor');
           }
         } catch (error) {
           console.error('[Studio Init] Failed to load background from IndexedDB:', error);
@@ -206,9 +217,20 @@ export function useStudioInitialization({
       } else if (streamBackground) {
         // Background stored as URL in localStorage
         console.log('[Studio Init] Restoring background from localStorage:', streamBackgroundName || streamBackground);
+
+        // Dispatch event for other listeners
         window.dispatchEvent(new CustomEvent('backgroundUpdated', {
           detail: { url: streamBackground, name: streamBackgroundName }
         }));
+
+        // ALSO directly call compositor to ensure it's set
+        await compositorService.addOverlay({
+          id: 'background',
+          type: 'background',
+          url: streamBackground,
+          position: { x: 0, y: 0, width: 1920, height: 1080 },
+        });
+        console.log('[Studio Init] Background set on compositor');
       }
 
       // Restore logo - check IndexedDB first, then localStorage
@@ -223,18 +245,40 @@ export function useStudioInitialization({
           if (mediaData) {
             const objectURL = URL.createObjectURL(mediaData.blob);
             console.log('[Studio Init] Restoring logo from IndexedDB:', streamLogoName || streamLogoAssetId);
+
+            // Dispatch event for other listeners
             window.dispatchEvent(new CustomEvent('logoUpdated', {
               detail: { url: objectURL, name: streamLogoName }
             }));
+
+            // ALSO directly call compositor to ensure it's set
+            await compositorService.addOverlay({
+              id: 'logo',
+              type: 'logo',
+              url: objectURL,
+              position: { x: 20, y: 20, width: 100, height: 100 },
+            });
+            console.log('[Studio Init] Logo set on compositor');
           }
         } catch (error) {
           console.error('[Studio Init] Failed to load logo from IndexedDB:', error);
         }
       } else if (streamLogo) {
         console.log('[Studio Init] Restoring logo from localStorage:', streamLogoName || streamLogo);
+
+        // Dispatch event for other listeners
         window.dispatchEvent(new CustomEvent('logoUpdated', {
           detail: { url: streamLogo, name: streamLogoName }
         }));
+
+        // ALSO directly call compositor to ensure it's set
+        await compositorService.addOverlay({
+          id: 'logo',
+          type: 'logo',
+          url: streamLogo,
+          position: { x: 20, y: 20, width: 100, height: 100 },
+        });
+        console.log('[Studio Init] Logo set on compositor');
       }
 
       // Restore overlay - check IndexedDB first, then localStorage
@@ -249,18 +293,40 @@ export function useStudioInitialization({
           if (mediaData) {
             const objectURL = URL.createObjectURL(mediaData.blob);
             console.log('[Studio Init] Restoring overlay from IndexedDB:', streamOverlayName || streamOverlayAssetId);
+
+            // Dispatch event for other listeners
             window.dispatchEvent(new CustomEvent('overlayUpdated', {
               detail: { url: objectURL, name: streamOverlayName }
             }));
+
+            // ALSO directly call compositor to ensure it's set
+            await compositorService.addOverlay({
+              id: 'overlay',
+              type: 'banner',
+              url: objectURL,
+              position: { x: 0, y: 0, width: 1920, height: 1080 },
+            });
+            console.log('[Studio Init] Overlay set on compositor');
           }
         } catch (error) {
           console.error('[Studio Init] Failed to load overlay from IndexedDB:', error);
         }
       } else if (streamOverlay) {
         console.log('[Studio Init] Restoring overlay from localStorage:', streamOverlayName || streamOverlay);
+
+        // Dispatch event for other listeners
         window.dispatchEvent(new CustomEvent('overlayUpdated', {
           detail: { url: streamOverlay, name: streamOverlayName }
         }));
+
+        // ALSO directly call compositor to ensure it's set
+        await compositorService.addOverlay({
+          id: 'overlay',
+          type: 'banner',
+          url: streamOverlay,
+          position: { x: 0, y: 0, width: 1920, height: 1080 },
+        });
+        console.log('[Studio Init] Overlay set on compositor');
       }
 
       console.log('[Studio Init] Media assets restored');
