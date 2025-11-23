@@ -179,42 +179,37 @@ export function useStudioInitialization({
   // Restore media assets from localStorage
   const restoreMediaAssets = async () => {
     try {
-      // Restore background
+      // Small delay to ensure DOM and canvas are ready
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Restore background - dispatch event like Media panel does
       const streamBackground = localStorage.getItem('streamBackground');
+      const streamBackgroundName = localStorage.getItem('streamBackgroundName');
       if (streamBackground) {
-        console.log('[Studio Init] Restoring background:', streamBackground);
-        await compositorService.addOverlay({
-          id: 'background-restore',
-          type: 'background',
-          url: streamBackground,
-          position: { x: 0, y: 0, width: 1920, height: 1080 },
-        });
+        console.log('[Studio Init] Restoring background:', streamBackgroundName || streamBackground);
+        window.dispatchEvent(new CustomEvent('backgroundUpdated', {
+          detail: { url: streamBackground, name: streamBackgroundName }
+        }));
       }
 
-      // Restore logo
+      // Restore logo - dispatch event
       const streamLogo = localStorage.getItem('streamLogo');
       const streamLogoName = localStorage.getItem('streamLogoName');
       if (streamLogo) {
         console.log('[Studio Init] Restoring logo:', streamLogoName || streamLogo);
-        await compositorService.addOverlay({
-          id: streamLogoName || 'logo-restore',
-          type: 'logo',
-          url: streamLogo,
-          position: { x: 20, y: 20, width: 100, height: 100 },
-        });
+        window.dispatchEvent(new CustomEvent('logoUpdated', {
+          detail: { url: streamLogo, name: streamLogoName }
+        }));
       }
 
-      // Restore overlay (saved as banner type)
+      // Restore overlay - dispatch event
       const streamOverlay = localStorage.getItem('streamOverlay');
       const streamOverlayName = localStorage.getItem('streamOverlayName');
       if (streamOverlay) {
         console.log('[Studio Init] Restoring overlay:', streamOverlayName || streamOverlay);
-        await compositorService.addOverlay({
-          id: streamOverlayName || 'overlay-restore',
-          type: 'banner',
-          url: streamOverlay,
-          position: { x: 0, y: 0, width: 1920, height: 1080 },
-        });
+        window.dispatchEvent(new CustomEvent('overlayUpdated', {
+          detail: { url: streamOverlay, name: streamOverlayName }
+        }));
       }
 
       console.log('[Studio Init] Media assets restored');
