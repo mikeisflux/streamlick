@@ -69,6 +69,17 @@ class AudioMixerService {
       throw new Error('Audio mixer not initialized');
     }
 
+    // CRITICAL FIX: Resume audio context if suspended (required for audio playback)
+    // Browsers auto-suspend audio contexts until user interaction
+    if (this.audioContext.state === 'suspended') {
+      console.log('[Audio Mixer] Resuming suspended audio context...');
+      this.audioContext.resume().then(() => {
+        console.log('[Audio Mixer] Audio context resumed successfully');
+      }).catch((error) => {
+        console.error('[Audio Mixer] Failed to resume audio context:', error);
+      });
+    }
+
     // Remove existing source if any
     this.removeStream(id);
 
