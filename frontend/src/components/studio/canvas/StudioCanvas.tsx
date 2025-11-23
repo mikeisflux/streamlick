@@ -328,24 +328,67 @@ export function StudioCanvas({
   }, [customLayoutPositions, editMode]);
 
   useEffect(() => {
-    const loadLogo = () => {
-      const logo = localStorage.getItem('streamLogo');
-      setStreamLogo(logo);
+    // CRITICAL: Load all media immediately on mount from IndexedDB/localStorage
+    const loadAllMedia = async () => {
+      // Load logo
+      const streamLogoAssetId = localStorage.getItem('streamLogoAssetId');
+      const streamLogoUrl = localStorage.getItem('streamLogo');
+
+      if (streamLogoAssetId) {
+        try {
+          console.log('[StudioCanvas] Loading logo from IndexedDB on mount');
+          const mediaData = await mediaStorageService.getMedia(streamLogoAssetId);
+          if (mediaData) {
+            const objectURL = URL.createObjectURL(mediaData.blob);
+            setStreamLogo(objectURL);
+          }
+        } catch (error) {
+          console.error('[StudioCanvas] Failed to load logo from IndexedDB:', error);
+        }
+      } else if (streamLogoUrl) {
+        setStreamLogo(streamLogoUrl);
+      }
+
+      // Load overlay
+      const streamOverlayAssetId = localStorage.getItem('streamOverlayAssetId');
+      const streamOverlayUrl = localStorage.getItem('streamOverlay');
+
+      if (streamOverlayAssetId) {
+        try {
+          console.log('[StudioCanvas] Loading overlay from IndexedDB on mount');
+          const mediaData = await mediaStorageService.getMedia(streamOverlayAssetId);
+          if (mediaData) {
+            const objectURL = URL.createObjectURL(mediaData.blob);
+            setStreamOverlay(objectURL);
+          }
+        } catch (error) {
+          console.error('[StudioCanvas] Failed to load overlay from IndexedDB:', error);
+        }
+      } else if (streamOverlayUrl) {
+        setStreamOverlay(streamOverlayUrl);
+      }
+
+      // Load video clip
+      const streamVideoClipAssetId = localStorage.getItem('streamVideoClipAssetId');
+      const streamVideoClipUrl = localStorage.getItem('streamVideoClip');
+
+      if (streamVideoClipAssetId) {
+        try {
+          console.log('[StudioCanvas] Loading video clip from IndexedDB on mount');
+          const mediaData = await mediaStorageService.getMedia(streamVideoClipAssetId);
+          if (mediaData) {
+            const objectURL = URL.createObjectURL(mediaData.blob);
+            setVideoClip(objectURL);
+          }
+        } catch (error) {
+          console.error('[StudioCanvas] Failed to load video clip from IndexedDB:', error);
+        }
+      } else if (streamVideoClipUrl) {
+        setVideoClip(streamVideoClipUrl);
+      }
     };
 
-    const loadOverlay = () => {
-      const overlay = localStorage.getItem('streamOverlay');
-      setStreamOverlay(overlay);
-    };
-
-    const loadVideoClip = () => {
-      const clip = localStorage.getItem('streamVideoClip');
-      setVideoClip(clip);
-    };
-
-    loadLogo();
-    loadOverlay();
-    loadVideoClip();
+    loadAllMedia();
 
     // Listen for custom event for logo updates
     const handleLogoUpdated = ((e: CustomEvent) => {
