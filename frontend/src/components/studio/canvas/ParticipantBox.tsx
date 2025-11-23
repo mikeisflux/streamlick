@@ -284,15 +284,46 @@ export function ParticipantBox({
           }}
         />
       ) : (
-        <div className="w-full h-full flex items-center justify-center bg-gray-900">
+        <div className="w-full h-full flex items-center justify-center bg-gray-900 relative">
           {selectedAvatar ? (
-            <div className="w-full h-full flex items-center justify-center p-8">
-              <div className="w-1/4 aspect-square rounded-full overflow-hidden">
+            <div className="w-full h-full flex items-center justify-center p-2 relative">
+              {/* Avatar with responsive sizing - fills most of the container */}
+              <div
+                className="relative rounded-full overflow-hidden flex items-center justify-center"
+                style={{
+                  width: '90%',
+                  maxWidth: '400px',
+                  aspectRatio: '1/1',
+                }}
+              >
                 <img
                   src={selectedAvatar}
                   alt={name}
                   className="w-full h-full object-cover"
                 />
+
+                {/* Voice animation rings when speaking */}
+                {audioEnabled && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    {/* Pulsating ring for speaking animation */}
+                    <div
+                      className="absolute rounded-full border-4 border-blue-500 animate-ping"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        animationDuration: '1s',
+                      }}
+                    />
+                    <div
+                      className="absolute rounded-full border-2 border-blue-400"
+                      style={{
+                        width: '95%',
+                        height: '95%',
+                        animation: 'pulse 2s ease-in-out infinite',
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           ) : (

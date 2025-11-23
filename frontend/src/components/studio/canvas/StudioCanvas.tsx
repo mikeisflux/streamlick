@@ -456,10 +456,10 @@ export function StudioCanvas({
     if (layoutId === 'screenshare' || (isSharingScreen && selectedLayout === 6)) {
       return {
         type: 'screen',
-        container: 'flex flex-col gap-2 p-2',
-        topBar: 'flex flex-row gap-2',
-        topBarHeight: 'h-[25%]',
-        screenShare: 'flex-1 h-[75%]',
+        container: 'flex flex-col gap-1 p-1',
+        topBar: 'flex flex-row gap-1',
+        topBarHeight: 'h-[12%]', // Smaller participant thumbnails (12% instead of 25%)
+        screenShare: 'flex-1 h-[88%]', // Almost fullscreen for shared screen (88% instead of 75%)
       };
     }
 
@@ -649,7 +649,7 @@ export function StudioCanvas({
         {/* Screen Share Layout - Active when screen sharing */}
         {isSharingScreen || screenShareStream ? (
           <>
-            {/* Top Bar - Participant Thumbnails (25% height / 1/4 of screen) */}
+            {/* Top Bar - Participant Thumbnails (12% height - small thumbnails) */}
             <div
               className={`${getLayoutStyles('screenshare').topBar} ${
                 getLayoutStyles('screenshare').topBarHeight
@@ -713,7 +713,7 @@ export function StudioCanvas({
                 ))}
             </div>
 
-            {/* Bottom - Screen Share (75% height / 3/4 of screen) */}
+            {/* Bottom - Screen Share (88% height - almost fullscreen) */}
             <div
               className={`relative bg-black rounded overflow-hidden ${getLayoutStyles('screenshare').screenShare}`}
             >
