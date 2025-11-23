@@ -539,6 +539,23 @@ export function StudioCanvas({
           mainVideo: 'col-span-1 row-span-1',
         };
 
+      case 9: // Video Grid - Auto-adjusting grid layout
+        const videoGrid = calculateDynamicGrid(totalParticipants);
+        return {
+          type: 'videogrid',
+          container: 'grid gap-4 p-4',
+          gridCols: videoGrid.cols,
+          gridRows: videoGrid.rows,
+          mainVideo: 'col-span-1 row-span-1 w-full h-full',
+        };
+
+      case 10: // Advanced Positioning - Draggable participants
+        return {
+          type: 'draggable',
+          container: 'relative w-full h-full',
+          mainVideo: 'absolute',
+        };
+
       default:
         // Fallback to group layout
         const fallbackGrid = calculateDynamicGrid(totalParticipants);

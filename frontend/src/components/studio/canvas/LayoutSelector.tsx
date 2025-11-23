@@ -16,7 +16,9 @@ const LAYOUT_NAMES = {
   5: 'News',
   6: 'Screen',
   7: 'Picture-in-Picture',
-  8: 'Cinema'
+  8: 'Cinema',
+  9: 'Video Grid',
+  10: 'Advanced Positioning'
 } as const;
 
 export function LayoutSelector({
@@ -102,6 +104,33 @@ export function LayoutSelector({
             <rect x="14" y="18" width="2" height="2" rx="0.5" />
           </svg>
         );
+      case 9: // Video Grid - Auto-adjusting grid layout
+        return (
+          <svg {...iconProps}>
+            <rect x="2" y="2" width="6.5" height="6.5" rx="1" />
+            <rect x="9.25" y="2" width="6.5" height="6.5" rx="1" />
+            <rect x="16.5" y="2" width="5.5" height="6.5" rx="1" />
+            <rect x="2" y="9.25" width="6.5" height="6.5" rx="1" />
+            <rect x="9.25" y="9.25" width="6.5" height="6.5" rx="1" />
+            <rect x="16.5" y="9.25" width="5.5" height="6.5" rx="1" />
+            <rect x="2" y="16.5" width="6.5" height="5.5" rx="1" />
+            <rect x="9.25" y="16.5" width="6.5" height="5.5" rx="1" />
+            <rect x="16.5" y="16.5" width="5.5" height="5.5" rx="1" />
+          </svg>
+        );
+      case 10: // Advanced Positioning - Draggable participants
+        return (
+          <svg {...iconProps}>
+            <rect x="2" y="2" width="9" height="9" rx="1" />
+            <rect x="13" y="4" width="7" height="7" rx="1" />
+            <rect x="4" y="13" width="6" height="6" rx="1" />
+            <rect x="12" y="14" width="9" height="7" rx="1" />
+            <circle cx="7" cy="7" r="1.5" fill="white" />
+            <circle cx="16.5" cy="7.5" r="1.5" fill="white" />
+            <circle cx="7" cy="16" r="1.5" fill="white" />
+            <circle cx="16.5" cy="17.5" r="1.5" fill="white" />
+          </svg>
+        );
       default:
         return <span className="text-white text-xs">{layoutId}</span>;
     }
@@ -118,8 +147,8 @@ export function LayoutSelector({
         zIndex: 50, // Layer 50: Layout selector bar (floating below canvas)
       }}
     >
-      {/* 8 Default Layout Buttons */}
-      {[1, 2, 3, 4, 5, 6, 7, 8].map((layoutId) => (
+      {/* 10 Layout Buttons */}
+      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((layoutId) => (
         <button
           key={layoutId}
           onClick={() => onLayoutChange(layoutId)}
