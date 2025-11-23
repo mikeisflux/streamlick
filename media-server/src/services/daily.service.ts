@@ -307,6 +307,42 @@ class DailyMediaServerService {
   }
 
   /**
+   * Get meeting token for Daily bot
+   * Returns the token created during initialization
+   */
+  async getMeetingToken(apiBaseUrl: string, broadcastId: string): Promise<string> {
+    // If we already have a token from initialization, return it
+    if (this.token) {
+      return this.token;
+    }
+
+    // Otherwise, fetch a new token from backend
+    try {
+      const mediaServerSecret = process.env.MEDIA_SERVER_SECRET || 'streamlick-media-server-secret';
+
+      const response = await axios.post(
+        `${apiBaseUrl}/api/daily/broadcasts/${broadcastId}/room`,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'x-media-server-secret': mediaServerSecret,
+          },
+          timeout: 30000,
+        }
+      );
+
+      const { token } = response.data;
+      this.token = token;
+
+      return token;
+    } catch (error: any) {
+      logger.error('[Daily Media Server] Failed to get meeting token:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get connection status
    */
   getStatus(): {

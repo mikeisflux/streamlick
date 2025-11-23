@@ -10,6 +10,8 @@ import ffmpeg from 'fluent-ffmpeg';
 import { RTMPDestination } from './streamer';
 import logger from '../utils/logger';
 import { dailyMediaServerService } from '../services/daily.service';
+import { dailyBotService } from '../services/daily-bot.service';
+import { rtpBridgeService } from '../services/rtp-bridge.service';
 
 interface Pipeline {
   videoPlainTransport: PlainTransport | null;
@@ -17,9 +19,11 @@ interface Pipeline {
   videoConsumer: any | null;
   audioConsumer: any | null;
   ffmpegProcesses: Map<string, any>;
+  rtpBridgePeerConnection?: any; // For Daily bot mode
 }
 
 const activePipelines = new Map<string, Pipeline>();
+const MAX_CONCURRENT_BOTS = 5; // Limit per media server instance
 
 /**
  * Create a compositor pipeline for a broadcast
@@ -699,43 +703,84 @@ async function createDailyPipeline(
   destinations: RTMPDestination[]
 ): Promise<void> {
   try {
-    logger.info(`[Daily Pipeline] Creating Daily pipeline for broadcast ${broadcastId}`);
+    logger.info(`[Daily Pipeline BOT] Creating automated Daily bot pipeline for broadcast ${broadcastId}`);
 
-    // Get backend API URL from environment
+    // Check concurrent bot limit
+    if (activePipelines.size >= MAX_CONCURRENT_BOTS) {
+      throw new Error(
+        `Maximum concurrent bots (${MAX_CONCURRENT_BOTS}) reached. ` +
+        `Add more media servers with load balancer to scale.`
+      );
+    }
+
     const backendApiUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
-    logger.info(`[Daily Pipeline] Using backend API URL: ${backendApiUrl}`);
-    logger.info(`[Daily Pipeline] BACKEND_API_URL env var: ${process.env.BACKEND_API_URL || 'NOT SET'}`);
 
-    // Step 1: Initialize Daily service and create room via REST API
+    // Step 1: Create Daily room and token via REST API
     await dailyMediaServerService.initialize({
       apiBaseUrl: backendApiUrl,
       broadcastId,
     });
 
-    // Step 2: SKIP joining room - we use REST API only, not WebRTC client
-    // The media server orchestrates streaming via backend API calls
+    // Step 2: Create consumers to get RTP streams from mediasoup
+    logger.info('[Daily Pipeline BOT] Creating consumers for RTP bridge...');
 
-    // Step 3: Start RTMP streaming via Daily REST API
+    const videoConsumer = await videoProducer.createConsumer({
+      rtpCapabilities: router.rtpCapabilities,
+      paused: false,
+    });
+
+    const audioConsumer = await audioProducer.createConsumer({
+      rtpCapabilities: router.rtpCapabilities,
+      paused: false,
+    });
+
+    // Step 3: Use RTP bridge to create MediaStreamTracks
+    logger.info('[Daily Pipeline BOT] Creating MediaStreamTracks via RTP bridge...');
+
+    const bridgeResult = await rtpBridgeService.createTracksFromConsumers(
+      videoConsumer,
+      audioConsumer,
+      router
+    );
+
+    // Step 4: Join Daily room as bot
+    const roomUrl = `https://streamlick.daily.co/streamlick-broadcast-${broadcastId}`;
+    const token = await dailyMediaServerService.getMeetingToken(backendApiUrl, broadcastId);
+
+    await dailyBotService.joinRoom({
+      roomUrl,
+      token,
+      backendApiUrl,
+      broadcastId,
+    });
+
+    // Step 5: Set custom tracks
+    await dailyBotService.setCustomTracks(
+      bridgeResult.videoTrack,
+      bridgeResult.audioTrack
+    );
+
+    // Step 6: Start RTMP streaming
     const dailyDestinations = destinations.map((dest) => ({
       rtmpUrl: dest.rtmpUrl,
       streamKey: dest.streamKey,
-      platform: dest.platform,
     }));
 
-    await dailyMediaServerService.startStreaming(backendApiUrl, broadcastId, dailyDestinations);
+    await dailyBotService.startLiveStreaming(dailyDestinations);
 
-    // Step 5: Store pipeline reference (simplified for Daily mode)
+    // Store pipeline
     activePipelines.set(broadcastId, {
-      videoPlainTransport: null, // Not used in Daily mode
-      audioPlainTransport: null, // Not used in Daily mode
-      videoConsumer: null,
-      audioConsumer: null,
-      ffmpegProcesses: new Map(), // No FFmpeg in Daily mode
+      videoPlainTransport: null,
+      audioPlainTransport: null,
+      videoConsumer,
+      audioConsumer,
+      ffmpegProcesses: new Map(),
+      rtpBridgePeerConnection: bridgeResult.peerConnection,
     });
 
-    logger.info(`[Daily Pipeline] ✅ Daily pipeline created successfully for broadcast ${broadcastId}`);
+    logger.info(`[Daily Pipeline BOT] ✅ Automated bot pipeline created successfully`);
   } catch (error) {
-    logger.error('[Daily Pipeline] Failed to create Daily pipeline:', error);
+    logger.error('[Daily Pipeline BOT] Failed to create bot pipeline:', error);
     throw error;
   }
 }
@@ -745,22 +790,33 @@ async function createDailyPipeline(
  */
 async function stopDailyPipeline(broadcastId: string): Promise<void> {
   try {
-    logger.info(`[Daily Pipeline] Stopping Daily pipeline for broadcast ${broadcastId}`);
+    logger.info(`[Daily Pipeline BOT] Stopping Daily bot pipeline for broadcast ${broadcastId}`);
 
-    const backendApiUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
+    const pipeline = activePipelines.get(broadcastId);
 
-    // Stop RTMP streaming
-    await dailyMediaServerService.stopStreaming(backendApiUrl, broadcastId);
+    // Stop RTMP streaming and leave room
+    await dailyBotService.stopLiveStreaming();
+    await dailyBotService.leaveRoom();
 
-    // Cleanup Daily connection
-    await dailyMediaServerService.destroy();
+    // Cleanup RTP bridge peer connection
+    if (pipeline?.rtpBridgePeerConnection) {
+      await rtpBridgeService.cleanup(pipeline.rtpBridgePeerConnection);
+    }
+
+    // Close consumers
+    if (pipeline?.videoConsumer) {
+      pipeline.videoConsumer.close();
+    }
+    if (pipeline?.audioConsumer) {
+      pipeline.audioConsumer.close();
+    }
 
     // Remove from active pipelines
     activePipelines.delete(broadcastId);
 
-    logger.info(`[Daily Pipeline] ✅ Daily pipeline stopped for broadcast ${broadcastId}`);
+    logger.info(`[Daily Pipeline BOT] ✅ Bot pipeline stopped and cleaned up for broadcast ${broadcastId}`);
   } catch (error) {
-    logger.error('[Daily Pipeline] Failed to stop Daily pipeline:', error);
+    logger.error('[Daily Pipeline BOT] Failed to stop bot pipeline:', error);
     throw error;
   }
 }

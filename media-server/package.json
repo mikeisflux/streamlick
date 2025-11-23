@@ -20,7 +20,8 @@
     "mediasoup-client": "^3.7.0",
     "node-media-server": "^2.6.2",
     "socket.io": "^4.6.0",
-    "winston": "^3.11.0"
+    "winston": "^3.11.0",
+    "wrtc": "^0.4.7"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

@@ -102,17 +102,19 @@ class DailyBotService {
   /**
    * Set custom video and audio tracks for the bot
    *
-   * NOTE: In Node.js, we can't use browser MediaStream APIs directly.
-   * We need to create tracks from mediasoup RTP streams using WebRTC APIs.
-   *
-   * For now, this is a placeholder - we'll need to implement the RTP → MediaStreamTrack bridge.
+   * These tracks should be created by the RTP bridge service
+   * which converts mediasoup RTP streams to MediaStreamTracks.
    */
   async setCustomTracks(videoTrack: any, audioTrack: any): Promise<void> {
     try {
-      logger.info('[Daily Bot] Setting custom video and audio tracks...');
+      logger.info('[Daily Bot] Setting custom video and audio tracks...', {
+        videoTrackId: videoTrack?.id,
+        audioTrackId: audioTrack?.id,
+      });
 
-      // TODO: Implement RTP → MediaStreamTrack conversion
-      // This requires using node-webrtc or similar to create MediaStreamTrack from RTP
+      if (!videoTrack || !audioTrack) {
+        throw new Error('Both videoTrack and audioTrack are required');
+      }
 
       await this.callObject.setInputDevicesAsync({
         videoSource: videoTrack,
