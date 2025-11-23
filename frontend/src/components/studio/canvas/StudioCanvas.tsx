@@ -5,6 +5,7 @@ import { TeleprompterOverlay } from './TeleprompterOverlay';
 import { CommentOverlay } from './CommentOverlay';
 import { Caption } from '../../../services/caption.service';
 import { compositorService } from '../../../services/compositor.service';
+import { mediaStorageService } from '../../../services/media-storage.service';
 
 interface Banner {
   id: string;
@@ -220,6 +221,31 @@ export function StudioCanvas({
   useEffect(() => {
     console.log('[StudioCanvas] Setting up background event listener');
 
+    // CRITICAL: Load background immediately on mount to avoid race condition
+    const loadInitialBackground = async () => {
+      const streamBackgroundAssetId = localStorage.getItem('streamBackgroundAssetId');
+      const streamBackground = localStorage.getItem('streamBackground');
+
+      if (streamBackgroundAssetId) {
+        try {
+          console.log('[StudioCanvas] Loading background from IndexedDB on mount');
+          const mediaData = await mediaStorageService.getMedia(streamBackgroundAssetId);
+          if (mediaData) {
+            const objectURL = URL.createObjectURL(mediaData.blob);
+            console.log('[StudioCanvas] Background loaded from IndexedDB');
+            setStreamBackground(objectURL);
+          }
+        } catch (error) {
+          console.error('[StudioCanvas] Failed to load background from IndexedDB:', error);
+        }
+      } else if (streamBackground) {
+        console.log('[StudioCanvas] Loading background from localStorage on mount');
+        setStreamBackground(streamBackground);
+      }
+    };
+
+    loadInitialBackground();
+
     // Listen for custom event for background updates
     const handleBackgroundUpdated = ((e: CustomEvent) => {
       console.log('[StudioCanvas] Background updated event received:', e.detail);
@@ -227,10 +253,6 @@ export function StudioCanvas({
     }) as EventListener;
 
     window.addEventListener('backgroundUpdated', handleBackgroundUpdated);
-
-    // Initial load - event will be dispatched by useStudioInitialization
-    // which handles both IndexedDB and localStorage loading
-    // No need to duplicate that logic here
 
     return () => {
       console.log('[StudioCanvas] Removing background event listener');
