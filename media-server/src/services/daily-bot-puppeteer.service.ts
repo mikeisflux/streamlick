@@ -62,6 +62,26 @@ class DailyBotPuppeteerService {
         <html>
         <head>
           <title>Daily Bot</title>
+          <script>
+            // Mock navigator.mediaDevices before Daily SDK loads
+            if (!navigator.mediaDevices) {
+              navigator.mediaDevices = {};
+            }
+            if (!navigator.mediaDevices.getUserMedia) {
+              navigator.mediaDevices.getUserMedia = function() {
+                return Promise.reject(new Error('getUserMedia not supported - using custom tracks'));
+              };
+            }
+            if (!navigator.mediaDevices.enumerateDevices) {
+              navigator.mediaDevices.enumerateDevices = function() {
+                return Promise.resolve([
+                  { deviceId: 'default', kind: 'videoinput', label: 'Fake Video', groupId: '' },
+                  { deviceId: 'default', kind: 'audioinput', label: 'Fake Audio', groupId: '' }
+                ]);
+              };
+            }
+            console.log('✅ navigator.mediaDevices mocked');
+          </script>
           <script src="https://unpkg.com/@daily-co/daily-js"></script>
         </head>
         <body>
