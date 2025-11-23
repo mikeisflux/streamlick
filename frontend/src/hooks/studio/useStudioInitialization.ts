@@ -3,6 +3,7 @@ import { broadcastService } from '../../services/broadcast.service';
 import { socketService } from '../../services/socket.service';
 import { webrtcService } from '../../services/webrtc.service';
 import { compositorService } from '../../services/compositor.service';
+import { mediaStorageService } from '../../services/media-storage.service';
 import { useStudioStore } from '../../store/studioStore';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -176,37 +177,87 @@ export function useStudioInitialization({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [broadcastId]);
 
-  // Restore media assets from localStorage
+  // Restore media assets from localStorage and IndexedDB
   const restoreMediaAssets = async () => {
     try {
       // Small delay to ensure DOM and canvas are ready
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Restore background - dispatch event like Media panel does
+      // Restore background - check IndexedDB first, then localStorage
+      const streamBackgroundAssetId = localStorage.getItem('streamBackgroundAssetId');
       const streamBackground = localStorage.getItem('streamBackground');
       const streamBackgroundName = localStorage.getItem('streamBackgroundName');
-      if (streamBackground) {
-        console.log('[Studio Init] Restoring background:', streamBackgroundName || streamBackground);
+
+      if (streamBackgroundAssetId) {
+        // Background stored in IndexedDB - load it
+        try {
+          console.log('[Studio Init] Loading background from IndexedDB:', streamBackgroundAssetId);
+          const mediaData = await mediaStorageService.getMedia(streamBackgroundAssetId);
+          if (mediaData) {
+            const objectURL = URL.createObjectURL(mediaData.blob);
+            console.log('[Studio Init] Restoring background from IndexedDB:', streamBackgroundName || streamBackgroundAssetId);
+            window.dispatchEvent(new CustomEvent('backgroundUpdated', {
+              detail: { url: objectURL, name: streamBackgroundName }
+            }));
+          }
+        } catch (error) {
+          console.error('[Studio Init] Failed to load background from IndexedDB:', error);
+        }
+      } else if (streamBackground) {
+        // Background stored as URL in localStorage
+        console.log('[Studio Init] Restoring background from localStorage:', streamBackgroundName || streamBackground);
         window.dispatchEvent(new CustomEvent('backgroundUpdated', {
           detail: { url: streamBackground, name: streamBackgroundName }
         }));
       }
 
-      // Restore logo - dispatch event
+      // Restore logo - check IndexedDB first, then localStorage
+      const streamLogoAssetId = localStorage.getItem('streamLogoAssetId');
       const streamLogo = localStorage.getItem('streamLogo');
       const streamLogoName = localStorage.getItem('streamLogoName');
-      if (streamLogo) {
-        console.log('[Studio Init] Restoring logo:', streamLogoName || streamLogo);
+
+      if (streamLogoAssetId) {
+        try {
+          console.log('[Studio Init] Loading logo from IndexedDB:', streamLogoAssetId);
+          const mediaData = await mediaStorageService.getMedia(streamLogoAssetId);
+          if (mediaData) {
+            const objectURL = URL.createObjectURL(mediaData.blob);
+            console.log('[Studio Init] Restoring logo from IndexedDB:', streamLogoName || streamLogoAssetId);
+            window.dispatchEvent(new CustomEvent('logoUpdated', {
+              detail: { url: objectURL, name: streamLogoName }
+            }));
+          }
+        } catch (error) {
+          console.error('[Studio Init] Failed to load logo from IndexedDB:', error);
+        }
+      } else if (streamLogo) {
+        console.log('[Studio Init] Restoring logo from localStorage:', streamLogoName || streamLogo);
         window.dispatchEvent(new CustomEvent('logoUpdated', {
           detail: { url: streamLogo, name: streamLogoName }
         }));
       }
 
-      // Restore overlay - dispatch event
+      // Restore overlay - check IndexedDB first, then localStorage
+      const streamOverlayAssetId = localStorage.getItem('streamOverlayAssetId');
       const streamOverlay = localStorage.getItem('streamOverlay');
       const streamOverlayName = localStorage.getItem('streamOverlayName');
-      if (streamOverlay) {
-        console.log('[Studio Init] Restoring overlay:', streamOverlayName || streamOverlay);
+
+      if (streamOverlayAssetId) {
+        try {
+          console.log('[Studio Init] Loading overlay from IndexedDB:', streamOverlayAssetId);
+          const mediaData = await mediaStorageService.getMedia(streamOverlayAssetId);
+          if (mediaData) {
+            const objectURL = URL.createObjectURL(mediaData.blob);
+            console.log('[Studio Init] Restoring overlay from IndexedDB:', streamOverlayName || streamOverlayAssetId);
+            window.dispatchEvent(new CustomEvent('overlayUpdated', {
+              detail: { url: objectURL, name: streamOverlayName }
+            }));
+          }
+        } catch (error) {
+          console.error('[Studio Init] Failed to load overlay from IndexedDB:', error);
+        }
+      } else if (streamOverlay) {
+        console.log('[Studio Init] Restoring overlay from localStorage:', streamOverlayName || streamOverlay);
         window.dispatchEvent(new CustomEvent('overlayUpdated', {
           detail: { url: streamOverlay, name: streamOverlayName }
         }));
