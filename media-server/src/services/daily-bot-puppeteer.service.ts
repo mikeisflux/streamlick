@@ -131,6 +131,9 @@ class DailyBotPuppeteerService {
       // Join Daily room
       await this.joinDailyRoom(config);
 
+      // Wait for active video and audio before starting RTMP
+      await this.waitForActiveMedia();
+
       // Start RTMP streaming
       await this.startRTMPStreaming(config);
 
@@ -309,6 +312,63 @@ class DailyBotPuppeteerService {
       }
       throw error;
     }
+  }
+
+  private async waitForActiveMedia(): Promise<void> {
+    logger.info('[Puppeteer Bot] Waiting for active video and audio...');
+
+    await this.page!.evaluate(async () => {
+      const win = window as any;
+      const maxWaitTime = 30000; // 30 seconds max wait
+      const startTime = Date.now();
+
+      // Wait for at least one participant with video AND audio
+      while (Date.now() - startTime < maxWaitTime) {
+        const participants = win.dailyCall.participants();
+        console.log('Checking participants...', Object.keys(participants).length, 'participants');
+
+        // Check all participants (excluding local bot)
+        let hasActiveVideo = false;
+        let hasActiveAudio = false;
+
+        for (const [id, participant] of Object.entries(participants)) {
+          if (id === 'local') continue; // Skip the bot itself
+
+          const p = participant as any;
+          console.log(`Participant ${id}:`, {
+            video: p.video,
+            audio: p.audio,
+            tracks: p.tracks,
+          });
+
+          if (p.video && p.tracks?.video?.state === 'playable') {
+            hasActiveVideo = true;
+          }
+          if (p.audio && p.tracks?.audio?.state === 'playable') {
+            hasActiveAudio = true;
+          }
+
+          if (hasActiveVideo && hasActiveAudio) {
+            console.log(`✅ Found participant ${id} with active video and audio`);
+            break;
+          }
+        }
+
+        if (hasActiveVideo && hasActiveAudio) {
+          console.log('✅ Active video and audio detected, waiting 2 seconds for stability...');
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          console.log('✅ Ready to start RTMP streaming');
+          return;
+        }
+
+        // Wait 500ms before checking again
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
+      throw new Error('Timeout waiting for active video and audio tracks');
+    });
+
+    logger.info('[Puppeteer Bot] Active media confirmed');
   }
 
   private async startRTMPStreaming(config: PuppeteerBotConfig): Promise<void> {
