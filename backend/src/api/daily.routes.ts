@@ -112,10 +112,17 @@ router.post('/broadcasts/:broadcastId/streaming/start', async (req: AuthRequest,
 
     res.json({ success: true });
   } catch (error: any) {
-    logger.error('[Daily Routes] Failed to start streaming:', error);
+    logger.error('[Daily Routes] Failed to start streaming:', {
+      error: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      stack: error.stack,
+    });
     res.status(500).json({
       error: 'Failed to start live streaming',
       message: error.message,
+      details: error.response?.data,
     });
   }
 });
