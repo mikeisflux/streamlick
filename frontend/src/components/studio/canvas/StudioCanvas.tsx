@@ -736,49 +736,82 @@ export function StudioCanvas({
           <>
             {/* Simplified Auto-Layout - All layouts now use smart grid */}
             {/* Render local user first - only when on stage */}
-            {isLocalUserOnStage && (
-              <div
-                className={(totalParticipants === 1 && selectedLayout === 1) ? '' : getLayoutStyles(selectedLayout).mainVideo}
-                style={
-                  (totalParticipants === 1 && selectedLayout === 1)
-                    ? {
-                        gridColumn: '1 / -1',
-                        gridRow: '1 / -1',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '2rem',
-                      }
-                    : {}
+            {isLocalUserOnStage && (() => {
+              const isSolo = totalParticipants === 1;
+              let className = '';
+              let containerStyle = {};
+              let innerStyle = { width: '100%', height: '100%' };
+
+              if (isSolo) {
+                // Solo participant positioning based on layout type
+                switch (selectedLayout) {
+                  case 1: // Solo - Centered at 50%
+                    containerStyle = {
+                      gridColumn: '1 / -1',
+                      gridRow: '1 / -1',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '2rem',
+                    };
+                    innerStyle = { width: '50%', height: '50%' };
+                    break;
+
+                  case 6: // Screen - TINY box at top (waiting for screen share)
+                    className = 'col-span-1 row-span-1';
+                    innerStyle = { width: '120px', height: '90px' };
+                    break;
+
+                  case 7: // PIP - TINY box in corner (waiting for screen share)
+                    className = 'absolute bottom-4 right-4';
+                    innerStyle = { width: '240px', height: '180px' };
+                    break;
+
+                  case 8: // Cinema - EXTREMELY SMALL at top (waiting for widescreen content)
+                    className = 'col-span-1 row-span-1';
+                    containerStyle = { display: 'flex', justifyContent: 'center', alignItems: 'flex-start', paddingTop: '1rem' };
+                    innerStyle = { width: '160px', height: '120px' };
+                    break;
+
+                  default: // Layouts 2, 3, 4, 5 - Use mainVideo positioning
+                    className = getLayoutStyles(selectedLayout).mainVideo || '';
+                    break;
                 }
-              >
-                <div style={(totalParticipants === 1 && selectedLayout === 1) ? { width: '50%', height: '50%' } : { width: '100%', height: '100%' }}>
-                  <ParticipantBox
-                    stream={localStream}
-                    videoEnabled={videoEnabled}
-                    audioEnabled={audioEnabled}
-                    name="You"
-                    positionNumber={1}
-                    isHost={true}
-                    videoRef={mainVideoRef}
-                    size="medium"
-                    connectionQuality="excellent"
-                    showPositionNumber={showPositionNumbers}
-                    showConnectionQuality={showConnectionQuality}
-                    showLowerThird={showLowerThirds}
-                    participantId="local-user"
-                    onRemoveFromStage={onRemoveFromStage}
-                    cameraFrame={styleSettings.cameraFrame}
-                    borderWidth={styleSettings.borderWidth}
-                    borderColor={styleSettings.primaryColor}
-                    mirrorVideo={styleSettings.mirrorVideo}
-                    editMode={editMode}
-                    position={customLayoutPositions.get('local-user')}
-                    onPositionChange={(pos) => handlePositionChange('local-user', pos)}
-                  />
+              } else {
+                // Multiple participants - use standard mainVideo positioning
+                className = getLayoutStyles(selectedLayout).mainVideo || '';
+              }
+
+              return (
+                <div className={className} style={containerStyle}>
+                  <div style={innerStyle}>
+                    <ParticipantBox
+                      stream={localStream}
+                      videoEnabled={videoEnabled}
+                      audioEnabled={audioEnabled}
+                      name="You"
+                      positionNumber={1}
+                      isHost={true}
+                      videoRef={mainVideoRef}
+                      size="medium"
+                      connectionQuality="excellent"
+                      showPositionNumber={showPositionNumbers}
+                      showConnectionQuality={showConnectionQuality}
+                      showLowerThird={showLowerThirds}
+                      participantId="local-user"
+                      onRemoveFromStage={onRemoveFromStage}
+                      cameraFrame={styleSettings.cameraFrame}
+                      borderWidth={styleSettings.borderWidth}
+                      borderColor={styleSettings.primaryColor}
+                      mirrorVideo={styleSettings.mirrorVideo}
+                      editMode={editMode}
+                      position={customLayoutPositions.get('local-user')}
+                      onPositionChange={(pos) => handlePositionChange('local-user', pos)}
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Render remote participants */}
             {onStageParticipants.map((participant, index) => (
