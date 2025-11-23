@@ -68,7 +68,11 @@ class DailyBotPuppeteerService {
 
       logger.info('[Puppeteer Bot] Browser launched');
 
-      // Inject Daily.co SDK and create bot page
+      // Navigate to Daily.co domain to get a valid origin for postMessage
+      // This is required because Daily SDK uses postMessage internally and needs a non-null origin
+      await this.page.goto('https://daily.co', { waitUntil: 'domcontentloaded' });
+
+      // Now set our custom content (will inherit the daily.co origin)
       await this.page.setContent(`
         <!DOCTYPE html>
         <html>
@@ -112,7 +116,7 @@ class DailyBotPuppeteerService {
           </script>
         </body>
         </html>
-      `);
+      `, { waitUntil: 'networkidle0' });
 
       logger.info('[Puppeteer Bot] Page content set');
 
