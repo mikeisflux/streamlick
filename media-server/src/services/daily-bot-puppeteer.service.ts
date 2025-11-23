@@ -194,7 +194,7 @@ class DailyBotPuppeteerService {
       };
     });
 
-    logger.info('[Puppeteer Bot] WebRTC API check:', webrtcCheck);
+    logger.info(`[Puppeteer Bot] WebRTC API check: ${JSON.stringify(webrtcCheck, null, 2)}`);
 
     // Get browser console logs
     this.page!.on('console', (msg) => {
@@ -238,10 +238,10 @@ class DailyBotPuppeteerService {
 
       logger.info('[Puppeteer Bot] Joined Daily room');
     } catch (error: any) {
-      logger.error('[Puppeteer Bot] Error joining Daily room:', {
-        message: error.message,
-        stack: error.stack,
-      });
+      logger.error(`[Puppeteer Bot] Error joining Daily room: ${error.message}`);
+      if (error.stack) {
+        logger.error(`[Puppeteer Bot] Stack: ${error.stack}`);
+      }
       throw error;
     }
   }
