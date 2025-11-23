@@ -182,38 +182,68 @@ class DailyBotPuppeteerService {
   private async joinDailyRoom(config: PuppeteerBotConfig): Promise<void> {
     logger.info('[Puppeteer Bot] Joining Daily room...');
 
-    await this.page!.evaluate(
-      async (params) => {
-        const { roomUrl, token } = params;
-        const win = window as any;
+    // First check what WebRTC APIs are available
+    const webrtcCheck = await this.page!.evaluate(() => {
+      const win = window as any;
+      return {
+        RTCPeerConnection: typeof RTCPeerConnection !== 'undefined',
+        getUserMedia: typeof navigator.mediaDevices?.getUserMedia === 'function',
+        mediaDevices: typeof navigator.mediaDevices !== 'undefined',
+        DailyIframe: typeof win.DailyIframe !== 'undefined',
+        navigator: typeof navigator !== 'undefined',
+      };
+    });
 
-        // Create Daily call object
-        win.dailyCall = win.DailyIframe.createCallObject();
+    logger.info('[Puppeteer Bot] WebRTC API check:', webrtcCheck);
 
-        win.dailyCall.on('joined-meeting', () => {
-          win.botLog.push({ message: 'Joined Daily meeting' });
-        });
+    // Get browser console logs
+    this.page!.on('console', (msg) => {
+      logger.info(`[Browser Console ${msg.type()}]:`, msg.text());
+    });
 
-        win.dailyCall.on('error', (error: any) => {
-          win.botLog.push({ message: 'Daily error', error });
-        });
+    try {
+      await this.page!.evaluate(
+        async (params) => {
+          const { roomUrl, token } = params;
+          const win = window as any;
 
-        // Join the room
-        await win.dailyCall.join({ url: roomUrl, token });
+          // Create Daily call object
+          win.dailyCall = win.DailyIframe.createCallObject();
 
-        // Set custom tracks from mediasoup
-        if (win.mediaTracks.video && win.mediaTracks.audio) {
-          await win.dailyCall.setInputDevicesAsync({
-            videoSource: win.mediaTracks.video,
-            audioSource: win.mediaTracks.audio,
+          win.dailyCall.on('joined-meeting', () => {
+            win.botLog.push({ message: 'Joined Daily meeting' });
           });
-          win.botLog.push({ message: 'Set custom tracks from mediasoup' });
-        }
-      },
-      { roomUrl: config.roomUrl, token: config.token }
-    );
 
-    logger.info('[Puppeteer Bot] Joined Daily room');
+          win.dailyCall.on('error', (error: any) => {
+            console.error('Daily error event:', error);
+            win.botLog.push({ message: 'Daily error', error });
+          });
+
+          // Join the room
+          console.log('Attempting to join Daily room...');
+          await win.dailyCall.join({ url: roomUrl, token });
+          console.log('Successfully joined Daily room');
+
+          // Set custom tracks from mediasoup
+          if (win.mediaTracks.video && win.mediaTracks.audio) {
+            await win.dailyCall.setInputDevicesAsync({
+              videoSource: win.mediaTracks.video,
+              audioSource: win.mediaTracks.audio,
+            });
+            win.botLog.push({ message: 'Set custom tracks from mediasoup' });
+          }
+        },
+        { roomUrl: config.roomUrl, token: config.token }
+      );
+
+      logger.info('[Puppeteer Bot] Joined Daily room');
+    } catch (error: any) {
+      logger.error('[Puppeteer Bot] Error joining Daily room:', {
+        message: error.message,
+        stack: error.stack,
+      });
+      throw error;
+    }
   }
 
   private async startRTMPStreaming(config: PuppeteerBotConfig): Promise<void> {
