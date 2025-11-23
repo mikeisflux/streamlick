@@ -1,11 +1,14 @@
 /**
  * RTP Bridge Service
  *
- * Bridges mediasoup RTP streams to WebRTC MediaStreamTracks
- * that can be used with Daily.co
+ * Bridges mediasoup RTP streams to WebRTC MediaStreamTracks using full WebRTC signaling
+ * with DTLS/SRTP support.
  *
- * This creates a WebRTC peer connection using wrtc (Node.js WebRTC)
- * and feeds it RTP from mediasoup, then extracts MediaStreamTracks.
+ * Architecture:
+ * 1. Create wrtc RTCPeerConnection
+ * 2. Create mediasoup WebRTC Transport (not Plain)
+ * 3. Exchange offer/answer with proper DTLS parameters
+ * 4. Create consumers and extract MediaStreamTracks
  */
 
 import { types as mediasoupTypes } from 'mediasoup';
@@ -25,6 +28,9 @@ interface BridgeResult {
   videoTrack: any; // MediaStreamTrack
   audioTrack: any; // MediaStreamTrack
   peerConnection: any; // RTCPeerConnection
+  webRtcTransport: mediasoupTypes.WebRtcTransport; // Need to track for cleanup
+  videoConsumer: mediasoupTypes.Consumer;
+  audioConsumer: mediasoupTypes.Consumer;
 }
 
 class RTPBridgeService {
@@ -44,90 +50,85 @@ class RTPBridgeService {
     }
 
     try {
-      logger.info('[RTP Bridge] Creating MediaStreamTracks from mediasoup consumers...');
+      logger.info('[RTP Bridge] Creating MediaStreamTracks with full WebRTC signaling...');
 
-      // Create WebRTC peer connection
+      // STEP 1: Create wrtc peer connection
       const peerConnection = new wrtc.RTCPeerConnection({
         iceServers: [],
       });
 
       logger.info('[RTP Bridge] Created RTCPeerConnection');
 
-      // Create a Plain RTP transport for the peer connection to receive from mediasoup
-      const plainTransport = await router.createPlainTransport({
-        listenIp: { ip: '127.0.0.1', announcedIp: undefined },
-        rtcpMux: true,
-        comedia: true, // Accept connections from any IP
+      // STEP 2: Add transceivers to receive video and audio
+      peerConnection.addTransceiver('video', { direction: 'recvonly' });
+      peerConnection.addTransceiver('audio', { direction: 'recvonly' });
+
+      // STEP 3: Create offer from peer connection
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+
+      logger.info('[RTP Bridge] Created offer from peer connection');
+
+      // STEP 4: Extract DTLS parameters from offer
+      const dtlsParameters = this.extractDtlsParameters(offer.sdp!);
+
+      logger.info('[RTP Bridge] Extracted DTLS parameters:', dtlsParameters);
+
+      // STEP 5: Create mediasoup WebRTC Transport
+      const webRtcTransport = await router.createWebRtcTransport({
+        listenIps: [{ ip: '127.0.0.1', announcedIp: undefined }],
+        enableUdp: true,
+        enableTcp: false,
+        preferUdp: true,
+        initialAvailableOutgoingBitrate: 1000000,
       });
 
-      logger.info('[RTP Bridge] Created Plain RTP transport:', {
-        transportId: plainTransport.id,
-        tuple: plainTransport.tuple,
-      });
+      logger.info('[RTP Bridge] Created mediasoup WebRTC transport');
 
-      // Create consumers on the plain transport from the producers
-      const plainVideoConsumer = await plainTransport.consume({
+      // STEP 6: Connect mediasoup transport with peer connection's DTLS params
+      await webRtcTransport.connect({ dtlsParameters });
+
+      logger.info('[RTP Bridge] Connected WebRTC transport');
+
+      // STEP 7: Get RTP capabilities that wrtc supports
+      const rtpCapabilities = this.getWrtcRtpCapabilities(router);
+
+      // STEP 8: Create consumers on WebRTC transport
+      const videoConsumer = await webRtcTransport.consume({
         producerId: videoProducer.id,
-        rtpCapabilities: router.rtpCapabilities,
+        rtpCapabilities,
         paused: false,
       });
 
-      const plainAudioConsumer = await plainTransport.consume({
+      const audioConsumer = await webRtcTransport.consume({
         producerId: audioProducer.id,
-        rtpCapabilities: router.rtpCapabilities,
+        rtpCapabilities,
         paused: false,
       });
 
-      logger.info('[RTP Bridge] Created consumers on plain transport');
+      logger.info('[RTP Bridge] Created consumers on WebRTC transport');
 
-      // Get RTP parameters from the consumers
-      const videoRtpParameters = plainVideoConsumer.rtpParameters;
-      const audioRtpParameters = plainAudioConsumer.rtpParameters;
-
-      // Create an SDP offer that describes the RTP streams from mediasoup
-      const sdp = this.createSDPFromRTPParameters(
-        plainTransport.tuple.localPort,
-        videoRtpParameters,
-        audioRtpParameters
+      // STEP 9: Build SDP answer from mediasoup transport and consumers
+      const answerSdp = this.buildAnswerSdp(
+        webRtcTransport,
+        videoConsumer,
+        audioConsumer
       );
 
-      logger.info('[RTP Bridge] Generated SDP offer:', sdp.substring(0, 200) + '...');
+      logger.info('[RTP Bridge] Built answer SDP');
 
-      // Set remote description (what we're receiving from mediasoup)
-      try {
-        await peerConnection.setRemoteDescription({
-          type: 'offer',
-          sdp,
-        });
-      } catch (error: any) {
-        logger.error('[RTP Bridge] Failed to set remote description:', {
-          error: error.message,
-          sdp: sdp,
-        });
-        throw error;
-      }
-
-      // Create answer
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
-
-      logger.info('[RTP Bridge] Created and set local description');
-
-      // Connect the plain transport to send to the peer connection
-      const answerSdp = answer.sdp || '';
-      const remoteRtpPort = this.extractPortFromSDP(answerSdp);
-
-      await plainTransport.connect({
-        ip: '127.0.0.1',
-        port: remoteRtpPort,
+      // STEP 10: Set answer on peer connection
+      await peerConnection.setRemoteDescription({
+        type: 'answer',
+        sdp: answerSdp,
       });
 
-      logger.info('[RTP Bridge] Connected plain transport to peer connection');
+      logger.info('[RTP Bridge] Set answer on peer connection');
 
-      // Wait for tracks to be available on the peer connection
+      // STEP 11: Wait for tracks to arrive
       const tracks = await this.waitForTracks(peerConnection);
 
-      logger.info('[RTP Bridge] ✅ Tracks received from peer connection:', {
+      logger.info('[RTP Bridge] ✅ Tracks received:', {
         videoTrack: tracks.videoTrack?.id,
         audioTrack: tracks.audioTrack?.id,
       });
@@ -136,6 +137,9 @@ class RTPBridgeService {
         videoTrack: tracks.videoTrack,
         audioTrack: tracks.audioTrack,
         peerConnection,
+        webRtcTransport,
+        videoConsumer,
+        audioConsumer,
       };
     } catch (error: any) {
       logger.error('[RTP Bridge] Failed to create tracks:', {
@@ -147,62 +151,126 @@ class RTPBridgeService {
   }
 
   /**
-   * Create SDP offer from RTP parameters
+   * Extract DTLS parameters from SDP offer
    */
-  private createSDPFromRTPParameters(
-    port: number,
-    videoRtpParameters: mediasoupTypes.RtpParameters,
-    audioRtpParameters: mediasoupTypes.RtpParameters
+  private extractDtlsParameters(sdp: string): mediasoupTypes.DtlsParameters {
+    // Extract fingerprint
+    const fingerprintMatch = sdp.match(/a=fingerprint:(\S+)\s+(\S+)/);
+    if (!fingerprintMatch) {
+      throw new Error('No DTLS fingerprint found in offer SDP');
+    }
+
+    // Extract setup attribute (active/passive/actpass)
+    const setupMatch = sdp.match(/a=setup:(\S+)/);
+    let role: mediasoupTypes.DtlsRole = 'auto';
+
+    if (setupMatch) {
+      const setup = setupMatch[1];
+      // If peer is active, we must be passive (server)
+      // If peer is passive, we must be active (client)
+      // If peer is actpass, we choose to be active (client)
+      if (setup === 'active') {
+        role = 'server';
+      } else if (setup === 'passive') {
+        role = 'client';
+      } else {
+        role = 'client'; // Default to client when peer offers actpass
+      }
+    }
+
+    return {
+      role,
+      fingerprints: [
+        {
+          algorithm: fingerprintMatch[1],
+          value: fingerprintMatch[2],
+        },
+      ],
+    };
+  }
+
+  /**
+   * Get RTP capabilities that wrtc peer connection supports
+   */
+  private getWrtcRtpCapabilities(router: mediasoupTypes.Router): mediasoupTypes.RtpCapabilities {
+    // Use router's capabilities but filter to what wrtc commonly supports
+    const routerCaps = router.rtpCapabilities;
+
+    return {
+      codecs: routerCaps.codecs.filter((codec) => {
+        // wrtc supports VP8, H264, and Opus
+        const mimeType = codec.mimeType.toLowerCase();
+        return (
+          mimeType === 'video/vp8' ||
+          mimeType === 'video/h264' ||
+          mimeType === 'audio/opus'
+        );
+      }),
+      headerExtensions: routerCaps.headerExtensions,
+    };
+  }
+
+  /**
+   * Build SDP answer from mediasoup WebRTC transport and consumers
+   */
+  private buildAnswerSdp(
+    transport: mediasoupTypes.WebRtcTransport,
+    videoConsumer: mediasoupTypes.Consumer,
+    audioConsumer: mediasoupTypes.Consumer
   ): string {
-    const videoCodec = videoRtpParameters.codecs[0];
-    const audioCodec = audioRtpParameters.codecs[0];
+    const dtlsParams = transport.dtlsParameters;
+    const iceParams = transport.iceParameters;
+    const iceCandidates = transport.iceCandidates;
 
-    // Generate random SSRCs for the streams
-    const videoSSRC = Math.floor(Math.random() * 0xffffffff);
-    const audioSSRC = Math.floor(Math.random() * 0xffffffff);
+    // Get first ICE candidate
+    const candidate = iceCandidates[0];
 
+    // Get RTP parameters
+    const videoRtp = videoConsumer.rtpParameters;
+    const audioRtp = audioConsumer.rtpParameters;
+
+    const videoCodec = videoRtp.codecs[0];
+    const audioCodec = audioRtp.codecs[0];
+
+    // Get SSRCs from RTP parameters
+    const videoSsrc = videoRtp.encodings?.[0]?.ssrc || Math.floor(Math.random() * 0xffffffff);
+    const audioSsrc = audioRtp.encodings?.[0]?.ssrc || Math.floor(Math.random() * 0xffffffff);
+
+    // Build SDP answer
     const sdp = `v=0
 o=- 0 0 IN IP4 127.0.0.1
-s=mediasoup-bridge
+s=mediasoup
 t=0 0
 a=group:BUNDLE 0 1
 a=msid-semantic:WMS *
-m=video ${port} UDP/TLS/RTP/SAVPF ${videoCodec.payloadType}
-c=IN IP4 127.0.0.1
-a=rtcp:${port} IN IP4 127.0.0.1
+a=ice-ufrag:${iceParams.usernameFragment}
+a=ice-pwd:${iceParams.password}
+a=ice-options:trickle
+a=fingerprint:${dtlsParams.fingerprints[0].algorithm} ${dtlsParams.fingerprints[0].value}
+a=setup:${dtlsParams.role === 'server' ? 'active' : 'passive'}
+m=video ${candidate.port} UDP/TLS/RTP/SAVPF ${videoCodec.payloadType}
+c=IN IP4 ${candidate.ip}
+a=rtcp:${candidate.port} IN IP4 ${candidate.ip}
 a=rtcp-mux
 a=sendonly
 a=mid:0
 a=rtpmap:${videoCodec.payloadType} ${videoCodec.mimeType.split('/')[1]}/${videoCodec.clockRate}
-a=ssrc:${videoSSRC} cname:mediasoup
-a=ssrc:${videoSSRC} msid:mediasoup video0
-a=ssrc:${videoSSRC} mslabel:mediasoup
-a=ssrc:${videoSSRC} label:video0
-m=audio ${port} UDP/TLS/RTP/SAVPF ${audioCodec.payloadType}
-c=IN IP4 127.0.0.1
-a=rtcp:${port} IN IP4 127.0.0.1
+a=ssrc:${videoSsrc} cname:mediasoup
+a=ssrc:${videoSsrc} msid:mediasoup video
+a=candidate:${candidate.foundation} 1 udp ${candidate.priority} ${candidate.ip} ${candidate.port} typ ${candidate.type}
+m=audio ${candidate.port} UDP/TLS/RTP/SAVPF ${audioCodec.payloadType}
+c=IN IP4 ${candidate.ip}
+a=rtcp:${candidate.port} IN IP4 ${candidate.ip}
 a=rtcp-mux
 a=sendonly
 a=mid:1
-a=rtpmap:${audioCodec.payloadType} ${audioCodec.mimeType.split('/')[1]}/${audioCodec.clockRate}
-a=ssrc:${audioSSRC} cname:mediasoup
-a=ssrc:${audioSSRC} msid:mediasoup audio0
-a=ssrc:${audioSSRC} mslabel:mediasoup
-a=ssrc:${audioSSRC} label:audio0
+a=rtpmap:${audioCodec.payloadType} ${audioCodec.mimeType.split('/')[1]}/${audioCodec.clockRate}${audioCodec.channels ? `/${audioCodec.channels}` : ''}
+a=ssrc:${audioSsrc} cname:mediasoup
+a=ssrc:${audioSsrc} msid:mediasoup audio
+a=candidate:${candidate.foundation} 1 udp ${candidate.priority} ${candidate.ip} ${candidate.port} typ ${candidate.type}
 `;
 
     return sdp;
-  }
-
-  /**
-   * Extract port from SDP
-   */
-  private extractPortFromSDP(sdp: string): number {
-    const match = sdp.match(/m=(?:video|audio) (\d+)/);
-    if (!match) {
-      throw new Error('Could not extract port from SDP');
-    }
-    return parseInt(match[1], 10);
   }
 
   /**

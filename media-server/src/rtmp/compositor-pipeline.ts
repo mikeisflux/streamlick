@@ -20,6 +20,7 @@ interface Pipeline {
   audioConsumer: any | null;
   ffmpegProcesses: Map<string, any>;
   rtpBridgePeerConnection?: any; // For Daily bot mode
+  rtpBridgeWebRtcTransport?: any; // For Daily bot WebRTC transport
 }
 
 const activePipelines = new Map<string, Pipeline>();
@@ -756,14 +757,14 @@ async function createDailyPipeline(
     await dailyBotService.startLiveStreaming(dailyDestinations);
 
     // Store pipeline
-    // Note: Consumers are created internally in RTP bridge, not stored here
     activePipelines.set(broadcastId, {
       videoPlainTransport: null,
       audioPlainTransport: null,
-      videoConsumer: null, // Created internally in RTP bridge
-      audioConsumer: null, // Created internally in RTP bridge
+      videoConsumer: bridgeResult.videoConsumer,
+      audioConsumer: bridgeResult.audioConsumer,
       ffmpegProcesses: new Map(),
       rtpBridgePeerConnection: bridgeResult.peerConnection,
+      rtpBridgeWebRtcTransport: bridgeResult.webRtcTransport,
     });
 
     logger.info(`[Daily Pipeline BOT] ✅ Automated bot pipeline created successfully`);
@@ -786,9 +787,14 @@ async function stopDailyPipeline(broadcastId: string): Promise<void> {
     await dailyBotService.stopLiveStreaming();
     await dailyBotService.leaveRoom();
 
-    // Cleanup RTP bridge peer connection
+    // Cleanup RTP bridge resources
     if (pipeline?.rtpBridgePeerConnection) {
       await rtpBridgeService.cleanup(pipeline.rtpBridgePeerConnection);
+    }
+
+    // Close WebRTC transport
+    if (pipeline?.rtpBridgeWebRtcTransport) {
+      pipeline.rtpBridgeWebRtcTransport.close();
     }
 
     // Close consumers
