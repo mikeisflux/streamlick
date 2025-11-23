@@ -218,19 +218,17 @@ export function StudioCanvas({
 
   // Load stream background
   useEffect(() => {
-    const loadBackground = () => {
-      const bg = localStorage.getItem('streamBackground');
-      setStreamBackground(bg);
-    };
-
-    loadBackground();
-
     // Listen for custom event for background updates
     const handleBackgroundUpdated = ((e: CustomEvent) => {
       setStreamBackground(e.detail.url);
     }) as EventListener;
 
     window.addEventListener('backgroundUpdated', handleBackgroundUpdated);
+
+    // Initial load - event will be dispatched by useStudioInitialization
+    // which handles both IndexedDB and localStorage loading
+    // No need to duplicate that logic here
+
     return () => window.removeEventListener('backgroundUpdated', handleBackgroundUpdated);
   }, []);
 
