@@ -738,9 +738,9 @@ export function StudioCanvas({
             {/* Render local user first - only when on stage */}
             {isLocalUserOnStage && (
               <div
-                className={totalParticipants === 1 ? '' : getLayoutStyles(selectedLayout).mainVideo}
+                className={(totalParticipants === 1 && selectedLayout === 1) ? '' : getLayoutStyles(selectedLayout).mainVideo}
                 style={
-                  totalParticipants === 1
+                  (totalParticipants === 1 && selectedLayout === 1)
                     ? {
                         gridColumn: '1 / -1',
                         gridRow: '1 / -1',
@@ -752,7 +752,7 @@ export function StudioCanvas({
                     : {}
                 }
               >
-                <div style={totalParticipants === 1 ? { width: '50%', height: '50%' } : { width: '100%', height: '100%' }}>
+                <div style={(totalParticipants === 1 && selectedLayout === 1) ? { width: '50%', height: '50%' } : { width: '100%', height: '100%' }}>
                   <ParticipantBox
                     stream={localStream}
                     videoEnabled={videoEnabled}
