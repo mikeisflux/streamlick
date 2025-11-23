@@ -38,6 +38,7 @@ import {
   useSidebarVideoSync,
   useFeatureToggles,
   useTeleprompter,
+  useAutoMuteDuringVideos,
   useStudioHandlers,
 } from '../hooks/studio';
 import { useCanvasSettings } from '../hooks/studio/useCanvasSettings';
@@ -57,6 +58,9 @@ export function Studio() {
 
   const { broadcast, isLive, setBroadcast } = useStudioStore();
   const { localStream, audioEnabled, videoEnabled, startCamera, stopCamera, toggleAudio, toggleVideo } = useMedia();
+
+  // Auto-mute during video playback
+  useAutoMuteDuringVideos(localStream, audioEnabled);
 
   // Feature toggles
   const {

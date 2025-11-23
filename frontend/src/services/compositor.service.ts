@@ -90,6 +90,10 @@ class CompositorService {
   private audioAnalysers: Map<string, AnalyserNode> = new Map();
   private audioLevels: Map<string, number> = new Map(); // 0-1 normalized audio level
 
+  // Video playback callbacks for auto-muting participants
+  private onVideoStart?: () => void;
+  private onVideoEnd?: () => void;
+
   // Canvas dimensions - configurable via environment or defaults to 1080p Full HD (1920x1080)
   private readonly WIDTH = parseInt(import.meta.env.VITE_CANVAS_WIDTH || '1920');
   private readonly HEIGHT = parseInt(import.meta.env.VITE_CANVAS_HEIGHT || '1080');
@@ -335,6 +339,17 @@ class CompositorService {
     const normalizedVolume = Math.max(0, Math.min(100, volume)) / 100;
     logger.info(`Setting input volume to ${volume}% (${normalizedVolume.toFixed(2)})`);
     audioMixerService.setMasterVolume(normalizedVolume);
+  }
+
+  /**
+   * Set callbacks for video playback events (for auto-muting participants)
+   * @param onStart Called when a video starts playing
+   * @param onEnd Called when a video ends
+   */
+  setVideoPlaybackCallbacks(onStart: () => void, onEnd: () => void): void {
+    this.onVideoStart = onStart;
+    this.onVideoEnd = onEnd;
+    logger.info('Video playback callbacks registered');
   }
 
   /**
@@ -623,6 +638,12 @@ class CompositorService {
           this.setMediaClipOverlay(videoElement);
           logger.info('Intro video set as media clip overlay, starting playback...');
 
+          // Notify that video is starting (for auto-muting participants)
+          if (this.onVideoStart) {
+            logger.info('[Auto-Mute] Calling onVideoStart callback');
+            this.onVideoStart();
+          }
+
           videoElement.play().catch((error) => {
             logger.error('Failed to play intro video:', error);
             clearTimeout(loadingTimeout); // Clear loading timeout
@@ -651,6 +672,13 @@ class CompositorService {
         clearTimeout(loadingTimeout); // Clear loading timeout
         this.clearMediaClipOverlay();
         audioMixerService.removeStream('intro-video');
+
+        // Notify that video has ended (for auto-unmuting participants)
+        if (this.onVideoEnd) {
+          logger.info('[Auto-Mute] Calling onVideoEnd callback');
+          this.onVideoEnd();
+        }
+
         resolve();
       };
 
@@ -683,6 +711,13 @@ class CompositorService {
           videoElement.pause();
           this.clearMediaClipOverlay();
           audioMixerService.removeStream('intro-video');
+
+          // Notify that video has ended (for auto-unmuting participants)
+          if (this.onVideoEnd) {
+            logger.info('[Auto-Mute] Calling onVideoEnd callback (duration timeout)');
+            this.onVideoEnd();
+          }
+
           resolve();
         }, duration * 1000);
       }
