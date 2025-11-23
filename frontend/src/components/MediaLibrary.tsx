@@ -164,9 +164,15 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
         console.error('[MediaLibrary] Failed to resume AudioContext:', error);
       }
 
+      // CRITICAL: Force unmute and set volume IMMEDIATELY before playing
+      videoElement.muted = false;
+      videoElement.volume = 1.0;
+      console.log(`[MediaLibrary] Video settings - muted: ${videoElement.muted}, volume: ${videoElement.volume}`);
+
       // Start playing
       try {
         await videoElement.play();
+        console.log('[MediaLibrary] Video playing - you should hear audio now!');
         setPlayingClips(prev => new Set(prev).add(clipId));
       } catch (error) {
         console.error('[MediaLibrary] Failed to play video:', error);
