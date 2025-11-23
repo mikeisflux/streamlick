@@ -132,6 +132,65 @@ class CompositorService {
       alpha: false,
       desynchronized: true,
     });
+
+    // Listen for media asset events (background, logo, overlay)
+    this.setupMediaAssetListeners();
+  }
+
+  /**
+   * Setup event listeners for media assets
+   */
+  private setupMediaAssetListeners(): void {
+    // Background updates
+    window.addEventListener('backgroundUpdated', ((e: CustomEvent) => {
+      const { url } = e.detail;
+      if (url) {
+        logger.info('[Compositor] Background updated via event:', url);
+        this.addOverlay({
+          id: 'background',
+          type: 'background',
+          url,
+          position: { x: 0, y: 0, width: this.WIDTH, height: this.HEIGHT },
+        }).catch(err => logger.error('[Compositor] Failed to set background:', err));
+      } else {
+        logger.info('[Compositor] Background removed via event');
+        this.removeOverlay('background');
+      }
+    }) as EventListener);
+
+    // Logo updates
+    window.addEventListener('logoUpdated', ((e: CustomEvent) => {
+      const { url } = e.detail;
+      if (url) {
+        logger.info('[Compositor] Logo updated via event:', url);
+        this.addOverlay({
+          id: 'logo',
+          type: 'logo',
+          url,
+          position: { x: 20, y: 20, width: 100, height: 100 },
+        }).catch(err => logger.error('[Compositor] Failed to set logo:', err));
+      } else {
+        logger.info('[Compositor] Logo removed via event');
+        this.removeOverlay('logo');
+      }
+    }) as EventListener);
+
+    // Overlay updates
+    window.addEventListener('overlayUpdated', ((e: CustomEvent) => {
+      const { url } = e.detail;
+      if (url) {
+        logger.info('[Compositor] Overlay updated via event:', url);
+        this.addOverlay({
+          id: 'overlay',
+          type: 'banner',
+          url,
+          position: { x: 0, y: 0, width: this.WIDTH, height: this.HEIGHT },
+        }).catch(err => logger.error('[Compositor] Failed to set overlay:', err));
+      } else {
+        logger.info('[Compositor] Overlay removed via event');
+        this.removeOverlay('overlay');
+      }
+    }) as EventListener);
   }
 
   /**
