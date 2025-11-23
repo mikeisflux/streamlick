@@ -160,7 +160,12 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
         return newSet;
       });
     } else {
-      // CRITICAL: Resume AudioContext FIRST (synchronously within user gesture)
+      // CRITICAL: Initialize and setup audio mixer BEFORE playing
+      // Ensure audio mixer is initialized (safe to call multiple times)
+      audioMixerService.initialize();
+      console.log('[MediaLibrary] Audio mixer initialized');
+
+      // Resume AudioContext (synchronously within user gesture)
       const audioContext = (audioMixerService as any).audioContext;
       if (audioContext && audioContext.state === 'suspended') {
         console.log('[MediaLibrary] Resuming AudioContext BEFORE play (synchronous in user gesture)...');
@@ -171,9 +176,10 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
       // This routes the video audio through the Web Audio context
       try {
         audioMixerService.addMediaElement(clipId, videoElement);
-        console.log('[MediaLibrary] Video element added to audio mixer');
+        console.log('[MediaLibrary] Video element added to audio mixer for dual output (stream + local speakers)');
       } catch (error) {
         console.error('[MediaLibrary] Failed to add video to audio mixer:', error);
+        // If audio mixer fails, video will still play with default browser audio
       }
 
       // Set volume and unmute
