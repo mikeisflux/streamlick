@@ -577,6 +577,10 @@ export function StudioCanvas({
   useEffect(() => {
     if (screenShareVideoRef.current && screenShareStream) {
       screenShareVideoRef.current.srcObject = screenShareStream;
+      // Ensure video plays
+      screenShareVideoRef.current.play().catch(err =>
+        console.error('Failed to play screen share video:', err)
+      );
     }
   }, [screenShareStream]);
 
