@@ -240,7 +240,13 @@ class DailyMediaServerService {
 
       logger.info('[Daily Media Server] RTMP streaming started via Daily');
     } catch (error: any) {
-      logger.error('[Daily Media Server] Failed to start streaming:', error.message);
+      logger.error('[Daily Media Server] Failed to start streaming:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        responseData: error.response?.data,
+        stack: error.stack,
+      });
       throw error;
     }
   }
