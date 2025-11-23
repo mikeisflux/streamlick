@@ -91,6 +91,9 @@ class AudioProcessorService {
     // Convert to dB (0-255 -> dB)
     const dB = 20 * Math.log10(average / 255);
 
+    // Get current audio time for gain scheduling
+    const now = this.audioContext!.currentTime;
+
     // Apply noise gate
     if (this.noiseGateEnabled) {
       if (dB > this.noiseGateThreshold) {
@@ -102,7 +105,6 @@ class AudioProcessorService {
       }
 
       // Smooth gain changes to avoid clicks/pops
-      const now = this.audioContext!.currentTime;
       const timeDelta = this.targetGain > this.currentGain ? this.attackTime : this.releaseTime;
 
       // Gradually move current gain toward target
@@ -230,7 +232,7 @@ class AudioProcessorService {
   /**
    * Clean up and close audio context
    */
-  async destroy(): void {
+  async destroy(): Promise<void> {
     logger.info('[AudioProcessor] Destroying audio processor');
 
     this.stop();
