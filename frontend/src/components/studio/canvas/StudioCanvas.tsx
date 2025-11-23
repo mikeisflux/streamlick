@@ -4,6 +4,7 @@ import { ParticipantBox } from './ParticipantBox';
 import { TeleprompterOverlay } from './TeleprompterOverlay';
 import { CommentOverlay } from './CommentOverlay';
 import { Caption } from '../../../services/caption.service';
+import { compositorService } from '../../../services/compositor.service';
 
 interface Banner {
   id: string;
@@ -423,13 +424,16 @@ export function StudioCanvas({
 
   const handleVolumeChange = (newVolume: number) => {
     setVolume(newVolume);
-    // Set volume on all audio elements except preview videos
-    const audioElements = document.querySelectorAll('audio, video');
-    audioElements.forEach((element: any) => {
-      if (element.dataset.excludeGlobalMute !== 'true') {
-        element.volume = newVolume / 100;
-      }
-    });
+
+    // CRITICAL FIX: Use compositor service to set master volume
+    // This controls the Web Audio API mixer which handles ALL audio:
+    // - Participant audio (from WebRTC MediaStreams)
+    // - Intro/countdown videos
+    // - Audio/video clips
+    // Setting HTML element .volume property doesn't affect Web Audio API routing
+    compositorService.setInputVolume(newVolume);
+
+    console.log(`[StudioCanvas] Master volume set to ${newVolume}%`);
   };
 
   return (

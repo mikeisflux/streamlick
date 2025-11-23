@@ -70,13 +70,16 @@ export function CompositorPreview({ orientation = 'landscape' }: CompositorPrevi
 
   const handleVolumeChange = (newVolume: number) => {
     setVolume(newVolume);
-    // Set volume on all audio elements
-    const audioElements = document.querySelectorAll('audio, video');
-    audioElements.forEach((element: any) => {
-      if (element.dataset.excludeGlobalMute !== 'true') {
-        element.volume = newVolume / 100;
-      }
-    });
+
+    // CRITICAL FIX: Use compositor service to set master volume
+    // This controls the Web Audio API mixer which handles ALL audio:
+    // - Participant audio (from WebRTC MediaStreams)
+    // - Intro/countdown videos
+    // - Audio/video clips
+    // Setting HTML element .volume property doesn't affect Web Audio API routing
+    compositorService.setInputVolume(newVolume);
+
+    console.log(`[CompositorPreview] Master volume set to ${newVolume}%`);
   };
 
   const aspectRatio = orientation === 'portrait' ? '9 / 16' : '16 / 9';
