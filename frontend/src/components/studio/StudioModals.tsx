@@ -1,6 +1,5 @@
 import {
   AnalyticsDashboard,
-  MediaLibraryModal,
   ClipManagerModal,
   ProducerModeModal,
   ClipDurationSelector,
@@ -9,11 +8,6 @@ import {
 } from './modals';
 
 interface StudioModalsProps {
-  // Media Library
-  showMediaLibrary: boolean;
-  setShowMediaLibrary: (show: boolean) => void;
-  onPlayClip: (clipId: string) => void;
-
   // Clip Manager
   showClipManager: boolean;
   setShowClipManager: (show: boolean) => void;
@@ -66,9 +60,6 @@ interface StudioModalsProps {
 }
 
 export function StudioModals({
-  showMediaLibrary,
-  setShowMediaLibrary,
-  onPlayClip,
   showClipManager,
   setShowClipManager,
   broadcastId,
@@ -108,15 +99,6 @@ export function StudioModals({
 }: StudioModalsProps) {
   return (
     <>
-      {/* Media Library Modal */}
-      {showMediaLibrary && (
-        <MediaLibraryModal
-          isOpen={showMediaLibrary}
-          onClose={() => setShowMediaLibrary(false)}
-          onTriggerClip={onPlayClip}
-        />
-      )}
-
       {/* Clip Manager Modal */}
       {showClipManager && (
         <ClipManagerModal isOpen={showClipManager} onClose={() => setShowClipManager(false)} broadcastId={broadcastId} />

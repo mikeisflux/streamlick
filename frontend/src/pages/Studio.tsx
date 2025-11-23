@@ -279,7 +279,7 @@ export function Studio() {
     currentLayout: selectedLayout,
     onLayoutChange: handleLayoutChange,
   });
-  const { mediaClips, showMediaLibrary, setShowMediaLibrary, handlePlayClip } = useMediaClips();
+  const { mediaClips, handlePlayClip } = useMediaClips();
   const { showAnalyticsDashboard, setShowAnalyticsDashboard, analyticsDashboardPosition, analyticsDashboardSize, handleAnalyticsDashboardDragStart, handleAnalyticsDashboardResizeStart } = useAnalyticsDashboard();
   const { showDestinationsDrawer, setShowDestinationsDrawer, showInviteDrawer, setShowInviteDrawer, showBannerDrawer, setShowBannerDrawer, showBrandDrawer, setShowBrandDrawer, showRecordingDrawer, setShowRecordingDrawer } = useDrawers();
   const { showClipManager, setShowClipManager, showProducerMode, setShowProducerMode, showClipDurationSelector, setShowClipDurationSelector, showLanguageSelector, setShowLanguageSelector, showBackgroundSettings, setShowBackgroundSettings, showSceneManager, setShowSceneManager } = useModals();
@@ -620,9 +620,6 @@ export function Studio() {
 
       {/* Modals */}
       <StudioModals
-        showMediaLibrary={showMediaLibrary}
-        setShowMediaLibrary={setShowMediaLibrary}
-        onPlayClip={handlePlayClip}
         showClipManager={showClipManager}
         setShowClipManager={setShowClipManager}
         broadcastId={broadcastId}
