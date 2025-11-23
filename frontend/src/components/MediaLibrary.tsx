@@ -285,7 +285,10 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
                 <div onClick={() => handlePreviewClick(clip.id)} className="cursor-pointer">
                   <video
                     ref={(el) => {
-                      if (el) videoRefs.current.set(clip.id, el);
+                      if (el) {
+                        videoRefs.current.set(clip.id, el);
+                        el.volume = 1.0; // CRITICAL: Set volume to 100% for audio playback
+                      }
                     }}
                     src={clip.url}
                     className="w-full h-48 object-cover rounded"
