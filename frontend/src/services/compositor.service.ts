@@ -647,6 +647,7 @@ class CompositorService {
       const videoElement = document.createElement('video');
       videoElement.src = videoUrl;
       videoElement.muted = false; // Keep unmuted so audio can be captured by Web Audio API
+      videoElement.volume = 1.0; // Set volume to 100% (CRITICAL for audio playback)
       videoElement.autoplay = false;
       videoElement.preload = 'auto'; // FIX FLICKERING: Preload entire video for smooth playback
       // Note: crossOrigin removed - not needed for same-origin video files and can cause issues
