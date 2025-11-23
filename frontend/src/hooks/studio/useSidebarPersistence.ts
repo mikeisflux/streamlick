@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 
-type RightTabType = 'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording' | null;
+type RightTabType = 'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording' | 'quality' | null;
 
 export function useSidebarPersistence() {
   // State initialization from localStorage
@@ -78,7 +78,7 @@ export function useSidebarPersistence() {
   };
 
   const handleRightSidebarToggle = (
-    tab: 'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording'
+    tab: 'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording' | 'quality'
   ) => {
     if (leftSidebarOpen) {
       setLeftSidebarOpen(false);

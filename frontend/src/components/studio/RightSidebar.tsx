@@ -6,6 +6,7 @@ import { NotesPanel } from '../NotesPanel';
 import { ParticipantsPanel } from '../ParticipantsPanel';
 import { PrivateChatPanel } from '../PrivateChatPanel';
 import { RecordingControls } from '../RecordingControls';
+import { BitrateControl } from '../BitrateControl';
 import { TeleprompterSettings } from '../../hooks/studio/useTeleprompter';
 
 interface Comment {
@@ -19,10 +20,11 @@ interface Comment {
 
 interface RightSidebarProps {
   rightSidebarOpen: boolean;
-  activeRightTab: 'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording' | null;
-  onTabToggle: (tab: 'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording') => void;
+  activeRightTab: 'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording' | 'quality' | null;
+  onTabToggle: (tab: 'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording' | 'quality') => void;
   broadcastId: string | undefined;
   currentUserId: string | undefined;
+  isLive: boolean;
   onShowBannerDrawer: () => void;
   rightSidebarRef: RefObject<HTMLElement>;
   teleprompterState: ReturnType<typeof import('../../hooks/studio/useTeleprompter').useTeleprompter>;
@@ -35,6 +37,7 @@ export function RightSidebar({
   onTabToggle,
   broadcastId,
   currentUserId,
+  isLive,
   onShowBannerDrawer,
   rightSidebarRef,
   teleprompterState,
@@ -230,6 +233,28 @@ export function RightSidebar({
           </svg>
           <span className="text-xs font-medium">Record</span>
         </button>
+
+        <button
+          onClick={() => onTabToggle('quality')}
+          className="flex flex-col items-center justify-center py-4 border-b transition-colors hover:bg-gray-100"
+          aria-label="Stream Quality Panel"
+          aria-expanded={activeRightTab === 'quality'}
+          style={{
+            borderBottomColor: '#e0e0e0',
+            ...(activeRightTab === 'quality' ? {
+              backgroundColor: '#e6f2ff',
+              color: '#0066ff',
+              borderLeft: '4px solid #0066ff'
+            } : {
+              color: '#666666'
+            })
+          }}
+        >
+          <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          <span className="text-xs font-medium">Quality</span>
+        </button>
       </div>
 
       {/* Expandable Content Panel - Slides out from right (320px, absolute positioned) */}
@@ -293,6 +318,11 @@ export function RightSidebar({
                 <RecordingControls
                   broadcastId={broadcastId}
                 />
+              )}
+              {activeRightTab === 'quality' && broadcastId && (
+                <div className="p-4">
+                  <BitrateControl broadcastId={broadcastId} isLive={isLive} />
+                </div>
               )}
             </div>
           </>

@@ -586,6 +586,7 @@ export function Studio() {
           onTabToggle={handleRightSidebarToggle}
           broadcastId={broadcastId}
           currentUserId={broadcast?.userId}
+          isLive={isLive}
           onShowBannerDrawer={() => setShowBannerDrawer(true)}
           rightSidebarRef={rightSidebarRef}
           teleprompterState={teleprompterState}
