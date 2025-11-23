@@ -47,6 +47,18 @@ class DailyBotPuppeteerService {
 
       this.page = await this.browser.newPage();
 
+      // Set up console log forwarding immediately
+      this.page.on('console', (msg) => {
+        const type = msg.type();
+        const text = msg.text();
+        logger.info(`[Browser Console ${type}]: ${text}`);
+      });
+
+      // Forward page errors
+      this.page.on('pageerror', (error) => {
+        logger.error(`[Browser Page Error]: ${error.message}`);
+      });
+
       // Grant media permissions
       const context = this.browser.defaultBrowserContext();
       await context.overridePermissions('https://api.daily.co', [
@@ -216,49 +228,69 @@ class DailyBotPuppeteerService {
 
     logger.info(`[Puppeteer Bot] WebRTC API check: ${JSON.stringify(webrtcCheck, null, 2)}`);
 
-    // Get browser console logs
-    this.page!.on('console', (msg) => {
-      logger.info(`[Browser Console ${msg.type()}]:`, msg.text());
-    });
-
     try {
-      await this.page!.evaluate(
+      const joinResult = await this.page!.evaluate(
         async (params) => {
           const { roomUrl, token } = params;
           const win = window as any;
 
-          // Create Daily call object
-          win.dailyCall = win.DailyIframe.createCallObject();
+          try {
+            // Create Daily call object
+            console.log('Creating Daily call object...');
+            win.dailyCall = win.DailyIframe.createCallObject();
 
-          win.dailyCall.on('joined-meeting', () => {
-            win.botLog.push({ message: 'Joined Daily meeting' });
-          });
-
-          win.dailyCall.on('error', (error: any) => {
-            console.error('Daily error event:', error);
-            win.botLog.push({ message: 'Daily error', error });
-          });
-
-          // Join the room
-          console.log('Attempting to join Daily room...');
-          await win.dailyCall.join({ url: roomUrl, token });
-          console.log('Successfully joined Daily room');
-
-          // Set custom tracks from mediasoup
-          if (win.mediaTracks.video && win.mediaTracks.audio) {
-            await win.dailyCall.setInputDevicesAsync({
-              videoSource: win.mediaTracks.video,
-              audioSource: win.mediaTracks.audio,
+            win.dailyCall.on('joined-meeting', () => {
+              console.log('✅ Joined Daily meeting');
+              win.botLog.push({ message: 'Joined Daily meeting' });
             });
-            win.botLog.push({ message: 'Set custom tracks from mediasoup' });
+
+            win.dailyCall.on('error', (error: any) => {
+              console.error('❌ Daily error event:', JSON.stringify(error, null, 2));
+              win.botLog.push({ message: 'Daily error', error });
+            });
+
+            // Join the room
+            console.log('Attempting to join Daily room...', { roomUrl });
+            const joinResponse = await win.dailyCall.join({ url: roomUrl, token });
+            console.log('✅ Successfully joined Daily room', joinResponse);
+
+            // Set custom tracks from mediasoup
+            if (win.mediaTracks.video && win.mediaTracks.audio) {
+              console.log('Setting custom tracks from mediasoup...');
+              await win.dailyCall.setInputDevicesAsync({
+                videoSource: win.mediaTracks.video,
+                audioSource: win.mediaTracks.audio,
+              });
+              console.log('✅ Custom tracks set');
+              win.botLog.push({ message: 'Set custom tracks from mediasoup' });
+            } else {
+              console.warn('⚠️ mediaTracks not available:', {
+                hasVideo: !!win.mediaTracks.video,
+                hasAudio: !!win.mediaTracks.audio,
+              });
+            }
+
+            return { success: true };
+          } catch (err: any) {
+            console.error('❌ Error in page evaluate:', err.message, err.stack);
+            return {
+              success: false,
+              error: err.message || String(err),
+              errorType: err.constructor?.name,
+              stack: err.stack,
+            };
           }
         },
         { roomUrl: config.roomUrl, token: config.token }
       );
 
+      if (!joinResult.success) {
+        throw new Error(`Daily join failed: ${joinResult.error} (${joinResult.errorType})`);
+      }
+
       logger.info('[Puppeteer Bot] Joined Daily room');
     } catch (error: any) {
-      logger.error(`[Puppeteer Bot] Error joining Daily room: ${error.message}`);
+      logger.error(`[Puppeteer Bot] Error joining Daily room: ${error.message || String(error)}`);
       if (error.stack) {
         logger.error(`[Puppeteer Bot] Stack: ${error.stack}`);
       }
