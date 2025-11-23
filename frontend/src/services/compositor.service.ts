@@ -269,49 +269,43 @@ class CompositorService {
     // Only wait for metadata if video is enabled and has video tracks
     if (participant.videoEnabled && hasVideoTracks) {
       try {
-        // Wait for video to have CURRENT_DATA (readyState >= 2) with 3 second timeout
-        let onLoadedData: (() => void) | null = null;
-        let onMetadata: (() => void) | null = null;
-
-        await Promise.race([
-          new Promise<void>((resolve) => {
-            // If already at readyState >= 2, resolve immediately
-            if (video.readyState >= 2) {
-              logger.info(`Video already ready for participant ${participant.id}, readyState: ${video.readyState}`);
-              video.play().catch(err => logger.error('Failed to play video:', err));
-              resolve();
-              return;
-            }
-
-            // Wait for loadeddata event (readyState = 2 or higher)
-            onLoadedData = () => {
-              logger.info(`Video data loaded for participant ${participant.id}, readyState: ${video.readyState}`);
-              video.play().catch(err => logger.error('Failed to play video:', err));
-              resolve();
-            };
-
-            // Also handle metadata as fallback
-            onMetadata = () => {
-              logger.info(`Video metadata loaded for participant ${participant.id}, readyState: ${video.readyState}`);
-              // Don't resolve yet - wait for loadeddata
-            };
-
-            video.addEventListener('loadeddata', onLoadedData, { once: true });
-            video.addEventListener('loadedmetadata', onMetadata, { once: true });
-
-            // Note: Don't call video.load() for MediaStream sources - it can cause issues
-            // The stream should start flowing automatically when srcObject is set
-          }),
-          new Promise<void>((resolve) => setTimeout(() => {
-            logger.warn(`Video data load timeout for participant ${participant.id} - readyState: ${video.readyState}`);
-            // Clean up event listeners on timeout to prevent duplicate play() calls
-            if (onLoadedData) video.removeEventListener('loadeddata', onLoadedData);
-            if (onMetadata) video.removeEventListener('loadedmetadata', onMetadata);
-            // Try to play anyway - drawing will show placeholder if readyState < 2
-            video.play().catch(err => logger.error('Failed to play video after timeout:', err));
+        // For MediaStream sources, events like 'loadeddata' often don't fire reliably.
+        // Instead, poll the readyState until it reaches >= 2 (HAVE_CURRENT_DATA)
+        const waitForVideoReady = new Promise<void>((resolve) => {
+          // If already ready, play immediately
+          if (video.readyState >= 2) {
+            logger.info(`Video already ready for participant ${participant.id}, readyState: ${video.readyState}`);
+            video.play().catch(err => logger.error('Failed to play video:', err));
             resolve();
-          }, 3000))
-        ]);
+            return;
+          }
+
+          // Poll readyState every 100ms until ready or timeout
+          let attempts = 0;
+          const maxAttempts = 30; // 3 seconds (30 * 100ms)
+
+          const checkReadyState = () => {
+            attempts++;
+
+            if (video.readyState >= 2) {
+              logger.info(`Video ready for participant ${participant.id} after ${attempts * 100}ms, readyState: ${video.readyState}`);
+              video.play().catch(err => logger.error('Failed to play video:', err));
+              resolve();
+            } else if (attempts >= maxAttempts) {
+              logger.warn(`Video readyState check timeout for participant ${participant.id} after ${attempts * 100}ms - readyState: ${video.readyState}`);
+              // Try to play anyway
+              video.play().catch(err => logger.error('Failed to play video after timeout:', err));
+              resolve();
+            } else {
+              // Continue polling
+              setTimeout(checkReadyState, 100);
+            }
+          };
+
+          checkReadyState();
+        });
+
+        await waitForVideoReady;
       } catch (error) {
         logger.error(`Error loading video for participant ${participant.id}:`, error);
         // Continue anyway - don't fail the whole broadcast
