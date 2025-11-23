@@ -180,8 +180,10 @@ export function useStudioInitialization({
   // Restore media assets from localStorage and IndexedDB
   const restoreMediaAssets = async () => {
     try {
-      // Small delay to ensure DOM and canvas are ready
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Delay to ensure DOM, canvas, and StudioCanvas event listeners are ready
+      // StudioCanvas sets up event listeners after this hook runs, so we need
+      // to wait for the next tick to ensure listeners are set up
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Restore background - check IndexedDB first, then localStorage
       const streamBackgroundAssetId = localStorage.getItem('streamBackgroundAssetId');
@@ -197,10 +199,14 @@ export function useStudioInitialization({
             const objectURL = URL.createObjectURL(mediaData.blob);
             console.log('[Studio Init] Restoring background from IndexedDB:', streamBackgroundName || streamBackgroundAssetId);
 
-            // Dispatch event for other listeners
-            window.dispatchEvent(new CustomEvent('backgroundUpdated', {
-              detail: { url: objectURL, name: streamBackgroundName }
-            }));
+            // CRITICAL: Dispatch event on next animation frame to ensure StudioCanvas listener is set up
+            // StudioCanvas mounts AFTER this hook runs, so we need to delay event dispatch
+            requestAnimationFrame(() => {
+              console.log('[Studio Init] Dispatching backgroundUpdated event');
+              window.dispatchEvent(new CustomEvent('backgroundUpdated', {
+                detail: { url: objectURL, name: streamBackgroundName }
+              }));
+            });
 
             // ALSO directly call compositor to ensure it's set
             await compositorService.addOverlay({
@@ -218,10 +224,13 @@ export function useStudioInitialization({
         // Background stored as URL in localStorage
         console.log('[Studio Init] Restoring background from localStorage:', streamBackgroundName || streamBackground);
 
-        // Dispatch event for other listeners
-        window.dispatchEvent(new CustomEvent('backgroundUpdated', {
-          detail: { url: streamBackground, name: streamBackgroundName }
-        }));
+        // CRITICAL: Dispatch event on next animation frame to ensure StudioCanvas listener is set up
+        requestAnimationFrame(() => {
+          console.log('[Studio Init] Dispatching backgroundUpdated event');
+          window.dispatchEvent(new CustomEvent('backgroundUpdated', {
+            detail: { url: streamBackground, name: streamBackgroundName }
+          }));
+        });
 
         // ALSO directly call compositor to ensure it's set
         await compositorService.addOverlay({
