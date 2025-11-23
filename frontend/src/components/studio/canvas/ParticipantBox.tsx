@@ -286,12 +286,12 @@ export function ParticipantBox({
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-gray-900 relative">
           {selectedAvatar ? (
-            <div className="w-full h-full flex items-center justify-center p-2 relative">
-              {/* Avatar with fixed sizing - maintains 500px size unless container is smaller */}
+            <div className="w-full h-full flex items-center justify-center p-8 relative">
+              {/* Avatar maintains original 25% size with minimum threshold */}
               <div
                 className="relative rounded-full overflow-hidden flex items-center justify-center"
                 style={{
-                  width: 'min(500px, 90%)',
+                  width: 'max(25%, 200px)',
                   aspectRatio: '1/1',
                 }}
               >
