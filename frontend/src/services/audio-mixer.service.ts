@@ -132,6 +132,14 @@ class AudioMixerService {
   }
 
   /**
+   * Remove a media element from the mix
+   * Alias for removeStream - works for both streams and media elements
+   */
+  removeMediaElement(id: string): void {
+    this.removeStream(id);
+  }
+
+  /**
    * Set volume for a specific stream
    */
   setStreamVolume(id: string, volume: number): void {
