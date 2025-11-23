@@ -348,21 +348,24 @@ class DailyBotPuppeteerService {
 
     await this.page!.evaluate(async () => {
       const win = window as any;
-      const maxWaitTime = 30000; // 30 seconds max wait
+      const maxWaitTime = 10000; // 10 seconds max wait
       const startTime = Date.now();
 
       // Wait for at least one participant with video AND audio
       while (Date.now() - startTime < maxWaitTime) {
         const participants = win.dailyCall.participants();
-        console.log('Checking participants...', Object.keys(participants).length, 'participants');
+        const participantCount = Object.keys(participants).length;
+        console.log('Checking participants...', participantCount, 'participants');
 
         // Check all participants (excluding local bot)
         let hasActiveVideo = false;
         let hasActiveAudio = false;
+        let remoteParticipantCount = 0;
 
         for (const [id, participant] of Object.entries(participants)) {
           if (id === 'local') continue; // Skip the bot itself
 
+          remoteParticipantCount++;
           const p = participant as any;
           console.log(`Participant ${id}:`, {
             video: p.video,
@@ -394,10 +397,13 @@ class DailyBotPuppeteerService {
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
-      throw new Error('Timeout waiting for active video and audio tracks');
+      // After 10 seconds, proceed anyway (stream will be blank until someone joins)
+      console.warn('⚠️ No participants with active media found after 10 seconds');
+      console.warn('⚠️ Proceeding anyway - RTMP stream will be blank until a participant joins Daily');
+      console.warn('⚠️ NOTE: User frontend needs to join the Daily room, not just send to mediasoup');
     });
 
-    logger.info('[Puppeteer Bot] Active media confirmed');
+    logger.info('[Puppeteer Bot] Proceeding to start RTMP streaming');
   }
 
   private async startRTMPStreaming(config: PuppeteerBotConfig): Promise<void> {
@@ -408,22 +414,43 @@ class DailyBotPuppeteerService {
         const win = window as any;
         const rtmpUrl = `${destinations[0].rtmpUrl}/${destinations[0].streamKey}`;
 
-        // Get local participant session ID
+        // Get participants
         const participants = win.dailyCall.participants();
-        const localParticipant = participants.local;
-        const sessionId = localParticipant.session_id;
 
-        console.log('Starting RTMP stream with session_id:', sessionId);
+        // Find first non-local participant with video
+        let targetSessionId = null;
+        for (const [id, participant] of Object.entries(participants)) {
+          if (id === 'local') continue;
+          const p = participant as any;
+          if (p.video) {
+            targetSessionId = p.session_id;
+            console.log(`Found participant with video: ${id}, session_id: ${targetSessionId}`);
+            break;
+          }
+        }
+
+        let layoutConfig;
+        if (targetSessionId) {
+          // Use single-participant layout with the participant who has video
+          layoutConfig = {
+            preset: 'single-participant',
+            session_id: targetSessionId,
+          };
+          console.log('Using single-participant layout with session_id:', targetSessionId);
+        } else {
+          // No participants with video, use default grid layout (will show empty/blank)
+          layoutConfig = {
+            preset: 'default',
+          };
+          console.warn('No participants with video found, using default layout (will be blank)');
+        }
 
         await win.dailyCall.startLiveStreaming({
           rtmpUrl,
-          layout: {
-            preset: 'single-participant',
-            session_id: sessionId,
-          },
+          layout: layoutConfig,
         });
 
-        win.botLog.push({ message: 'RTMP streaming started', rtmpUrl, sessionId });
+        win.botLog.push({ message: 'RTMP streaming started', rtmpUrl, layout: layoutConfig });
       },
       config.rtmpDestinations
     );
