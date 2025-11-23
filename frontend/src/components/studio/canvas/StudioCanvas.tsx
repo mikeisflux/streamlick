@@ -366,14 +366,14 @@ export function StudioCanvas({
 
   // Simplified auto-layout based on participants and screen share
   const getLayoutStyles = (layoutId: number | 'screenshare') => {
-    // When screen is being shared, move participants to left sidebar
-    if (layoutId === 'screenshare' || isSharingScreen) {
+    // When screen is being shared, use vertical layout (top/bottom)
+    // Layout 6 (Screen): Participants on top (1/4), screen share on bottom (3/4)
+    if (layoutId === 'screenshare' || (isSharingScreen && selectedLayout === 6)) {
       return {
-        container: 'flex gap-2 p-2',
-        sidebar: 'flex flex-col gap-2',
-        sidebarWidth: 'w-[25%]',
-        mainVideo: 'flex-1',
-        screenShare: 'flex-1 w-[75%]',
+        container: 'flex flex-col gap-2 p-2',
+        topBar: 'flex flex-row gap-2',
+        topBarHeight: 'h-[25%]',
+        screenShare: 'flex-1 h-[75%]',
       };
     }
 
@@ -469,11 +469,11 @@ export function StudioCanvas({
         {/* Screen Share Layout - Active when screen sharing */}
         {isSharingScreen || screenShareStream ? (
           <>
-            {/* Left Sidebar - Participant Thumbnails (20%) */}
+            {/* Top Bar - Participant Thumbnails (25% height / 1/4 of screen) */}
             <div
-              className={`${getLayoutStyles('screenshare').sidebar} ${
-                getLayoutStyles('screenshare').sidebarWidth
-              } gap-2`}
+              className={`${getLayoutStyles('screenshare').topBar} ${
+                getLayoutStyles('screenshare').topBarHeight
+              }`}
             >
               {/* Host Video - only shown when local user is on stage */}
               {isLocalUserOnStage && (
@@ -503,10 +503,10 @@ export function StudioCanvas({
                 </div>
               )}
 
-              {/* Remote Participants - Up to 4 slots */}
+              {/* Remote Participants - Up to 4 slots horizontally */}
               {Array.from(remoteParticipants.values())
                 .filter((p) => p.id !== 'screen-share' && p.role !== 'backstage')
-                .slice(0, 4)
+                .slice(0, 3)
                 .map((participant, index) => (
                   <div key={participant.id} className="flex-1">
                     <ParticipantBox
@@ -533,7 +533,7 @@ export function StudioCanvas({
                 ))}
             </div>
 
-            {/* Right Side - Screen Share (80%) */}
+            {/* Bottom - Screen Share (75% height / 3/4 of screen) */}
             <div
               className={`relative bg-black rounded overflow-hidden ${getLayoutStyles('screenshare').screenShare}`}
             >
