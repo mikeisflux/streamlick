@@ -28,7 +28,7 @@ class DailyBotPuppeteerService {
     try {
       logger.info('[Puppeteer Bot] Launching headless browser...');
 
-      // Launch Puppeteer
+      // Launch Puppeteer with WebRTC enabled
       this.browser = await puppeteer.launch({
         headless: true,
         args: [
@@ -36,10 +36,25 @@ class DailyBotPuppeteerService {
           '--disable-setuid-sandbox',
           '--use-fake-ui-for-media-stream',
           '--use-fake-device-for-media-stream',
+          '--enable-webrtc',
+          '--enable-features=NetworkService,NetworkServiceInProcess',
+          '--disable-web-security',
+          '--allow-insecure-localhost',
+          '--autoplay-policy=no-user-gesture-required',
+          '--disable-blink-features=AutomationControlled',
         ],
       });
 
       this.page = await this.browser.newPage();
+
+      // Grant media permissions
+      const context = this.browser.defaultBrowserContext();
+      await context.overridePermissions('https://api.daily.co', [
+        'camera',
+        'microphone',
+        'audio-capture',
+        'video-capture',
+      ]);
 
       logger.info('[Puppeteer Bot] Browser launched');
 
