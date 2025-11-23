@@ -74,6 +74,12 @@ class CompositorService {
   private showChat = false;
   private lowerThird: LowerThird | null = null;
   private mediaClipOverlay: HTMLVideoElement | HTMLImageElement | null = null;
+  private mediaClipOverlayHandlers: {
+    ended?: () => void;
+    error?: (event: Event) => void;
+    canplaythrough?: () => void;
+    loadedmetadata?: () => void;
+  } = {};
   private countdownValue: number | null = null;
 
   // Image caching to prevent memory leaks from creating Images every frame
@@ -428,11 +434,23 @@ class CompositorService {
     // CRITICAL FIX: Properly clean up video/image element before clearing reference
     if (this.mediaClipOverlay) {
       if (this.mediaClipOverlay instanceof HTMLVideoElement) {
-        // Remove ALL event listeners FIRST to prevent error cascades
-        this.mediaClipOverlay.onended = null;
-        this.mediaClipOverlay.onerror = null;
-        this.mediaClipOverlay.oncanplaythrough = null;
-        this.mediaClipOverlay.onloadedmetadata = null;
+        // CRITICAL FIX: Remove event listeners using removeEventListener (not property assignment)
+        // Listeners were added with addEventListener, so they must be removed the same way
+        if (this.mediaClipOverlayHandlers.ended) {
+          this.mediaClipOverlay.removeEventListener('ended', this.mediaClipOverlayHandlers.ended);
+        }
+        if (this.mediaClipOverlayHandlers.error) {
+          this.mediaClipOverlay.removeEventListener('error', this.mediaClipOverlayHandlers.error);
+        }
+        if (this.mediaClipOverlayHandlers.canplaythrough) {
+          this.mediaClipOverlay.removeEventListener('canplaythrough', this.mediaClipOverlayHandlers.canplaythrough);
+        }
+        if (this.mediaClipOverlayHandlers.loadedmetadata) {
+          this.mediaClipOverlay.removeEventListener('loadedmetadata', this.mediaClipOverlayHandlers.loadedmetadata);
+        }
+
+        // Clear handler references
+        this.mediaClipOverlayHandlers = {};
 
         // Stop video playback
         this.mediaClipOverlay.pause();
@@ -502,8 +520,8 @@ class CompositorService {
         reject(new Error('Video loading timeout'));
       }, 10000); // 10 second timeout
 
-      // Wait for metadata (dimensions) to load first
-      videoElement.addEventListener('loadedmetadata', () => {
+      // CRITICAL FIX: Store event handlers so they can be properly removed later
+      const onLoadedMetadata = () => {
         // Clear loading timeout since metadata loaded successfully
         clearTimeout(loadingTimeout);
         logger.info(`Intro video metadata loaded: ${videoUrl}, dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}, duration: ${videoElement.duration}s`);
@@ -553,21 +571,23 @@ class CompositorService {
           setOverlayAndPlay();
         } else {
           // Wait for enough buffered data before showing video
-          videoElement.addEventListener('canplaythrough', setOverlayAndPlay, { once: true });
+          const onCanPlayThrough = () => {
+            setOverlayAndPlay();
+          };
+          this.mediaClipOverlayHandlers.canplaythrough = onCanPlayThrough;
+          videoElement.addEventListener('canplaythrough', onCanPlayThrough, { once: true });
         }
-      });
+      };
 
-      // Clear overlay and remove audio when video ends
-      videoElement.addEventListener('ended', () => {
+      const onEnded = () => {
         logger.info('Intro video ended, clearing overlay and removing audio from mixer');
         clearTimeout(loadingTimeout); // Clear loading timeout
         this.clearMediaClipOverlay();
         audioMixerService.removeStream('intro-video');
         resolve();
-      });
+      };
 
-      // Handle errors
-      videoElement.addEventListener('error', (event) => {
+      const onError = (event: Event) => {
         const errorMsg = videoElement.error
           ? `Code: ${videoElement.error.code}, Message: ${videoElement.error.message}`
           : 'Unknown error';
@@ -576,7 +596,17 @@ class CompositorService {
         this.clearMediaClipOverlay();
         audioMixerService.removeStream('intro-video');
         reject(new Error(`Video error: ${errorMsg}`));
-      });
+      };
+
+      // Store handlers for later removal
+      this.mediaClipOverlayHandlers.loadedmetadata = onLoadedMetadata;
+      this.mediaClipOverlayHandlers.ended = onEnded;
+      this.mediaClipOverlayHandlers.error = onError;
+
+      // Attach event listeners
+      videoElement.addEventListener('loadedmetadata', onLoadedMetadata);
+      videoElement.addEventListener('ended', onEnded);
+      videoElement.addEventListener('error', onError);
 
       // If duration is specified, stop video after that duration
       if (duration) {
