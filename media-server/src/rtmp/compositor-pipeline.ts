@@ -10,7 +10,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import { RTMPDestination } from './streamer';
 import logger from '../utils/logger';
 import { dailyMediaServerService } from '../services/daily.service';
-import { dailyBotService } from '../services/daily-bot.service';
+import { dailyBotPuppeteerService } from '../services/daily-bot-puppeteer.service';
 import { rtpBridgeService } from '../services/rtp-bridge.service';
 
 interface Pipeline {
@@ -722,8 +722,8 @@ async function createDailyPipeline(
       broadcastId,
     });
 
-    // Step 2: Use RTP bridge to create MediaStreamTracks from producers
-    logger.info('[Daily Pipeline BOT] Creating MediaStreamTracks via RTP bridge...');
+    // Step 2: Create WebRTC transport and consumers for Puppeteer bot
+    logger.info('[Daily Pipeline BOT] Creating WebRTC transport and consumers...');
 
     const bridgeResult = await rtpBridgeService.createTracksFromProducers(
       videoProducer,
@@ -731,30 +731,25 @@ async function createDailyPipeline(
       router
     );
 
-    // Step 4: Join Daily room as bot
+    // Step 3: Get Daily room URL and token
     const roomUrl = `https://streamlick.daily.co/streamlick-broadcast-${broadcastId}`;
     const token = await dailyMediaServerService.getMeetingToken(backendApiUrl, broadcastId);
 
-    await dailyBotService.joinRoom({
-      roomUrl,
-      token,
-      backendApiUrl,
-      broadcastId,
-    });
-
-    // Step 5: Set custom tracks
-    await dailyBotService.setCustomTracks(
-      bridgeResult.videoTrack,
-      bridgeResult.audioTrack
-    );
-
-    // Step 6: Start RTMP streaming
+    // Step 4: Start Puppeteer bot (joins mediasoup + Daily, starts RTMP)
     const dailyDestinations = destinations.map((dest) => ({
       rtmpUrl: dest.rtmpUrl,
       streamKey: dest.streamKey,
     }));
 
-    await dailyBotService.startLiveStreaming(dailyDestinations);
+    await dailyBotPuppeteerService.startBot({
+      roomUrl,
+      token,
+      broadcastId,
+      webRtcTransport: bridgeResult.webRtcTransport,
+      videoConsumer: bridgeResult.videoConsumer,
+      audioConsumer: bridgeResult.audioConsumer,
+      rtmpDestinations: dailyDestinations,
+    });
 
     // Store pipeline
     activePipelines.set(broadcastId, {
@@ -783,9 +778,8 @@ async function stopDailyPipeline(broadcastId: string): Promise<void> {
 
     const pipeline = activePipelines.get(broadcastId);
 
-    // Stop RTMP streaming and leave room
-    await dailyBotService.stopLiveStreaming();
-    await dailyBotService.leaveRoom();
+    // Stop Puppeteer bot
+    await dailyBotPuppeteerService.stopBot();
 
     // Cleanup RTP bridge resources
     if (pipeline?.rtpBridgePeerConnection) {
