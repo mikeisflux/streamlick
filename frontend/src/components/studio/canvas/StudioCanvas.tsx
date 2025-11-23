@@ -364,12 +364,12 @@ export function StudioCanvas({
     return { cols, rows };
   };
 
-  // Simplified auto-layout based on participants and screen share
+  // Layout system - implements all 8 layout types
   const getLayoutStyles = (layoutId: number | 'screenshare') => {
-    // When screen is being shared, use vertical layout (top/bottom)
-    // Layout 6 (Screen): Participants on top (1/4), screen share on bottom (3/4)
+    // When screen is being shared, use layout 6 (Screen)
     if (layoutId === 'screenshare' || (isSharingScreen && selectedLayout === 6)) {
       return {
+        type: 'screen',
         container: 'flex flex-col gap-2 p-2',
         topBar: 'flex flex-row gap-2',
         topBarHeight: 'h-[25%]',
@@ -377,16 +377,93 @@ export function StudioCanvas({
       };
     }
 
-    // Auto-arrange participants based on count
-    const { cols, rows } = calculateDynamicGrid(totalParticipants);
+    const numericLayoutId = typeof layoutId === 'number' ? layoutId : selectedLayout;
 
-    // All layouts now use smart auto-grid
-    return {
-      container: 'grid gap-2 p-2',
-      mainVideo: 'col-span-1 row-span-1',
-      gridCols: cols,
-      gridRows: rows,
-    };
+    switch (numericLayoutId) {
+      case 1: // Solo - One person fills entire screen
+        return {
+          type: 'solo',
+          container: 'grid gap-2 p-2',
+          gridCols: 1,
+          gridRows: 1,
+          mainVideo: 'col-span-1 row-span-1',
+        };
+
+      case 2: // Cropped - 2x2 grid, tight boxes
+        return {
+          type: 'cropped',
+          container: 'grid gap-2 p-2',
+          gridCols: 2,
+          gridRows: 2,
+          mainVideo: 'col-span-1 row-span-1',
+        };
+
+      case 3: // Group - Equal-sized grid (auto-calculated)
+        const { cols, rows } = calculateDynamicGrid(totalParticipants);
+        return {
+          type: 'group',
+          container: 'grid gap-2 p-2',
+          gridCols: cols,
+          gridRows: rows,
+          mainVideo: 'col-span-1 row-span-1',
+        };
+
+      case 4: // Spotlight - One large + small boxes above
+        return {
+          type: 'spotlight',
+          container: 'grid gap-2 p-2',
+          gridCols: 3,
+          gridRows: 4,
+          mainVideo: 'col-span-3 row-span-3', // Bottom 3 rows
+          secondaryVideo: 'col-span-1 row-span-1', // Top row slots
+        };
+
+      case 5: // News - Side by side (2 columns)
+        return {
+          type: 'news',
+          container: 'grid gap-2 p-2',
+          gridCols: 2,
+          gridRows: 1,
+          mainVideo: 'col-span-1 row-span-1',
+        };
+
+      case 6: // Screen - Handled above with screen share
+        return {
+          type: 'screen',
+          container: 'flex flex-col gap-2 p-2',
+          topBar: 'flex flex-row gap-2',
+          topBarHeight: 'h-[25%]',
+          screenShare: 'flex-1 h-[75%]',
+        };
+
+      case 7: // Picture-in-Picture - Full screen with overlay
+        return {
+          type: 'pip',
+          container: 'relative p-2',
+          mainVideo: 'w-full h-full',
+          pipOverlay: 'absolute bottom-4 right-4 w-1/4 h-1/4',
+        };
+
+      case 8: // Cinema - Wide format (21:9 aspect)
+        return {
+          type: 'cinema',
+          container: 'grid gap-2 p-2',
+          gridCols: totalParticipants > 1 ? 2 : 1,
+          gridRows: 1,
+          mainVideo: 'col-span-1 row-span-1',
+        };
+
+      default:
+        // Fallback to group layout
+        const fallbackGrid = calculateDynamicGrid(totalParticipants);
+        return {
+          type: 'group',
+          container: 'grid gap-2 p-2',
+          gridCols: fallbackGrid.cols,
+          gridRows: fallbackGrid.rows,
+          mainVideo: 'col-span-1 row-span-1',
+        };
+    }
   };
 
   // Set srcObject for screen share video

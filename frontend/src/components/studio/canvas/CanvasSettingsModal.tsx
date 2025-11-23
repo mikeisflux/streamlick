@@ -1081,7 +1081,7 @@ function LayoutsSettings({ props }: { props: CanvasSettingsModalProps }) {
           <option value="3">Group - All participants equal-sized grid (Shift+3)</option>
           <option value="4">Spotlight - One large speaker with small boxes above (Shift+4)</option>
           <option value="5">News - Person on left, content on right (Shift+5)</option>
-          <option value="6">Screen - Large content with tiny participants (Shift+6)</option>
+          <option value="6">Screen - Participants on top (1/4), screen share below (3/4) (Shift+6)</option>
           <option value="7">Picture-in-Picture - Full screen content with person overlay (Shift+7)</option>
           <option value="8">Cinema - Ultra-wide format (Shift+8)</option>
         </select>
