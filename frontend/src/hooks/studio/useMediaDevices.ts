@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { audioProcessorService } from '../../services/audio-processor.service';
+import { audioMixerService } from '../../services/audio-mixer.service';
 
 export function useMediaDevices() {
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
@@ -77,6 +78,12 @@ export function useMediaDevices() {
         }
         localStream.addTrack(processedAudioTrack);
       }
+
+      // CRITICAL: Update audio mixer with new microphone for monitor mode
+      // Remove old microphone and add new one so WebRTC sends updated audio
+      audioMixerService.removeStream('local-microphone');
+      audioMixerService.addStream('local-microphone', new MediaStream([processedAudioTrack]));
+      console.log('[useMediaDevices] Microphone updated in audio mixer for monitor mode');
 
       // Clean up: stop the raw audio track since we're using the processed one
       newAudioTrack.stop();

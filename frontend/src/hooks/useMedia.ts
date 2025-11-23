@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { audioProcessorService } from '../services/audio-processor.service';
+import { audioMixerService } from '../services/audio-mixer.service';
 import { logger } from '../utils/logger';
 
 export function useMedia() {
@@ -64,6 +65,12 @@ export function useMedia() {
           ...(videoTrack ? [videoTrack] : []),
         ]);
 
+        // CRITICAL: Initialize audio mixer and add microphone for monitor mode
+        // This ensures all participants hear the microphone audio when WebRTC starts
+        audioMixerService.initialize();
+        audioMixerService.addStream('local-microphone', new MediaStream([processedAudioTrack]));
+        logger.info('[useMedia] Microphone added to audio mixer for monitor mode');
+
         localStreamRef.current = processedStream;
         setLocalStream(processedStream);
         logger.info('[useMedia] Audio processing active - noise gate enabled');
@@ -81,6 +88,10 @@ export function useMedia() {
   }, []);
 
   const stopCamera = useCallback(() => {
+    // Remove microphone from audio mixer
+    audioMixerService.removeStream('local-microphone');
+    logger.info('[useMedia] Microphone removed from audio mixer');
+
     // Stop audio processor
     audioProcessorService.stop();
 
