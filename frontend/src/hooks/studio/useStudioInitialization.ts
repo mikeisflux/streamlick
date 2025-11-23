@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { broadcastService } from '../../services/broadcast.service';
 import { socketService } from '../../services/socket.service';
 import { webrtcService } from '../../services/webrtc.service';
+import { compositorService } from '../../services/compositor.service';
 import { useStudioStore } from '../../store/studioStore';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -132,6 +133,11 @@ export function useStudioInitialization({
         await loadDevices();
         if (!isMounted) return;
 
+        console.log('[Studio Init] Restoring media assets from localStorage...');
+        // Restore saved media assets (background, logo, overlay)
+        await restoreMediaAssets();
+        if (!isMounted) return;
+
         console.log('[Studio Init] Connecting socket...');
         // Connect socket (uses httpOnly cookies for authentication)
         socketService.connect();
@@ -169,6 +175,57 @@ export function useStudioInitialization({
     // Functions (startCamera, stopCamera, loadDevices, setBroadcast) are accessed via closure
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [broadcastId]);
+
+  // Restore media assets from localStorage
+  const restoreMediaAssets = async () => {
+    try {
+      // Restore background
+      const streamBackground = localStorage.getItem('streamBackground');
+      if (streamBackground) {
+        console.log('[Studio Init] Restoring background:', streamBackground);
+        await compositorService.addOverlay({
+          id: 'background-restore',
+          type: 'background',
+          url: streamBackground,
+          position: { x: 0, y: 0 },
+          size: { width: 1920, height: 1080 },
+        });
+      }
+
+      // Restore logo
+      const streamLogo = localStorage.getItem('streamLogo');
+      const streamLogoName = localStorage.getItem('streamLogoName');
+      if (streamLogo) {
+        console.log('[Studio Init] Restoring logo:', streamLogoName || streamLogo);
+        await compositorService.addOverlay({
+          id: streamLogoName || 'logo-restore',
+          type: 'logo',
+          url: streamLogo,
+          position: { x: 20, y: 20 },
+          size: { width: 100, height: 100 },
+        });
+      }
+
+      // Restore overlay
+      const streamOverlay = localStorage.getItem('streamOverlay');
+      const streamOverlayName = localStorage.getItem('streamOverlayName');
+      if (streamOverlay) {
+        console.log('[Studio Init] Restoring overlay:', streamOverlayName || streamOverlay);
+        await compositorService.addOverlay({
+          id: streamOverlayName || 'overlay-restore',
+          type: 'image',
+          url: streamOverlay,
+          position: { x: 0, y: 0 },
+          size: { width: 1920, height: 1080 },
+        });
+      }
+
+      console.log('[Studio Init] Media assets restored');
+    } catch (error) {
+      console.error('[Studio Init] Failed to restore media assets:', error);
+      // Don't throw - allow studio to continue even if media restore fails
+    }
+  };
 
   // Wrap setSelectedDestinations to always deduplicate
   const setSelectedDestinationsSafe = (destinations: string[] | ((prev: string[]) => string[])) => {
