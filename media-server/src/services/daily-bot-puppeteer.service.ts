@@ -170,7 +170,7 @@ class DailyBotPuppeteerService {
       rtpParameters: config.audioConsumer.rtpParameters,
     };
 
-    // Execute in browser context
+    // Execute in browser context and wait for tracks
     await this.page!.evaluate(
       async (params) => {
         const { transportParams, videoConsumerParams, audioConsumerParams } = params;
@@ -194,20 +194,42 @@ class DailyBotPuppeteerService {
         // Store tracks when they arrive
         win.mediaTracks = { video: null, audio: null };
 
-        pc.ontrack = (event: any) => {
-          win.botLog.push({ message: 'Track received', kind: event.track.kind });
-          if (event.track.kind === 'video') {
-            win.mediaTracks.video = event.track;
-          } else {
-            win.mediaTracks.audio = event.track;
-          }
+        // Create a promise that resolves when both tracks are received
+        const tracksPromise = new Promise<void>((resolve) => {
+          let videoReceived = false;
+          let audioReceived = false;
 
-          // Display in video element
-          const videoEl = document.getElementById('localVideo') as any;
-          if (videoEl && event.streams[0]) {
-            videoEl.srcObject = event.streams[0];
-          }
-        };
+          pc.ontrack = (event: any) => {
+            console.log(`✅ Track received: ${event.track.kind}`);
+            win.botLog.push({ message: 'Track received', kind: event.track.kind });
+
+            if (event.track.kind === 'video') {
+              win.mediaTracks.video = event.track;
+              videoReceived = true;
+            } else {
+              win.mediaTracks.audio = event.track;
+              audioReceived = true;
+            }
+
+            // Display in video element
+            const videoEl = document.getElementById('localVideo') as any;
+            if (videoEl && event.streams[0]) {
+              videoEl.srcObject = event.streams[0];
+            }
+
+            // Resolve when both tracks received
+            if (videoReceived && audioReceived) {
+              console.log('✅ Both tracks received');
+              resolve();
+            }
+          };
+        });
+
+        // Wait for tracks (with timeout)
+        await Promise.race([
+          tracksPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout waiting for tracks')), 5000)),
+        ]);
       },
       { transportParams, videoConsumerParams, audioConsumerParams }
     );
@@ -310,12 +332,22 @@ class DailyBotPuppeteerService {
         const win = window as any;
         const rtmpUrl = `${destinations[0].rtmpUrl}/${destinations[0].streamKey}`;
 
+        // Get local participant session ID
+        const participants = win.dailyCall.participants();
+        const localParticipant = participants.local;
+        const sessionId = localParticipant.session_id;
+
+        console.log('Starting RTMP stream with session_id:', sessionId);
+
         await win.dailyCall.startLiveStreaming({
           rtmpUrl,
-          layout: { preset: 'single-participant' },
+          layout: {
+            preset: 'single-participant',
+            session_id: sessionId,
+          },
         });
 
-        win.botLog.push({ message: 'RTMP streaming started', rtmpUrl });
+        win.botLog.push({ message: 'RTMP streaming started', rtmpUrl, sessionId });
       },
       config.rtmpDestinations
     );
