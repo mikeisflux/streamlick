@@ -11,6 +11,8 @@ interface MediaLibraryProps {
 }
 
 export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
+  console.warn('🚨 MediaLibrary component mounted/rendered! New code loaded!');
+
   const [clips, setClips] = useState<MediaClip[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedType, setSelectedType] = useState<'all' | 'video' | 'audio' | 'image'>('all');
@@ -337,7 +339,14 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
             {/* Video Preview - Click to play/stop */}
             {clip.type === 'video' && (
               <div className="relative group">
-                <div onClick={() => handlePreviewClick(clip.id)} className="cursor-pointer">
+                <div
+                  onClick={(e) => {
+                    console.warn('🚨🚨🚨 DIV CLICKED!!!', clip.id, e);
+                    handlePreviewClick(clip.id);
+                  }}
+                  className="cursor-pointer"
+                  style={{ border: '2px solid red' }}
+                >
                   <video
                     ref={(el) => {
                       if (el) {
