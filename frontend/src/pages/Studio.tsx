@@ -283,6 +283,7 @@ export function Studio() {
   const { isSharingScreen, screenShareStream, handleToggleScreenShare } = useScreenShare({
     currentLayout: selectedLayout,
     onLayoutChange: handleLayoutChange,
+    isLive,
   });
   const { mediaClips, handlePlayClip } = useMediaClips();
   const { showAnalyticsDashboard, setShowAnalyticsDashboard, analyticsDashboardPosition, analyticsDashboardSize, handleAnalyticsDashboardDragStart, handleAnalyticsDashboardResizeStart } = useAnalyticsDashboard();
@@ -376,6 +377,11 @@ export function Studio() {
       }
     };
   }, [localStream, remoteParticipants, audioEnabled, videoEnabled, isLive, selectedLayout]);
+
+  // Update compositor broadcasting status when going live/offline
+  useEffect(() => {
+    compositorService.setBroadcasting(isLive);
+  }, [isLive]);
 
   // Broadcast title update handler
   const handleTitleChange = async (newTitle: string) => {

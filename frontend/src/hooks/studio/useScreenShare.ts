@@ -7,9 +7,10 @@ import toast from 'react-hot-toast';
 interface UseScreenShareProps {
   currentLayout: number;
   onLayoutChange: (layoutId: number) => void;
+  isLive?: boolean; // Only produce to WebRTC when live
 }
 
-export function useScreenShare({ currentLayout, onLayoutChange }: UseScreenShareProps) {
+export function useScreenShare({ currentLayout, onLayoutChange, isLive = false }: UseScreenShareProps) {
   const [isSharingScreen, setIsSharingScreen] = useState(false);
   const [screenShareStream, setScreenShareStream] = useState<MediaStream | null>(null);
   const previousLayoutRef = useRef<number | null>(null);
@@ -85,8 +86,12 @@ export function useScreenShare({ currentLayout, onLayoutChange }: UseScreenShare
         const videoTrack = stream.getVideoTracks()[0];
         if (videoTrack) {
           videoTrackRef.current = videoTrack;
-          const producerId = await webrtcService.produceMedia(videoTrack);
-          producerIdRef.current = producerId;
+
+          // Only produce to WebRTC if live
+          if (isLive) {
+            const producerId = await webrtcService.produceMedia(videoTrack);
+            producerIdRef.current = producerId;
+          }
 
           // Handle browser-initiated screen share end (user clicks "Stop Sharing" in browser UI)
           videoTrack.onended = async () => {

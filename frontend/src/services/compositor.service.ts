@@ -83,6 +83,7 @@ class CompositorService {
   private layout: LayoutConfig = { type: 'grid' };
   private animationFrameId: number | null = null;
   private isCompositing = false;
+  private isBroadcasting = false; // Track if actively broadcasting to WebRTC
   private chatMessages: ChatMessage[] = [];
   private showChat = false;
   private lowerThird: LowerThird | null = null;
@@ -419,6 +420,15 @@ class CompositorService {
     const normalizedVolume = Math.max(0, Math.min(100, volume)) / 100;
     logger.info(`Setting input volume to ${volume}% (${normalizedVolume.toFixed(2)})`);
     audioMixerService.setMasterVolume(normalizedVolume);
+  }
+
+  /**
+   * Set broadcasting status (to control WebRTC track replacement)
+   * @param isBroadcasting True if actively broadcasting to WebRTC
+   */
+  setBroadcasting(isBroadcasting: boolean): void {
+    this.isBroadcasting = isBroadcasting;
+    logger.info(`Compositor broadcasting status: ${isBroadcasting}`);
   }
 
   /**
@@ -974,27 +984,33 @@ class CompositorService {
             logger.error('[Canvas Track] New track also MUTED!', { id: newVideoTrack.id });
           });
 
-          // Replace the track in the WebRTC producer
-          // This is CRITICAL - without this, the old muted track keeps sending to server
-          try {
-            await webrtcService.replaceVideoTrack(newVideoTrack);
-            logger.info('[Canvas Track] Successfully replaced track in WebRTC producer');
+          // Replace the track in the WebRTC producer (only if broadcasting)
+          // This is CRITICAL when live - without this, the old muted track keeps sending to server
+          if (this.isBroadcasting) {
+            try {
+              await webrtcService.replaceVideoTrack(newVideoTrack);
+              logger.info('[Canvas Track] Successfully replaced track in WebRTC producer');
 
-            // FAILOVER: Hide reconnecting overlay after successful recovery
-            // Keep it visible for at least 2 seconds so viewers see the message
-            const elapsed = Date.now() - this.reconnectingOverlayStartTime;
-            if (elapsed < 2000) {
-              setTimeout(() => {
+              // FAILOVER: Hide reconnecting overlay after successful recovery
+              // Keep it visible for at least 2 seconds so viewers see the message
+              const elapsed = Date.now() - this.reconnectingOverlayStartTime;
+              if (elapsed < 2000) {
+                setTimeout(() => {
+                  this.showReconnectingOverlay = false;
+                  logger.info('[Failover] Reconnecting overlay hidden after successful recovery');
+                }, 2000 - elapsed);
+              } else {
                 this.showReconnectingOverlay = false;
                 logger.info('[Failover] Reconnecting overlay hidden after successful recovery');
-              }, 2000 - elapsed);
-            } else {
-              this.showReconnectingOverlay = false;
-              logger.info('[Failover] Reconnecting overlay hidden after successful recovery');
+              }
+            } catch (error) {
+              logger.error('[Canvas Track] Failed to replace track in WebRTC producer:', error);
+              // Keep overlay showing if track replacement failed
             }
-          } catch (error) {
-            logger.error('[Canvas Track] Failed to replace track in WebRTC producer:', error);
-            // Keep overlay showing if track replacement failed
+          } else {
+            // Not broadcasting - just hide the overlay
+            logger.info('[Canvas Track] Not broadcasting, skipping WebRTC track replacement');
+            this.showReconnectingOverlay = false;
           }
         } catch (error) {
           logger.error('[Canvas Track] Failed to recreate stream after mute:', error);
