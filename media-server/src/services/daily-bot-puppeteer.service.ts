@@ -128,11 +128,14 @@ class DailyBotPuppeteerService {
       // Wait for active video/audio in mediasoup before joining Daily
       await this.waitForMediasoupProducers(config);
 
+      // Get tracks from mediasoup to use as bot's camera/mic
+      await this.setupMediasoupTracks(config);
+
       // Join Daily room
       await this.joinDailyRoom(config);
 
-      // Wait for active video and audio in Daily before starting RTMP
-      await this.waitForActiveMedia();
+      // Set the mediasoup tracks as the bot's camera/mic in Daily
+      await this.setDailyInputTracks();
 
       // Start RTMP streaming
       await this.startRTMPStreaming(config);
@@ -175,6 +178,71 @@ class DailyBotPuppeteerService {
     }
 
     throw new Error('Timeout waiting for active video/audio in mediasoup');
+  }
+
+  private async setupMediasoupTracks(config: PuppeteerBotConfig): Promise<void> {
+    logger.info('[Puppeteer Bot] Setting up media tracks...');
+
+    await this.page!.evaluate(async () => {
+      const win = window as any;
+
+      // Create canvas for video
+      const canvas = document.createElement('canvas');
+      canvas.width = 1920;
+      canvas.height = 1080;
+      const ctx = canvas.getContext('2d')!;
+
+      // Draw a simple background (we'll improve this to show mediasoup content later)
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '48px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('Streamlick Live', canvas.width / 2, canvas.height / 2);
+
+      // Capture canvas as video stream
+      const videoStream = canvas.captureStream(30); // 30 FPS
+      const videoTrack = videoStream.getVideoTracks()[0];
+
+      // Create fake audio track
+      const audioContext = new AudioContext();
+      const oscillator = audioContext.createOscillator();
+      const destination = audioContext.createMediaStreamDestination();
+      oscillator.connect(destination);
+      oscillator.frequency.value = 0; // Silent
+      oscillator.start();
+      const audioTrack = destination.stream.getAudioTracks()[0];
+
+      // Store tracks
+      win.botMediaTracks = {
+        video: videoTrack,
+        audio: audioTrack,
+      };
+
+      console.log('✅ Created bot media tracks (canvas video + silent audio)');
+    });
+
+    logger.info('[Puppeteer Bot] Media tracks created');
+  }
+
+  private async setDailyInputTracks(): Promise<void> {
+    logger.info('[Puppeteer Bot] Setting Daily input tracks...');
+
+    await this.page!.evaluate(async () => {
+      const win = window as any;
+
+      if (win.botMediaTracks && win.dailyCall) {
+        await win.dailyCall.setInputDevicesAsync({
+          videoSource: win.botMediaTracks.video,
+          audioSource: win.botMediaTracks.audio,
+        });
+        console.log('✅ Set bot media tracks as Daily input');
+      } else {
+        console.warn('⚠️ Bot media tracks or Daily call not available');
+      }
+    });
+
+    logger.info('[Puppeteer Bot] Daily input tracks set');
   }
 
   private async connectToMediasoup(config: PuppeteerBotConfig): Promise<void> {
@@ -416,34 +484,15 @@ class DailyBotPuppeteerService {
 
         // Get participants
         const participants = win.dailyCall.participants();
+        const localParticipant = participants.local;
 
-        // Find first non-local participant with video
-        let targetSessionId = null;
-        for (const [id, participant] of Object.entries(participants)) {
-          if (id === 'local') continue;
-          const p = participant as any;
-          if (p.video) {
-            targetSessionId = p.session_id;
-            console.log(`Found participant with video: ${id}, session_id: ${targetSessionId}`);
-            break;
-          }
-        }
+        // Use the bot's own session since it has video now
+        const layoutConfig = {
+          preset: 'single-participant',
+          session_id: localParticipant.session_id,
+        };
 
-        let layoutConfig;
-        if (targetSessionId) {
-          // Use single-participant layout with the participant who has video
-          layoutConfig = {
-            preset: 'single-participant',
-            session_id: targetSessionId,
-          };
-          console.log('Using single-participant layout with session_id:', targetSessionId);
-        } else {
-          // No participants with video, use default grid layout (will show empty/blank)
-          layoutConfig = {
-            preset: 'default',
-          };
-          console.warn('No participants with video found, using default layout (will be blank)');
-        }
+        console.log('Starting RTMP stream with bot session_id:', localParticipant.session_id);
 
         await win.dailyCall.startLiveStreaming({
           rtmpUrl,
