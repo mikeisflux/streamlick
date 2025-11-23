@@ -721,25 +721,12 @@ async function createDailyPipeline(
       broadcastId,
     });
 
-    // Step 2: Create consumers to get RTP streams from mediasoup
-    logger.info('[Daily Pipeline BOT] Creating consumers for RTP bridge...');
-
-    const videoConsumer = await videoProducer.createConsumer({
-      rtpCapabilities: router.rtpCapabilities,
-      paused: false,
-    });
-
-    const audioConsumer = await audioProducer.createConsumer({
-      rtpCapabilities: router.rtpCapabilities,
-      paused: false,
-    });
-
-    // Step 3: Use RTP bridge to create MediaStreamTracks
+    // Step 2: Use RTP bridge to create MediaStreamTracks from producers
     logger.info('[Daily Pipeline BOT] Creating MediaStreamTracks via RTP bridge...');
 
-    const bridgeResult = await rtpBridgeService.createTracksFromConsumers(
-      videoConsumer,
-      audioConsumer,
+    const bridgeResult = await rtpBridgeService.createTracksFromProducers(
+      videoProducer,
+      audioProducer,
       router
     );
 
