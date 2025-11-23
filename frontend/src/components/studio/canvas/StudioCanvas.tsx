@@ -22,6 +22,7 @@ import { CommentOverlay } from './CommentOverlay';
 import { Caption } from '../../../services/caption.service';
 import { compositorService } from '../../../services/compositor.service';
 import { mediaStorageService } from '../../../services/media-storage.service';
+import { audioMixerService } from '../../../services/audio-mixer.service';
 
 interface Banner {
   id: string;
@@ -1002,12 +1003,62 @@ export function StudioCanvas({
             }}
           >
             <video
+              ref={(el) => {
+                if (el && videoClip) {
+                  console.warn('🚨🚨🚨 VIDEO CLIP PLAYING:', videoClip);
+                  console.warn('Video element state:', {
+                    src: el.src,
+                    muted: el.muted,
+                    volume: el.volume,
+                    paused: el.paused,
+                  });
+
+                  // CRITICAL: Unmute and set up audio routing
+                  el.muted = false;
+                  el.volume = 1.0;
+
+                  // Initialize audio mixer
+                  audioMixerService.initialize();
+
+                  // Get AudioContext and resume it
+                  const audioContext = (audioMixerService as any).audioContext;
+                  if (audioContext && audioContext.state === 'suspended') {
+                    console.warn('⏳ Resuming AudioContext...');
+                    audioContext.resume().then(() => {
+                      console.warn('✅ AudioContext resumed, state:', audioContext.state);
+                      // Add video to audio mixer AFTER context is resumed
+                      try {
+                        audioMixerService.addMediaElement('video-clip', el);
+                        console.warn('✅ Video audio routed through mixer');
+                      } catch (error) {
+                        console.error('❌ Failed to add video to mixer:', error);
+                      }
+                    });
+                  } else {
+                    // Context already running, add immediately
+                    try {
+                      audioMixerService.addMediaElement('video-clip', el);
+                      console.warn('✅ Video audio routed through mixer');
+                    } catch (error) {
+                      console.error('❌ Failed to add video to mixer:', error);
+                    }
+                  }
+                }
+              }}
               src={videoClip}
               autoPlay
-              muted
               playsInline
               className="w-full h-full object-cover"
               onEnded={() => {
+                console.warn('🎬 Video clip ended');
+                // Remove from audio mixer
+                try {
+                  audioMixerService.removeMediaElement('video-clip');
+                  console.warn('✅ Video removed from audio mixer');
+                } catch (error) {
+                  console.error('❌ Failed to remove video from mixer:', error);
+                }
+
                 // Auto-remove video clip when it ends
                 setVideoClip(null);
                 localStorage.removeItem('streamVideoClip');
