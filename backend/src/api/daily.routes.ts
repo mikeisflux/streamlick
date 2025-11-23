@@ -96,13 +96,15 @@ router.post('/broadcasts/:broadcastId/streaming/start', async (req: AuthRequest,
 
     const roomName = `streamlick-broadcast-${broadcastId}`;
 
-    // Format endpoints for Daily API - must use 'endpoint' property
-    const endpoints = destinations.map((dest: any) => ({
-      endpoint: `${dest.rtmpUrl}/${dest.streamKey}`, // Daily API requires objects with 'endpoint' property
+    // Format outputs for Daily API - use separate 'url' and 'streamKey' properties
+    // Matches Daily.co best practice format
+    const outputs = destinations.map((dest: any) => ({
+      url: dest.rtmpUrl,
+      streamKey: dest.streamKey,
     }));
 
     await dailyServiceBackend.startLiveStreaming(roomName, {
-      endpoints,
+      outputs,
       layout: layout || {
         preset: 'single-participant', // Only show broadcaster
       },
@@ -176,15 +178,16 @@ router.post('/broadcasts/:broadcastId/streaming/add-endpoints', async (req: Auth
       return res.status(400).json({ error: 'At least one destination is required' });
     }
 
-    logger.info(`[Daily Routes] Adding ${destinations.length} endpoint(s) for broadcast ${broadcastId}`);
+    logger.info(`[Daily Routes] Adding ${destinations.length} output(s) for broadcast ${broadcastId}`);
 
     const roomName = `streamlick-broadcast-${broadcastId}`;
 
-    const endpoints = destinations.map((dest: any) => ({
-      endpoint: `${dest.rtmpUrl}/${dest.streamKey}`, // Daily API requires 'endpoint', not 'rtmpUrl'
+    const outputs = destinations.map((dest: any) => ({
+      url: dest.rtmpUrl,
+      streamKey: dest.streamKey,
     }));
 
-    await dailyServiceBackend.updateLiveStreamingEndpoints(roomName, endpoints);
+    await dailyServiceBackend.updateLiveStreamingEndpoints(roomName, outputs);
 
     res.json({ success: true });
   } catch (error: any) {

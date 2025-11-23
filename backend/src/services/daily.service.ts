@@ -35,12 +35,13 @@ interface DailyRoom {
   config: any;
 }
 
-interface LiveStreamingEndpoint {
-  endpoint: string;
+interface LiveStreamingOutput {
+  url: string;
+  streamKey: string;
 }
 
 interface StartLiveStreamingParams {
-  endpoints: LiveStreamingEndpoint[];
+  outputs: LiveStreamingOutput[];
   layout?: {
     preset?: 'default' | 'single-participant' | 'active-participant' | 'gallery';
   };
@@ -217,10 +218,11 @@ class DailyServiceBackend {
     this.ensureInitialized();
 
     try {
-      logger.info(`[Daily Backend] Starting live streaming for room ${roomName} with ${params.endpoints.length} endpoint(s)`);
+      logger.info(`[Daily Backend] Starting live streaming for room ${roomName} with ${params.outputs.length} output(s)`);
 
-      const response = await this.apiClient.post(`/rooms/${roomName}/live-streaming/start`, {
-        endpoints: params.endpoints,
+      // Use correct Daily API format: /start-live-streaming with 'outputs' array
+      const response = await this.apiClient.post(`/rooms/${roomName}/start-live-streaming`, {
+        outputs: params.outputs,
         layout: params.layout,
         instanceId: params.instanceId,
       });
@@ -233,7 +235,7 @@ class DailyServiceBackend {
         data: error.response?.data,
         message: error.message,
         roomName,
-        endpointCount: params.endpoints.length,
+        outputCount: params.outputs.length,
       });
       throw error;
     }
@@ -269,22 +271,23 @@ class DailyServiceBackend {
   /**
    * Update live streaming endpoints (add new destinations)
    */
-  async updateLiveStreamingEndpoints(roomName: string, endpoints: LiveStreamingEndpoint[], instanceId?: string): Promise<void> {
+  async updateLiveStreamingEndpoints(roomName: string, outputs: LiveStreamingOutput[], instanceId?: string): Promise<void> {
     this.ensureInitialized();
 
     try {
-      logger.info(`[Daily Backend] Updating live streaming endpoints for room ${roomName}`);
+      logger.info(`[Daily Backend] Updating live streaming outputs for room ${roomName}`);
 
-      const body: any = { endpoints };
+      const body: any = { outputs };
       if (instanceId) {
         body.instanceId = instanceId;
       }
 
+      // Note: Update endpoint might use different path - verify with Daily.co docs if needed
       await this.apiClient.post(`/rooms/${roomName}/live-streaming/update`, body);
 
-      logger.info('[Daily Backend] Live streaming endpoints updated successfully');
+      logger.info('[Daily Backend] Live streaming outputs updated successfully');
     } catch (error: any) {
-      logger.error('[Daily Backend] Failed to update endpoints:', error.response?.data || error);
+      logger.error('[Daily Backend] Failed to update outputs:', error.response?.data || error);
       throw error;
     }
   }
