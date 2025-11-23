@@ -151,37 +151,24 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
         return newSet;
       });
     } else {
-      // CRITICAL: Automatic mute/unmute cycle to satisfy browser autoplay policy
-      // This simulates what the user does manually (mute button → unmute button)
-      // Start muted, then unmute after playing starts
-      videoElement.muted = true;
-      videoElement.volume = 1.0;
-      console.log(`[MediaLibrary] Starting video muted (autoplay workaround)`);
+      // CRITICAL: Resume AudioContext FIRST (synchronously within user gesture)
+      // This is the key - clicking "Mute Speaker" works because it's a user gesture that allows AudioContext.resume()
+      const audioContext = (audioMixerService as any).audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        console.log('[MediaLibrary] Resuming AudioContext BEFORE play (synchronous in user gesture)...');
+        audioContext.resume(); // Call synchronously, don't await
+      }
 
-      // Start playing FIRST (within user gesture), THEN unmute
-      // This ensures the play() call happens synchronously within the click event
+      // Set volume and unmute
+      videoElement.muted = false;
+      videoElement.volume = 1.0;
+      console.log(`[MediaLibrary] Video settings - muted: ${videoElement.muted}, volume: ${videoElement.volume}`);
+
+      // Start playing (synchronously within user gesture)
       videoElement.play()
         .then(() => {
-          console.log('[MediaLibrary] Video playing, now unmuting...');
-
-          // CRITICAL: Automatic unmute after video starts (simulates manual mute/unmute)
-          setTimeout(() => {
-            videoElement.muted = false;
-            console.log('[MediaLibrary] Video unmuted - audio should now play!');
-          }, 100);
-
+          console.log('[MediaLibrary] Video playing with audio!');
           setPlayingClips(prev => new Set(prev).add(clipId));
-
-          // Resume AudioContext AFTER play starts (non-blocking)
-          const audioContext = (audioMixerService as any).audioContext;
-          if (audioContext && audioContext.state === 'suspended') {
-            console.log('[MediaLibrary] Resuming suspended AudioContext...');
-            audioContext.resume().then(() => {
-              console.log('[MediaLibrary] AudioContext resumed');
-            }).catch((error: any) => {
-              console.error('[MediaLibrary] Failed to resume AudioContext:', error);
-            });
-          }
         })
         .catch((error) => {
           console.error('[MediaLibrary] Failed to play video:', error);
