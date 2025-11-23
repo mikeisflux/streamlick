@@ -182,7 +182,7 @@ class RTPBridgeService {
       role,
       fingerprints: [
         {
-          algorithm: fingerprintMatch[1],
+          algorithm: fingerprintMatch[1] as mediasoupTypes.FingerprintAlgorithm,
           value: fingerprintMatch[2],
         },
       ],
@@ -197,7 +197,7 @@ class RTPBridgeService {
     const routerCaps = router.rtpCapabilities;
 
     return {
-      codecs: routerCaps.codecs.filter((codec) => {
+      codecs: (routerCaps.codecs || []).filter((codec) => {
         // wrtc supports VP8, H264, and Opus
         const mimeType = codec.mimeType.toLowerCase();
         return (
@@ -206,7 +206,7 @@ class RTPBridgeService {
           mimeType === 'audio/opus'
         );
       }),
-      headerExtensions: routerCaps.headerExtensions,
+      headerExtensions: routerCaps.headerExtensions || [],
     };
   }
 
