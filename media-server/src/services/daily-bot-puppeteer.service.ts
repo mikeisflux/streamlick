@@ -125,8 +125,8 @@ class DailyBotPuppeteerService {
 
       logger.info('[Puppeteer Bot] Daily SDK loaded');
 
-      // Connect to mediasoup WebRTC transport
-      await this.connectToMediasoup(config);
+      // Skip connectToMediasoup - the user's browser will send media directly to Daily
+      // await this.connectToMediasoup(config);
 
       // Join Daily room
       await this.joinDailyRoom(config);
@@ -280,21 +280,8 @@ class DailyBotPuppeteerService {
             const joinResponse = await win.dailyCall.join({ url: roomUrl, token });
             console.log('✅ Successfully joined Daily room', joinResponse);
 
-            // Set custom tracks from mediasoup
-            if (win.mediaTracks.video && win.mediaTracks.audio) {
-              console.log('Setting custom tracks from mediasoup...');
-              await win.dailyCall.setInputDevicesAsync({
-                videoSource: win.mediaTracks.video,
-                audioSource: win.mediaTracks.audio,
-              });
-              console.log('✅ Custom tracks set');
-              win.botLog.push({ message: 'Set custom tracks from mediasoup' });
-            } else {
-              console.warn('⚠️ mediaTracks not available:', {
-                hasVideo: !!win.mediaTracks.video,
-                hasAudio: !!win.mediaTracks.audio,
-              });
-            }
+            // Bot joins as a participant without camera/mic
+            // The actual user's media comes from their browser joining Daily directly
 
             return { success: true };
           } catch (err: any) {
