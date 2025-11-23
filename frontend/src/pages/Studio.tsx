@@ -350,15 +350,15 @@ export function Studio() {
         console.log('[Studio] Compositor initialized in preview mode with', participantStreams.length, 'participants');
 
         // Apply current layout
-        const layoutMap: { [key: number]: 'grid' | 'spotlight' | 'sidebar' | 'pip' } = {
-          1: 'grid',      // Solo
-          2: 'grid',      // Cropped
-          3: 'grid',      // Group
-          4: 'spotlight', // Spotlight
-          5: 'sidebar',   // News
-          6: 'sidebar',   // Screen
-          7: 'pip',       // Picture-in-Picture
-          8: 'sidebar',   // Cinema
+        const layoutMap: { [key: number]: 'grid' | 'spotlight' | 'sidebar' | 'pip' | 'screenshare' } = {
+          1: 'grid',        // Solo
+          2: 'grid',        // Cropped
+          3: 'grid',        // Group
+          4: 'spotlight',   // Spotlight
+          5: 'sidebar',     // News
+          6: 'screenshare', // Screen
+          7: 'pip',         // Picture-in-Picture
+          8: 'sidebar',     // Cinema
         };
         const layoutType = layoutMap[selectedLayout] || 'grid';
         compositorService.setLayout({ type: layoutType });

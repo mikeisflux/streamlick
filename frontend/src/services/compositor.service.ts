@@ -43,7 +43,7 @@ interface ParticipantStream {
 }
 
 interface LayoutConfig {
-  type: 'grid' | 'spotlight' | 'sidebar' | 'pip';
+  type: 'grid' | 'spotlight' | 'sidebar' | 'pip' | 'screenshare';
   spotlightId?: string; // For spotlight layout
   positions?: Array<{ x: number; y: number; width: number; height: number }>;
 }
@@ -1484,6 +1484,9 @@ class CompositorService {
       case 'pip':
         this.drawPipLayout(participantArray);
         break;
+      case 'screenshare':
+        this.drawScreenShareLayout(participantArray);
+        break;
     }
   }
 
@@ -1579,6 +1582,48 @@ class CompositorService {
 
       this.drawParticipantVideo(pip.id, x, y, pipWidth, pipHeight);
       this.drawParticipantName(pip.name, x, y, pipWidth, pipHeight);
+    }
+  }
+
+  /**
+   * Draw screen share layout
+   * Screen share takes 88% height at bottom, participants as thumbnails (12% height) at top
+   */
+  private drawScreenShareLayout(participants: ParticipantStream[]): void {
+    if (participants.length === 0 || !this.ctx) return;
+
+    // Find screen share participant
+    const screenShare = participants.find(p => p.id === 'screen-share');
+    const otherParticipants = participants.filter(p => p.id !== 'screen-share');
+
+    const padding = 5;
+    const thumbnailHeight = this.HEIGHT * 0.12; // 12% for thumbnails
+    const screenHeight = this.HEIGHT * 0.88; // 88% for screen share
+    const gap = 5;
+
+    // Draw participant thumbnails at top (12% height)
+    if (otherParticipants.length > 0) {
+      const thumbnailWidth = (this.WIDTH - padding * 2 - gap * (otherParticipants.length - 1)) / otherParticipants.length;
+
+      otherParticipants.forEach((participant, index) => {
+        const x = padding + index * (thumbnailWidth + gap);
+        const y = padding;
+        const width = thumbnailWidth;
+        const height = thumbnailHeight - padding * 2;
+
+        this.drawParticipantVideo(participant.id, x, y, width, height);
+        this.drawParticipantName(participant.name, x, y, width, height);
+      });
+    }
+
+    // Draw screen share at bottom (88% height)
+    if (screenShare) {
+      const x = padding;
+      const y = thumbnailHeight + gap;
+      const width = this.WIDTH - padding * 2;
+      const height = screenHeight - gap - padding;
+
+      this.drawParticipantVideo(screenShare.id, x, y, width, height);
     }
   }
 
