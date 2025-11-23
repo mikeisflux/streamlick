@@ -29,14 +29,14 @@ interface BridgeResult {
 
 class RTPBridgeService {
   /**
-   * Create MediaStreamTracks from mediasoup consumers
+   * Create MediaStreamTracks from mediasoup producers
    *
-   * Strategy: Create a WebRTC peer connection, send RTP from mediasoup to it,
-   * and extract the resulting MediaStreamTracks.
+   * Strategy: Create a WebRTC peer connection, create consumers from producers,
+   * send RTP from mediasoup to the peer connection, and extract MediaStreamTracks.
    */
-  async createTracksFromConsumers(
-    videoConsumer: mediasoupTypes.Consumer,
-    audioConsumer: mediasoupTypes.Consumer,
+  async createTracksFromProducers(
+    videoProducer: mediasoupTypes.Producer,
+    audioProducer: mediasoupTypes.Producer,
     router: mediasoupTypes.Router
   ): Promise<BridgeResult> {
     if (!wrtc) {
@@ -65,9 +65,24 @@ class RTPBridgeService {
         tuple: plainTransport.tuple,
       });
 
+      // Create consumers on the plain transport from the producers
+      const plainVideoConsumer = await plainTransport.consume({
+        producerId: videoProducer.id,
+        rtpCapabilities: router.rtpCapabilities,
+        paused: false,
+      });
+
+      const plainAudioConsumer = await plainTransport.consume({
+        producerId: audioProducer.id,
+        rtpCapabilities: router.rtpCapabilities,
+        paused: false,
+      });
+
+      logger.info('[RTP Bridge] Created consumers on plain transport');
+
       // Get RTP parameters from the consumers
-      const videoRtpParameters = videoConsumer.rtpParameters;
-      const audioRtpParameters = audioConsumer.rtpParameters;
+      const videoRtpParameters = plainVideoConsumer.rtpParameters;
+      const audioRtpParameters = plainAudioConsumer.rtpParameters;
 
       // Create an SDP offer that describes the RTP streams from mediasoup
       const sdp = this.createSDPFromRTPParameters(
@@ -100,21 +115,6 @@ class RTPBridgeService {
       });
 
       logger.info('[RTP Bridge] Connected plain transport to peer connection');
-
-      // Create consumers on the plain transport
-      const plainVideoConsumer = await plainTransport.consume({
-        producerId: videoConsumer.producerId,
-        rtpCapabilities: router.rtpCapabilities,
-        paused: false,
-      });
-
-      const plainAudioConsumer = await plainTransport.consume({
-        producerId: audioConsumer.producerId,
-        rtpCapabilities: router.rtpCapabilities,
-        paused: false,
-      });
-
-      logger.info('[RTP Bridge] Created consumers on plain transport');
 
       // Wait for tracks to be available on the peer connection
       const tracks = await this.waitForTracks(peerConnection);
