@@ -160,33 +160,36 @@ export function MediaLibrary({ onTriggerClip }: MediaLibraryProps) {
         return newSet;
       });
     } else {
-      // CRITICAL: Initialize and setup audio mixer BEFORE playing
-      // Ensure audio mixer is initialized (safe to call multiple times)
-      audioMixerService.initialize();
-      console.log('[MediaLibrary] Audio mixer initialized');
+      // CRITICAL: All audio setup must happen SYNCHRONOUSLY within user gesture
+      // for browser autoplay policy to allow audio playback
+      try {
+        // 1. Initialize audio mixer (safe to call multiple times)
+        audioMixerService.initialize();
+        console.log('[MediaLibrary] Audio mixer initialized');
 
-      // CRITICAL: Add video element to audio mixer and AWAIT AudioContext resume
-      // This must complete BEFORE playing the video for audio to work
-      audioMixerService.addMediaElement(clipId, videoElement)
-        .then(() => {
-          console.log('[MediaLibrary] Video element added to audio mixer, AudioContext resumed');
+        // 2. Add video to audio mixer SYNCHRONOUSLY (routes audio through Web Audio)
+        audioMixerService.addMediaElement(clipId, videoElement);
+        console.log('[MediaLibrary] Video element added to audio mixer');
 
-          // Set volume and unmute
-          videoElement.muted = false;
-          videoElement.volume = 1.0;
-          console.log(`[MediaLibrary] Video settings - muted: ${videoElement.muted}, volume: ${videoElement.volume}`);
+        // 3. Set volume and unmute SYNCHRONOUSLY
+        videoElement.muted = false;
+        videoElement.volume = 1.0;
+        console.log(`[MediaLibrary] Video settings - muted: ${videoElement.muted}, volume: ${videoElement.volume}`);
 
-          // Start playing AFTER AudioContext is resumed and connections are set up
-          return videoElement.play();
-        })
-        .then(() => {
-          console.log('[MediaLibrary] Video playing with audio!');
-          setPlayingClips(prev => new Set(prev).add(clipId));
-        })
-        .catch((error) => {
-          console.error('[MediaLibrary] Failed to setup audio or play video:', error);
-          toast.error('Failed to play video');
-        });
+        // 4. Start playing SYNCHRONOUSLY (within user gesture)
+        videoElement.play()
+          .then(() => {
+            console.log('[MediaLibrary] Video playing with audio!');
+            setPlayingClips(prev => new Set(prev).add(clipId));
+          })
+          .catch((error) => {
+            console.error('[MediaLibrary] Failed to play video:', error);
+            toast.error('Failed to play video');
+          });
+      } catch (error) {
+        console.error('[MediaLibrary] Failed to setup audio mixer:', error);
+        toast.error('Failed to setup audio');
+      }
     }
   };
 
