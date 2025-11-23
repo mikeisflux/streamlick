@@ -218,8 +218,11 @@ export function StudioCanvas({
 
   // Load stream background
   useEffect(() => {
+    console.log('[StudioCanvas] Setting up background event listener');
+
     // Listen for custom event for background updates
     const handleBackgroundUpdated = ((e: CustomEvent) => {
+      console.log('[StudioCanvas] Background updated event received:', e.detail);
       setStreamBackground(e.detail.url);
     }) as EventListener;
 
@@ -229,7 +232,10 @@ export function StudioCanvas({
     // which handles both IndexedDB and localStorage loading
     // No need to duplicate that logic here
 
-    return () => window.removeEventListener('backgroundUpdated', handleBackgroundUpdated);
+    return () => {
+      console.log('[StudioCanvas] Removing background event listener');
+      window.removeEventListener('backgroundUpdated', handleBackgroundUpdated);
+    };
   }, []);
 
   // Load stream logo from localStorage
