@@ -981,30 +981,36 @@ class CompositorService {
         });
       }
 
+      // CRITICAL FIX: Draw noise in the SAME region that frozen detection samples from (center 100x100)
+      // Previous bug: noise was drawn randomly across entire canvas, so sample region missed it
+      // This guarantees the frozen detection will see pixel changes
+      const sampleX = Math.floor((this.WIDTH - this.PIXEL_SAMPLE_SIZE) / 2);
+      const sampleY = Math.floor((this.HEIGHT - this.PIXEL_SAMPLE_SIZE) / 2);
+
       if (this.isTabVisible) {
-        // Normal mode: Draw 200 noise pixels (increased from 50)
-        // Alpha 0.1 = 90% transparent, creates strong delta while still imperceptible
-        this.ctx!.globalAlpha = 0.1; // Increased from 0.03
-        for (let i = 0; i < 200; i++) { // Increased from 50
+        // Normal mode: Draw 50 noise pixels in sample region
+        // Alpha 0.15 = 85% transparent, creates strong delta while still imperceptible
+        this.ctx!.globalAlpha = 0.15;
+        for (let i = 0; i < 50; i++) {
           this.ctx!.fillStyle = `rgb(${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)})`;
           this.ctx!.fillRect(
-            Math.random() * this.canvas!.width,
-            Math.random() * this.canvas!.height,
-            3, // 3x3 pixels (increased from 2x2)
-            3
+            sampleX + Math.random() * this.PIXEL_SAMPLE_SIZE,  // X within sample region
+            sampleY + Math.random() * this.PIXEL_SAMPLE_SIZE,  // Y within sample region
+            2,
+            2
           );
         }
       } else {
         // AGGRESSIVE MODE: Tab is hidden, browser may throttle more aggressively
-        // Draw 300 pixels with higher alpha and larger size
-        this.ctx!.globalAlpha = 0.15; // Increased from 0.08
-        for (let i = 0; i < 300; i++) { // Increased from 100
+        // Draw 100 pixels with higher alpha in sample region
+        this.ctx!.globalAlpha = 0.2;
+        for (let i = 0; i < 100; i++) {
           this.ctx!.fillStyle = `rgb(${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)})`;
           this.ctx!.fillRect(
-            Math.random() * this.canvas!.width,
-            Math.random() * this.canvas!.height,
-            4, // 4x4 pixels (increased from 3x3)
-            4
+            sampleX + Math.random() * this.PIXEL_SAMPLE_SIZE,  // X within sample region
+            sampleY + Math.random() * this.PIXEL_SAMPLE_SIZE,  // Y within sample region
+            3,
+            3
           );
         }
       }
