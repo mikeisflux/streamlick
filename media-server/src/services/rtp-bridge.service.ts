@@ -91,13 +91,21 @@ class RTPBridgeService {
         audioRtpParameters
       );
 
-      logger.info('[RTP Bridge] Generated SDP offer');
+      logger.info('[RTP Bridge] Generated SDP offer:', sdp.substring(0, 200) + '...');
 
       // Set remote description (what we're receiving from mediasoup)
-      await peerConnection.setRemoteDescription({
-        type: 'offer',
-        sdp,
-      });
+      try {
+        await peerConnection.setRemoteDescription({
+          type: 'offer',
+          sdp,
+        });
+      } catch (error: any) {
+        logger.error('[RTP Bridge] Failed to set remote description:', {
+          error: error.message,
+          sdp: sdp,
+        });
+        throw error;
+      }
 
       // Create answer
       const answer = await peerConnection.createAnswer();
@@ -149,26 +157,38 @@ class RTPBridgeService {
     const videoCodec = videoRtpParameters.codecs[0];
     const audioCodec = audioRtpParameters.codecs[0];
 
+    // Generate random SSRCs for the streams
+    const videoSSRC = Math.floor(Math.random() * 0xffffffff);
+    const audioSSRC = Math.floor(Math.random() * 0xffffffff);
+
     const sdp = `v=0
 o=- 0 0 IN IP4 127.0.0.1
 s=mediasoup-bridge
 t=0 0
 a=group:BUNDLE 0 1
-a=msid-semantic: WMS *
-
-m=video ${port} RTP/AVP ${videoCodec.payloadType}
+a=msid-semantic:WMS *
+m=video ${port} UDP/TLS/RTP/SAVPF ${videoCodec.payloadType}
 c=IN IP4 127.0.0.1
 a=rtcp:${port} IN IP4 127.0.0.1
-a=rtpmap:${videoCodec.payloadType} ${videoCodec.mimeType.split('/')[1]}/${videoCodec.clockRate}
+a=rtcp-mux
 a=sendonly
 a=mid:0
-
-m=audio ${port} RTP/AVP ${audioCodec.payloadType}
+a=rtpmap:${videoCodec.payloadType} ${videoCodec.mimeType.split('/')[1]}/${videoCodec.clockRate}
+a=ssrc:${videoSSRC} cname:mediasoup
+a=ssrc:${videoSSRC} msid:mediasoup video0
+a=ssrc:${videoSSRC} mslabel:mediasoup
+a=ssrc:${videoSSRC} label:video0
+m=audio ${port} UDP/TLS/RTP/SAVPF ${audioCodec.payloadType}
 c=IN IP4 127.0.0.1
 a=rtcp:${port} IN IP4 127.0.0.1
-a=rtpmap:${audioCodec.payloadType} ${audioCodec.mimeType.split('/')[1]}/${audioCodec.clockRate}
+a=rtcp-mux
 a=sendonly
 a=mid:1
+a=rtpmap:${audioCodec.payloadType} ${audioCodec.mimeType.split('/')[1]}/${audioCodec.clockRate}
+a=ssrc:${audioSSRC} cname:mediasoup
+a=ssrc:${audioSSRC} msid:mediasoup audio0
+a=ssrc:${audioSSRC} mslabel:mediasoup
+a=ssrc:${audioSSRC} label:audio0
 `;
 
     return sdp;
