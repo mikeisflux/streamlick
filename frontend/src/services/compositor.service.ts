@@ -86,6 +86,10 @@ class CompositorService {
   private backgroundImage: HTMLImageElement | null = null;
   private overlayImages: Map<string, HTMLImageElement> = new Map();
 
+  // Audio visualization for participants with camera off
+  private audioAnalysers: Map<string, AnalyserNode> = new Map();
+  private audioLevels: Map<string, number> = new Map(); // 0-1 normalized audio level
+
   // Canvas dimensions - configurable via environment or defaults to 1080p Full HD (1920x1080)
   private readonly WIDTH = parseInt(import.meta.env.VITE_CANVAS_WIDTH || '1920');
   private readonly HEIGHT = parseInt(import.meta.env.VITE_CANVAS_HEIGHT || '1080');
@@ -144,12 +148,15 @@ class CompositorService {
     for (const participant of participants) {
       await this.addParticipant(participant);
 
-      // Add participant audio to mixer
+      // Add participant audio to mixer and create audio analyser for visualization
       if (participant.audioEnabled && participant.stream) {
         const audioTrack = participant.stream.getAudioTracks()[0];
         if (audioTrack) {
           const audioStream = new MediaStream([audioTrack]);
           audioMixerService.addStream(participant.id, audioStream);
+
+          // Create audio analyser for pulsating visualization when camera is off
+          this.createAudioAnalyser(participant.id, audioStream);
         }
       }
     }
@@ -248,7 +255,67 @@ class CompositorService {
       this.videoElements.delete(participantId);
     }
 
+    // Clean up audio analyser
+    const analyser = this.audioAnalysers.get(participantId);
+    if (analyser) {
+      analyser.disconnect();
+      this.audioAnalysers.delete(participantId);
+      this.audioLevels.delete(participantId);
+    }
+
     this.participants.delete(participantId);
+  }
+
+  /**
+   * Create audio analyser for visualizing participant audio levels
+   */
+  private createAudioAnalyser(participantId: string, audioStream: MediaStream): void {
+    try {
+      // Create a separate audio context for analysis (not the mixer context)
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(audioStream);
+      const analyser = audioContext.createAnalyser();
+
+      // Configure analyser for speech detection
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+
+      // Connect source to analyser (don't connect to destination - just analyze)
+      source.connect(analyser);
+
+      // Store analyser
+      this.audioAnalysers.set(participantId, analyser);
+      this.audioLevels.set(participantId, 0);
+
+      logger.info(`Audio analyser created for participant ${participantId}`);
+    } catch (error) {
+      logger.error(`Failed to create audio analyser for ${participantId}:`, error);
+    }
+  }
+
+  /**
+   * Update audio levels for all participants
+   * Called every frame to detect speaking participants
+   */
+  private updateAudioLevels(): void {
+    this.audioAnalysers.forEach((analyser, participantId) => {
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      analyser.getByteFrequencyData(dataArray);
+
+      // Calculate average volume
+      let sum = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        sum += dataArray[i];
+      }
+      const average = sum / bufferLength;
+
+      // Normalize to 0-1 range (0-255 → 0-1)
+      const normalizedLevel = average / 255;
+
+      // Store level for drawing
+      this.audioLevels.set(participantId, normalizedLevel);
+    });
   }
 
   /**
@@ -982,6 +1049,9 @@ class CompositorService {
           this.drawBackground();
         }
 
+        // Update audio levels for pulsating avatar animations
+        this.updateAudioLevels();
+
         this.drawParticipants();
 
         this.drawOverlays();
@@ -1481,12 +1551,41 @@ class CompositorService {
         });
       }
 
-      // Video disabled - show placeholder
+      // Video disabled - show placeholder with audio visualization
       this.ctx.fillStyle = '#333333';
       this.ctx.fillRect(x, y, width, height);
 
+      // Get audio level for pulsating animation
+      const audioLevel = this.audioLevels.get(participantId) || 0;
+      const isSpeaking = audioLevel > 0.05; // Threshold for detecting speech
+
+      // Draw pulsating rings when speaking
+      if (isSpeaking && participant.audioEnabled) {
+        const centerX = x + width / 2;
+        const centerY = y + height / 2;
+        const baseRadius = Math.min(width, height) * 0.25;
+
+        // Create pulsating effect using time-based animation
+        const time = Date.now() / 1000;
+        const pulse = Math.sin(time * 4) * 0.5 + 0.5; // Pulsate at 4Hz (0-1)
+
+        // Draw 3 concentric rings that pulse with audio
+        for (let i = 0; i < 3; i++) {
+          const ringDelay = i * 0.3; // Stagger the rings
+          const ringPulse = Math.sin(time * 4 - ringDelay) * 0.5 + 0.5;
+          const radius = baseRadius + (i * 20) + (ringPulse * audioLevel * 30);
+          const alpha = (1 - i * 0.3) * audioLevel * 0.6;
+
+          this.ctx.strokeStyle = `rgba(66, 153, 225, ${alpha})`; // Blue rings
+          this.ctx.lineWidth = 3 + audioLevel * 5;
+          this.ctx.beginPath();
+          this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+          this.ctx.stroke();
+        }
+      }
+
       // Draw camera off icon
-      this.ctx.fillStyle = '#666666';
+      this.ctx.fillStyle = isSpeaking ? '#88ccff' : '#666666'; // Brighten when speaking
       this.ctx.font = `${Math.min(width, height) * 0.3}px Arial`;
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
