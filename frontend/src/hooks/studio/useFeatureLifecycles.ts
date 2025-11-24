@@ -21,11 +21,25 @@ export function useCaptions(enabled: boolean, language: string) {
         }
 
         try {
+          // TODO: ARCHITECTURAL FIX NEEDED
+          // Current limitation: Browser SpeechRecognition API can only access the microphone directly.
+          // It CANNOT process the compositor's mixed audio output (which includes all participants).
+          //
+          // Proper solution:
+          // 1. Get compositor's output stream: compositorService.getOutputStream()
+          // 2. Extract audio track from mixed output
+          // 3. Use Web Audio API + backend transcription service (Google Cloud Speech, AWS Transcribe, etc.)
+          //    OR use MediaRecorder to capture chunks and send to transcription service
+          //
+          // For now, this only captions the LOCAL microphone, not all participants.
+
           // Request microphone permission explicitly
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
           // Stop the test stream immediately - we just needed to check permissions
           stream.getTracks().forEach(track => track.stop());
+
+          console.warn('[AI Captions] Currently only processing local microphone. TODO: Process compositor mixed audio for all participants.');
 
           // Set up caption callbacks
           captionService.onCaption((caption: Caption) => {
