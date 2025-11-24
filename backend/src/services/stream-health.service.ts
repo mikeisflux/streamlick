@@ -43,7 +43,6 @@ export class StreamHealthMonitor extends EventEmitter {
       return;
     }
 
-    logger.info(`Starting health monitoring for broadcast ${broadcastId}`);
 
     this.startTimes.set(broadcastId, Date.now());
 
@@ -84,7 +83,6 @@ export class StreamHealthMonitor extends EventEmitter {
     this.metrics.delete(broadcastId);
     this.startTimes.delete(broadcastId);
 
-    logger.info(`Stopped health monitoring for broadcast ${broadcastId}`);
   }
 
   /**

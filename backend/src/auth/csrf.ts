@@ -81,7 +81,6 @@ export function validateCsrfToken(req: Request, res: Response, next: NextFunctio
 
   // Debug logging - always log non-safe method requests
   if (!safeMethods.includes(req.method)) {
-    logger.info(`[CSRF] ${req.method} ${fullPath}`, {
       pathToCheck,
       isExempt,
       hasToken: !!req.cookies[COOKIE_NAMES.CSRF_TOKEN],
@@ -91,7 +90,6 @@ export function validateCsrfToken(req: Request, res: Response, next: NextFunctio
 
   // Exempt matching requests
   if (isExempt) {
-    logger.info(`[CSRF] ✓ Exemption applied for ${req.method} ${fullPath}`);
     return next();
   }
 

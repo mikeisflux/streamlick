@@ -75,7 +75,6 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req: Reques
       },
     });
 
-    logger.info(`Background uploaded: ${background.id} by user ${userId}`);
 
     res.json({ background });
   } catch (error: any) {
@@ -142,7 +141,6 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
       where: { id },
     });
 
-    logger.info(`Background deleted: ${id}`);
 
     res.json({ success: true });
   } catch (error: any) {

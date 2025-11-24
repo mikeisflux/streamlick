@@ -37,7 +37,6 @@ router.post('/:broadcastId/ban', authMiddleware, async (req: Request, res: Respo
       },
     });
 
-    logger.info(`Participant ${participantId} banned from broadcast ${broadcastId}`);
 
     res.json({ success: true, ban });
   } catch (error: any) {
@@ -76,7 +75,6 @@ router.delete('/:broadcastId/ban/:participantId', authMiddleware, async (req: Re
       },
     });
 
-    logger.info(`Participant ${participantId} unbanned from broadcast ${broadcastId}`);
 
     res.json({ success: true });
   } catch (error: any) {

@@ -28,7 +28,6 @@ const prisma = new PrismaClient({
 // Custom query logging with sanitization in development
 if (process.env.NODE_ENV === 'development') {
   prisma.$on('query' as never, (e: any) => {
-    logger.info('Prisma Query:', {
       query: sanitizeQuery(e.query),
       duration: `${e.duration}ms`,
       // Only log params in very verbose mode (opt-in via PRISMA_LOG_PARAMS=true)
