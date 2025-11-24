@@ -257,34 +257,15 @@ class CompositorService {
       await this.addParticipant(participant);
 
       // Add participant audio to mixer and create audio analyser for visualization
-      // Create analyzer if stream has audio tracks (regardless of audioEnabled state)
-      // The audioEnabled flag is checked when rendering animations
-      if (participant.stream) {
-        const audioTracks = participant.stream.getAudioTracks();
-        console.log(`[AUDIO ANALYZER SETUP] Participant ${participant.id} stream has ${audioTracks.length} audio tracks`);
-
-        const audioTrack = audioTracks[0];
+      if (participant.audioEnabled && participant.stream) {
+        const audioTrack = participant.stream.getAudioTracks()[0];
         if (audioTrack) {
           const audioStream = new MediaStream([audioTrack]);
+          audioMixerService.addStream(participant.id, audioStream);
 
-          // Add to mixer if audio is enabled
-          if (participant.audioEnabled) {
-            audioMixerService.addStream(participant.id, audioStream);
-            console.log(`[AUDIO MIXER] Added participant ${participant.id} to audio mixer`);
-          }
-
-          // Always create audio analyser for visualization (checked at render time)
-          try {
-            this.createAudioAnalyser(participant.id, audioStream);
-            console.log(`[AUDIO ANALYZER SETUP] ✅ Created audio analyser for participant ${participant.id}`);
-          } catch (error) {
-            console.error(`[AUDIO ANALYZER SETUP] ❌ Failed to create audio analyser for ${participant.id}:`, error);
-          }
-        } else {
-          console.warn(`[AUDIO ANALYZER SETUP] ⚠️ No audio track found for participant ${participant.id}`);
+          // Create audio analyser for pulsating visualization when camera is off
+          this.createAudioAnalyser(participant.id, audioStream);
         }
-      } else {
-        console.warn(`[AUDIO ANALYZER SETUP] ⚠️ No stream found for participant ${participant.id}`);
       }
     }
 
