@@ -23,11 +23,8 @@ async function waitForStreamActive(
   maxAttempts: number = 12,
   delayMs: number = 5000
 ): Promise<boolean> {
-  logger.info(`[YouTube Stream Poll] Starting to poll stream ${streamId} (max ${maxAttempts * delayMs / 1000}s)`);
-
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      logger.info(`[YouTube Stream Poll] Attempt ${attempt}/${maxAttempts} - Checking stream status...`);
 
       const response = await axios.get(`${YOUTUBE_API_BASE}/liveStreams`, {
         params: {
@@ -44,19 +41,14 @@ async function waitForStreamActive(
       }
 
       const streamStatus = stream.status?.streamStatus;
-      const healthStatus = stream.status?.healthStatus?.status;
-
-      logger.info(`[YouTube Stream Poll] Stream status: ${streamStatus}, Health: ${healthStatus || 'N/A'}`);
 
       // Stream is active when it's receiving video data
       if (streamStatus === 'active') {
-        logger.info(`[YouTube Stream Poll] ✅ Stream is ACTIVE after ${attempt} attempts (${attempt * delayMs / 1000}s)`);
         return true;
       }
 
       // If not active yet, wait before next poll
       if (attempt < maxAttempts) {
-        logger.info(`[YouTube Stream Poll] ⏳ Stream not active yet, waiting ${delayMs / 1000}s before retry...`);
         await new Promise(resolve => setTimeout(resolve, delayMs));
       }
     } catch (error: any) {
@@ -82,18 +74,12 @@ export async function refreshYouTubeToken(
   clientSecret: string
 ): Promise<{ access_token: string; expires_in: number }> {
   try {
-    logger.info('[YouTube Token] Attempting to refresh token...');
-    logger.info(`[YouTube Token] Client ID: ${clientId?.substring(0, 20)}...`);
-    logger.info(`[YouTube Token] Refresh token present: ${!!refreshToken}`);
-
     const response = await axios.post(YOUTUBE_TOKEN_URL, {
       client_id: clientId,
       client_secret: clientSecret,
       refresh_token: refreshToken,
       grant_type: 'refresh_token',
     });
-
-    logger.info('[YouTube Token] ✅ Token refreshed successfully');
 
     return {
       access_token: response.data.access_token,
@@ -149,7 +135,6 @@ export async function getValidYouTubeToken(destinationId: string): Promise<strin
     const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
 
     if (expiryTime <= fiveMinutesFromNow) {
-      logger.info(`YouTube token expired or expiring soon for destination ${destinationId}, refreshing...`);
 
       if (!destination.refreshToken) {
         throw new Error('No refresh token available for YouTube destination');
@@ -158,17 +143,12 @@ export async function getValidYouTubeToken(destinationId: string): Promise<strin
       const refreshToken = decrypt(destination.refreshToken);
 
       // Get OAuth credentials from database (admin settings) or environment variables
-      logger.info('[YouTube Token] Retrieving OAuth credentials from database...');
       const credentials = await getOAuthCredentials('youtube');
 
       if (!credentials.clientId || !credentials.clientSecret) {
         logger.error('[YouTube Token] Missing OAuth credentials');
-        logger.error(`[YouTube Token] clientId present: ${!!credentials.clientId}`);
-        logger.error(`[YouTube Token] clientSecret present: ${!!credentials.clientSecret}`);
         throw new Error('YouTube OAuth credentials not configured in admin settings');
       }
-
-      logger.info('[YouTube Token] Successfully retrieved OAuth credentials from database');
 
       const refreshed = await refreshYouTubeToken(
         refreshToken,
@@ -186,8 +166,6 @@ export async function getValidYouTubeToken(destinationId: string): Promise<strin
           tokenExpiresAt: new Date(Date.now() + refreshed.expires_in * 1000),
         },
       });
-
-      logger.info(`YouTube token refreshed for destination ${destinationId}`);
     }
   }
 
@@ -205,17 +183,7 @@ export async function createYouTubeLiveBroadcast(
   privacyStatus: 'public' | 'unlisted' | 'private' = 'public'
 ): Promise<{ broadcastId: string; streamId: string; rtmpUrl: string; streamKey: string }> {
   try {
-    logger.info('Creating YouTube live broadcast', {
-      title,
-      privacyStatus,
-      hasDescription: !!description,
-      hasSchedule: !!scheduledStartTime
-    });
-
     // Step 1: Create liveBroadcast
-    logger.info('[YouTube Step 1/4] Creating liveBroadcast...');
-    logger.info(`[YouTube Step 1/4] Request payload: title="${title}", description="${description || ''}", privacy=${privacyStatus}`);
-
     const broadcastResponse = await axios.post(
       `${YOUTUBE_API_BASE}/liveBroadcasts`,
       {
@@ -243,17 +211,9 @@ export async function createYouTubeLiveBroadcast(
       }
     );
 
-    logger.info(`[YouTube Step 1/4] Response: broadcastId=${broadcastResponse.data.id}, title="${broadcastResponse.data.snippet?.title}"`);
-
     const broadcastId = broadcastResponse.data.id;
-    logger.info(`[YouTube Step 1/4] ✓ LiveBroadcast created successfully`, {
-      broadcastId,
-      lifeCycleStatus: broadcastResponse.data.status?.lifeCycleStatus,
-      privacyStatus: broadcastResponse.data.status?.privacyStatus
-    });
 
     // Step 2: Create or get liveStream
-    logger.info('[YouTube Step 2/4] Creating liveStream...');
     const streamResponse = await axios.post(
       `${YOUTUBE_API_BASE}/liveStreams`,
       {
@@ -284,17 +244,7 @@ export async function createYouTubeLiveBroadcast(
     const rtmpUrl = ingestionInfo.ingestionAddress; // Plain RTMP (e.g., rtmp://a.rtmp.youtube.com/live2)
     const streamKey = ingestionInfo.streamName;
 
-    logger.info(`[YouTube Step 2/4] ✓ LiveStream created successfully`, {
-      streamId,
-      rtmpUrl,
-      protocol: rtmpUrl.startsWith('rtmps://') ? 'RTMPS' : 'RTMP',
-      streamKeyLength: streamKey?.length,
-      resolution: streamResponse.data.cdn.resolution,
-      frameRate: streamResponse.data.cdn.frameRate
-    });
-
     // Step 3: Bind broadcast to stream
-    logger.info('[YouTube Step 3/4] Binding broadcast to stream...');
     await axios.post(
       `${YOUTUBE_API_BASE}/liveBroadcasts/bind`,
       null,
@@ -308,24 +258,9 @@ export async function createYouTubeLiveBroadcast(
       }
     );
 
-    logger.info(`[YouTube Step 3/4] ✓ Broadcast bound to stream successfully`, {
-      broadcastId,
-      streamId
-    });
-
     // Step 4: Return immediately - background monitoring will handle transition
     // The monitorAndTransitionYouTubeBroadcast function (called from broadcasts.routes.ts)
     // will poll the stream status and transition when active
-    logger.info('[YouTube Step 4/4] ✓ Broadcast created and bound to stream');
-    logger.info('[YouTube Step 4/4] Background monitoring will transition to live when stream is active');
-
-    logger.info('✓ YouTube live broadcast created successfully', {
-      broadcastId,
-      streamId,
-      rtmpUrl,
-      privacyStatus,
-      title
-    });
 
     return {
       broadcastId,
@@ -359,10 +294,6 @@ export async function transitionYouTubeBroadcastToLive(
   accessToken: string
 ): Promise<void> {
   try {
-    logger.info(`[YouTube Transition] ========== TRANSITIONING TO LIVE ==========`);
-    logger.info(`[YouTube Transition] Broadcast ID: ${broadcastId}`);
-    logger.info(`[YouTube Transition] Calling liveBroadcasts.transition with broadcastStatus="live"`);
-
     const response = await axios.post(
       `${YOUTUBE_API_BASE}/liveBroadcasts/transition`,
       null,
@@ -375,14 +306,6 @@ export async function transitionYouTubeBroadcastToLive(
         headers: { Authorization: `Bearer ${accessToken}` },
       }
     );
-
-    logger.info(`[YouTube Transition] ========== TRANSITION SUCCESSFUL ==========`);
-    logger.info(`[YouTube Transition] ✓ Broadcast is now LIVE`, {
-      broadcastId,
-      lifeCycleStatus: response.data?.status?.lifeCycleStatus,
-      privacyStatus: response.data?.status?.privacyStatus,
-      recordingStatus: response.data?.status?.recordingStatus
-    });
   } catch (error: any) {
     const errorDetails = {
       broadcastId,
@@ -410,8 +333,6 @@ export async function endYouTubeLiveBroadcast(
   accessToken: string
 ): Promise<void> {
   try {
-    logger.info(`[YouTube End] Ending broadcast`, { broadcastId });
-
     const response = await axios.post(
       `${YOUTUBE_API_BASE}/liveBroadcasts/transition`,
       null,
@@ -424,11 +345,6 @@ export async function endYouTubeLiveBroadcast(
         headers: { Authorization: `Bearer ${accessToken}` },
       }
     );
-
-    logger.info(`[YouTube End] ✓ Broadcast ended successfully`, {
-      broadcastId,
-      finalStatus: response.data?.status?.lifeCycleStatus
-    });
   } catch (error: any) {
     logger.warn(`[YouTube End] Failed to end broadcast (non-fatal)`, {
       broadcastId,
@@ -447,14 +363,10 @@ export async function deleteYouTubeLiveBroadcast(
   accessToken: string
 ): Promise<void> {
   try {
-    logger.info(`Deleting YouTube live broadcast: ${broadcastId}`);
-
     await axios.delete(`${YOUTUBE_API_BASE}/liveBroadcasts`, {
       params: { id: broadcastId },
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-
-    logger.info(`YouTube broadcast deleted: ${broadcastId}`);
   } catch (error: any) {
     logger.error('Error deleting YouTube live broadcast:', error.response?.data || error.message);
     // Don't throw - deletion is optional
@@ -566,13 +478,6 @@ export async function monitorAndTransitionYouTubeBroadcast(
   maxAttempts: number = 30,
   pollIntervalMs: number = 2000
 ): Promise<void> {
-  logger.info(`[YouTube Monitor] Starting broadcast monitoring`, {
-    broadcastId,
-    maxAttempts,
-    pollIntervalMs,
-    maxWaitTime: `${(maxAttempts * pollIntervalMs) / 1000}s`
-  });
-
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       // Wait before checking (except first attempt)
@@ -581,11 +486,6 @@ export async function monitorAndTransitionYouTubeBroadcast(
       }
 
       const status = await getYouTubeBroadcastStatus(broadcastId, accessToken);
-      logger.info(`[YouTube Monitor] ========== STATUS CHECK ${attempt}/${maxAttempts} ==========`);
-      logger.info(`[YouTube Monitor] Broadcast ID: ${broadcastId}`);
-      logger.info(`[YouTube Monitor] Lifecycle Status: ${status.lifeCycleStatus}`);
-      logger.info(`[YouTube Monitor] Stream Status: ${status.streamStatus || 'unknown'}`);
-      logger.info(`[YouTube Monitor] Stream Health: ${status.healthStatus?.status || 'unknown'}`);
       if (status.healthStatus?.configurationIssues) {
         logger.warn(`[YouTube Monitor] Configuration Issues:`, status.healthStatus.configurationIssues);
       }
@@ -613,16 +513,8 @@ export async function monitorAndTransitionYouTubeBroadcast(
           reason = `Stream status is ACTIVE (${status.streamStatus}) and has been running for 10+ seconds`;
         }
 
-        logger.info(`[YouTube Monitor] ========== STREAM DETECTED! ==========`);
-        logger.info(`[YouTube Monitor] ✓ ${reason}`);
-        logger.info(`[YouTube Monitor] Initiating transition to live after ${attempt} attempt(s)...`);
-
         try {
           await transitionYouTubeBroadcastToLive(broadcastId, accessToken);
-          logger.info(`[YouTube Monitor] ========== SUCCESS! ==========`);
-          logger.info(`[YouTube Monitor] ✓ Successfully transitioned to live!`);
-          logger.info(`[YouTube Monitor] Total attempts: ${attempt}`);
-          logger.info(`[YouTube Monitor] Total wait time: ${(attempt * pollIntervalMs) / 1000}s`);
           return;
         } catch (transitionError: any) {
           // Handle specific YouTube API errors
@@ -643,8 +535,6 @@ export async function monitorAndTransitionYouTubeBroadcast(
           logger.error(`[YouTube Monitor] Error message: ${errorMessage}`);
           throw transitionError;
         }
-      } else {
-        logger.info(`[YouTube Monitor] Waiting for stream... (streamStatus: ${status.streamStatus || 'unknown'}, health: ${status.healthStatus?.status || 'unknown'}, lifecycle: ${status.lifeCycleStatus})`);
       }
 
       // Check for error states
