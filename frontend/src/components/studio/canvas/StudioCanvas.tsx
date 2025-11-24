@@ -143,6 +143,9 @@ export function StudioCanvas({
   // Detect if local user is speaking (for voice animations)
   const isLocalSpeaking = useAudioLevel(localStream, audioEnabled);
 
+  // Track which remote participants are speaking
+  const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
+
   // Load banners from localStorage
   const [banners, setBanners] = useState<Banner[]>([]);
 
@@ -280,6 +283,96 @@ export function StudioCanvas({
       window.removeEventListener('backgroundUpdated', handleBackgroundUpdated);
     };
   }, []);
+
+  // Monitor audio levels for remote participants
+  useEffect(() => {
+    const audioContexts = new Map<string, { context: AudioContext; analyser: AnalyserNode; source: MediaStreamAudioSourceNode; frameId: number }>();
+
+    const setupAudioAnalyzer = (participantId: string, stream: MediaStream, audioEnabled: boolean) => {
+      // Clean up existing analyzer if any
+      const existing = audioContexts.get(participantId);
+      if (existing) {
+        cancelAnimationFrame(existing.frameId);
+        existing.source.disconnect();
+        existing.analyser.disconnect();
+        existing.context.close();
+        audioContexts.delete(participantId);
+      }
+
+      // Don't set up analyzer if audio is disabled or no audio tracks
+      if (!audioEnabled || !stream.getAudioTracks().length) {
+        setSpeakingParticipants(prev => {
+          const next = new Set(prev);
+          next.delete(participantId);
+          return next;
+        });
+        return;
+      }
+
+      try {
+        const audioContext = new AudioContext();
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.8;
+
+        const audioTrack = stream.getAudioTracks()[0];
+        const clonedStream = new MediaStream([audioTrack.clone()]);
+        const source = audioContext.createMediaStreamSource(clonedStream);
+        source.connect(analyser);
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const speakingThreshold = 20;
+
+        const checkAudioLevel = () => {
+          analyser.getByteFrequencyData(dataArray);
+
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+          }
+          const average = sum / dataArray.length;
+          const speaking = average > speakingThreshold;
+
+          setSpeakingParticipants(prev => {
+            const next = new Set(prev);
+            if (speaking) {
+              next.add(participantId);
+            } else {
+              next.delete(participantId);
+            }
+            return next;
+          });
+
+          const frameId = requestAnimationFrame(checkAudioLevel);
+          audioContexts.set(participantId, { context: audioContext, analyser, source, frameId });
+        };
+
+        checkAudioLevel();
+      } catch (error) {
+        console.error(`[StudioCanvas] Failed to create audio analyser for ${participantId}:`, error);
+      }
+    };
+
+    // Set up analyzers for all remote participants
+    remoteParticipants.forEach((participant, id) => {
+      if (participant.stream) {
+        setupAudioAnalyzer(id, participant.stream, participant.audioEnabled);
+      }
+    });
+
+    // Cleanup
+    return () => {
+      audioContexts.forEach(({ context, analyser, source, frameId }) => {
+        cancelAnimationFrame(frameId);
+        source.disconnect();
+        analyser.disconnect();
+        if (context.state !== 'closed') {
+          context.close();
+        }
+      });
+      audioContexts.clear();
+    };
+  }, [remoteParticipants]);
 
   // Load stream logo from localStorage
   const [streamLogo, setStreamLogo] = useState<string | null>(null);
@@ -848,6 +941,7 @@ export function StudioCanvas({
                       stream={participant.stream}
                       videoEnabled={participant.videoEnabled}
                       audioEnabled={participant.audioEnabled}
+                      isSpeaking={speakingParticipants.has(participant.id)}
                       name={participant.name}
                       positionNumber={index + 2}
                       isHost={participant.role === 'host'}

@@ -144,6 +144,9 @@ class CompositorService {
   private showReconnectingOverlay = false;
   private reconnectingOverlayStartTime = 0;
 
+  // Backup timer for when tab is hidden (prevents stream muting)
+  private backupTimerId: number | null = null;
+
   constructor() {
     this.canvas = document.createElement('canvas');
     this.canvas.width = this.WIDTH;
@@ -1074,6 +1077,12 @@ class CompositorService {
     // ANTI-MUTE: Remove visibility change listener
     document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
 
+    // Clean up backup timer
+    if (this.backupTimerId !== null) {
+      window.clearInterval(this.backupTimerId);
+      this.backupTimerId = null;
+    }
+
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
@@ -1493,6 +1502,42 @@ class CompositorService {
   private handleVisibilityChange(): void {
     this.isTabVisible = !document.hidden;
     logger.info(`[Tab Visibility] Tab is now ${this.isTabVisible ? 'visible' : 'hidden'} - adjusting anti-mute strategy`);
+
+    if (!this.isTabVisible && this.isCompositing) {
+      // Tab is hidden - start backup timer to prevent stream muting
+      // requestAnimationFrame gets throttled heavily when tab is hidden, so we need setInterval as backup
+      logger.info('[Tab Visibility] Starting backup timer to prevent stream muting');
+      this.backupTimerId = window.setInterval(() => {
+        // Force a render even if requestAnimationFrame is throttled
+        if (this.isCompositing && this.ctx) {
+          try {
+            // Just draw some noise to keep the stream active
+            const sampleX = Math.floor((this.WIDTH - this.PIXEL_SAMPLE_SIZE) / 2);
+            const sampleY = Math.floor((this.HEIGHT - this.PIXEL_SAMPLE_SIZE) / 2);
+
+            this.ctx.save();
+            this.ctx.globalAlpha = 0.2;
+            for (let i = 0; i < 100; i++) {
+              this.ctx.fillStyle = `rgb(${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)})`;
+              this.ctx.fillRect(
+                sampleX + Math.random() * this.PIXEL_SAMPLE_SIZE,
+                sampleY + Math.random() * this.PIXEL_SAMPLE_SIZE,
+                3,
+                3
+              );
+            }
+            this.ctx.restore();
+          } catch (error) {
+            logger.error('[Backup Timer] Error rendering:', error);
+          }
+        }
+      }, 1000 / this.FPS); // Run at target FPS
+    } else if (this.isTabVisible && this.backupTimerId !== null) {
+      // Tab is visible - stop backup timer, requestAnimationFrame will handle it
+      logger.info('[Tab Visibility] Stopping backup timer');
+      window.clearInterval(this.backupTimerId);
+      this.backupTimerId = null;
+    }
   }
 
   /**

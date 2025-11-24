@@ -375,18 +375,18 @@ export function ParticipantBox({
       {/* Lower Third Name Display - 40px from bottom */}
       {showLowerThird && (
         <div
-          className="absolute left-0 right-0 flex items-center px-3"
+          className="absolute flex items-center px-3"
           style={{
             bottom: '40px',
+            left: '16px',
             height: '40px',
             backgroundColor: 'rgba(0, 0, 0, 0.75)',
             borderRadius: '20px',
-            marginLeft: '16px',
-            marginRight: '16px',
+            maxWidth: 'calc(100% - 32px)',
           }}
         >
-          <div className="text-white flex-1">
-            <div className={`font-semibold truncate ${textSize}`}>
+          <div className="text-white">
+            <div className={`font-semibold whitespace-nowrap ${textSize}`}>
               {name}
               {isHost && <span className="ml-1 text-blue-400">(Host)</span>}
             </div>
