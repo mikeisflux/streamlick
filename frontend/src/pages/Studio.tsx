@@ -299,6 +299,13 @@ export function Studio() {
     compositorService.setInputVolume(canvasSettings.inputVolume);
   }, [canvasSettings.inputVolume]);
 
+  // Apply noise gate settings to audio processor when they change
+  useEffect(() => {
+    const { audioProcessorService } = require('../services/audio-processor.service');
+    audioProcessorService.setNoiseGateEnabled(canvasSettings.noiseGateEnabled);
+    audioProcessorService.setNoiseGateThreshold(canvasSettings.noiseGateThreshold);
+  }, [canvasSettings.noiseGateEnabled, canvasSettings.noiseGateThreshold]);
+
   // ⚠️ MANDATORY - KEEP IN SYNC ⚠️
   // CRITICAL: Initialize compositor in preview mode when not live
   // This enables audio animations, layout previews, and all compositor features
@@ -732,6 +739,10 @@ export function Studio() {
         onNoiseSuppressionChange={canvasSettings.setNoiseSuppression}
         autoAdjustMicrophone={canvasSettings.autoAdjustMicrophone}
         onAutoAdjustMicrophoneChange={canvasSettings.setAutoAdjustMicrophone}
+        noiseGateEnabled={canvasSettings.noiseGateEnabled}
+        onNoiseGateEnabledChange={canvasSettings.setNoiseGateEnabled}
+        noiseGateThreshold={canvasSettings.noiseGateThreshold}
+        onNoiseGateThresholdChange={canvasSettings.setNoiseGateThreshold}
         // Visual effects
         selectedBackground={canvasSettings.selectedBackground}
         onBackgroundSelect={canvasSettings.setSelectedBackground}

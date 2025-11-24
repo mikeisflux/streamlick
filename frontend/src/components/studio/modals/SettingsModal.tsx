@@ -12,6 +12,10 @@ interface SettingsModalProps {
   handleVideoDeviceChange: (deviceId: string) => void;
   localStream: MediaStream | null;
   videoEnabled: boolean;
+  noiseGateEnabled: boolean;
+  setNoiseGateEnabled: (enabled: boolean) => void;
+  noiseGateThreshold: number;
+  setNoiseGateThreshold: (threshold: number) => void;
   backgroundRemovalEnabled: boolean;
   setBackgroundRemovalEnabled: (enabled: boolean) => void;
   backgroundRemovalOptions: BackgroundOptions;
@@ -38,6 +42,10 @@ export function SettingsModal({
   handleVideoDeviceChange,
   localStream,
   videoEnabled,
+  noiseGateEnabled,
+  setNoiseGateEnabled,
+  noiseGateThreshold,
+  setNoiseGateThreshold,
   backgroundRemovalEnabled,
   setBackgroundRemovalEnabled,
   backgroundRemovalOptions,
@@ -118,6 +126,55 @@ export function SettingsModal({
               <p className="text-xs text-gray-500 mt-1">
                 Choose which microphone to use for your broadcast
               </p>
+            </div>
+
+            {/* Background Noise Removal */}
+            <div className="border-t border-gray-200 pt-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Background Noise Removal</h3>
+                  <p className="text-xs text-gray-500 mt-1">Professional noise gate for clean audio</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={noiseGateEnabled}
+                    onChange={(e) => setNoiseGateEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+
+              {noiseGateEnabled && (
+                <div className="space-y-4 pl-2">
+                  {/* Threshold Slider */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                      Noise Gate Threshold: {noiseGateThreshold}dB
+                    </label>
+                    <input
+                      type="range"
+                      min="-60"
+                      max="-20"
+                      value={noiseGateThreshold}
+                      onChange={(e) => setNoiseGateThreshold(parseInt(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      style={{
+                        background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((noiseGateThreshold + 60) / 40) * 100}%, #e5e7eb ${((noiseGateThreshold + 60) / 40) * 100}%, #e5e7eb 100%)`
+                      }}
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>-60dB (Less sensitive)</span>
+                      <span>-20dB (More sensitive)</span>
+                    </div>
+                    <p className="text-xs text-gray-600 mt-2">
+                      Lower values reduce more noise but may cut off quiet speech.
+                      Recommended: -38dB for most environments.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Video Preview */}
