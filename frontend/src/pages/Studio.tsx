@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { compositorService } from '../services/compositor.service';
+import { audioProcessorService } from '../services/audio-processor.service';
 import { broadcastService } from '../services/broadcast.service';
 import { useMedia } from '../hooks/useMedia';
 import { useStudioStore } from '../store/studioStore';
@@ -301,7 +302,6 @@ export function Studio() {
 
   // Apply noise gate settings to audio processor when they change
   useEffect(() => {
-    const { audioProcessorService } = require('../services/audio-processor.service');
     audioProcessorService.setNoiseGateEnabled(canvasSettings.noiseGateEnabled);
     audioProcessorService.setNoiseGateThreshold(canvasSettings.noiseGateThreshold);
   }, [canvasSettings.noiseGateEnabled, canvasSettings.noiseGateThreshold]);
