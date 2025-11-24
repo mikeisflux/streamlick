@@ -232,6 +232,26 @@ class DailyBotPuppeteerService {
       if (videoEl) {
         const stream = new MediaStream([videoTrack, audioTrack]);
         videoEl.srcObject = stream;
+
+        // Wait for video to start playing
+        await new Promise((resolve) => {
+          videoEl.onloadedmetadata = () => {
+            videoEl.play().then(() => {
+              console.log('✅ Video element playing:', JSON.stringify({
+                width: videoEl.videoWidth,
+                height: videoEl.videoHeight,
+                paused: videoEl.paused,
+                readyState: videoEl.readyState,
+                currentTime: videoEl.currentTime,
+              }));
+              resolve(null);
+            }).catch((err: any) => {
+              console.error('❌ Video play failed:', err.message);
+              resolve(null);
+            });
+          };
+        });
+
         console.log('✅ Displaying mediasoup video in page');
       }
 
@@ -247,10 +267,15 @@ class DailyBotPuppeteerService {
 
       if (win.botMediaTracks) {
         console.log('🎥 Creating Daily call object and setting input devices...');
+        // Get video track settings to check dimensions
+        const videoSettings = win.botMediaTracks.video.getSettings();
         console.log('Track info:', JSON.stringify({
           videoId: win.botMediaTracks.video.id,
           videoEnabled: win.botMediaTracks.video.enabled,
           videoReadyState: win.botMediaTracks.video.readyState,
+          videoWidth: videoSettings.width,
+          videoHeight: videoSettings.height,
+          videoFrameRate: videoSettings.frameRate,
           audioId: win.botMediaTracks.audio.id,
           audioEnabled: win.botMediaTracks.audio.enabled,
           audioReadyState: win.botMediaTracks.audio.readyState,
@@ -269,6 +294,19 @@ class DailyBotPuppeteerService {
         win.dailyCall.on('error', (error: any) => {
           console.error('❌ Daily error event:', JSON.stringify(error, null, 2));
           win.botLog.push({ message: 'Daily error', error });
+        });
+
+        // Listen for live streaming events
+        win.dailyCall.on('live-streaming-started', (event: any) => {
+          console.log('✅ Daily live-streaming-started event:', JSON.stringify(event));
+        });
+
+        win.dailyCall.on('live-streaming-stopped', (event: any) => {
+          console.log('🛑 Daily live-streaming-stopped event:', JSON.stringify(event));
+        });
+
+        win.dailyCall.on('live-streaming-error', (event: any) => {
+          console.error('❌ Daily live-streaming-error event:', JSON.stringify(event));
         });
 
         // Set input devices BEFORE joining
