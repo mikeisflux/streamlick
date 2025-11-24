@@ -122,18 +122,9 @@ app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 
 // Debug middleware to log body after parsing
 app.use('/api/broadcasts/:id/start', (req, res, next) => {
-  logger.info('[DEBUG MIDDLEWARE] ========== REQUEST DETAILS ==========');
-  logger.info(`[DEBUG MIDDLEWARE] Content-Type: ${req.headers['content-type']}`);
-  logger.info(`[DEBUG MIDDLEWARE] Content-Length: ${req.headers['content-length']}`);
-  logger.info(`[DEBUG MIDDLEWARE] Body defined: ${!!req.body}`);
-  logger.info(`[DEBUG MIDDLEWARE] Body type: ${typeof req.body}`);
-  logger.info(`[DEBUG MIDDLEWARE] Body keys: ${req.body ? Object.keys(req.body).join(', ') : 'NONE'}`);
   if (req.body) {
-    logger.info(`[DEBUG MIDDLEWARE] Body JSON: ${JSON.stringify(req.body)}`);
   } else {
-    logger.info('[DEBUG MIDDLEWARE] Body is UNDEFINED or NULL!');
   }
-  logger.info('[DEBUG MIDDLEWARE] ========================================');
   next();
 });
 
@@ -232,8 +223,6 @@ app.use((req, res) => {
 
 // Start server
 server.listen(PORT, async () => {
-  logger.info(`🚀 Streamlick API server running on port ${PORT}`);
-  logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
 
   // Initialize Daily.co service
   try {
@@ -245,9 +234,7 @@ server.listen(PORT, async () => {
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
   server.close(() => {
-    logger.info('Server closed');
     process.exit(0);
   });
 });
