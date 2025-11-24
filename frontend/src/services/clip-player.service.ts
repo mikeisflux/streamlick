@@ -73,7 +73,6 @@ class ClipPlayerService {
       } else {
         // Wait for loadedmetadata event
         video.addEventListener('loadedmetadata', () => {
-          console.log('[ClipPlayer] Video metadata loaded:', {
             width: video.videoWidth,
             height: video.videoHeight,
             duration: video.duration,
@@ -122,26 +121,21 @@ class ClipPlayerService {
     // Wait for metadata to be loaded before registering with compositor
     try {
       await metadataLoaded;
-      console.log('[ClipPlayer] Video ready to display on canvas');
 
       // CRITICAL FIX: Add video audio to the compositor's audio mixer
       // This ensures the clip's audio is included in the output stream to YouTube
       try {
-        console.log('[ClipPlayer] Adding video clip audio to mixer...');
 
         // CRITICAL: Resume AudioContext to enable audio playback
         // Browser autoplay policies suspend AudioContext by default
         const audioContext = (audioMixerService as any).audioContext;
         if (audioContext && audioContext.state === 'suspended') {
-          console.log('[ClipPlayer] Resuming suspended AudioContext...');
           await audioContext.resume();
-          console.log('[ClipPlayer] AudioContext resumed');
         }
 
         audioMixerService.addMediaElement(`clip-${clip.id}`, video);
         // Apply volume via mixer
         audioMixerService.setStreamVolume(`clip-${clip.id}`, clip.volume / 100);
-        console.log('[ClipPlayer] Video clip audio added to mixer successfully');
       } catch (audioError) {
         console.error('[ClipPlayer] Failed to add video audio to mixer:', audioError);
         // Continue anyway - video will play without audio in output stream
@@ -162,7 +156,6 @@ class ClipPlayerService {
       this.onPlayCallback(clip.id);
     }
 
-    console.log(`Playing video clip: ${clip.name}`);
   }
 
   /**
@@ -182,11 +175,9 @@ class ClipPlayerService {
     // CRITICAL FIX: Add audio to the compositor's audio mixer
     // This ensures the clip's audio is included in the output stream to YouTube
     try {
-      console.log('[ClipPlayer] Adding audio clip to mixer...');
       audioMixerService.addMediaElement(`clip-${clip.id}`, audio);
       // Apply volume via mixer
       audioMixerService.setStreamVolume(`clip-${clip.id}`, clip.volume / 100);
-      console.log('[ClipPlayer] Audio clip added to mixer successfully');
     } catch (error) {
       console.error('[ClipPlayer] Failed to add audio to mixer:', error);
       // Continue anyway - audio will play locally but not in output stream
@@ -224,7 +215,6 @@ class ClipPlayerService {
       this.onPlayCallback(clip.id);
     }
 
-    console.log(`Playing audio clip: ${clip.name}`);
   }
 
   /**
@@ -276,7 +266,6 @@ class ClipPlayerService {
       this.onPlayCallback(clip.id);
     }
 
-    console.log(`Showing image clip: ${clip.name} for ${displayDuration}ms`);
   }
 
   /**
@@ -301,7 +290,6 @@ class ClipPlayerService {
       this.onStopCallback(clipId);
     }
 
-    console.log(`Stopped clip: ${state.clip.name}`);
   }
 
   /**
@@ -355,7 +343,6 @@ class ClipPlayerService {
    */
   setMasterVolume(volume: number): void {
     // Master volume control is now handled by the broadcast audio mixer
-    console.log('[ClipPlayer] Master volume control delegated to audio mixer service');
   }
 
   /**
