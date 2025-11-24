@@ -16,13 +16,11 @@ const prisma = new PrismaClient();
  */
 export async function forceDeleteBroadcastDestinations(broadcastId: string): Promise<number> {
   try {
-    logger.info(`[NUCLEAR CLEANUP] 💥 FORCE DELETING all destinations for broadcast ${broadcastId}`);
 
     const result = await prisma.broadcastDestination.deleteMany({
       where: { broadcastId },
     });
 
-    logger.info(`[NUCLEAR CLEANUP] ✓ FORCE DELETED ${result.count} destinations for broadcast ${broadcastId}`);
     return result.count;
   } catch (error) {
     logger.error(`[NUCLEAR CLEANUP] ❌ Failed to force delete destinations:`, error);
@@ -57,7 +55,6 @@ export async function forceDeleteAllBroadcastDestinations(): Promise<number> {
 export async function forceDeleteOldBroadcastDestinations(hoursOld: number = 24): Promise<number> {
   try {
     const cutoffDate = new Date(Date.now() - hoursOld * 60 * 60 * 1000);
-    logger.info(`[NUCLEAR CLEANUP] 🧹 Deleting destinations for broadcasts older than ${hoursOld} hours (before ${cutoffDate.toISOString()})`);
 
     // Find broadcasts older than cutoff
     const oldBroadcasts = await prisma.broadcast.findMany({
@@ -72,12 +69,10 @@ export async function forceDeleteOldBroadcastDestinations(hoursOld: number = 24)
     });
 
     if (oldBroadcasts.length === 0) {
-      logger.info(`[NUCLEAR CLEANUP] No old broadcasts found - nothing to clean up`);
       return 0;
     }
 
     const broadcastIds = oldBroadcasts.map((b) => b.id);
-    logger.info(`[NUCLEAR CLEANUP] Found ${broadcastIds.length} old broadcasts - deleting their destinations`);
 
     const result = await prisma.broadcastDestination.deleteMany({
       where: {
@@ -87,7 +82,6 @@ export async function forceDeleteOldBroadcastDestinations(hoursOld: number = 24)
       },
     });
 
-    logger.info(`[NUCLEAR CLEANUP] ✓ Deleted ${result.count} destinations from ${broadcastIds.length} old broadcasts`);
     return result.count;
   } catch (error) {
     logger.error(`[NUCLEAR CLEANUP] ❌ Failed to delete old destinations:`, error);
