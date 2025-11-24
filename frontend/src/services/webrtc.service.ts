@@ -227,21 +227,21 @@ class WebRTCService {
       throw new Error('Device not initialized');
     }
 
-    // Force H.264 codec for video to avoid transcoding on media server
-    // H.264 is natively supported by RTMP, so FFmpeg can use -vcodec copy
+    // CRITICAL: Force VP8 codec for video for Daily.co compatibility
+    // Daily's browser-based RTMP streaming expects WebRTC-standard VP8, not H.264
     let codecOptions: any = { track };
 
     if (track.kind === 'video') {
-      // Find H.264 codec in device capabilities
-      const h264Codec = this.device.rtpCapabilities.codecs?.find(
-        codec => codec.mimeType.toLowerCase() === 'video/h264'
+      // Find VP8 codec in device capabilities
+      const vp8Codec = this.device.rtpCapabilities.codecs?.find(
+        codec => codec.mimeType.toLowerCase() === 'video/vp8'
       );
 
-      if (h264Codec) {
-        codecOptions.codec = h264Codec;
-        logger.info('Using H.264 codec for video (avoids transcoding)');
+      if (vp8Codec) {
+        codecOptions.codec = vp8Codec;
+        logger.info('Using VP8 codec for video (Daily.co compatibility)');
       } else {
-        logger.warn('H.264 codec not available, falling back to default (VP8)');
+        logger.warn('VP8 codec not available, falling back to default');
       }
     }
 

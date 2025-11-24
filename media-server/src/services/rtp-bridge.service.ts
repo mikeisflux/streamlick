@@ -168,19 +168,25 @@ class RTPBridgeService {
    * Get RTP capabilities that wrtc peer connection supports
    */
   private getWrtcRtpCapabilities(router: mediasoupTypes.Router): mediasoupTypes.RtpCapabilities {
-    // Use router's capabilities but filter to what wrtc commonly supports
+    // CRITICAL: Only request VP8 for video (not H.264) to ensure Daily.co compatibility
+    // Daily's browser-based RTMP streaming expects WebRTC-standard VP8, not H.264
     const routerCaps = router.rtpCapabilities;
 
+    // Filter codecs to ONLY VP8 for video (exclude H.264) and Opus for audio
+    const filteredCodecs = (routerCaps.codecs || []).filter((codec) => {
+      const mimeType = codec.mimeType.toLowerCase();
+      return (
+        mimeType === 'video/vp8' ||  // VP8 only for video (Daily.co requirement)
+        mimeType === 'audio/opus'    // Opus for audio
+      );
+    });
+
+    logger.info('[RTP Bridge] Using codec capabilities:', {
+      codecs: filteredCodecs.map(c => c.mimeType),
+    });
+
     return {
-      codecs: (routerCaps.codecs || []).filter((codec) => {
-        // wrtc supports VP8, H264, and Opus
-        const mimeType = codec.mimeType.toLowerCase();
-        return (
-          mimeType === 'video/vp8' ||
-          mimeType === 'video/h264' ||
-          mimeType === 'audio/opus'
-        );
-      }),
+      codecs: filteredCodecs,
       headerExtensions: routerCaps.headerExtensions || [],
     };
   }
