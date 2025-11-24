@@ -831,8 +831,6 @@ export function StudioCanvas({
 
   };
 
-  const aspectRatio = orientation === 'portrait' ? '9 / 16' : '16 / 9';
-
   return (
     <div
       ref={containerRef}
