@@ -252,7 +252,7 @@ class DailyBotPuppeteerService {
       id: config.audioConsumer.id,
       producerId: config.audioConsumer.producerId,
       kind: config.audioConsumer.kind,
-      rtpParameters: config.videoConsumer.rtpParameters,
+      rtpParameters: config.audioConsumer.rtpParameters,
     };
 
     // Build SDP answer from mediasoup transport parameters
