@@ -526,6 +526,27 @@ a=candidate:${candidate.foundation} 1 udp ${candidate.priority} ${candidate.ip} 
               tracks: localParticipant.tracks,
             }));
 
+            // CRITICAL: Check what actual MediaStreamTracks Daily is using
+            const actualVideoTrack = localParticipant.videoTrack;
+            const actualAudioTrack = localParticipant.audioTrack;
+            console.log('🔍 Actual tracks Daily is using:', JSON.stringify({
+              videoTrackId: actualVideoTrack?.id,
+              videoTrackLabel: actualVideoTrack?.label,
+              videoTrackEnabled: actualVideoTrack?.enabled,
+              videoTrackReadyState: actualVideoTrack?.readyState,
+              audioTrackId: actualAudioTrack?.id,
+              audioTrackLabel: actualAudioTrack?.label,
+              audioTrackEnabled: actualAudioTrack?.enabled,
+              audioTrackReadyState: actualAudioTrack?.readyState,
+            }));
+
+            // Check if these match our mediasoup tracks
+            const usingOurTracks = {
+              video: actualVideoTrack?.id === win.botMediaTracks.video.id,
+              audio: actualAudioTrack?.id === win.botMediaTracks.audio.id,
+            };
+            console.log('✅ Daily is using our mediasoup tracks:', JSON.stringify(usingOurTracks));
+
             return { success: true };
           } catch (err: any) {
             console.error('❌ Error in page evaluate:', err.message, err.stack);
