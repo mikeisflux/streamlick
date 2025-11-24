@@ -20,15 +20,9 @@ export function CompositorPreview({ orientation = 'landscape' }: CompositorPrevi
     // Get the compositor canvas
     const compositorCanvas = compositorService.getCanvas();
 
-      hasCanvas: !!compositorCanvas,
-      hasContainer: !!containerRef.current,
-      alreadyInserted: canvasInserted.current
-    });
-
     if (!compositorCanvas || !containerRef.current || canvasInserted.current) {
       return;
     }
-
 
     // Insert the compositor canvas into the DOM
     containerRef.current.appendChild(compositorCanvas);
@@ -39,11 +33,6 @@ export function CompositorPreview({ orientation = 'landscape' }: CompositorPrevi
     compositorCanvas.style.height = '100%';
     compositorCanvas.style.objectFit = 'contain';
     compositorCanvas.style.backgroundColor = '#000';
-
-      width: compositorCanvas.width,
-      height: compositorCanvas.height,
-      displayed: true
-    });
 
     // Cleanup function
     return () => {

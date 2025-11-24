@@ -127,11 +127,6 @@ class DailyServiceBackend {
 
       const room: DailyRoom = response.data;
 
-        id: room.id,
-        name: room.name,
-        url: room.url,
-      });
-
       return room;
     } catch (error: any) {
       logger.error('[Daily Backend] Failed to create room:', error.response?.data || error);

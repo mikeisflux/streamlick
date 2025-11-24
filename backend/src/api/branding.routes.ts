@@ -131,12 +131,6 @@ router.post(
       const files = req.files as any;
       const config = req.body.config ? JSON.parse(req.body.config) : {};
 
-        logo: files?.logo?.[0]?.filename,
-        favicon: files?.favicon?.[0]?.filename,
-        hero: files?.hero?.[0]?.filename,
-        config,
-      });
-
       // Delete old files, excluding the newly uploaded ones
       const existingFiles = fs.existsSync(uploadDir) ? fs.readdirSync(uploadDir) : [];
 

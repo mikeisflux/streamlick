@@ -163,12 +163,6 @@ export function useBroadcast({
       return false;
     }
 
-      selected: selectedDestinations.length,
-      deduplicated: deduplicatedDestinations.length,
-      valid: validDestinations.length,
-      validIds: validDestinations,
-    });
-
     try {
       // Initialize WebRTC if not already done
       if (!webrtcService.getDevice()) {
@@ -239,11 +233,6 @@ export function useBroadcast({
         };
       });
 
-        validDestinations,
-        destinationCount: validDestinations.length,
-        apiDestinationSettings
-      });
-
       // Start broadcast with destination settings (using only valid, connected destinations)
       // This triggers the 30-second countdown on the backend and creates YouTube/Facebook broadcasts
       await broadcastService.start(broadcastId, validDestinations, apiDestinationSettings);
@@ -286,8 +275,6 @@ export function useBroadcast({
         rtmpUrl: bd.rtmpUrl,
         streamKey: bd.streamKey,
       }));
-
-        destinationsToStream.map((d: any) => ({ platform: d.platform, rtmpUrl: d.rtmpUrl })));
 
       mediaServerSocketService.emit('start-rtmp', {
         broadcastId,

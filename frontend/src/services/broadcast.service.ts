@@ -36,11 +36,6 @@ export const broadcastService = {
       destinationIds,
       destinationSettings,
     };
-      broadcastId: id,
-      requestBody,
-      destinationIds,
-      destinationIdsLength: destinationIds?.length,
-    });
     const response = await api.post(`/broadcasts/${id}/start`, requestBody);
     return response.data;
   },

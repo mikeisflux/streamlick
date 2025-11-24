@@ -73,11 +73,6 @@ class ClipPlayerService {
       } else {
         // Wait for loadedmetadata event
         video.addEventListener('loadedmetadata', () => {
-            width: video.videoWidth,
-            height: video.videoHeight,
-            duration: video.duration,
-            readyState: video.readyState,
-          });
           resolve();
         }, { once: true });
 

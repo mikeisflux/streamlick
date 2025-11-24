@@ -99,10 +99,6 @@ class HetznerService {
       throw new Error('Hetzner API key not configured. Add HETZNER_API_KEY to Admin Settings.');
     }
 
-      baseURL: this.baseURL,
-      keyPrefix: apiKey.substring(0, 20) + '...',
-    });
-
     // MINOR FIX: Add timeout to prevent hanging on slow Hetzner API responses
     return axios.create({
       baseURL: this.baseURL,

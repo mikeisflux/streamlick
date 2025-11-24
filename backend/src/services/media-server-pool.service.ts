@@ -123,8 +123,6 @@ class MediaServerPool {
     healthyServers.sort((a, b) => a.activeStreams - b.activeStreams);
 
     const selected = healthyServers[0];
-      `Selected ${selected.id} for new stream (${selected.activeStreams} active streams)`
-    );
 
     return selected;
   }

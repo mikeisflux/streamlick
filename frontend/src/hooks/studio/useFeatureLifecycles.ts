@@ -201,10 +201,6 @@ export function useBackgroundRemoval(
       // Verify localStream is still valid
       if (localStream) {
         const videoTracks = localStream.getVideoTracks();
-          id: localStream.id,
-          videoTracks: videoTracks.length,
-          active: videoTracks[0]?.readyState
-        });
       }
 
       if (backgroundRemovalService.isActive()) {

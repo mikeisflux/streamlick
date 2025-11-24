@@ -327,14 +327,6 @@ export function StudioCanvas({
           const average = sum / dataArray.length;
           const speaking = average > speakingThreshold;
 
-          // Debug logging for remote participants
-          if (Math.random() < 0.033) {
-              average: average.toFixed(2),
-              threshold: speakingThreshold,
-              speaking
-            });
-          }
-
           setSpeakingParticipants(prev => {
             const next = new Set(prev);
             if (speaking) {
