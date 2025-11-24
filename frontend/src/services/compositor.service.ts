@@ -727,6 +727,9 @@ class CompositorService {
     }
 
     this.mediaClipOverlay = null;
+
+    // WYSIWYG FIX: Always clear video from StudioCanvas preview when clearing compositor overlay
+    window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
   }
 
   /**
@@ -757,6 +760,8 @@ class CompositorService {
         logger.error(`[Media Clip] Video loading timeout after 10s: ${videoUrl}`);
         this.clearMediaClipOverlay();
         audioMixerService.removeStream('intro-video');
+        // WYSIWYG FIX: Clear video from StudioCanvas preview
+        window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
         reject(new Error('Video loading timeout'));
       }, 10000); // 10 second timeout
 
@@ -790,6 +795,12 @@ class CompositorService {
           // Set as media clip overlay AFTER enough data is buffered
           this.setMediaClipOverlay(videoElement);
 
+          // WYSIWYG FIX: Dispatch event to show video in StudioCanvas preview
+          // This ensures user sees exactly what viewers see
+          window.dispatchEvent(new CustomEvent('videoClipUpdated', {
+            detail: { url: videoUrl, name: 'Intro Video' }
+          }));
+
           // Notify that video is starting (for auto-muting participants)
           if (this.onVideoStart) {
             this.onVideoStart();
@@ -801,6 +812,8 @@ class CompositorService {
             this.clearMediaClipOverlay();
             // Clean up audio on error
             audioMixerService.removeStream('intro-video');
+            // Clear StudioCanvas preview
+            window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
             reject(error);
           });
         };
@@ -823,6 +836,9 @@ class CompositorService {
         this.clearMediaClipOverlay();
         audioMixerService.removeStream('intro-video');
 
+        // WYSIWYG FIX: Clear video from StudioCanvas preview
+        window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
+
         // Notify that video has ended (for auto-unmuting participants)
         if (this.onVideoEnd) {
           this.onVideoEnd();
@@ -839,6 +855,8 @@ class CompositorService {
         clearTimeout(loadingTimeout); // Clear loading timeout
         this.clearMediaClipOverlay();
         audioMixerService.removeStream('intro-video');
+        // WYSIWYG FIX: Clear video from StudioCanvas preview
+        window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
         reject(new Error(`Video error: ${errorMsg}`));
       };
 
@@ -859,6 +877,9 @@ class CompositorService {
           videoElement.pause();
           this.clearMediaClipOverlay();
           audioMixerService.removeStream('intro-video');
+
+          // WYSIWYG FIX: Clear video from StudioCanvas preview
+          window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
 
           // Notify that video has ended (for auto-unmuting participants)
           if (this.onVideoEnd) {
