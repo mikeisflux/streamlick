@@ -167,6 +167,7 @@ export function useMedia() {
 
   return {
     localStream,
+    rawStream: rawStreamRef.current, // Raw audio before noise gate - use for audio level detection
     screenStream,
     audioEnabled,
     videoEnabled,

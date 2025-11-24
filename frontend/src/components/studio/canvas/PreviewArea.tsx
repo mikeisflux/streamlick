@@ -12,6 +12,7 @@ interface RemoteParticipant {
 
 interface PreviewAreaProps {
   localStream: MediaStream | null;
+  rawStream: MediaStream | null; // Raw audio before noise gate - for audio level detection
   videoEnabled: boolean;
   audioEnabled: boolean;
   isLocalUserOnStage: boolean;
@@ -24,6 +25,7 @@ interface PreviewAreaProps {
 
 export function PreviewArea({
   localStream,
+  rawStream,
   videoEnabled,
   audioEnabled,
   isLocalUserOnStage,
@@ -36,8 +38,8 @@ export function PreviewArea({
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
 
-  // Detect if local user is speaking (for voice animations)
-  const isLocalSpeaking = useAudioLevel(localStream, audioEnabled);
+  // Detect if local user is speaking (for voice animations) - use RAW audio before noise gate
+  const isLocalSpeaking = useAudioLevel(rawStream || localStream, audioEnabled);
 
   // Load selected avatar from localStorage
   useEffect(() => {

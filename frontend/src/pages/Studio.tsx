@@ -62,7 +62,7 @@ export function Studio() {
   const speakerButtonRef = useRef<HTMLDivElement>(null);
 
   const { broadcast, isLive, setBroadcast } = useStudioStore();
-  const { localStream, audioEnabled, videoEnabled, startCamera, stopCamera, toggleAudio, toggleVideo } = useMedia();
+  const { localStream, rawStream, audioEnabled, videoEnabled, startCamera, stopCamera, toggleAudio, toggleVideo } = useMedia();
 
   // Auto-mute during video playback
   useAutoMuteDuringVideos(localStream, audioEnabled);
@@ -471,6 +471,7 @@ export function Studio() {
             ) : (
               <StudioCanvas
                 localStream={processedStream || localStream}
+                rawStream={rawStream}
                 videoEnabled={videoEnabled}
                 audioEnabled={audioEnabled}
                 isLocalUserOnStage={isLocalUserOnStage}
@@ -530,6 +531,7 @@ export function Studio() {
           <div style={{ flexShrink: 0, marginBottom: '80px' }}>
             <PreviewArea
               localStream={processedStream || localStream}
+              rawStream={rawStream}
               videoEnabled={videoEnabled}
               audioEnabled={audioEnabled}
               isLocalUserOnStage={isLocalUserOnStage}

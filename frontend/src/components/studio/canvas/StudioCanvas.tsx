@@ -62,6 +62,7 @@ interface Comment {
 
 interface StudioCanvasProps {
   localStream: MediaStream | null;
+  rawStream: MediaStream | null; // Raw audio before noise gate - for audio level detection
   videoEnabled: boolean;
   audioEnabled: boolean;
   isLocalUserOnStage: boolean;
@@ -100,6 +101,7 @@ interface StudioCanvasProps {
 
 export function StudioCanvas({
   localStream,
+  rawStream,
   videoEnabled,
   audioEnabled,
   isLocalUserOnStage,
@@ -140,8 +142,8 @@ export function StudioCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const [volume, setVolume] = useState(100);
 
-  // Detect if local user is speaking (for voice animations)
-  const isLocalSpeaking = useAudioLevel(localStream, audioEnabled);
+  // Detect if local user is speaking (for voice animations) - use RAW audio before noise gate
+  const isLocalSpeaking = useAudioLevel(rawStream || localStream, audioEnabled);
 
   // Track which remote participants are speaking
   const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
