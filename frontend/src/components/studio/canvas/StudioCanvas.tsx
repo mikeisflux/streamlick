@@ -1561,8 +1561,8 @@ export function StudioCanvas({
     return positions[position];
   };
 
-  // Calculate aspect ratio based on orientation
-  const aspectRatio = orientation === 'portrait' ? '9 / 16' : '16 / 9';
+  // Calculate aspect ratio based on orientation (10:6 = 5:3 for participant cameras)
+  const aspectRatio = orientation === 'portrait' ? '6 / 10' : '10 / 6';
 
   const handleFullscreen = () => {
     if (containerRef.current) {
@@ -1613,6 +1613,120 @@ export function StudioCanvas({
           backgroundColor: '#000',
         }}
       />
+
+      {/* On-Screen Chat Overlay - Draggable & Resizable (DOM overlay for preview) */}
+      {showChatOnStream && (
+        <div
+          ref={chatOverlayRef}
+          className="absolute bg-black/80 backdrop-blur-sm rounded-lg overflow-hidden"
+          style={{
+            left: chatOverlayPosition.x !== 0 ? `${chatOverlayPosition.x}px` : 'auto',
+            top: chatOverlayPosition.y !== 0 ? `${chatOverlayPosition.y}px` : 'auto',
+            right: chatOverlayPosition.x === 0 ? '16px' : 'auto',
+            bottom: chatOverlayPosition.y === 0 ? '80px' : 'auto',
+            width: `${chatOverlaySize.width}px`,
+            height: `${chatOverlaySize.height}px`,
+            cursor: isDraggingChat ? 'grabbing' : 'default',
+            zIndex: 10,
+            transition: isDraggingChat ? 'none' : 'none',
+          }}
+        >
+          {/* Drag Handle */}
+          <div
+            onMouseDown={onChatOverlayDragStart}
+            className="bg-gray-800/50 px-3 py-2 flex items-center justify-between cursor-grab active:cursor-grabbing border-b border-gray-700"
+          >
+            <span className="text-white text-xs font-semibold">Live Chat</span>
+            <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+            </svg>
+          </div>
+
+          {/* Chat Messages */}
+          <div className="p-3 overflow-y-auto" style={{ height: `calc(100% - 50px)` }}>
+            <div className="space-y-2">
+              {chatMessages.slice(-10).map((msg, i) => (
+                <div key={i} className="text-white text-sm">
+                  <span className="font-semibold">{msg.author}:</span> {msg.message}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Resize Handle */}
+          <div
+            onMouseDown={onChatOverlayResizeStart}
+            className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize"
+            style={{
+              background: 'linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.3) 50%)',
+            }}
+          />
+        </div>
+      )}
+
+      {/* Banner Overlays (DOM preview - also rendered on canvas) */}
+      {banners
+        .filter((banner) => banner.visible)
+        .map((banner) => (
+          <div
+            key={banner.id}
+            className="absolute px-6 py-4 rounded-lg shadow-lg"
+            style={{
+              ...getBannerPositionStyles(banner.position),
+              backgroundColor: banner.backgroundColor,
+              color: banner.textColor,
+              zIndex: 25,
+              maxWidth: '90%',
+              pointerEvents: 'none',
+            }}
+          >
+            <div className="font-bold text-lg">{banner.title}</div>
+            {banner.subtitle && <div className="text-sm opacity-90 mt-1">{banner.subtitle}</div>}
+          </div>
+        ))}
+
+      {/* Logo Overlay - Top Left Corner (DOM preview - also rendered on canvas) */}
+      {streamLogo && (
+        <div
+          className="absolute"
+          style={{
+            top: '20px',
+            left: '20px',
+            zIndex: 20,
+            maxWidth: '150px',
+            maxHeight: '150px',
+          }}
+        >
+          <img
+            src={streamLogo}
+            alt="Stream Logo"
+            style={{
+              width: 'auto',
+              height: 'auto',
+              maxWidth: '150px',
+              maxHeight: '150px',
+              objectFit: 'contain',
+            }}
+          />
+        </div>
+      )}
+
+      {/* Full Screen Overlay - On top of everything (DOM preview - also rendered on canvas) */}
+      {streamOverlay && (
+        <div
+          className="absolute inset-0"
+          style={{
+            zIndex: 30,
+            pointerEvents: 'none',
+          }}
+        >
+          <img
+            src={streamOverlay}
+            alt="Stream Overlay"
+            className="w-full h-full object-cover"
+          />
+        </div>
+      )}
 
       {/* Fullscreen button - bottom right */}
       <button
