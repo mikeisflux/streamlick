@@ -93,19 +93,6 @@ export async function createCompositorPipeline(
 
     logger.info('Video and audio consumers created on separate plain transports');
 
-    // DEBUG: Log producer and consumer stats to verify video is flowing
-    const videoProducerStats = await videoProducer.getStats();
-    const audioProducerStats = await audioProducer.getStats();
-    const videoConsumerStats = await videoConsumer.getStats();
-    const audioConsumerStats = await audioConsumer.getStats();
-
-    logger.info('========== PRODUCER/CONSUMER STATS ==========');
-    logger.info(`Video Producer Stats: ${JSON.stringify(Array.from(videoProducerStats.values()), null, 2)}`);
-    logger.info(`Audio Producer Stats: ${JSON.stringify(Array.from(audioProducerStats.values()), null, 2)}`);
-    logger.info(`Video Consumer Stats: ${JSON.stringify(Array.from(videoConsumerStats.values()), null, 2)}`);
-    logger.info(`Audio Consumer Stats: ${JSON.stringify(Array.from(audioConsumerStats.values()), null, 2)}`);
-    logger.info('================================================');
-
     // Verify video producer is actually producing
     if (videoProducer.paused) {
       logger.error(`❌ VIDEO PRODUCER IS PAUSED! This will cause no video packets to be sent.`);
@@ -143,16 +130,7 @@ export async function createCompositorPipeline(
       ? (process.env.MEDIASOUP_ANNOUNCED_IP || 'localhost')
       : '127.0.0.1';
 
-    logger.info(`========== FFMPEG SEPARATE TRANSPORT SETUP ==========`);
-    logger.info(`Total destinations: ${destinations.length}`);
-    logger.info(`Media Server IP: ${mediaServerIp}`);
-    logger.info(`Video SSRC: ${videoSsrc}, Audio SSRC: ${audioSsrc}`);
-    logger.info(`Video codec parameters:`, JSON.stringify(videoCodecParameters));
-    logger.info(`Has sprop-parameter-sets: ${!!spropParameterSets}`);
-    logger.info(`Destinations:`);
-    destinations.forEach((dest, index) => {
-      logger.info(`  [${index + 1}] ${dest.platform}: ${dest.rtmpUrl}/${dest.streamKey?.substring(0, 20)}...`);
-    });
+    logger.info(`Setting up FFmpeg for ${destinations.length} destination(s)`);
 
     // FFmpeg will listen on separate ports for video and audio
     // MediaSoup uses ports 40000-40100 for WebRTC, FFmpeg uses 40200-40203
@@ -214,11 +192,7 @@ a=recvonly`;
 
     fs.writeFileSync(sdpPath, unifiedSdp);
 
-    logger.info(`Unified SDP file created for FFmpeg:`);
-    logger.info(`  SDP: ${sdpPath} (video port: ${ffmpegVideoPort}, audio port: ${ffmpegAudioPort})`);
-    logger.info(`========== SDP CONTENT (VERIFY VIDEO STREAM) ==========`);
-    logger.info(unifiedSdp);
-    logger.info(`========== END SDP CONTENT ==========`);
+    logger.info(`SDP file created: ${sdpPath}`);
 
     // Start FFmpeg for destinations
     const ffmpegProcesses = new Map<string, any>();
@@ -245,9 +219,7 @@ a=recvonly`;
       const dest = destinations[0];
       const rtmpUrl = `${dest.rtmpUrl}/${dest.streamKey}`;
 
-      logger.info(`========== STARTING SINGLE FFMPEG PROCESS (UNIFIED INPUT, DIRECT OUTPUT) ==========`);
-      logger.info(`Destination: ${dest.platform} - ${dest.rtmpUrl}`);
-      logger.info(`Video codec: ${videoCodecName}`);
+      logger.info(`Starting FFmpeg for ${dest.platform}`);
 
       command = ffmpeg()
         // Global options
@@ -331,9 +303,7 @@ a=recvonly`;
         return `[f=flv:flvflags=no_duration_filesize]${rtmpUrl}`;
       }).join('|');
 
-      logger.info(`========== STARTING SINGLE FFMPEG PROCESS (UNIFIED INPUT, TEE MUXER) ==========`);
-      logger.info(`Using tee muxer for ${destinations.length} destinations`);
-      logger.info(`Video codec: ${videoCodecName}`);
+      logger.info(`Starting FFmpeg with tee muxer for ${destinations.length} destinations`);
 
       command = ffmpeg()
         // Global options
@@ -412,12 +382,7 @@ a=recvonly`;
 
     command
       .on('start', (commandLine: string) => {
-        logger.info(`========== FFMPEG MULTI-STREAM PROCESS STARTED ==========`);
-        logger.info(`🚀 FFmpeg started for ${destinations.length} destination(s)`);
-        logger.info(`⚙️  Command: ${commandLine}`);
-        destinations.forEach((dest, index) => {
-          logger.info(`  📺 [${index + 1}] ${dest.platform}: ${dest.rtmpUrl}`);
-        });
+        logger.info(`FFmpeg started for ${destinations.length} destination(s)`);
       })
       .on('error', (err: Error, stdout: string | null, stderr: string | null) => {
         logger.error(`========== FFMPEG MULTI-STREAM ERROR ==========`);
@@ -461,61 +426,24 @@ a=recvonly`;
           return; // Skip packet-level noise
         }
 
-        // CRITICAL: Highlight when video stream is detected (or missing!)
-        if (stderrLine.includes('Stream #0:0') && stderrLine.includes('Video')) {
-          logger.info(`[FFmpeg] ✅ VIDEO STREAM DETECTED: ${stderrLine}`);
-        } else if (stderrLine.includes('Stream #0:1') && stderrLine.includes('Audio')) {
-          logger.info(`[FFmpeg] ✅ AUDIO STREAM DETECTED: ${stderrLine}`);
-        } else if (stderrLine.includes('Input #0') && stderrLine.includes('sdp')) {
-          logger.info(`[FFmpeg] 📥 SDP INPUT OPENED: ${stderrLine}`);
-        } else if (stderrLine.includes('Output #0')) {
-          logger.info(`[FFmpeg] 📤 OUTPUT CONFIGURED: ${stderrLine}`);
-        } else if (stderrLine.includes('Opening') && stderrLine.includes('rtmp://')) {
-          logger.info(`[FFmpeg] 🔌 CONNECTING TO RTMP: ${stderrLine}`);
-        } else if (stderrLine.includes('Server version') || stderrLine.includes('Bandwidth')) {
-          logger.info(`[FFmpeg] 🤝 RTMP HANDSHAKE: ${stderrLine}`);
-        } else if (stderrLine.includes('Metadata') || stderrLine.includes('onMetaData')) {
-          logger.info(`[FFmpeg] 📤 RTMP METADATA SENT: ${stderrLine}`);
-        } else if (stderrLine.includes('Press [q] to stop')) {
-          logger.info(`[FFmpeg] ▶️  ENCODING STARTED: ${stderrLine}`);
-        } else if (stderrLine.includes('encoder') || stderrLine.includes('Encoder')) {
-          logger.info(`[FFmpeg] ⚙️  ENCODER: ${stderrLine}`);
-        } else if (stderrLine.includes('muxer') || stderrLine.includes('Muxer')) {
-          logger.info(`[FFmpeg] ⚙️  MUXER: ${stderrLine}`);
-        } else if (stderrLine.includes('error') || stderrLine.includes('Error') ||
+        // Only log errors and warnings - skip routine FFmpeg output
+        if (stderrLine.includes('error') || stderrLine.includes('Error') ||
             stderrLine.includes('failed') || stderrLine.includes('Failed') ||
             stderrLine.includes('I/O error') || stderrLine.includes('Connection reset') ||
             stderrLine.includes('Broken pipe') || stderrLine.includes('Connection timed out') ||
             stderrLine.includes('rtmp') && (stderrLine.includes('error') || stderrLine.includes('failed'))) {
-          // Errors are always logged at error level (including RTMP connection issues)
-          logger.error(`[FFmpeg] ❌ ${stderrLine}`);
+          logger.error(`[FFmpeg] ${stderrLine}`);
         } else if (stderrLine.includes('warning') || stderrLine.includes('Warning')) {
-          // Warnings logged at warn level
           logger.warn(`[FFmpeg] ${stderrLine}`);
-        } else if (stderrLine.includes('bitrate=') || stderrLine.includes('fps=') ||
-                   stderrLine.includes('frame=') || stderrLine.includes('time=') ||
-                   stderrLine.includes('speed=')) {
-          // Progress info logged at info level (shows encoding is working)
-          logger.info(`[FFmpeg] 📊 ${stderrLine}`);
-        } else if (stderrLine.includes('RTP:') || stderrLine.includes('Input #') ||
-                   stderrLine.includes('Stream #') || stderrLine.includes('codec') ||
-                   stderrLine.includes('Codec') || stderrLine.includes('Duration')) {
-          // Important stream/codec info logged at info level (always visible)
-          logger.info(`[FFmpeg] ${stderrLine}`);
-        } else if (stderrLine.trim().length > 0) {
-          // Everything else logged at info level (skip empty lines)
-          logger.info(`[FFmpeg] ${stderrLine}`);
         }
       });
 
     // Start FFmpeg process - it will start listening on the RTP ports
     command.run();
     ffmpegProcesses.set(broadcastId, command); // Store single process by broadcast ID
-    logger.info(`✅ FFmpeg process started and listening for RTP on ports ${ffmpegVideoPort} and ${ffmpegAudioPort}`);
 
     // CRITICAL: Wait for FFmpeg to fully initialize and start listening
     // If we connect too early, MediaSoup will send packets before FFmpeg is ready
-    logger.info(`Waiting 2 seconds for FFmpeg to initialize...`);
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     // NOW connect the transports - this will trigger MediaSoup to start sending RTP
@@ -524,24 +452,19 @@ a=recvonly`;
       port: ffmpegVideoPort,
       rtcpPort: ffmpegVideoRtcpPort,
     });
-    logger.info(`✅ Video transport connected - MediaSoup sending RTP to ${ffmpegIp}:${ffmpegVideoPort}`);
 
     await audioTransport.connect({
       ip: ffmpegIp,
       port: ffmpegAudioPort,
       rtcpPort: ffmpegAudioRtcpPort,
     });
-    logger.info(`✅ Audio transport connected - MediaSoup sending RTP to ${ffmpegIp}:${ffmpegAudioPort}`);
 
     // Request one more keyframe now that FFmpeg is definitely listening
     try {
       await videoConsumer.requestKeyFrame();
-      logger.info(`🔑 Final keyframe requested after FFmpeg connection`);
     } catch (error) {
       logger.warn('Could not request final keyframe:', error);
     }
-
-    logger.info(`✅ Pipeline fully connected and streaming to ${destinations.length} destination(s)`);
 
     // Store pipeline
     activePipelines.set(broadcastId, {
@@ -552,52 +475,6 @@ a=recvonly`;
       ffmpegProcesses,
     });
 
-    // DEBUG: Monitor video/audio packet flow every 5 seconds
-    const monitorInterval = setInterval(async () => {
-      try {
-        const vProducerStats = await videoProducer.getStats();
-        const aProducerStats = await audioProducer.getStats();
-        const vConsumerStats = await videoConsumer.getStats();
-        const aConsumerStats = await audioConsumer.getStats();
-
-        // Extract packet counts from stats
-        // Producers receive packets FROM browser, so they have 'inbound-rtp' stats
-        const videoProducerPackets = Array.from(vProducerStats.values())
-          .filter((s: any) => s.type === 'inbound-rtp')
-          .map((s: any) => s.packetCount)[0] || 0;
-
-        const audioProducerPackets = Array.from(aProducerStats.values())
-          .filter((s: any) => s.type === 'inbound-rtp')
-          .map((s: any) => s.packetCount)[0] || 0;
-
-        // Consumers show what they RECEIVED from producer in inbound-rtp stats
-        // For PlainRtpTransport, inbound shows what came from producer
-        const videoConsumerPackets = Array.from(vConsumerStats.values())
-          .filter((s: any) => s.type === 'inbound-rtp')
-          .reduce((sum: number, s: any) => sum + (s.packetCount || 0), 0);
-
-        const audioConsumerPackets = Array.from(aConsumerStats.values())
-          .filter((s: any) => s.type === 'inbound-rtp')
-          .reduce((sum: number, s: any) => sum + (s.packetCount || 0), 0);
-
-        logger.info(`[Monitor] Broadcast ${broadcastId} - Video: Producer=${videoProducerPackets} pkts, Consumer=${videoConsumerPackets} pkts | Audio: Producer=${audioProducerPackets} pkts, Consumer=${audioConsumerPackets} pkts`);
-
-        if (videoProducerPackets === 0) {
-          logger.error(`❌ VIDEO PRODUCER HAS SENT 0 PACKETS! Compositor may not be generating video frames.`);
-        }
-        if (videoConsumerPackets === 0) {
-          logger.error(`❌ VIDEO CONSUMER HAS RECEIVED 0 PACKETS! RTP video stream is not reaching FFmpeg.`);
-        }
-      } catch (error) {
-        logger.error('Error monitoring packet stats:', error);
-        clearInterval(monitorInterval);
-      }
-    }, 5000);
-
-    // Store interval for cleanup
-    (activePipelines.get(broadcastId) as any).monitorInterval = monitorInterval;
-
-    logger.info(`Compositor pipeline created for broadcast ${broadcastId}`);
   } catch (error) {
     logger.error('Failed to create compositor pipeline:', error);
     throw error;
@@ -608,7 +485,6 @@ a=recvonly`;
  * Stop and cleanup compositor pipeline
  */
 export async function stopCompositorPipeline(broadcastId: string): Promise<void> {
-  logger.info(`Stopping compositor pipeline for broadcast ${broadcastId}`);
 
   // Check streaming method to determine which pipeline to stop
   const streamingMethod = process.env.STREAMING_METHOD || 'ffmpeg';
@@ -627,14 +503,12 @@ export async function stopCompositorPipeline(broadcastId: string): Promise<void>
   // Stop monitoring interval
   if ((pipeline as any).monitorInterval) {
     clearInterval((pipeline as any).monitorInterval);
-    logger.info('Monitor interval stopped');
   }
 
   // Stop FFmpeg processes
   pipeline.ffmpegProcesses.forEach((command, destId) => {
     try {
       command.kill('SIGKILL');
-      logger.info(`FFmpeg process stopped for destination ${destId}`);
     } catch (error) {
       logger.error(`Error stopping FFmpeg for destination ${destId}:`, error);
     }
@@ -648,7 +522,6 @@ export async function stopCompositorPipeline(broadcastId: string): Promise<void>
 
     if (fs.existsSync(sdpPath)) {
       fs.unlinkSync(sdpPath);
-      logger.info('Unified SDP file deleted');
     }
   } catch (error) {
     logger.error('Error deleting SDP file:', error);
@@ -658,11 +531,9 @@ export async function stopCompositorPipeline(broadcastId: string): Promise<void>
   try {
     if (pipeline.videoConsumer && !pipeline.videoConsumer.closed) {
       pipeline.videoConsumer.close();
-      logger.info('Video consumer closed');
     }
     if (pipeline.audioConsumer && !pipeline.audioConsumer.closed) {
       pipeline.audioConsumer.close();
-      logger.info('Audio consumer closed');
     }
   } catch (error) {
     logger.error('Error closing consumers:', error);
@@ -672,18 +543,15 @@ export async function stopCompositorPipeline(broadcastId: string): Promise<void>
   try {
     if (pipeline.videoPlainTransport && !pipeline.videoPlainTransport.closed) {
       pipeline.videoPlainTransport.close();
-      logger.info('Video plain transport closed');
     }
     if (pipeline.audioPlainTransport && !pipeline.audioPlainTransport.closed) {
       pipeline.audioPlainTransport.close();
-      logger.info('Audio plain transport closed');
     }
   } catch (error) {
     logger.error('Error closing plain transports:', error);
   }
 
   activePipelines.delete(broadcastId);
-  logger.info(`Compositor pipeline stopped for broadcast ${broadcastId}`);
 }
 
 /**
@@ -704,7 +572,6 @@ async function createDailyPipeline(
   destinations: RTMPDestination[]
 ): Promise<void> {
   try {
-    logger.info(`[Daily Pipeline BOT] Creating automated Daily bot pipeline for broadcast ${broadcastId}`);
 
     // Check concurrent bot limit
     if (activePipelines.size >= MAX_CONCURRENT_BOTS) {
@@ -723,7 +590,6 @@ async function createDailyPipeline(
     });
 
     // Step 2: Create WebRTC transport and consumers for Puppeteer bot
-    logger.info('[Daily Pipeline BOT] Creating WebRTC transport and consumers...');
 
     const bridgeResult = await rtpBridgeService.createTracksFromProducers(
       videoProducer,
@@ -762,7 +628,6 @@ async function createDailyPipeline(
       rtpBridgeWebRtcTransport: bridgeResult.webRtcTransport,
     });
 
-    logger.info(`[Daily Pipeline BOT] ✅ Automated bot pipeline created successfully`);
   } catch (error) {
     logger.error('[Daily Pipeline BOT] Failed to create bot pipeline:', error);
     throw error;
@@ -774,7 +639,6 @@ async function createDailyPipeline(
  */
 async function stopDailyPipeline(broadcastId: string): Promise<void> {
   try {
-    logger.info(`[Daily Pipeline BOT] Stopping Daily bot pipeline for broadcast ${broadcastId}`);
 
     const pipeline = activePipelines.get(broadcastId);
 
@@ -801,8 +665,6 @@ async function stopDailyPipeline(broadcastId: string): Promise<void> {
 
     // Remove from active pipelines
     activePipelines.delete(broadcastId);
-
-    logger.info(`[Daily Pipeline BOT] ✅ Bot pipeline stopped and cleaned up for broadcast ${broadcastId}`);
   } catch (error) {
     logger.error('[Daily Pipeline BOT] Failed to stop bot pipeline:', error);
     throw error;
@@ -830,7 +692,6 @@ export async function updatePipelineDestinations(
   broadcastId: string,
   destinations: RTMPDestination[]
 ): Promise<void> {
-  logger.info(`Updating destinations for broadcast ${broadcastId}`);
 
   const pipeline = activePipelines.get(broadcastId);
   if (!pipeline) {
@@ -848,5 +709,4 @@ export async function updatePipelineDestinations(
   pipeline.ffmpegProcesses.clear();
 
   // Start new FFmpeg processes (implementation would be similar to createCompositorPipeline)
-  logger.info('Pipeline destinations updated (implementation pending)');
 }
