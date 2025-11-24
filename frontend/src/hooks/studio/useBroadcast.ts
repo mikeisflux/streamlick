@@ -191,6 +191,18 @@ export function useBroadcast({
           })),
       ].filter((p) => p.stream);
 
+      // DEBUG: Log participant video state
+      console.error('🎥 GO LIVE - Compositor Initialization:', {
+        localVideoEnabled: videoEnabled,
+        localAudioEnabled: audioEnabled,
+        localStreamHasVideo: localStream?.getVideoTracks().length,
+        localStreamHasAudio: localStream?.getAudioTracks().length,
+        videoTrackEnabled: localStream?.getVideoTracks()[0]?.enabled,
+        videoTrackReadyState: localStream?.getVideoTracks()[0]?.readyState,
+        audioTrackEnabled: localStream?.getAudioTracks()[0]?.enabled,
+        participantCount: participantStreams.length,
+      });
+
       await compositorService.initialize(participantStreams);
       compositorService.setLayout({ type: currentLayout });
 
