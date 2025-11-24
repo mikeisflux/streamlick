@@ -51,6 +51,14 @@ export function useMedia() {
       const audioTrack = stream.getAudioTracks()[0];
       const videoTrack = stream.getVideoTracks()[0];
 
+      logger.info('[useMedia] Original stream tracks:', {
+        hasAudio: !!audioTrack,
+        hasVideo: !!videoTrack,
+        videoEnabled: videoTrack?.enabled,
+        videoReadyState: videoTrack?.readyState,
+        audioEnabled: audioTrack?.enabled,
+      });
+
       if (audioTrack) {
         // Create stream with just audio for processing
         const audioOnlyStream = new MediaStream([audioTrack]);
@@ -64,6 +72,13 @@ export function useMedia() {
           processedAudioTrack,
           ...(videoTrack ? [videoTrack] : []),
         ]);
+
+        logger.info('[useMedia] Processed stream tracks:', {
+          videoTracks: processedStream.getVideoTracks().length,
+          audioTracks: processedStream.getAudioTracks().length,
+          videoTrack: processedStream.getVideoTracks()[0]?.id,
+          videoEnabled: processedStream.getVideoTracks()[0]?.enabled,
+        });
 
         // CRITICAL: Initialize audio mixer and add microphone for monitor mode
         // This ensures all participants hear the microphone audio when WebRTC starts
