@@ -67,6 +67,15 @@ class DailyBotPuppeteerService {
       this.page.on('console', (msg) => {
         const type = msg.type();
         const text = msg.text();
+
+        // Forward all browser console logs to server logs
+        if (type === 'error') {
+          logger.error(`[Browser Console]: ${text}`);
+        } else if (type === 'warning') {
+          logger.warn(`[Browser Console]: ${text}`);
+        } else {
+          logger.info(`[Browser Console]: ${text}`);
+        }
       });
 
       // Forward page errors
