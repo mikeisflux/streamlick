@@ -6,7 +6,6 @@ import { diagnosticLogger } from '../services/diagnostic-logger.service';
 export async function createWebRtcTransport(router: Router): Promise<WebRtcTransport> {
   const transport = await router.createWebRtcTransport(mediasoupConfig.webRtcTransport);
 
-  logger.info(`WebRTC transport created [id:${transport.id}]`);
   diagnosticLogger.logRTPPipeline(
     'WebRtcTransport',
     'WebRTC transport created',
@@ -31,7 +30,6 @@ export async function createWebRtcTransport(router: Router): Promise<WebRtcTrans
   });
 
   transport.on('@close', () => {
-    logger.info(`WebRTC transport closed [id:${transport.id}]`);
     diagnosticLogger.logRTPPipeline(
       'WebRtcTransport',
       'WebRTC transport closed',
@@ -48,7 +46,6 @@ export async function connectTransport(
   dtlsParameters: any
 ): Promise<void> {
   await transport.connect({ dtlsParameters });
-  logger.info(`Transport connected [id:${transport.id}]`);
   diagnosticLogger.logRTPPipeline(
     'WebRtcTransport',
     'Transport connected',
@@ -64,7 +61,6 @@ export async function createProducer(
 ): Promise<Producer> {
   const producer = await transport.produce({ kind, rtpParameters });
 
-  logger.info(`Producer created [id:${producer.id}, kind:${kind}]`);
   diagnosticLogger.logRTPPipeline(
     'Producer',
     `Producer created for ${kind}`,
@@ -96,7 +92,6 @@ export async function createConsumer(
     paused: true,
   });
 
-  logger.info(`Consumer created [id:${consumer.id}]`);
   diagnosticLogger.logRTPPipeline(
     'Consumer',
     'Consumer created',
