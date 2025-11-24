@@ -529,6 +529,110 @@ export function StudioCanvas({
     };
   }, []);
 
+  // Canvas initialization and rendering loop
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // Initialize canvas context
+    const ctx = canvas.getContext('2d', {
+      alpha: false,
+      desynchronized: true,
+    });
+
+    if (!ctx) {
+      console.error('[StudioCanvas] Failed to get 2D context');
+      return;
+    }
+
+    canvasCtxRef.current = ctx;
+
+    // Set canvas resolution (1920x1080 for landscape, 1080x1920 for portrait)
+    if (orientation === 'portrait') {
+      canvas.width = 1080;
+      canvas.height = 1920;
+    } else {
+      canvas.width = 1920;
+      canvas.height = 1080;
+    }
+
+    console.log('[StudioCanvas] Canvas initialized:', {
+      width: canvas.width,
+      height: canvas.height,
+      orientation,
+    });
+
+    // Start rendering loop
+    let frameCount = 0;
+    let lastFrameTime = performance.now();
+
+    const render = () => {
+      if (!ctx || !canvas) return;
+
+      const now = performance.now();
+      const elapsed = now - lastFrameTime;
+
+      // Target 30 FPS (33ms per frame)
+      if (elapsed >= 33) {
+        lastFrameTime = now - (elapsed % 33);
+        frameCount++;
+
+        // Clear canvas
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // TODO: Draw background image
+
+        // TODO: Draw participants based on layout
+
+        // TODO: Draw overlay (full-screen)
+
+        // TODO: Draw logo
+
+        // TODO: Draw banners
+
+        // TODO: Draw chat
+
+        // TODO: Draw captions
+
+        // Log FPS every 60 frames
+        if (frameCount % 60 === 0) {
+          const fps = 1000 / elapsed;
+          console.log('[StudioCanvas] Canvas FPS:', fps.toFixed(1));
+        }
+      }
+
+      animationFrameRef.current = requestAnimationFrame(render);
+    };
+
+    // Start render loop
+    render();
+
+    // Cleanup
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [backgroundColor, orientation]);
+
+  // Set video srcObject for local stream
+  useEffect(() => {
+    if (mainVideoRef.current && localStream) {
+      mainVideoRef.current.srcObject = localStream;
+      mainVideoRef.current.play().catch(err => console.error('[StudioCanvas] Failed to play local video:', err));
+    }
+  }, [localStream]);
+
+  // Set video srcObject for screen share
+  useEffect(() => {
+    if (screenShareVideoRef.current && screenShareStream) {
+      screenShareVideoRef.current.srcObject = screenShareStream;
+      screenShareVideoRef.current.play().catch(err => console.error('[StudioCanvas] Failed to play screen share:', err));
+    }
+  }, [screenShareStream]);
+
   // Calculate total participants (local user if on stage + remote on-stage)
   const onStageParticipants = Array.from(remoteParticipants.values()).filter(
     (p) => p.role !== 'backstage' && p.id !== 'screen-share'
@@ -715,6 +819,8 @@ export function StudioCanvas({
 
   };
 
+  const aspectRatio = orientation === 'portrait' ? '9 / 16' : '16 / 9';
+
   return (
     <div
       ref={containerRef}
@@ -726,488 +832,21 @@ export function StudioCanvas({
         backgroundColor,
         border: editMode ? '4px solid #8B5CF6' : 'none',
         boxSizing: 'border-box',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
       }}
     >
-      {/* Main Video Preview with Dynamic Layout */}
-      <div
-        className={`absolute inset-0 overflow-hidden ${
-          getLayoutStyles(isSharingScreen || screenShareStream ? 'screenshare' : selectedLayout).container
-        }`}
+      {/* Canvas - renders all output */}
+      <canvas
+        ref={canvasRef}
         style={{
-          backgroundColor,
-          backgroundImage: streamBackground ? `url(${streamBackground})` : 'none',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
-          ...(getLayoutStyles(selectedLayout).gridCols && {
-            gridTemplateColumns: `repeat(${getLayoutStyles(selectedLayout).gridCols}, 1fr)`,
-            gridTemplateRows: `repeat(${getLayoutStyles(selectedLayout).gridRows}, 1fr)`,
-          }),
+          width: '100%',
+          height: '100%',
+          objectFit: 'contain',
+          backgroundColor: '#000',
         }}
-      >
-        {/* Screen Share Layout - Active when screen sharing */}
-        {isSharingScreen || screenShareStream ? (
-          <>
-            {/* Top Bar - Participant Thumbnails (12% height - small thumbnails) */}
-            <div
-              className={`${getLayoutStyles('screenshare').topBar} ${
-                getLayoutStyles('screenshare').topBarHeight
-              }`}
-            >
-              {/* Host Video - only shown when local user is on stage */}
-              {isLocalUserOnStage && (
-                <div className="flex-1">
-                  <ParticipantBox
-                    stream={localStream}
-                    videoEnabled={videoEnabled}
-                    audioEnabled={audioEnabled}
-                    isSpeaking={isLocalSpeaking}
-                    name="You"
-                    positionNumber={1}
-                    isHost={true}
-                    videoRef={mainVideoRef}
-                    size="small"
-                    showPositionNumber={showPositionNumbers}
-                    showConnectionQuality={showConnectionQuality}
-                    showLowerThird={showLowerThirds}
-                    participantId="local-user"
-                    onRemoveFromStage={onRemoveFromStage}
-                    cameraFrame={styleSettings.cameraFrame}
-                    borderWidth={styleSettings.borderWidth}
-                    borderColor={styleSettings.primaryColor}
-                    mirrorVideo={styleSettings.mirrorVideo}
-                    editMode={editMode}
-                    position={customLayoutPositions.get('local-user')}
-                    onPositionChange={(pos) => handlePositionChange('local-user', pos)}
-                  />
-                </div>
-              )}
-
-              {/* Remote Participants - Up to 4 slots horizontally */}
-              {Array.from(remoteParticipants.values())
-                .filter((p) => p.id !== 'screen-share' && p.role !== 'backstage')
-                .slice(0, 3)
-                .map((participant, index) => (
-                  <div key={participant.id} className="flex-1">
-                    <ParticipantBox
-                      stream={participant.stream}
-                      videoEnabled={participant.videoEnabled}
-                      audioEnabled={participant.audioEnabled}
-                      name={participant.name}
-                      positionNumber={index + 2}
-                      size="small"
-                      showPositionNumber={showPositionNumbers}
-                      showConnectionQuality={showConnectionQuality}
-                      showLowerThird={showLowerThirds}
-                      participantId={participant.id}
-                      onRemoveFromStage={onRemoveFromStage}
-                      cameraFrame={styleSettings.cameraFrame}
-                      borderWidth={styleSettings.borderWidth}
-                      borderColor={styleSettings.primaryColor}
-                      mirrorVideo={false}
-                      editMode={editMode}
-                      position={customLayoutPositions.get(participant.id)}
-                      onPositionChange={(pos) => handlePositionChange(participant.id, pos)}
-                    />
-                  </div>
-                ))}
-            </div>
-
-            {/* Bottom - Screen Share (88% height - almost fullscreen) */}
-            <div
-              className={`relative bg-black rounded overflow-hidden ${getLayoutStyles('screenshare').screenShare}`}
-            >
-              {screenShareStream ? (
-                <video
-                  ref={screenShareVideoRef}
-                  autoPlay
-                  playsInline
-                  className="w-full h-full object-contain"
-                  style={{ willChange: 'auto', backgroundColor: '#000' }}
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <div className="text-center">
-                    <svg
-                      className="w-16 h-16 text-gray-600 mx-auto mb-2"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                      />
-                    </svg>
-                    <p className="text-gray-500 text-sm">Screen Share</p>
-                  </div>
-                </div>
-              )}
-              <div className="absolute top-2 left-2 bg-blue-600 px-3 py-1 rounded text-white text-xs font-semibold">
-                🖥️ Screen Sharing
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            {/* Simplified Auto-Layout - All layouts now use smart grid */}
-            {/* Render local user first - only when on stage */}
-            {isLocalUserOnStage && (() => {
-              const isSolo = totalParticipants === 1;
-              let className = '';
-              let containerStyle = {};
-              let innerStyle = { width: '100%', height: '100%' };
-
-              if (isSolo) {
-                // Solo participant positioning based on layout type
-                switch (selectedLayout) {
-                  case 1: // Solo - Centered at 50%
-                    containerStyle = {
-                      gridColumn: '1 / -1',
-                      gridRow: '1 / -1',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '2rem',
-                    };
-                    innerStyle = { width: '50%', height: '50%' };
-                    break;
-
-                  case 6: // Screen - TINY box at top (waiting for screen share)
-                    className = 'col-span-1 row-span-1';
-                    innerStyle = { width: '120px', height: '90px' };
-                    break;
-
-                  case 7: // PIP - TINY box in corner (waiting for screen share)
-                    className = 'absolute bottom-4 right-4';
-                    innerStyle = { width: '240px', height: '180px' };
-                    break;
-
-                  case 8: // Cinema - EXTREMELY SMALL at top (waiting for widescreen content)
-                    className = 'col-span-1 row-span-1';
-                    containerStyle = { display: 'flex', justifyContent: 'center', alignItems: 'flex-start', paddingTop: '1rem' };
-                    innerStyle = { width: '160px', height: '120px' };
-                    break;
-
-                  default: // Layouts 2, 3, 4, 5 - Use mainVideo positioning
-                    className = getLayoutStyles(selectedLayout).mainVideo || '';
-                    break;
-                }
-              } else {
-                // Multiple participants - use standard mainVideo positioning
-                className = getLayoutStyles(selectedLayout).mainVideo || '';
-              }
-
-              return (
-                <div className={className} style={containerStyle}>
-                  <div style={innerStyle}>
-                    <ParticipantBox
-                      stream={localStream}
-                      videoEnabled={videoEnabled}
-                      audioEnabled={audioEnabled}
-                      isSpeaking={isLocalSpeaking}
-                      name="You"
-                      positionNumber={1}
-                      isHost={true}
-                      videoRef={mainVideoRef}
-                      size="medium"
-                      connectionQuality="excellent"
-                      showPositionNumber={showPositionNumbers}
-                      showConnectionQuality={showConnectionQuality}
-                      showLowerThird={showLowerThirds}
-                      participantId="local-user"
-                      onRemoveFromStage={onRemoveFromStage}
-                      cameraFrame={styleSettings.cameraFrame}
-                      borderWidth={styleSettings.borderWidth}
-                      borderColor={styleSettings.primaryColor}
-                      mirrorVideo={styleSettings.mirrorVideo}
-                      editMode={editMode}
-                      position={customLayoutPositions.get('local-user')}
-                      onPositionChange={(pos) => handlePositionChange('local-user', pos)}
-                    />
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Render remote participants */}
-            {onStageParticipants.map((participant, index) => (
-              <div key={participant.id} className={`${getLayoutStyles(selectedLayout).mainVideo}`}>
-                    <ParticipantBox
-                      stream={participant.stream}
-                      videoEnabled={participant.videoEnabled}
-                      audioEnabled={participant.audioEnabled}
-                      isSpeaking={speakingParticipants.has(participant.id)}
-                      name={participant.name}
-                      positionNumber={index + 2}
-                      isHost={participant.role === 'host'}
-                      size="medium"
-                      connectionQuality="excellent"
-                      showPositionNumber={showPositionNumbers}
-                      showConnectionQuality={showConnectionQuality}
-                      showLowerThird={showLowerThirds}
-                      participantId={participant.id}
-                      onRemoveFromStage={onRemoveFromStage}
-                      cameraFrame={styleSettings.cameraFrame}
-                      borderWidth={styleSettings.borderWidth}
-                      borderColor={styleSettings.primaryColor}
-                      mirrorVideo={false}
-                      editMode={editMode}
-                      position={customLayoutPositions.get(participant.id)}
-                      onPositionChange={(pos) => handlePositionChange(participant.id, pos)}
-                    />
-                  </div>
-                ))}
-          </>
-        )}
-
-        {/* Resolution Badge - Top Left (only show when not screen sharing and when enabled) */}
-        {showResolutionBadge && !isSharingScreen && !screenShareStream && (
-          <div
-            className="absolute text-sm font-semibold text-white flex items-center justify-center"
-            style={{
-              top: '16px',
-              left: '16px',
-              width: '60px',
-              height: '32px',
-              backgroundColor: 'rgba(0, 0, 0, 0.7)',
-              borderRadius: '4px',
-              zIndex: 5, // Layer 5: Resolution badge (1080p indicator)
-            }}
-          >
-            1080p
-          </div>
-        )}
-
-        {/* On-Screen Chat Overlay - Draggable & Resizable */}
-        {showChatOnStream && (
-          <div
-            ref={chatOverlayRef}
-            className="absolute bg-black/80 backdrop-blur-sm rounded-lg overflow-hidden"
-            style={{
-              left: chatOverlayPosition.x !== 0 ? `${chatOverlayPosition.x}px` : 'auto',
-              top: chatOverlayPosition.y !== 0 ? `${chatOverlayPosition.y}px` : 'auto',
-              right: chatOverlayPosition.x === 0 ? '16px' : 'auto',
-              bottom: chatOverlayPosition.y === 0 ? '80px' : 'auto',
-              width: `${chatOverlaySize.width}px`,
-              height: `${chatOverlaySize.height}px`,
-              cursor: isDraggingChat ? 'grabbing' : 'default',
-              zIndex: 10,
-              transition: isDraggingChat ? 'none' : 'none',
-            }}
-          >
-            {/* Drag Handle */}
-            <div
-              onMouseDown={onChatOverlayDragStart}
-              className="bg-gray-800/50 px-3 py-2 flex items-center justify-between cursor-grab active:cursor-grabbing border-b border-gray-700"
-            >
-              <span className="text-white text-xs font-semibold">Live Chat</span>
-              <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-              </svg>
-            </div>
-
-            {/* Chat Messages */}
-            <div className="p-3 overflow-y-auto" style={{ height: `calc(100% - 50px)` }}>
-              <div className="space-y-2">
-                {chatMessages.slice(-10).map((msg, i) => (
-                  <div key={i} className="text-white text-sm">
-                    <span className="font-semibold">{msg.author}:</span> {msg.message}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Resize Handle */}
-            <div
-              onMouseDown={onChatOverlayResizeStart}
-              className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize"
-              style={{
-                background: 'linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.3) 50%)',
-              }}
-            />
-          </div>
-        )}
-
-        {/* AI Caption Overlay */}
-        {captionsEnabled && <CaptionOverlay caption={currentCaption} />}
-
-        {/* Teleprompter Overlay */}
-        {showTeleprompterOnCanvas && (
-          <TeleprompterOverlay
-            notes={teleprompterNotes}
-            fontSize={teleprompterFontSize}
-            isScrolling={teleprompterIsScrolling}
-            scrollSpeed={teleprompterScrollSpeed}
-            scrollPosition={teleprompterScrollPosition}
-          />
-        )}
-
-        {/* Comment Overlay */}
-        <CommentOverlay comment={displayedComment} onDismiss={onDismissComment} />
-
-        {/* Banner Overlays */}
-        {banners
-          .filter((banner) => banner.visible)
-          .map((banner) => (
-            <div
-              key={banner.id}
-              className="absolute px-6 py-4 rounded-lg shadow-lg"
-              style={{
-                ...getBannerPositionStyles(banner.position),
-                backgroundColor: banner.backgroundColor,
-                color: banner.textColor,
-                zIndex: 25,
-                maxWidth: '90%',
-                pointerEvents: 'none',
-              }}
-            >
-              <div className="font-bold text-lg">{banner.title}</div>
-              {banner.subtitle && <div className="text-sm opacity-90 mt-1">{banner.subtitle}</div>}
-            </div>
-          ))}
-
-        {/* Logo Overlay - Top Left Corner */}
-        {streamLogo && (
-          <div
-            className="absolute"
-            style={{
-              top: '20px',
-              left: '20px',
-              zIndex: 20,
-              maxWidth: '150px',
-              maxHeight: '150px',
-            }}
-          >
-            <img
-              src={streamLogo}
-              alt="Stream Logo"
-              style={{
-                width: 'auto',
-                height: 'auto',
-                maxWidth: '150px',
-                maxHeight: '150px',
-                objectFit: 'contain',
-              }}
-            />
-          </div>
-        )}
-
-        {/* Full Screen Overlay - On top of everything */}
-        {streamOverlay && (
-          <div
-            className="absolute inset-0"
-            style={{
-              zIndex: 30,
-              pointerEvents: 'none',
-            }}
-          >
-            <img
-              src={streamOverlay}
-              alt="Stream Overlay"
-              className="w-full h-full object-cover"
-            />
-          </div>
-        )}
-
-        {/* Video Clip Overlay - Plays on top of canvas */}
-        {videoClip && (
-          <div
-            className="absolute inset-0"
-            style={{
-              zIndex: 35,
-              pointerEvents: 'auto',
-            }}
-          >
-            <video
-              ref={(el) => {
-                if (el && videoClip) {
-                  console.warn('🚨🚨🚨 VIDEO CLIP PLAYING:', videoClip);
-                  console.warn('Video element state:', {
-                    src: el.src,
-                    muted: el.muted,
-                    volume: el.volume,
-                    paused: el.paused,
-                  });
-
-                  // CRITICAL: Unmute and set up audio routing
-                  el.muted = false;
-                  el.volume = 1.0;
-
-                  // Initialize audio mixer
-                  audioMixerService.initialize();
-
-                  // Get AudioContext and resume it
-                  const audioContext = (audioMixerService as any).audioContext;
-                  if (audioContext && audioContext.state === 'suspended') {
-                    console.warn('⏳ Resuming AudioContext...');
-                    audioContext.resume().then(() => {
-                      console.warn('✅ AudioContext resumed, state:', audioContext.state);
-                      // Add video to audio mixer AFTER context is resumed
-                      try {
-                        audioMixerService.addMediaElement('video-clip', el);
-                        console.warn('✅ Video audio routed through mixer');
-                      } catch (error) {
-                        console.error('❌ Failed to add video to mixer:', error);
-                      }
-                    });
-                  } else {
-                    // Context already running, add immediately
-                    try {
-                      audioMixerService.addMediaElement('video-clip', el);
-                      console.warn('✅ Video audio routed through mixer');
-                    } catch (error) {
-                      console.error('❌ Failed to add video to mixer:', error);
-                    }
-                  }
-                }
-              }}
-              src={videoClip}
-              autoPlay
-              playsInline
-              className="w-full h-full object-cover"
-              onEnded={() => {
-                console.warn('🎬 Video clip ended');
-                // Remove from audio mixer
-                try {
-                  audioMixerService.removeMediaElement('video-clip');
-                  console.warn('✅ Video removed from audio mixer');
-                } catch (error) {
-                  console.error('❌ Failed to remove video from mixer:', error);
-                }
-
-                // Auto-remove video clip when it ends
-                setVideoClip(null);
-                localStorage.removeItem('streamVideoClip');
-                localStorage.removeItem('streamVideoClipAssetId');
-                localStorage.removeItem('streamVideoClipName');
-                window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
-              }}
-            />
-
-            {/* Close button for video overlay */}
-            <button
-              onClick={() => {
-                setVideoClip(null);
-                localStorage.removeItem('streamVideoClip');
-                localStorage.removeItem('streamVideoClipAssetId');
-                localStorage.removeItem('streamVideoClipName');
-                window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
-              }}
-              className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg shadow-lg flex items-center gap-2 transition-colors"
-              title="Close video overlay"
-              style={{ zIndex: 36 }}
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              <span className="text-sm font-medium">Close Video</span>
-            </button>
-          </div>
-        )}
-      </div>
+      />
 
       {/* Fullscreen button - bottom right */}
       <button
@@ -1241,6 +880,25 @@ export function StudioCanvas({
           <div className="text-white text-sm">{volume}%</div>
         </div>
       </div>
+
+      {/* Hidden video elements for stream management */}
+      {localStream && isLocalUserOnStage && (
+        <video
+          ref={mainVideoRef}
+          autoPlay
+          playsInline
+          muted
+          style={{ display: 'none' }}
+        />
+      )}
+      {screenShareStream && (
+        <video
+          ref={screenShareVideoRef}
+          autoPlay
+          playsInline
+          style={{ display: 'none' }}
+        />
+      )}
     </div>
   );
 }
