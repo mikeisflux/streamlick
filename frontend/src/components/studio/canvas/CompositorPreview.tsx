@@ -20,7 +20,6 @@ export function CompositorPreview({ orientation = 'landscape' }: CompositorPrevi
     // Get the compositor canvas
     const compositorCanvas = compositorService.getCanvas();
 
-    console.log('[CompositorPreview] useEffect triggered', {
       hasCanvas: !!compositorCanvas,
       hasContainer: !!containerRef.current,
       alreadyInserted: canvasInserted.current
@@ -30,7 +29,6 @@ export function CompositorPreview({ orientation = 'landscape' }: CompositorPrevi
       return;
     }
 
-    console.log('[CompositorPreview] Displaying compositor canvas in UI');
 
     // Insert the compositor canvas into the DOM
     containerRef.current.appendChild(compositorCanvas);
@@ -42,7 +40,6 @@ export function CompositorPreview({ orientation = 'landscape' }: CompositorPrevi
     compositorCanvas.style.objectFit = 'contain';
     compositorCanvas.style.backgroundColor = '#000';
 
-    console.log('[CompositorPreview] Compositor canvas added to DOM:', {
       width: compositorCanvas.width,
       height: compositorCanvas.height,
       displayed: true
@@ -51,7 +48,6 @@ export function CompositorPreview({ orientation = 'landscape' }: CompositorPrevi
     // Cleanup function
     return () => {
       if (compositorCanvas && containerRef.current && compositorCanvas.parentNode === containerRef.current) {
-        console.log('[CompositorPreview] Removing compositor canvas from DOM');
         containerRef.current.removeChild(compositorCanvas);
         canvasInserted.current = false;
       }
@@ -79,7 +75,6 @@ export function CompositorPreview({ orientation = 'landscape' }: CompositorPrevi
     // Setting HTML element .volume property doesn't affect Web Audio API routing
     compositorService.setInputVolume(newVolume);
 
-    console.log(`[CompositorPreview] Master volume set to ${newVolume}%`);
   };
 
   const aspectRatio = orientation === 'portrait' ? '9 / 16' : '16 / 9';
