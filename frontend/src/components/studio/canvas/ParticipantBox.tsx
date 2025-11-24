@@ -331,20 +331,22 @@ export function ParticipantBox({
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
           {/* Outer pulsating ring - expands beyond avatar */}
           <div
-            className="absolute rounded-full border-8 border-white animate-ping"
+            className="absolute rounded-full border-white animate-ping"
             style={{
               width: 'min(95%, 600px)',
               aspectRatio: '1/1',
               animationDuration: '1s',
+              borderWidth: '24px',
             }}
           />
           {/* Inner pulsating ring - starts bigger than avatar */}
           <div
-            className="absolute rounded-full border-6 border-white"
+            className="absolute rounded-full border-white"
             style={{
               width: 'min(85%, 500px)',
               aspectRatio: '1/1',
               animation: 'pulse 2s ease-in-out infinite',
+              borderWidth: '20px',
             }}
           />
         </div>
