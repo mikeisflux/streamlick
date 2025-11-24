@@ -1,17 +1,18 @@
 /**
- * ⚠️ MANDATORY - KEEP IN SYNC WITH COMPOSITOR SERVICE ⚠️
+ * StudioCanvas - Canvas 2D API Rendering System
  *
- * StudioCanvas - Browser preview canvas using HTML/CSS layouts
+ * Single unified rendering system that:
+ * - Displays live canvas in browser (what user sees)
+ * - Exports output stream via canvas.captureStream() for media server
+ * - Handles all layouts, participants, overlays, and text rendering
  *
- * MUST stay in sync with compositor.service.ts (Canvas API output stream)
- * When making changes to:
- * - Layout logic (grid, spotlight, sidebar, pip)
- * - Participant positioning
- * - Audio animations (pulsating rings)
- * - Overlay rendering (backgrounds, logos, lower thirds)
- *
- * ALWAYS update BOTH StudioCanvas.tsx AND compositor.service.ts to maintain
- * visual consistency between preview and output stream!
+ * Features:
+ * - 10 layout types (Solo, Cropped, Group, Spotlight, News, Screen, PIP, Cinema, Grid, Advanced)
+ * - Background/logo/overlay image rendering
+ * - Audio visualization (pulsating rings when speaking)
+ * - Text overlays (captions, banners, chat, teleprompter, social comments)
+ * - Remote participant video management
+ * - Screen share video rendering
  */
 
 import { useRef, useEffect, useState } from 'react';
@@ -20,9 +21,7 @@ import { ParticipantBox } from './ParticipantBox';
 import { TeleprompterOverlay } from './TeleprompterOverlay';
 import { CommentOverlay } from './CommentOverlay';
 import { Caption } from '../../../services/caption.service';
-import { compositorService } from '../../../services/compositor.service';
 import { mediaStorageService } from '../../../services/media-storage.service';
-import { audioMixerService } from '../../../services/audio-mixer.service';
 import { canvasStreamService } from '../../../services/canvas-stream.service';
 import { useAudioLevel } from '../../../hooks/studio/useAudioLevel';
 
@@ -1576,15 +1575,8 @@ export function StudioCanvas({
 
   const handleVolumeChange = (newVolume: number) => {
     setVolume(newVolume);
-
-    // CRITICAL FIX: Use compositor service to set master volume
-    // This controls the Web Audio API mixer which handles ALL audio:
-    // - Participant audio (from WebRTC MediaStreams)
-    // - Intro/countdown videos
-    // - Audio/video clips
-    // Setting HTML element .volume property doesn't affect Web Audio API routing
-    compositorService.setInputVolume(newVolume);
-
+    // Volume is controlled via audioMixerService in Studio.tsx via canvasSettings.inputVolume
+    // This function just updates local UI state
   };
 
   return (

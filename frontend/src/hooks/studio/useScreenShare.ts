@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react';
 import { useMedia } from '../useMedia';
-import { compositorService } from '../../services/compositor.service';
 import { webrtcService } from '../../services/webrtc.service';
 import { audioMixerService } from '../../services/audio-mixer.service';
 import toast from 'react-hot-toast';
@@ -36,7 +35,7 @@ export function useScreenShare({ currentLayout, onLayoutChange, isLive = false }
       stopScreenShare();
       setIsSharingScreen(false);
       setScreenShareStream(null);
-      compositorService.removeParticipant('screen-share');
+      // Screen share removal handled by StudioCanvas via isSharingScreen prop
 
       // Remove screen share audio from mixer (system audio)
       audioMixerService.removeStream('screen-share-audio');
@@ -92,14 +91,7 @@ export function useScreenShare({ currentLayout, onLayoutChange, isLive = false }
           console.log('[ScreenShare] No system audio in screen share');
         }
 
-        await compositorService.addParticipant({
-          id: 'screen-share',
-          name: 'Screen Share',
-          stream,
-          isLocal: true,
-          audioEnabled: hasAudio, // Enable audio if screen share has audio tracks
-          videoEnabled: true,
-        });
+        // Screen share rendering handled by StudioCanvas via isSharingScreen and screenShareStream props
 
         const videoTrack = stream.getVideoTracks()[0];
         if (videoTrack) {

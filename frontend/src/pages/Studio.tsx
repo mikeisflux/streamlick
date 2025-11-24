@@ -1,8 +1,9 @@
 import { useRef, useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { compositorService } from '../services/compositor.service';
 import { audioProcessorService } from '../services/audio-processor.service';
+import { audioMixerService } from '../services/audio-mixer.service';
 import { broadcastService } from '../services/broadcast.service';
+import { canvasStreamService } from '../services/canvas-stream.service';
 import { useMedia } from '../hooks/useMedia';
 import { useStudioStore } from '../store/studioStore';
 import { useAuthStore } from '../store/authStore';
@@ -290,93 +291,20 @@ export function Studio() {
   // Teleprompter
   const teleprompterState = useTeleprompter();
   const { showHotkeyReference } = useStudioHotkeys({ audioEnabled, videoEnabled, isLive, isRecording, isSharingScreen, toggleAudio, toggleVideo, handleGoLive, handleEndBroadcast, handleStartRecording, handleStopRecording, handleToggleScreenShare, handleLayoutChange, setShowChatOnStream });
-  const { handleCreateClip } = useClipRecording(clipRecordingEnabled, localStream, () => compositorService.getOutputStream());
+  const { handleCreateClip } = useClipRecording(clipRecordingEnabled, localStream, () => canvasStreamService.getOutputStream());
 
   // Canvas Settings (persisted to localStorage)
   const canvasSettings = useCanvasSettings();
 
-  // Apply input volume to compositor when it changes
+  // Apply input volume to audio mixer when it changes
   useEffect(() => {
-    compositorService.setInputVolume(canvasSettings.inputVolume);
+    // Convert from 0-100 to 0-1 range
+    const normalizedVolume = Math.max(0, Math.min(100, canvasSettings.inputVolume)) / 100;
+    audioMixerService.setMasterVolume(normalizedVolume);
   }, [canvasSettings.inputVolume]);
 
-  // ⚠️ MANDATORY - KEEP IN SYNC ⚠️
-  // CRITICAL: Initialize compositor in preview mode when not live
-  // This enables audio animations, layout previews, and all compositor features
-  // even when not broadcasting
-  //
-  // MUST stay in sync with:
-  // 1. StudioCanvas.tsx - Browser preview canvas (HTML/CSS layout)
-  // 2. compositor.service.ts - Output stream canvas (Canvas API layout)
-  //
-  // When making changes to layout logic, participant rendering, or audio animations,
-  // ALWAYS update BOTH canvases to maintain visual consistency!
-  useEffect(() => {
-    // Skip if already live (handleGoLive will manage compositor)
-    if (isLive || !localStream) {
-      return;
-    }
-
-    // Build participant list - local user + on-stage remote participants
-    const participantStreams = [
-      {
-        id: 'local',
-        name: 'You',
-        stream: localStream,
-        isLocal: true,
-        audioEnabled,
-        videoEnabled,
-        avatarUrl: localStorage.getItem('selectedAvatar') || undefined, // Pass avatar URL
-      },
-      ...Array.from(remoteParticipants.values())
-        .filter((p) => p.role === 'host' || p.role === 'guest') // Only live participants
-        .filter((p) => p.stream) // Only participants with streams
-        .map((p) => ({
-          id: p.id,
-          name: p.name,
-          stream: p.stream!,
-          isLocal: false,
-          audioEnabled: p.audioEnabled,
-          videoEnabled: p.videoEnabled,
-          avatarUrl: undefined, // Remote participants don't have avatars yet
-        })),
-    ];
-
-    // Initialize compositor with current participants
-    compositorService.initialize(participantStreams)
-      .then(() => {
-
-        // Apply current layout
-        const layoutMap: { [key: number]: 'grid' | 'spotlight' | 'sidebar' | 'pip' | 'screenshare' } = {
-          1: 'grid',        // Solo
-          2: 'grid',        // Cropped
-          3: 'grid',        // Group
-          4: 'spotlight',   // Spotlight
-          5: 'sidebar',     // News
-          6: 'screenshare', // Screen
-          7: 'pip',         // Picture-in-Picture
-          8: 'sidebar',     // Cinema
-        };
-        const layoutType = layoutMap[selectedLayout] || 'grid';
-        compositorService.setLayout({ type: layoutType });
-      })
-      .catch((error) => {
-        console.error('[Studio] Failed to initialize compositor in preview mode:', error);
-      });
-
-    // Cleanup when component unmounts
-    // CRITICAL: Don't stop compositor here when going live!
-    // The cleanup runs with STALE closure value of isLive, causing compositor to stop
-    // when isLive changes from false→true. handleGoLive manages compositor when live.
-    return () => {
-      // No cleanup needed - compositor.initialize() handles cleanup internally
-    };
-  }, [localStream, remoteParticipants, audioEnabled, videoEnabled, isLive, selectedLayout]);
-
-  // Update compositor broadcasting status when going live/offline
-  useEffect(() => {
-    compositorService.setBroadcasting(isLive);
-  }, [isLive]);
+  // Canvas rendering is handled directly by StudioCanvas component
+  // No separate compositor initialization needed - StudioCanvas manages all rendering
 
   // Broadcast title update handler
   const handleTitleChange = async (newTitle: string) => {
@@ -468,8 +396,8 @@ export function Studio() {
         <main className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#F5F5F5' }}>
           {/* Canvas Container - constrained to leave room for Layout Selector and Preview Area */}
           <div className="flex items-center justify-center px-6 pb-20 relative" style={{ minHeight: 0, maxHeight: 'calc(100% - 350px)', flexShrink: 1, paddingTop: '144px' }}>
-            {/* ALWAYS show StudioCanvas - compositor runs invisibly in background */}
-            {/* User should see their designed canvas at all times, not the compositor output */}
+            {/* StudioCanvas renders using Canvas 2D API and provides output stream via canvas.captureStream() */}
+            {/* Single rendering system - what user sees IS what gets streamed to media server */}
             <StudioCanvas
               localStream={processedStream || localStream}
               rawStream={rawStream}
