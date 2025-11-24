@@ -116,7 +116,6 @@ router.post('/deploy', async (req, res) => {
       });
     }
 
-    logger.info(`Starting automated deployment: ${name} (${role}) on ${serverType} in ${location}`);
 
     // Deploy server via Hetzner API
     const server = await hetznerService.deployServer({
@@ -131,7 +130,6 @@ router.post('/deploy', async (req, res) => {
     });
 
     // Wait for server to be ready (max 2 minutes)
-    logger.info('Waiting for server to initialize...');
     await new Promise(resolve => setTimeout(resolve, 120000));
 
     // Construct response based on role
@@ -163,7 +161,6 @@ router.post('/deploy', async (req, res) => {
 
       try {
         const serverId = mediaServerPool.addServer(mediaServerUrl);
-        logger.info(`Added media server to pool: ${serverId}`);
         responseData.server.poolId = serverId;
       } catch (poolError: any) {
         logger.warn('Server deployed but failed to add to pool:', poolError.message);
@@ -184,7 +181,6 @@ router.post('/deploy', async (req, res) => {
       const dbPassword = generateToken(32); // 64-char hex password
 
       // Store password securely (in production, use secrets manager)
-      logger.info(`Database server deployed. Password generated (not logged for security).`);
 
       responseData.server.host = server.public_net.ipv4.ip;
       responseData.server.port = 5432;
@@ -203,7 +199,6 @@ router.post('/deploy', async (req, res) => {
       // CRITICAL FIX: Generate secure random password instead of hardcoded weak password
       const redisPassword = generateToken(32); // 64-char hex password
 
-      logger.info(`Redis server deployed. Password generated (not logged for security).`);
 
       responseData.server.host = server.public_net.ipv4.ip;
       responseData.server.port = 6379;
@@ -222,7 +217,6 @@ router.post('/deploy', async (req, res) => {
       const turnPassword = generateToken(32); // 64-char hex password
       const turnSecret = generateToken(32); // 64-char hex secret for long-term auth
 
-      logger.info(`TURN server deployed. Credentials generated (not logged for security).`);
 
       responseData.server.host = server.public_net.ipv4.ip;
       responseData.server.ports = {
@@ -321,7 +315,6 @@ router.post('/servers/:id/labels', async (req, res) => {
 
     await hetznerService.updateServerLabels(serverId, { role });
 
-    logger.info(`Updated server ${serverId} labels: role=${role}`);
 
     res.json({
       success: true,
