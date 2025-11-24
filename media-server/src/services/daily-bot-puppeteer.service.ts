@@ -233,24 +233,24 @@ class DailyBotPuppeteerService {
         const stream = new MediaStream([videoTrack, audioTrack]);
         videoEl.srcObject = stream;
 
-        // Wait for video to start playing
-        await new Promise((resolve) => {
-          videoEl.onloadedmetadata = () => {
-            videoEl.play().then(() => {
-              console.log('✅ Video element playing:', JSON.stringify({
-                width: videoEl.videoWidth,
-                height: videoEl.videoHeight,
-                paused: videoEl.paused,
-                readyState: videoEl.readyState,
-                currentTime: videoEl.currentTime,
-              }));
-              resolve(null);
-            }).catch((err: any) => {
-              console.error('❌ Video play failed:', err.message);
-              resolve(null);
-            });
-          };
-        });
+        // Try to play immediately (don't wait for events that might never fire)
+        try {
+          await videoEl.play();
+        } catch (err: any) {
+          console.error('❌ Video play failed:', err.message);
+        }
+
+        // Check video element state immediately (synchronously)
+        console.log('📹 Video element state:', JSON.stringify({
+          hasVideoTrack: stream.getVideoTracks().length > 0,
+          videoTrackReadyState: videoTrack.readyState,
+          videoTrackEnabled: videoTrack.enabled,
+          elementWidth: videoEl.videoWidth,
+          elementHeight: videoEl.videoHeight,
+          elementPaused: videoEl.paused,
+          elementReadyState: videoEl.readyState,
+          elementCurrentTime: videoEl.currentTime,
+        }));
 
         console.log('✅ Displaying mediasoup video in page');
       }
