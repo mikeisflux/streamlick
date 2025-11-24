@@ -333,32 +333,15 @@ export function ParticipantBox({
           {[0, 1, 2, 3, 4].map((i) => (
             <div
               key={i}
-              className="absolute rounded-full border-white"
+              className="absolute rounded-full border-white animate-ring-burst"
               style={{
                 width: '40%', // Start at avatar edge
                 aspectRatio: '1/1',
                 borderWidth: '2px',
-                opacity: 0,
-                animation: `ringBurst 1.5s ease-out infinite`,
                 animationDelay: `${i * 0.3}s`, // Stagger each ring by 300ms
               }}
             />
           ))}
-          <style jsx>{`
-            @keyframes ringBurst {
-              0% {
-                transform: scale(1);
-                opacity: 0.8;
-              }
-              50% {
-                opacity: 0.5;
-              }
-              100% {
-                transform: scale(1.5); /* Expand by 50% = ~20px on typical avatar */
-                opacity: 0;
-              }
-            }
-          `}</style>
         </div>
       )}
 
