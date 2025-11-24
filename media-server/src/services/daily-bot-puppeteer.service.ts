@@ -123,6 +123,9 @@ class DailyBotPuppeteerService {
       // Wait for active video/audio in mediasoup before joining Daily
       await this.waitForMediasoupProducers(config);
 
+      // CRITICAL: Connect to mediasoup to receive the composite video/audio tracks
+      await this.connectToMediasoup(config);
+
       // Get tracks from mediasoup to use as bot's camera/mic
       await this.setupMediasoupTracks(config);
 
@@ -174,40 +177,38 @@ class DailyBotPuppeteerService {
     await this.page!.evaluate(async () => {
       const win = window as any;
 
-      // Create canvas for video
-      const canvas = document.createElement('canvas');
-      canvas.width = 1920;
-      canvas.height = 1080;
-      const ctx = canvas.getContext('2d')!;
+      // CRITICAL FIX: Use the REAL tracks from mediasoup, not fake placeholder tracks
+      // The mediaTracks were populated by connectToMediasoup() via pc.ontrack event
+      if (!win.mediaTracks || !win.mediaTracks.video || !win.mediaTracks.audio) {
+        throw new Error('❌ Mediasoup tracks not available! Cannot stream placeholder to YouTube.');
+      }
 
-      // Draw a simple background (we'll improve this to show mediasoup content later)
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = '48px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText('Streamlick Live', canvas.width / 2, canvas.height / 2);
+      // Use the real composite video/audio from mediasoup
+      const videoTrack = win.mediaTracks.video;
+      const audioTrack = win.mediaTracks.audio;
 
-      // Capture canvas as video stream
-      const videoStream = canvas.captureStream(30); // 30 FPS
-      const videoTrack = videoStream.getVideoTracks()[0];
+      console.log('✅ Using REAL mediasoup tracks:', {
+        videoId: videoTrack.id,
+        videoLabel: videoTrack.label,
+        audioId: audioTrack.id,
+        audioLabel: audioTrack.label,
+      });
 
-      // Create fake audio track
-      const audioContext = new AudioContext();
-      const oscillator = audioContext.createOscillator();
-      const destination = audioContext.createMediaStreamDestination();
-      oscillator.connect(destination);
-      oscillator.frequency.value = 0; // Silent
-      oscillator.start();
-      const audioTrack = destination.stream.getAudioTracks()[0];
-
-      // Store tracks
+      // Store tracks for Daily.co to use
       win.botMediaTracks = {
         video: videoTrack,
         audio: audioTrack,
       };
 
-      console.log('✅ Created bot media tracks (canvas video + silent audio)');
+      // OPTIONAL: Display the video in the page for debugging
+      const videoEl = document.getElementById('localVideo') as any;
+      if (videoEl) {
+        const stream = new MediaStream([videoTrack, audioTrack]);
+        videoEl.srcObject = stream;
+        console.log('✅ Displaying mediasoup video in page');
+      }
+
+      console.log('✅ Bot media tracks set up with REAL composite stream from StudioCanvas');
     });
 
   }
@@ -232,7 +233,7 @@ class DailyBotPuppeteerService {
 
   private async connectToMediasoup(config: PuppeteerBotConfig): Promise<void> {
 
-    // Get transport parameters
+    // Get transport parameters for browser-side WebRTC connection
     const transportParams = {
       id: config.webRtcTransport.id,
       iceParameters: config.webRtcTransport.iceParameters,
@@ -251,14 +252,20 @@ class DailyBotPuppeteerService {
       id: config.audioConsumer.id,
       producerId: config.audioConsumer.producerId,
       kind: config.audioConsumer.kind,
-      rtpParameters: config.audioConsumer.rtpParameters,
+      rtpParameters: config.videoConsumer.rtpParameters,
     };
 
-    // Execute in browser context and wait for tracks
+    // Build SDP answer from mediasoup transport parameters
+    // This creates a valid SDP that the browser can use to connect to mediasoup
+    const answerSdp = this.buildBrowserSdp(transportParams, videoConsumerParams, audioConsumerParams);
+
+    // Execute in browser context to establish WebRTC connection
     await this.page!.evaluate(
       async (params) => {
-        const { transportParams, videoConsumerParams, audioConsumerParams } = params;
+        const { answerSdp } = params;
         const win = window as any;
+
+        console.log('[Bot] Creating RTCPeerConnection to mediasoup...');
 
         // Create RTCPeerConnection
         const pc = new RTCPeerConnection({
@@ -266,58 +273,127 @@ class DailyBotPuppeteerService {
         });
 
         win.mediasoupPeerConnection = pc;
+        win.mediaTracks = { video: null, audio: null };
 
-        // Add transceivers
+        // Add transceivers for receiving video and audio
         pc.addTransceiver('video', { direction: 'recvonly' });
         pc.addTransceiver('audio', { direction: 'recvonly' });
 
-        // Set remote description from mediasoup
-        // This is simplified - full implementation would construct proper SDP
-        win.botLog.push({ message: 'Mediasoup connection setup', transportParams });
-
-        // Store tracks when they arrive
-        win.mediaTracks = { video: null, audio: null };
-
-        // Create a promise that resolves when both tracks are received
+        // Set up track receiver before creating offer
         const tracksPromise = new Promise<void>((resolve) => {
           let videoReceived = false;
           let audioReceived = false;
 
           pc.ontrack = (event: any) => {
-            console.log(`✅ Track received: ${event.track.kind}`);
-            win.botLog.push({ message: 'Track received', kind: event.track.kind });
+            console.log(`✅ [Bot] Track received: ${event.track.kind}`, event.track.id);
 
             if (event.track.kind === 'video') {
               win.mediaTracks.video = event.track;
               videoReceived = true;
-            } else {
+            } else if (event.track.kind === 'audio') {
               win.mediaTracks.audio = event.track;
               audioReceived = true;
             }
 
-            // Display in video element
-            const videoEl = document.getElementById('localVideo') as any;
+            // Display video for debugging
+            const videoEl = document.getElementById('localVideo') as HTMLVideoElement;
             if (videoEl && event.streams[0]) {
               videoEl.srcObject = event.streams[0];
+              console.log('✅ [Bot] Video element updated with stream');
             }
 
             // Resolve when both tracks received
             if (videoReceived && audioReceived) {
-              console.log('✅ Both tracks received');
+              console.log('✅ [Bot] Both video and audio tracks received!');
               resolve();
             }
           };
         });
 
-        // Wait for tracks (with timeout)
+        // Create offer
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        console.log('[Bot] Created offer, set as local description');
+
+        // Set remote description from mediasoup (constructed SDP answer)
+        await pc.setRemoteDescription({
+          type: 'answer',
+          sdp: answerSdp,
+        });
+        console.log('[Bot] Set mediasoup SDP as remote description');
+
+        // Wait for tracks to arrive (with 10 second timeout)
         await Promise.race([
           tracksPromise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout waiting for tracks')), 5000)),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout waiting for mediasoup tracks in browser')), 10000)
+          ),
         ]);
+
+        console.log('✅ [Bot] Mediasoup connection established successfully');
       },
-      { transportParams, videoConsumerParams, audioConsumerParams }
+      { answerSdp }
     );
 
+    logger.info('[Puppeteer Bot] Successfully connected to mediasoup and received tracks');
+  }
+
+  /**
+   * Build SDP answer for browser to connect to mediasoup WebRTC transport
+   */
+  private buildBrowserSdp(
+    transportParams: any,
+    videoConsumerParams: any,
+    audioConsumerParams: any
+  ): string {
+    const dtls = transportParams.dtlsParameters;
+    const ice = transportParams.iceParameters;
+    const candidates = transportParams.iceCandidates;
+
+    // Get first candidate
+    const candidate = candidates[0];
+
+    // Get codec info from RTP parameters
+    const videoCodec = videoConsumerParams.rtpParameters.codecs[0];
+    const audioCodec = audioConsumerParams.rtpParameters.codecs[0];
+
+    // Get SSRCs
+    const videoSsrc = videoConsumerParams.rtpParameters.encodings?.[0]?.ssrc || 1111;
+    const audioSsrc = audioConsumerParams.rtpParameters.encodings?.[0]?.ssrc || 2222;
+
+    // Build SDP answer
+    return `v=0
+o=- 0 0 IN IP4 127.0.0.1
+s=mediasoup
+t=0 0
+a=group:BUNDLE 0 1
+a=msid-semantic:WMS *
+a=ice-ufrag:${ice.usernameFragment}
+a=ice-pwd:${ice.password}
+a=ice-options:trickle
+a=fingerprint:${dtls.fingerprints[0].algorithm} ${dtls.fingerprints[0].value}
+a=setup:active
+m=video ${candidate.port} UDP/TLS/RTP/SAVPF ${videoCodec.payloadType}
+c=IN IP4 ${candidate.ip}
+a=rtcp:${candidate.port} IN IP4 ${candidate.ip}
+a=rtcp-mux
+a=sendonly
+a=mid:0
+a=rtpmap:${videoCodec.payloadType} ${videoCodec.mimeType.split('/')[1]}/${videoCodec.clockRate}
+a=ssrc:${videoSsrc} cname:mediasoup
+a=ssrc:${videoSsrc} msid:mediasoup video
+a=candidate:${candidate.foundation} 1 udp ${candidate.priority} ${candidate.ip} ${candidate.port} typ ${candidate.type}
+m=audio ${candidate.port} UDP/TLS/RTP/SAVPF ${audioCodec.payloadType}
+c=IN IP4 ${candidate.ip}
+a=rtcp:${candidate.port} IN IP4 ${candidate.ip}
+a=rtcp-mux
+a=sendonly
+a=mid:1
+a=rtpmap:${audioCodec.payloadType} ${audioCodec.mimeType.split('/')[1]}/${audioCodec.clockRate}${audioCodec.channels ? `/${audioCodec.channels}` : ''}
+a=ssrc:${audioSsrc} cname:mediasoup
+a=ssrc:${audioSsrc} msid:mediasoup audio
+a=candidate:${candidate.foundation} 1 udp ${candidate.priority} ${candidate.ip} ${candidate.port} typ ${candidate.type}
+`;
   }
 
   private async joinDailyRoom(config: PuppeteerBotConfig): Promise<void> {
