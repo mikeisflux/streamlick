@@ -220,6 +220,7 @@ class CompositorService {
    * Initialize compositor with participants
    */
   async initialize(participants: ParticipantStream[]): Promise<void> {
+    console.log('[COMPOSITOR INIT] ========================================');
     console.log('[COMPOSITOR INIT] initialize() called with participants:', {
       count: participants.length,
       participants: participants.map(p => ({
@@ -231,8 +232,7 @@ class CompositorService {
         videoEnabled: p.videoEnabled
       }))
     });
-
-    logger.info('Initializing compositor with', participants.length, 'participants');
+    console.log('[COMPOSITOR INIT] ========================================');
 
     // Clear existing state
     this.stop();
@@ -296,7 +296,7 @@ class CompositorService {
    * Add a participant to the composition
    */
   async addParticipant(participant: ParticipantStream): Promise<void> {
-    logger.info('Adding participant to compositor:', participant.id);
+    console.log('[COMPOSITOR] Adding participant:', participant.id);
 
     const video = document.createElement('video');
     video.autoplay = true;
@@ -449,10 +449,11 @@ class CompositorService {
       const normalizedLevel = average / 255;
 
       // Debug logging - log periodically
-      if (this.frameCount % 90 === 0 && normalizedLevel > 0.01) {
-        logger.info(`[Audio Level] Participant ${participantId}:`, {
+      if (this.frameCount % 60 === 0 && normalizedLevel > 0.01) {
+        console.log(`[AUDIO LEVEL COMPOSITOR] Participant ${participantId}:`, {
           average: average.toFixed(2),
-          normalized: normalizedLevel.toFixed(3)
+          normalized: normalizedLevel.toFixed(3),
+          speakingThreshold: 0.04
         });
       }
 
