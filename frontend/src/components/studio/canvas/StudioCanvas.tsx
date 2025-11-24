@@ -23,6 +23,7 @@ import { Caption } from '../../../services/caption.service';
 import { compositorService } from '../../../services/compositor.service';
 import { mediaStorageService } from '../../../services/media-storage.service';
 import { audioMixerService } from '../../../services/audio-mixer.service';
+import { canvasStreamService } from '../../../services/canvas-stream.service';
 import { useAudioLevel } from '../../../hooks/studio/useAudioLevel';
 
 interface Banner {
@@ -578,6 +579,27 @@ export function StudioCanvas({
       orientation,
     });
 
+    // Capture canvas stream for media server (30 FPS)
+    // This is the "splitter" - one rendering system that both displays AND streams
+    try {
+      const canvasStream = canvas.captureStream(30);
+      outputStreamRef.current = canvasStream;
+
+      // Make stream available to useBroadcast via canvasStreamService
+      canvasStreamService.setOutputStream(canvasStream);
+
+      console.log('[StudioCanvas] Canvas stream captured and registered:', {
+        streamId: canvasStream.id,
+        videoTracks: canvasStream.getVideoTracks().length,
+        audioTracks: canvasStream.getAudioTracks().length,
+      });
+
+      // TODO: Combine with audio from audioMixerService
+      // For now, the video track is captured - audio will be added separately
+    } catch (error) {
+      console.error('[StudioCanvas] Failed to capture canvas stream:', error);
+    }
+
     // Start rendering loop
     let frameCount = 0;
     let lastFrameTime = performance.now();
@@ -688,6 +710,10 @@ export function StudioCanvas({
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
       }
+
+      // Clear canvas stream from service
+      canvasStreamService.setOutputStream(null);
+      outputStreamRef.current = null;
     };
   }, [backgroundColor, orientation]);
 

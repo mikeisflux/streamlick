@@ -4,6 +4,7 @@ import { socketService } from '../../services/socket.service';
 import { mediaServerSocketService } from '../../services/media-server-socket.service';
 import { webrtcService } from '../../services/webrtc.service';
 import { compositorService } from '../../services/compositor.service';
+import { canvasStreamService } from '../../services/canvas-stream.service';
 import { recordingService } from '../../services/recording.service';
 import { useStudioStore } from '../../store/studioStore';
 import api from '../../services/api';
@@ -66,9 +67,10 @@ export function useBroadcast({
   // Recording functions defined first to avoid circular dependency
   const handleStartRecording = useCallback(async () => {
     try {
-      const compositeStream = compositorService.getOutputStream();
+      // Get canvas stream from StudioCanvas via canvasStreamService
+      const compositeStream = canvasStreamService.getOutputStream();
       if (!compositeStream) {
-        toast.error('No composite stream available');
+        toast.error('No canvas stream available - please ensure you are on stage');
         return;
       }
 
@@ -214,13 +216,14 @@ export function useBroadcast({
         participantCount: participantStreams.length,
       });
 
-      await compositorService.initialize(participantStreams);
-      compositorService.setLayout({ type: currentLayout });
+      // REMOVED: compositor initialization - now using StudioCanvas for all rendering
+      // await compositorService.initialize(participantStreams);
+      // compositorService.setLayout({ type: currentLayout });
 
-      // Get composite stream and produce it via WebRTC
-      const compositeStream = compositorService.getOutputStream();
+      // Get canvas stream from StudioCanvas and produce it via WebRTC
+      const compositeStream = canvasStreamService.getOutputStream();
       if (!compositeStream) {
-        throw new Error('Failed to get composite stream');
+        throw new Error('Failed to get canvas stream - StudioCanvas may not be initialized');
       }
 
       // Produce composite video and audio tracks
