@@ -42,10 +42,6 @@ function validateEnvironment() {
     process.exit(1);
   }
 
-  logger.info('Environment validation passed');
-  logger.info(`  MEDIASOUP_ANNOUNCED_IP: ${process.env.MEDIASOUP_ANNOUNCED_IP}`);
-  logger.info(`  FRONTEND_URL: ${process.env.FRONTEND_URL}`);
-  logger.info(`  NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
 }
 
 validateEnvironment();
@@ -53,8 +49,6 @@ validateEnvironment();
 const app = express();
 const server = http.createServer(app);
 
-logger.info('========== SOCKET.IO INITIALIZATION ==========');
-logger.info(`CORS origin: ${process.env.FRONTEND_URL || 'http://localhost:3002'}`);
 
 const io = new SocketServer(server, {
   cors: {
@@ -63,15 +57,9 @@ const io = new SocketServer(server, {
   },
 });
 
-logger.info('✅ Socket.io server created');
 
 // Debug middleware to log ALL incoming connection attempts
 io.use((socket, next) => {
-  logger.info(`[Socket.io Middleware] ========== NEW CONNECTION ATTEMPT ==========`);
-  logger.info(`[Socket.io Middleware] Socket ID: ${socket.id}`);
-  logger.info(`[Socket.io Middleware] Origin: ${socket.handshake.headers.origin}`);
-  logger.info(`[Socket.io Middleware] Referer: ${socket.handshake.headers.referer}`);
-  logger.info(`[Socket.io Middleware] User-Agent: ${socket.handshake.headers['user-agent']}`);
   next();
 });
 
@@ -131,7 +119,6 @@ async function cleanupBroadcast(broadcastId: string): Promise<void> {
   const broadcast = broadcasts.get(broadcastId);
   if (!broadcast) return;
 
-  logger.info(`Cleaning up broadcast ${broadcastId}...`);
 
   let cleanupErrors: Error[] = [];
 
@@ -142,7 +129,6 @@ async function cleanupBroadcast(broadcastId: string): Promise<void> {
         try {
           if (!transport.closed) {
             transport.close();
-            logger.debug(`Closed transport ${transportId}`);
           }
         } catch (error) {
           logger.error(`Error closing transport ${transportId}:`, error);
@@ -160,7 +146,6 @@ async function cleanupBroadcast(broadcastId: string): Promise<void> {
         try {
           if (!producer.closed) {
             producer.close();
-            logger.debug(`Closed producer ${producerId}`);
           }
         } catch (error) {
           logger.error(`Error closing producer ${producerId}:`, error);
@@ -178,7 +163,6 @@ async function cleanupBroadcast(broadcastId: string): Promise<void> {
         try {
           if (!consumer.closed) {
             consumer.close();
-            logger.debug(`Closed consumer ${consumerId}`);
           }
         } catch (error) {
           logger.error(`Error closing consumer ${consumerId}:`, error);
@@ -194,13 +178,11 @@ async function cleanupBroadcast(broadcastId: string): Promise<void> {
     try {
       await stopCompositorPipeline(broadcastId);
     } catch (error) {
-      logger.debug(`No compositor pipeline to stop for ${broadcastId}`);
     }
 
     try {
       stopRTMPStream(broadcastId);
     } catch (error) {
-      logger.debug(`No RTMP stream to stop for ${broadcastId}`);
     }
   } catch (error) {
     logger.error(`Unexpected error during broadcast cleanup for ${broadcastId}:`, error);
@@ -212,7 +194,6 @@ async function cleanupBroadcast(broadcastId: string): Promise<void> {
       if (cleanupErrors.length > 0) {
         logger.warn(`Broadcast ${broadcastId} cleaned up with ${cleanupErrors.length} error(s)`);
       } else {
-        logger.info(`Broadcast ${broadcastId} cleaned up successfully`);
       }
     } catch (error) {
       logger.error(`Error removing broadcast ${broadcastId} from map:`, error);
@@ -250,10 +231,8 @@ async function untrackSocketBroadcast(socketId: string): Promise<void> {
 
         // If no more sockets connected, clean up the broadcast
         if (broadcast.sockets.size === 0) {
-          logger.info(`Last socket disconnected from broadcast ${broadcastId}, cleaning up...`);
           await cleanupBroadcast(broadcastId);
         } else {
-          logger.debug(`${broadcast.sockets.size} socket(s) still connected to broadcast ${broadcastId}`);
         }
       }
     });
@@ -326,17 +305,11 @@ app.get('/broadcasts/:broadcastId/rtp-capabilities', async (req: express.Request
 
 // Socket.io handlers
 io.on('connection', (socket) => {
-  logger.info(`========== SOCKET CONNECTION ESTABLISHED ==========`);
-  logger.info(`Socket ID: ${socket.id}`);
-  logger.info(`Client IP: ${socket.handshake.address}`);
-  logger.info(`Origin: ${socket.handshake.headers.origin}`);
 
   // Log all incoming events using onAny
   socket.onAny((eventName, ...args) => {
-    logger.info(`[Event Received] "${eventName}" on socket ${socket.id}`);
     if (args.length > 0 && typeof args[0] === 'object') {
       const data = JSON.stringify(args[0]).substring(0, 500);
-      logger.info(`[Event Data Preview] ${data}${args[0].length > 500 ? '...' : ''}`);
     }
   });
 
@@ -346,7 +319,6 @@ io.on('connection', (socket) => {
       // Get or create router for this broadcast
       let router = getRouter(broadcastId);
       if (!router) {
-        logger.debug(`Router not found for ${broadcastId}, creating...`);
         router = await createRouter(broadcastId);
       }
 
@@ -506,12 +478,6 @@ io.on('connection', (socket) => {
   // Start RTMP streaming with compositor pipeline
   socket.on('start-rtmp', async ({ broadcastId, destinations, compositeProducers }) => {
     try {
-      logger.info(`========== START-RTMP EVENT RECEIVED ==========`);
-      logger.info(`Broadcast ID: ${broadcastId}`);
-      logger.info(`Socket ID: ${socket.id}`);
-      logger.info(`Destinations count: ${destinations?.length || 0}`);
-      logger.info(`Destinations:`, JSON.stringify(destinations, null, 2));
-      logger.info(`Composite producers:`, JSON.stringify(compositeProducers, null, 2));
 
       // VALIDATION: Ensure at least one destination is provided
       if (!destinations || destinations.length === 0) {
@@ -519,14 +485,12 @@ io.on('connection', (socket) => {
         logger.error(`Cannot start FFmpeg with empty destinations - would result in "Invalid output" error`);
         throw new Error('Invalid output: No RTMP destinations provided. At least one destination is required.');
       }
-      logger.info(`✅ VALIDATION PASSED: ${destinations.length} destination(s) provided`);
 
       const broadcast = broadcasts.get(broadcastId);
       if (!broadcast) {
         logger.error(`❌ Broadcast ${broadcastId} not found in broadcasts map`);
         throw new Error('Broadcast not found');
       }
-      logger.info(`✅ Broadcast found in map`);
 
       // Guard against duplicate start-rtmp calls
       if (broadcast.isRtmpStreaming) {
@@ -539,14 +503,12 @@ io.on('connection', (socket) => {
 
       // Mark as streaming immediately to prevent race conditions
       broadcast.isRtmpStreaming = true;
-      logger.info(`✅ Marked broadcast as streaming`);
 
       const router = getRouter(broadcastId);
       if (!router) {
         logger.error(`❌ Router not found for broadcast ${broadcastId}`);
         throw new Error('Router not found');
       }
-      logger.info(`✅ Router found`);
 
       // CRITICAL: Deduplicate destinations to prevent multiple stream keys for the same broadcast
       // Deduplicate based on unique combination of rtmpUrl + streamKey
@@ -572,25 +534,15 @@ io.on('connection', (socket) => {
 
       // If composite producers are specified, use compositor pipeline
       if (compositeProducers?.videoProducerId && compositeProducers?.audioProducerId) {
-        logger.info(`[Compositor Pipeline] Video producer ID: ${compositeProducers.videoProducerId}`);
-        logger.info(`[Compositor Pipeline] Audio producer ID: ${compositeProducers.audioProducerId}`);
 
         const videoProducer = broadcast.producers.get(compositeProducers.videoProducerId);
         const audioProducer = broadcast.producers.get(compositeProducers.audioProducerId);
 
-        logger.info(`[Compositor Pipeline] Video producer found: ${!!videoProducer}`);
-        logger.info(`[Compositor Pipeline] Audio producer found: ${!!audioProducer}`);
-        logger.info(`[Compositor Pipeline] Available producers in map: ${Array.from(broadcast.producers.keys()).join(', ')}`);
 
         if (videoProducer && audioProducer) {
-          logger.info(`🚀 Starting compositor pipeline for ${finalDestinations.length} destination(s)...`);
 
           // Log each destination details
           finalDestinations.forEach((dest: any, index: number) => {
-            logger.info(`[Destination ${index + 1}] Platform: ${dest.platform}`);
-            logger.info(`[Destination ${index + 1}] RTMP URL: ${dest.rtmpUrl}`);
-            logger.info(`[Destination ${index + 1}] Stream Key length: ${dest.streamKey?.length || 0}`);
-            logger.info(`[Destination ${index + 1}] Full RTMP: ${dest.rtmpUrl}/${dest.streamKey?.substring(0, 10)}...`);
           });
 
           await createCompositorPipeline(router, broadcastId, videoProducer, audioProducer, finalDestinations);
@@ -598,7 +550,6 @@ io.on('connection', (socket) => {
           if (socket.connected) {
             socket.emit('rtmp-started', { broadcastId, method: 'compositor-pipeline' });
           }
-          logger.info('✅ RTMP started with compositor pipeline');
         } else {
           logger.warn('⚠️  Composite producers not found, falling back to legacy RTMP');
           logger.warn(`Available producers: ${Array.from(broadcast.producers.keys()).join(', ')}`);
@@ -609,16 +560,12 @@ io.on('connection', (socket) => {
         }
       } else {
         // Fallback to legacy RTMP (for backwards compatibility)
-        logger.info('⚠️  No composite producers specified, using legacy RTMP streaming');
-        logger.info(`Video producer ID: ${compositeProducers?.videoProducerId || 'undefined'}`);
-        logger.info(`Audio producer ID: ${compositeProducers?.audioProducerId || 'undefined'}`);
         startRTMPStream(broadcastId, finalDestinations);
         if (socket.connected) {
           socket.emit('rtmp-started', { broadcastId, method: 'legacy' });
         }
       }
 
-      logger.info(`========== START-RTMP COMPLETED ==========`);
     } catch (error) {
       logger.error('❌ Start RTMP error:', error);
       logger.error('Error stack:', (error as Error).stack);
@@ -627,7 +574,6 @@ io.on('connection', (socket) => {
       const broadcast = broadcasts.get(broadcastId);
       if (broadcast) {
         broadcast.isRtmpStreaming = false;
-        logger.info(`Cleared streaming flag due to error`);
       }
 
       if (socket.connected) {
@@ -639,7 +585,6 @@ io.on('connection', (socket) => {
   // Stop RTMP streaming
   socket.on('stop-rtmp', async ({ broadcastId }) => {
     try {
-      logger.info(`Stop RTMP requested for broadcast ${broadcastId}`);
 
       // Stop compositor pipeline (if active)
       await stopCompositorPipeline(broadcastId);
@@ -651,13 +596,11 @@ io.on('connection', (socket) => {
       const broadcast = broadcasts.get(broadcastId);
       if (broadcast) {
         broadcast.isRtmpStreaming = false;
-        logger.info(`Cleared streaming flag for broadcast ${broadcastId}`);
       }
 
       if (socket.connected) {
         socket.emit('rtmp-stopped', { broadcastId });
       }
-      logger.info(`RTMP streaming stopped for broadcast ${broadcastId}`);
     } catch (error) {
       logger.error('Stop RTMP error:', error);
       if (socket.connected) {
@@ -667,57 +610,28 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', async () => {
-    logger.info(`Media socket disconnected: ${socket.id}`);
 
     // Clean up broadcasts if this was the last socket
     await untrackSocketBroadcast(socket.id);
 
-    logger.debug(`Socket ${socket.id} cleanup completed`);
   });
 });
 
 // Initialize and start server
 async function start() {
   try {
-    logger.info('========================================');
-    logger.info('🚀 MEDIA SERVER STARTING...');
-    logger.info(`⏰ Time: ${new Date().toISOString()}`);
-    logger.info(`📦 Node version: ${process.version}`);
-    logger.info(`📁 CWD: ${process.cwd()}`);
-    logger.info('========================================');
 
-    logger.info('[Startup] Loading .env configuration...');
-    logger.info('[Startup] .env loaded successfully');
 
-    logger.info('[Startup] Running environment validation...');
-    logger.info('[Startup] Validating environment variables...');
-    logger.info(`[Startup] Checking MEDIASOUP_ANNOUNCED_IP: ${process.env.MEDIASOUP_ANNOUNCED_IP}`);
-    logger.info(`[Startup] Checking FRONTEND_URL: ${process.env.FRONTEND_URL}`);
-    logger.info('[Startup] ✓ Environment validation passed');
 
-    logger.info('[Startup] Creating Express app...');
-    logger.info('[Startup] Creating HTTP server...');
-    logger.info(`[Startup] Creating Socket.IO server with CORS: ${process.env.FRONTEND_URL || 'http://localhost:3002'}`);
-    logger.info('[Startup] ✓ Socket.IO server created');
 
-    logger.info('[Startup] Setting up Socket.IO connection handler...');
 
     // Create mediasoup workers (at least 2 for redundancy)
     const numWorkers = parseInt(process.env.MEDIASOUP_WORKERS || '2');
-    logger.info('[Startup] Calling start() function...');
-    logger.info('[Startup] ========== STARTING MEDIA SERVER ==========');
-    logger.info(`[Startup] Creating ${numWorkers} mediasoup workers...`);
 
     await createWorkers(numWorkers);
 
-    logger.info('[Startup] ✓ Mediasoup workers created');
 
-    logger.info('[Startup] Starting HTTP server on port ' + PORT + '...');
     server.listen(PORT, () => {
-      logger.info('========== ✅ SERVER LISTENING ON PORT ' + PORT + ' ==========');
-      logger.info(`[Startup] Environment: ${process.env.NODE_ENV || 'development'}`);
-      logger.info(`[Startup] FRONTEND_URL: ${process.env.FRONTEND_URL || 'http://localhost:3002'}`);
-      logger.info(`[Startup] Time: ${new Date().toISOString()}`);
     });
   } catch (error) {
     logger.error('❌ Failed to start media server:', error);
@@ -733,7 +647,6 @@ let shutdownTimeout: NodeJS.Timeout | null = null;
 
 // Graceful shutdown handler
 async function gracefulShutdown(signal: string) {
-  logger.info(`${signal} received, initiating graceful shutdown...`);
 
   // Start shutdown timeout
   shutdownTimeout = setTimeout(() => {
@@ -743,25 +656,20 @@ async function gracefulShutdown(signal: string) {
 
   try {
     // 1. Stop accepting new connections
-    logger.info('Closing server to prevent new connections...');
     server.close();
 
     // 2. Disconnect all active socket.io connections
-    logger.info('Disconnecting all active socket connections...');
     io.disconnectSockets();
 
     // 3. Clean up all broadcasts
-    logger.info(`Cleaning up ${broadcasts.size} active broadcast(s)...`);
     const cleanupPromises = Array.from(broadcasts.keys()).map(broadcastId =>
       cleanupBroadcast(broadcastId)
     );
     await Promise.all(cleanupPromises);
-    logger.info('All broadcasts cleaned up');
 
     // 4. Stop all adaptive bitrate monitoring
     try {
       adaptiveBitrateService.stopAll();
-      logger.info('Adaptive bitrate monitoring stopped');
     } catch (error) {
       logger.error('Error stopping adaptive bitrate service:', error);
     }
@@ -769,7 +677,6 @@ async function gracefulShutdown(signal: string) {
     // 5. Close diagnostic logger
     try {
       diagnosticLogger.destroy();
-      logger.info('Diagnostic logger closed');
     } catch (error) {
       logger.error('Error closing diagnostic logger:', error);
     }
@@ -778,7 +685,6 @@ async function gracefulShutdown(signal: string) {
     try {
       const { closeWorkers } = await import('./mediasoup/worker');
       await closeWorkers();
-      logger.info('Mediasoup workers closed');
     } catch (error) {
       logger.error('Error closing workers:', error);
     }
@@ -789,7 +695,6 @@ async function gracefulShutdown(signal: string) {
       shutdownTimeout = null;
     }
 
-    logger.info('Graceful shutdown completed successfully');
     process.exit(0);
   } catch (error) {
     logger.error('Error during graceful shutdown:', error);
