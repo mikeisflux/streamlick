@@ -71,7 +71,7 @@ class DailyBotPuppeteerService {
         // Forward all browser console logs to server logs
         if (type === 'error') {
           logger.error(`[Browser Console]: ${text}`);
-        } else if (type === 'warning') {
+        } else if (type === 'warn') {
           logger.warn(`[Browser Console]: ${text}`);
         } else {
           logger.info(`[Browser Console]: ${text}`);
