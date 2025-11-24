@@ -132,6 +132,7 @@ class CompositorService {
   private readonly WIDTH = parseInt(import.meta.env.VITE_CANVAS_WIDTH || '1920');
   private readonly HEIGHT = parseInt(import.meta.env.VITE_CANVAS_HEIGHT || '1080');
   private readonly FPS = parseInt(import.meta.env.VITE_CANVAS_FPS || '30');
+  private readonly PIXEL_SAMPLE_SIZE = 100; // Size of the center region for frozen canvas detection
 
   // Track which videos have been warned about pausing (to reduce console spam)
   private pausedVideoWarnings: Set<string> = new Set();
