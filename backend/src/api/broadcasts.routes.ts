@@ -193,14 +193,7 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res) => {
 // Start broadcast
 router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
   try {
-    logger.info(`[DEBUG ROUTE] ========== ROUTE HANDLER START ==========`);
-    logger.info(`[DEBUG ROUTE] Raw request body: ${JSON.stringify(req.body)}`);
     const { destinationIds, destinationSettings = {} } = req.body; // destinationSettings: { [destinationId]: { privacyStatus, scheduledStartTime } }
-    logger.info(`[DEBUG ROUTE] Broadcast start request - broadcastId: ${req.params.id}`);
-    logger.info(`[DEBUG ROUTE] destinationIds: ${JSON.stringify(destinationIds)}`);
-    logger.info(`[DEBUG ROUTE] destinationIds type: ${typeof destinationIds}, isArray: ${Array.isArray(destinationIds)}, length: ${destinationIds?.length}`);
-    logger.info(`[DEBUG ROUTE] destinationSettings: ${JSON.stringify(destinationSettings)}`);
-    logger.info(`[DEBUG ROUTE] ==============================================`);
 
     // NUCLEAR CLEANUP: Force delete ALL old broadcast destinations using utility function
     // This runs BEFORE any processing to ensure a clean slate every time
@@ -243,12 +236,8 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
 
     // Asynchronously prepare destinations during countdown
     // Use async IIFE instead of setImmediate to avoid race conditions
-    logger.info(`[BEFORE IIFE] About to invoke async IIFE for broadcast ${broadcast.id}`);
     (async () => {
-      logger.info(`[ASYNC IIFE] ========== IIFE INVOKED ==========`);
       try {
-        logger.info(`[ASYNC IIFE] Starting async broadcast preparation for ${broadcast.id}`);
-        logger.info(`[ASYNC IIFE] destinationIds: ${JSON.stringify(destinationIds)}`);
 
         const io = getIOInstance();
         // Configurable countdown duration (default 30 seconds for stream prep)
@@ -259,7 +248,6 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
           countdownSeconds = 30; // Safe default - allows time for YouTube stream prep
         }
 
-        logger.info(`[ASYNC IIFE] Starting countdown: ${countdownSeconds} seconds`);
 
         // Emit countdown ticks
         const countdownInterval = setInterval(() => {
@@ -283,7 +271,6 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
           // CRITICAL: Deduplicate destination IDs to prevent creating multiple stream keys for the same destination
           const uniqueDestinationIds = Array.from(new Set(destinationIds as string[])) as string[];
 
-          logger.info(`[ASYNC IIFE] Processing ${destinationIds.length} selected destinations: ${JSON.stringify(destinationIds)}`);
           if (uniqueDestinationIds.length !== destinationIds.length) {
             logger.warn(`[ASYNC IIFE] ⚠️  Detected ${destinationIds.length - uniqueDestinationIds.length} duplicate destination IDs`);
             logger.warn(`[ASYNC IIFE] Original array: ${JSON.stringify(destinationIds)}`);
@@ -298,8 +285,6 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
             },
           });
 
-          logger.info(`[ASYNC IIFE] Found ${destinations.length} active destinations in database for user ${req.user!.userId}`);
-          logger.info(`[ASYNC IIFE] Destinations: ${JSON.stringify(destinations.map(d => ({ id: d.id, platform: d.platform, channelId: d.channelId })))}`);
 
           // TEMPORARY FIX: ONLY PROCESS FIRST DESTINATION UNTIL MULTI-DESTINATION BUG IS FIXED
           const singleDestination = destinations.slice(0, 1);
@@ -317,7 +302,6 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
               }
 
               processedDestinationIds.add(destination.id);
-              logger.info(`[ASYNC IIFE] Processing destination ${destination.id} (${destination.platform}) [${processedDestinationIds.size}/${destinations.length}]`);
 
               let streamUrl = destination.rtmpUrl;
               let streamKey = destination.streamKey ? decrypt(destination.streamKey) : '';
@@ -346,17 +330,14 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
                 streamKey = liveVideo.streamKey;
                 liveVideoId = liveVideo.liveVideoId;
 
-                logger.info(`Created Facebook live video: ${liveVideoId}`);
               }
 
               // Handle YouTube live broadcast creation
               if (destination.platform === 'youtube' && destination.channelId) {
                 try {
-                  logger.info(`[YouTube] Starting broadcast creation for destination ${destination.id}`);
 
                   // Get valid token (auto-refreshes if needed)
                   const accessToken = await getValidYouTubeToken(destination.id);
-                  logger.info(`[YouTube] Got valid access token for destination ${destination.id}`);
 
                   // Get privacy and scheduling settings for this destination
                   const settings = destinationSettings[destination.id] || {};
@@ -365,7 +346,6 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
                   const title = settings.title || broadcast.title || 'Live Stream';
                   const description = settings.description || broadcast.description || '';
 
-                  logger.info(`[YouTube] Creating broadcast with settings: title="${title}", description="${description}", privacy=${privacyStatus}`);
 
                   // Create YouTube live broadcast
                   const ytBroadcast = await createYouTubeLiveBroadcast(
@@ -380,9 +360,6 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
                   streamKey = ytBroadcast.streamKey;
                   liveVideoId = ytBroadcast.broadcastId;
 
-                  logger.info(`[YouTube] ✅ Created broadcast ${liveVideoId} - RTMP URL: ${streamUrl}`);
-                  logger.info(`[YouTube] Privacy: ${privacyStatus}${scheduledStartTime ? ', scheduled: ' + scheduledStartTime : ''}`);
-                  logger.info(`[YouTube] Broadcast created in TESTING state - will transition to LIVE after countdown`);
 
                   // NOTE: We do NOT auto-transition to live here anymore!
                   // The frontend will call /broadcasts/:id/transition-youtube-to-live after:
@@ -426,7 +403,6 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
             }
           }
 
-          logger.info(`Broadcast prepared with ${broadcastDestinations.length} destinations`);
 
           // Roll back broadcast if all destination setups failed
           if (destinations.length > 0 && broadcastDestinations.length === 0) {
@@ -470,7 +446,6 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
               status: 'live',
             });
 
-            logger.info(`Broadcast ${req.params.id} went live after countdown`);
           } catch (error) {
             logger.error('Error updating broadcast to live after countdown:', error);
 
@@ -510,8 +485,6 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
 router.post('/:id/transition-youtube-to-live', authenticate, async (req: AuthRequest, res) => {
   try {
     const broadcastId = req.params.id;
-    logger.info(`[YouTube Transition] ========== MANUAL TRANSITION REQUEST ==========`);
-    logger.info(`[YouTube Transition] Broadcast ID: ${broadcastId}`);
 
     // Find all YouTube broadcast destinations for this broadcast
     const broadcastDestinations = await prisma.broadcastDestination.findMany({
@@ -526,7 +499,6 @@ router.post('/:id/transition-youtube-to-live', authenticate, async (req: AuthReq
       },
     });
 
-    logger.info(`[YouTube Transition] Found ${broadcastDestinations.length} YouTube destinations`);
 
     if (broadcastDestinations.length === 0) {
       logger.warn(`[YouTube Transition] No YouTube destinations found for broadcast ${broadcastId}`);
@@ -550,20 +522,16 @@ router.post('/:id/transition-youtube-to-live', authenticate, async (req: AuthReq
       }
 
       try {
-        logger.info(`[YouTube Transition] Transitioning broadcast ${liveVideoId} for destination ${destination.id}`);
 
         // Get valid access token (auto-refreshes if needed)
         const accessToken = await getValidYouTubeToken(destination.id);
 
         // CRITICAL: Check broadcast state before transitioning
         // YouTube requires broadcast to be in 'testing' state before going live
-        logger.info(`[YouTube Transition] Checking broadcast state before transition...`);
         const status = await getYouTubeBroadcastStatus(liveVideoId, accessToken);
-        logger.info(`[YouTube Transition] Current state: lifecycle=${status.lifeCycleStatus}, stream=${status.streamStatus || 'unknown'}`);
 
         // If still in 'ready' state, wait for YouTube to detect stream and transition to 'testing'
         if (status.lifeCycleStatus === 'ready') {
-          logger.info(`[YouTube Transition] Broadcast is in 'ready' state - waiting for YouTube to detect stream...`);
 
           // Poll for up to 20 seconds (10 attempts x 2 seconds)
           let becameTesting = false;
@@ -571,10 +539,8 @@ router.post('/:id/transition-youtube-to-live', authenticate, async (req: AuthReq
             await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
 
             const updatedStatus = await getYouTubeBroadcastStatus(liveVideoId, accessToken);
-            logger.info(`[YouTube Transition] Poll ${attempt}/10: lifecycle=${updatedStatus.lifeCycleStatus}, stream=${updatedStatus.streamStatus || 'unknown'}`);
 
             if (updatedStatus.lifeCycleStatus === 'testing' || updatedStatus.lifeCycleStatus === 'liveStarting') {
-              logger.info(`[YouTube Transition] ✅ Broadcast transitioned to '${updatedStatus.lifeCycleStatus}' state`);
               becameTesting = true;
               break;
             }
@@ -584,9 +550,7 @@ router.post('/:id/transition-youtube-to-live', authenticate, async (req: AuthReq
             throw new Error('Broadcast did not transition to testing state - YouTube may not have detected the stream yet. Please wait longer and try again.');
           }
         } else if (status.lifeCycleStatus === 'testing' || status.lifeCycleStatus === 'liveStarting') {
-          logger.info(`[YouTube Transition] ✅ Broadcast is in '${status.lifeCycleStatus}' state - ready to go live`);
         } else if (status.lifeCycleStatus === 'live') {
-          logger.info(`[YouTube Transition] ℹ️  Broadcast is already LIVE - no transition needed`);
 
           // Update status in database
           await prisma.broadcastDestination.update({
@@ -607,7 +571,6 @@ router.post('/:id/transition-youtube-to-live', authenticate, async (req: AuthReq
         // Transition to live
         await transitionYouTubeBroadcastToLive(liveVideoId, accessToken);
 
-        logger.info(`[YouTube Transition] ✅ Successfully transitioned ${liveVideoId} to LIVE`);
 
         // Update status in database
         await prisma.broadcastDestination.update({
@@ -631,8 +594,6 @@ router.post('/:id/transition-youtube-to-live', authenticate, async (req: AuthReq
       }
     }
 
-    logger.info(`[YouTube Transition] ========== TRANSITION COMPLETE ==========`);
-    logger.info(`[YouTube Transition] Total: ${results.length}, Successful: ${results.filter(r => r.status === 'success').length}`);
 
     res.json({
       message: 'YouTube transition completed',
@@ -648,11 +609,9 @@ router.post('/:id/transition-youtube-to-live', authenticate, async (req: AuthReq
 router.post('/:id/end', authenticate, async (req: AuthRequest, res) => {
   try {
     // FORCE DELETE: Nuke ALL broadcast destinations IMMEDIATELY - no waiting, no questions
-    logger.info(`[End Broadcast] 💥 FORCE DELETING all broadcast destinations for broadcast ${req.params.id}`);
     const forceDeleteResult = await prisma.broadcastDestination.deleteMany({
       where: { broadcastId: req.params.id },
     });
-    logger.info(`[End Broadcast] ✓ FORCE DELETED ${forceDeleteResult.count} broadcast destinations - database wiped clean`);
 
     const broadcast = await prisma.broadcast.findFirst({
       where: {
@@ -674,7 +633,6 @@ router.post('/:id/end', authenticate, async (req: AuthRequest, res) => {
 
     // Note: broadcast.broadcastDestinations will be empty array since we just deleted them all
     // Keeping this loop for potential future platform-specific cleanup if needed
-    logger.info(`[End Broadcast] Broadcast destinations already force deleted - skipping platform cleanup loop`);
 
     const endedAt = new Date();
     const durationSeconds = broadcast.startedAt
@@ -780,7 +738,6 @@ router.get('/:id/destinations', authenticate, async (req: AuthRequest, res) => {
       logger.warn(`[Get Destinations] Deduplicated ${broadcastDestinations.length} to ${deduplicatedDestinations.length} destinations for broadcast ${req.params.id}`);
     }
 
-    logger.info(`[Get Destinations] Returning ${deduplicatedDestinations.length} destinations for broadcast ${req.params.id}`);
 
     // Decrypt stream keys for media server
     const destinationsForMediaServer = deduplicatedDestinations.map((bd) => ({
@@ -793,12 +750,8 @@ router.get('/:id/destinations', authenticate, async (req: AuthRequest, res) => {
     }));
 
     // CRITICAL LOGGING: Log EXACTLY what we're returning to catch any duplication
-    logger.info(`[Get Destinations] ========== RETURNING TO FRONTEND ==========`);
-    logger.info(`[Get Destinations] Total count: ${destinationsForMediaServer.length}`);
     destinationsForMediaServer.forEach((dest, index) => {
-      logger.info(`[Get Destinations] [${index + 1}/${destinationsForMediaServer.length}] ID: ${dest.id}, Platform: ${dest.platform}, StreamKey: ${dest.streamKey?.substring(0, 8)}...`);
     });
-    logger.info(`[Get Destinations] ========== END RETURN DATA ==========`);
 
     res.json(destinationsForMediaServer);
   } catch (error) {
