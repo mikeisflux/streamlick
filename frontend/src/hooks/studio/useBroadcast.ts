@@ -300,6 +300,11 @@ export function useBroadcast({
       toast.success('Connected to platforms, starting countdown...');
 
       // Step 4: Display 30-second countdown on canvas (stream is already flowing to YouTube)
+      console.error('🎬 ABOUT TO START COUNTDOWN - Compositor state:', {
+        isCompositing: (compositorService as any).isCompositing,
+        frameCount: (compositorService as any).frameCount,
+        outputStream: !!(compositorService as any).outputStream,
+      });
       await compositorService.startCountdown(30);
 
       // Step 5: Transition YouTube broadcasts from "testing" to "live"
