@@ -1612,6 +1612,7 @@ export function StudioCanvas({
   return (
     <div
       ref={containerRef}
+      data-studio-canvas-root
       className="relative group"
       style={{
         width: '100%',

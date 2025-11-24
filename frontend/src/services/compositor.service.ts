@@ -727,9 +727,6 @@ class CompositorService {
     }
 
     this.mediaClipOverlay = null;
-
-    // WYSIWYG FIX: Always clear video from StudioCanvas preview when clearing compositor overlay
-    window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
   }
 
   /**
@@ -753,15 +750,26 @@ class CompositorService {
       videoElement.volume = 1.0; // Set volume to 100% (CRITICAL for audio playback)
       videoElement.autoplay = false;
       videoElement.preload = 'auto'; // FIX FLICKERING: Preload entire video for smooth playback
+      videoElement.playsInline = true; // Required for mobile browsers
+      videoElement.style.position = 'absolute';
+      videoElement.style.top = '0';
+      videoElement.style.left = '0';
+      videoElement.style.width = '100%';
+      videoElement.style.height = '100%';
+      videoElement.style.objectFit = 'cover';
+      videoElement.style.zIndex = '35'; // Match StudioCanvas video clip z-index
+      videoElement.id = 'compositor-video-overlay';
       // Note: crossOrigin removed - not needed for same-origin video files and can cause issues
 
       // CRITICAL FIX: Add timeout for video loading to prevent infinite hang
       const loadingTimeout = setTimeout(() => {
         logger.error(`[Media Clip] Video loading timeout after 10s: ${videoUrl}`);
+        // Remove video element from DOM
+        if (videoElement.parentNode) {
+          videoElement.parentNode.removeChild(videoElement);
+        }
         this.clearMediaClipOverlay();
         audioMixerService.removeStream('intro-video');
-        // WYSIWYG FIX: Clear video from StudioCanvas preview
-        window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
         reject(new Error('Video loading timeout'));
       }, 10000); // 10 second timeout
 
@@ -795,11 +803,15 @@ class CompositorService {
           // Set as media clip overlay AFTER enough data is buffered
           this.setMediaClipOverlay(videoElement);
 
-          // WYSIWYG FIX: Dispatch event to show video in StudioCanvas preview
-          // This ensures user sees exactly what viewers see
-          window.dispatchEvent(new CustomEvent('videoClipUpdated', {
-            detail: { url: videoUrl, name: 'Intro Video' }
-          }));
+          // WYSIWYG FIX: Mount video element to StudioCanvas so both systems use the SAME video
+          // This prevents sync issues between preview and output
+          const studioCanvas = document.querySelector('[data-studio-canvas-root]');
+          if (studioCanvas) {
+            studioCanvas.appendChild(videoElement);
+          } else {
+            // Fallback: append to body if StudioCanvas not found
+            document.body.appendChild(videoElement);
+          }
 
           // Notify that video is starting (for auto-muting participants)
           if (this.onVideoStart) {
@@ -808,12 +820,14 @@ class CompositorService {
 
           videoElement.play().catch((error) => {
             logger.error('Failed to play intro video:', error);
+            // Clean up video element on play error
+            if (videoElement.parentNode) {
+              videoElement.parentNode.removeChild(videoElement);
+            }
             clearTimeout(loadingTimeout); // Clear loading timeout
             this.clearMediaClipOverlay();
             // Clean up audio on error
             audioMixerService.removeStream('intro-video');
-            // Clear StudioCanvas preview
-            window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
             reject(error);
           });
         };
@@ -833,11 +847,12 @@ class CompositorService {
 
       const onEnded = () => {
         clearTimeout(loadingTimeout); // Clear loading timeout
+        // Remove video element from DOM
+        if (videoElement.parentNode) {
+          videoElement.parentNode.removeChild(videoElement);
+        }
         this.clearMediaClipOverlay();
         audioMixerService.removeStream('intro-video');
-
-        // WYSIWYG FIX: Clear video from StudioCanvas preview
-        window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
 
         // Notify that video has ended (for auto-unmuting participants)
         if (this.onVideoEnd) {
@@ -853,10 +868,12 @@ class CompositorService {
           : 'Unknown error';
         logger.error(`Intro video error: ${errorMsg}`, event);
         clearTimeout(loadingTimeout); // Clear loading timeout
+        // Remove video element from DOM
+        if (videoElement.parentNode) {
+          videoElement.parentNode.removeChild(videoElement);
+        }
         this.clearMediaClipOverlay();
         audioMixerService.removeStream('intro-video');
-        // WYSIWYG FIX: Clear video from StudioCanvas preview
-        window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
         reject(new Error(`Video error: ${errorMsg}`));
       };
 
@@ -875,11 +892,12 @@ class CompositorService {
         setTimeout(() => {
           clearTimeout(loadingTimeout); // Clear loading timeout
           videoElement.pause();
+          // Remove video element from DOM
+          if (videoElement.parentNode) {
+            videoElement.parentNode.removeChild(videoElement);
+          }
           this.clearMediaClipOverlay();
           audioMixerService.removeStream('intro-video');
-
-          // WYSIWYG FIX: Clear video from StudioCanvas preview
-          window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
 
           // Notify that video has ended (for auto-unmuting participants)
           if (this.onVideoEnd) {
