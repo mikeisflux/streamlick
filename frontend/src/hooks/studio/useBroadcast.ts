@@ -221,11 +221,15 @@ export function useBroadcast({
       // await compositorService.initialize(participantStreams);
       // compositorService.setLayout({ type: currentLayout });
 
-      // Get canvas stream from StudioCanvas (VIDEO ONLY - canvas.captureStream() doesn't include audio)
-      const canvasVideoStream = canvasStreamService.getOutputStream();
-      if (!canvasVideoStream) {
-        throw new Error('Failed to get canvas stream - StudioCanvas may not be initialized');
-      }
+      // CRITICAL: Wait for canvas stream from StudioCanvas to be ready
+      // The canvas stream is captured AFTER the first frame renders, not during initialization
+      // This ensures we get a stream with actual video data, not blank frames
+      console.error('⏳ Waiting for canvas stream to be ready...');
+      const canvasVideoStream = await canvasStreamService.waitForStream(10000);
+      console.error('✅ Canvas stream is ready!', {
+        streamId: canvasVideoStream.id,
+        videoTracks: canvasVideoStream.getVideoTracks().length,
+      });
 
       // Get audio from the audio mixer
       const audioMixerStream = audioMixerService.getOutputStream();
