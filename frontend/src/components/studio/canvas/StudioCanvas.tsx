@@ -1256,6 +1256,9 @@ export function StudioCanvas({
             canvasStreamService.setOutputStream(canvasStream);
 
             const videoTrack = canvasStream.getVideoTracks()[0];
+
+            // DIAGNOSTIC: Check if the track has actual video dimensions
+            const trackSettings = videoTrack?.getSettings();
             console.log('[StudioCanvas] 📹 Canvas stream captured and registered:', {
               streamId: canvasStream.id,
               videoTracks: canvasStream.getVideoTracks().length,
@@ -1264,6 +1267,11 @@ export function StudioCanvas({
               videoTrackEnabled: videoTrack?.enabled,
               videoTrackReadyState: videoTrack?.readyState,
               videoTrackMuted: videoTrack?.muted,
+              // CRITICAL: Check if track has actual dimensions
+              trackSettings: trackSettings,
+              trackWidth: trackSettings?.width,
+              trackHeight: trackSettings?.height,
+              trackFrameRate: trackSettings?.frameRate,
             });
 
             // Set up mute event handler

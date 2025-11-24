@@ -767,6 +767,33 @@ a=candidate:${candidate.foundation} 1 udp ${candidate.priority} ${candidate.ip} 
 
         console.log('✅ RTMP streaming started successfully');
         win.botLog.push({ message: 'RTMP streaming started', rtmpUrl, layout: layoutConfig });
+
+        // DIAGNOSTIC: Monitor Daily.co streaming stats to see what's being encoded
+        const statsInterval = setInterval(async () => {
+          try {
+            const stats = await win.dailyCall.getNetworkStats();
+            const localStats = stats?.stats?.latest?.videoSend;
+
+            if (localStats) {
+              console.log('📊 Daily RTMP Encoding Stats:', JSON.stringify({
+                timestamp: new Date().toISOString(),
+                videoSend: {
+                  width: localStats.width,
+                  height: localStats.height,
+                  frameRate: localStats.frameRate,
+                  bytesSent: localStats.bytesSent,
+                  packetsSent: localStats.packetsSent,
+                  packetsLost: localStats.packetsLost,
+                },
+              }, null, 2));
+            }
+          } catch (err: any) {
+            console.error('Failed to get Daily stats:', err.message);
+          }
+        }, 5000); // Check every 5 seconds
+
+        // Store interval so we can clear it on stop
+        win.statsMonitorInterval = statsInterval;
       },
       config.rtmpDestinations
     );
@@ -781,6 +808,12 @@ a=candidate:${candidate.foundation} 1 udp ${candidate.priority} ${candidate.ip} 
       const recordingData = await this.page.evaluate(() => {
         const win = window as any;
         console.log('🛑 Stopping bot...');
+
+        // Stop stats monitoring
+        if (win.statsMonitorInterval) {
+          clearInterval(win.statsMonitorInterval);
+          console.log('✅ Stats monitoring stopped');
+        }
 
         // Stop recording if active
         if (win.mediaRecorder && win.mediaRecorder.state === 'recording') {

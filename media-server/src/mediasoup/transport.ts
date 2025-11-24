@@ -78,6 +78,35 @@ export async function createProducer(
     }
   });
 
+  // DIAGNOSTIC: Monitor producer stats to see if it's receiving RTP packets
+  if (kind === 'video') {
+    const statsInterval = setInterval(async () => {
+      if (producer.closed) {
+        clearInterval(statsInterval);
+        return;
+      }
+
+      try {
+        const stats = await producer.getStats();
+        // stats is an array of objects, get the first one
+        const producerStats = Array.from(stats)[0];
+
+        if (producerStats) {
+          logger.info(`📊 VIDEO PRODUCER STATS [${producer.id.substring(0, 8)}]:`, {
+            bytesReceived: producerStats.bytesReceived,
+            packetsReceived: producerStats.packetsReceived,
+            packetsLost: producerStats.packetsLost,
+            framesReceived: producerStats.framesReceived,
+            keyFramesReceived: producerStats.keyFramesReceived,
+            score: producerStats.score,
+          });
+        }
+      } catch (err: any) {
+        logger.error('Failed to get producer stats:', err.message);
+      }
+    }, 5000); // Check every 5 seconds
+  }
+
   return producer;
 }
 
