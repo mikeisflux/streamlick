@@ -71,7 +71,6 @@ class AnalyticsService {
       this.recordHeatmapSnapshot();
     }, 10000);
 
-    console.log('📊 Analytics tracking started');
   }
 
   /**
@@ -94,7 +93,6 @@ class AnalyticsService {
       }
     });
 
-    console.log('📊 Analytics tracking stopped');
   }
 
   /**
@@ -126,7 +124,6 @@ class AnalyticsService {
     this.events.push(event);
     session.events.push(event);
 
-    console.log(`👤 Viewer joined: ${viewerId}`);
   }
 
   /**
@@ -152,7 +149,6 @@ class AnalyticsService {
     this.events.push(event);
     session.events.push(event);
 
-    console.log(`👋 Viewer left: ${viewerId} (watched ${session.duration}s)`);
   }
 
   /**
