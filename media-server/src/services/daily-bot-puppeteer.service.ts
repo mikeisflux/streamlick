@@ -261,6 +261,10 @@ class DailyBotPuppeteerService {
         });
         console.log('✅ Set bot media tracks as Daily input');
 
+        // Start the camera to actually publish the tracks
+        await win.dailyCall.startCamera();
+        console.log('✅ Started camera to publish tracks');
+
         // Explicitly enable camera and microphone to publish the tracks
         await win.dailyCall.setLocalAudio(true);
         await win.dailyCall.setLocalVideo(true);
