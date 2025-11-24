@@ -454,6 +454,13 @@ class CompositorService {
    * Add overlay asset (logo, banner, etc.)
    */
   async addOverlay(overlay: OverlayAsset): Promise<void> {
+    console.log('[Compositor] addOverlay called:', {
+      id: overlay.id,
+      type: overlay.type,
+      url: overlay.url.substring(0, 100),
+      position: overlay.position,
+    });
+
     if (overlay.type === 'background') {
       // Preload background image with 10 second timeout before setting overlay
       const img = new Image();
@@ -466,6 +473,11 @@ class CompositorService {
               // Clean up event listeners to prevent memory leaks
               img.onload = null;
               img.onerror = null;
+              console.log('[Compositor] Background image loaded:', {
+                id: overlay.id,
+                width: img.width,
+                height: img.height,
+              });
               resolve();
             };
             img.onerror = () => {
@@ -491,6 +503,7 @@ class CompositorService {
       }
     } else {
       this.overlays.push(overlay);
+      console.log('[Compositor] Overlay added to array, total overlays:', this.overlays.length);
 
       // Preload overlay image with 10 second timeout
       const img = new Image();
@@ -1807,10 +1820,33 @@ class CompositorService {
   private drawOverlays(): void {
     if (!this.ctx) return;
 
+    // DIAGNOSTIC: Log overlay state every 60 frames
+    if (this.frameCount % 60 === 0) {
+      console.log('[Compositor] Drawing overlays:', {
+        overlayCount: this.overlays.length,
+        overlays: this.overlays.map(o => ({
+          id: o.id,
+          type: o.type,
+          position: o.position,
+          imageLoaded: !!this.overlayImages.get(o.id),
+          imageSize: this.overlayImages.get(o.id) ? {
+            width: this.overlayImages.get(o.id)!.width,
+            height: this.overlayImages.get(o.id)!.height,
+          } : null,
+        })),
+      });
+    }
+
     this.overlays.forEach((overlay) => {
       // Use cached image - no new Image objects created every frame!
       const img = this.overlayImages.get(overlay.id);
-      if (!img) return; // Image not loaded yet
+      if (!img) {
+        // Log missing image every 60 frames
+        if (this.frameCount % 60 === 0) {
+          console.warn(`[Compositor] Overlay image not loaded: ${overlay.id}`);
+        }
+        return; // Image not loaded yet
+      }
 
       const pos = overlay.position || { x: 0, y: 0 };
       const width = overlay.position?.width || img.width;
