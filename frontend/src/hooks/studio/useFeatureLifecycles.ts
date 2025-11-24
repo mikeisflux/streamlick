@@ -39,7 +39,6 @@ export function useCaptions(enabled: boolean, language: string) {
           // Stop the test stream immediately - we just needed to check permissions
           stream.getTracks().forEach(track => track.stop());
 
-          console.log('[AI Captions] Using direct microphone access. For all participants, configure system to route audio playback to mic input.');
 
           // Set up caption callbacks
           captionService.onCaption((caption: Caption) => {
@@ -159,7 +158,6 @@ export function useBackgroundRemoval(
         try {
           // Stop existing background removal if stream changed
           if (streamChanged && backgroundRemovalService.isActive()) {
-            console.log('[Background Removal] Stream changed, restarting with new stream');
             backgroundRemovalService.stop();
           }
 
@@ -180,7 +178,6 @@ export function useBackgroundRemoval(
           }
 
           // Start background removal
-          console.log('[Background Removal] Starting with stream:', localStream.id);
           const outputStream = await backgroundRemovalService.start(localStream, options);
           if (!isMounted) return;
           setProcessedStream(outputStream);
@@ -197,7 +194,6 @@ export function useBackgroundRemoval(
     } else if (!enabled) {
       // Always stop and clear processed stream when disabled
       if (backgroundRemovalService.isActive()) {
-        console.log('[Background Removal] Stopping and restoring original stream');
         backgroundRemovalService.stop();
       }
       setProcessedStream(null);
@@ -205,7 +201,6 @@ export function useBackgroundRemoval(
       // Verify localStream is still valid
       if (localStream) {
         const videoTracks = localStream.getVideoTracks();
-        console.log('[Background Removal] Original stream status:', {
           id: localStream.id,
           videoTracks: videoTracks.length,
           active: videoTracks[0]?.readyState
@@ -257,11 +252,9 @@ export function useVerticalSimulcast(
         try {
           // Stop existing vertical simulcast if stream changed
           if (streamChanged && verticalCompositorService.active()) {
-            console.log('[Vertical Simulcast] Stream changed, restarting with new stream');
             verticalCompositorService.stop();
           }
 
-          console.log('[Vertical Simulcast] Starting with stream:', sourceStream.id);
 
           // Start vertical compositor
           const outputStream = await verticalCompositorService.start(sourceStream, {
@@ -285,7 +278,6 @@ export function useVerticalSimulcast(
       startVerticalSimulcast();
     } else if (!enabled) {
       if (verticalCompositorService.active()) {
-        console.log('[Vertical Simulcast] Stopping');
         verticalCompositorService.stop();
         toast.success('Vertical simulcast stopped');
       }
