@@ -708,17 +708,18 @@ export function StudioCanvas({
         const positions: ParticipantPosition[] = [];
 
         switch (activeLayout) {
-          case 1: // Solo - single participant fills screen (centered at 50% size for solo)
+          case 1: // Solo - centered at 50% (matching backup: width: '50%', height: '50%')
             if (participantCount === 1) {
-              const size = Math.min(canvas.width, canvas.height) * 0.5;
+              const width = canvas.width * 0.5;
+              const height = canvas.height * 0.5;
               positions.push({
-                x: (canvas.width - size) / 2,
-                y: (canvas.height - size) / 2,
-                width: size,
-                height: size
+                x: (canvas.width - width) / 2,
+                y: (canvas.height - height) / 2,
+                width,
+                height
               });
             } else {
-              // Fallback to grid for multiple
+              // Multiple participants in grid
               const cols = Math.ceil(Math.sqrt(participantCount));
               const rows = Math.ceil(participantCount / cols);
               const boxWidth = canvas.width / cols;
@@ -791,33 +792,40 @@ export function StudioCanvas({
             }
             break;
 
-          case 6: // Screen Share - thumbnails on top, screen share below
-            // For now, just layout participants - screen share will be added later
+          case 6: // Screen Share - small thumbnails on top (matching backup: 120px × 90px per tile)
+            // Keep thumbnails small and centered, don't expand to fill width
             {
               const topBarHeight = canvas.height * 0.12;
-              const thumbnailWidth = participantCount > 0 ? canvas.width / participantCount : canvas.width;
+              // Match backup sizes: 120px wide × 90px tall (6.25% × 8.33% of 1920×1080)
+              const thumbnailWidth = canvas.width * 0.0625;  // 120px at 1920px width
+              const thumbnailHeight = canvas.height * 0.0833; // 90px at 1080px height
+
+              // Center thumbnails horizontally
+              const totalWidth = thumbnailWidth * participantCount;
+              const startX = (canvas.width - totalWidth) / 2;
+
               allParticipants.forEach((_, i) => {
                 positions.push({
-                  x: i * thumbnailWidth,
-                  y: 0,
+                  x: startX + i * thumbnailWidth,
+                  y: (topBarHeight - thumbnailHeight) / 2, // Center vertically in top bar
                   width: thumbnailWidth,
-                  height: topBarHeight
+                  height: thumbnailHeight
                 });
               });
             }
             break;
 
-          case 7: // Picture-in-Picture - main + corner overlay
+          case 7: // Picture-in-Picture - main + corner overlay (matching backup: 240px × 180px)
             if (participantCount === 1) {
               positions.push({ x: 0, y: 0, width: canvas.width, height: canvas.height });
             } else {
               // First participant fullscreen
               positions.push({ x: 0, y: 0, width: canvas.width, height: canvas.height });
 
-              // Others in bottom-right corner
-              const pipWidth = 240;
-              const pipHeight = 180;
-              const gap = 10;
+              // Others in bottom-right corner (matching backup: 240px × 180px = 12.5% × 16.67%)
+              const pipWidth = canvas.width * 0.125;   // 240px at 1920px
+              const pipHeight = canvas.height * 0.1667; // 180px at 1080px
+              const gap = canvas.width * 0.0052; // ~10px at 1920px
               for (let i = 1; i < participantCount; i++) {
                 positions.push({
                   x: canvas.width - pipWidth - gap,
@@ -829,9 +837,21 @@ export function StudioCanvas({
             }
             break;
 
-          case 8: // Cinema - wide format
-            {
-              const boxWidth = participantCount > 1 ? canvas.width / 2 : canvas.width;
+          case 8: // Cinema - wide format (matching backup: 160px × 120px when solo)
+            if (participantCount === 1) {
+              // Solo: small box at top center (matching backup: 160px × 120px = 8.33% × 11.11%)
+              const width = canvas.width * 0.0833;   // 160px at 1920px
+              const height = canvas.height * 0.1111;  // 120px at 1080px
+              const padding = canvas.height * 0.0093; // ~10px at 1080px
+              positions.push({
+                x: (canvas.width - width) / 2,
+                y: padding,
+                width,
+                height
+              });
+            } else {
+              // Multiple: side by side
+              const boxWidth = canvas.width / participantCount;
               allParticipants.forEach((_, i) => {
                 positions.push({ x: i * boxWidth, y: 0, width: boxWidth, height: canvas.height });
               });
