@@ -35,7 +35,6 @@ class RecordingService {
       throw new Error('No supported video MIME types found');
     }
 
-    console.log('Starting recording with mime type:', mimeType);
 
     // Create MediaRecorder
     this.mediaRecorder = new MediaRecorder(stream, {
@@ -57,7 +56,6 @@ class RecordingService {
 
     // Handle recording stop
     this.mediaRecorder.onstop = () => {
-      console.log('Recording stopped, chunks:', this.recordedChunks.length);
     };
 
     // Handle errors
@@ -69,7 +67,6 @@ class RecordingService {
     this.mediaRecorder.start(1000);
     this.isRecording = true;
 
-    console.log('Recording started');
   }
 
   /**
@@ -90,14 +87,12 @@ class RecordingService {
       const mimeType = this.mediaRecorder.mimeType;
 
       this.mediaRecorder.onstop = () => {
-        console.log('Recording stopped, creating blob...');
 
         const blob = new Blob(this.recordedChunks, { type: mimeType });
 
         // Clean up MediaRecorder and state
         this.cleanup();
 
-        console.log('Recording blob created:', blob.size, 'bytes');
         resolve(blob);
       };
 
@@ -132,7 +127,6 @@ class RecordingService {
 
     if (this.mediaRecorder.state === 'recording') {
       this.mediaRecorder.pause();
-      console.log('Recording paused');
     }
   }
 
@@ -146,7 +140,6 @@ class RecordingService {
 
     if (this.mediaRecorder.state === 'paused') {
       this.mediaRecorder.resume();
-      console.log('Recording resumed');
     }
   }
 
@@ -205,12 +198,10 @@ class RecordingService {
         createdAt: new Date().toISOString(),
       });
 
-      console.log('Recording metadata saved:', filename);
     } catch (error) {
       console.error('Failed to save recording metadata:', error);
     }
 
-    console.log('Recording download started:', filename);
   }
 
   /**
@@ -238,7 +229,6 @@ class RecordingService {
       throw new Error('Failed to upload recording');
     }
 
-    console.log('Recording uploaded successfully');
   }
 
   /**
