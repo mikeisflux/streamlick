@@ -116,7 +116,6 @@ router.post('/users', async (req: AuthRequest, res: Response) => {
       },
     });
 
-    logger.info(`New user created by admin: ${user.email}`);
 
     res.status(201).json({
       ...user,
@@ -195,7 +194,6 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
       where: { id },
     });
 
-    logger.info(`User deleted by admin: ${id}`);
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
     logger.error('Delete user error:', error);
@@ -279,7 +277,6 @@ router.post('/templates', async (req: AuthRequest, res: Response) => {
       },
     });
 
-    logger.info(`Template created: ${template.id}`);
     res.json(template);
   } catch (error) {
     logger.error('Create template error:', error);
@@ -296,7 +293,6 @@ router.delete('/templates/:id', async (req: AuthRequest, res: Response) => {
       where: { id },
     });
 
-    logger.info(`Template deleted: ${id}`);
     res.json({ message: 'Template deleted successfully' });
   } catch (error) {
     logger.error('Delete template error:', error);
