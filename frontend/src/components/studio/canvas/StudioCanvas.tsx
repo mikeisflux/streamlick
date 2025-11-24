@@ -616,97 +616,14 @@ export function StudioCanvas({
       orientation,
     });
 
-    // Capture canvas stream for media server (30 FPS)
-    // This is the "splitter" - one rendering system that both displays AND streams
-    try {
-      const canvasStream = canvas.captureStream(30);
-      outputStreamRef.current = canvasStream;
-
-      // Make stream available to useBroadcast via canvasStreamService
-      canvasStreamService.setOutputStream(canvasStream);
-
-      const videoTrack = canvasStream.getVideoTracks()[0];
-      console.log('[StudioCanvas] 📹 Canvas stream captured and registered:', {
-        streamId: canvasStream.id,
-        videoTracks: canvasStream.getVideoTracks().length,
-        audioTracks: canvasStream.getAudioTracks().length,
-        videoTrackId: videoTrack?.id,
-        videoTrackEnabled: videoTrack?.enabled,
-        videoTrackReadyState: videoTrack?.readyState,
-        videoTrackMuted: videoTrack?.muted,
-      });
-
-      // CRITICAL: If track is ALREADY muted at creation, fix it immediately
-      if (videoTrack?.muted) {
-        console.error('[StudioCanvas] ⚠️ Canvas track is MUTED at creation! Recreating immediately...');
-        try {
-          const newStream = canvas.captureStream(30);
-          outputStreamRef.current = newStream;
-          canvasStreamService.setOutputStream(newStream);
-
-          const newTrack = newStream.getVideoTracks()[0];
-          console.log('[StudioCanvas] ✅ Recreated stream:', {
-            newTrackId: newTrack?.id,
-            newTrackMuted: newTrack?.muted,
-          });
-
-          // Note: Don't replace mediasoup producer here since broadcast hasn't started yet
-          // The producer will be created with the new stream when broadcast starts
-        } catch (err) {
-          console.error('[StudioCanvas] ❌ Failed to recreate initially muted stream:', err);
-        }
-      }
-
-      // CRITICAL: Monitor track for mute events and fix it
-      // Canvas tracks can spontaneously mute in Chrome, causing black frames
-      if (videoTrack) {
-        videoTrack.onmute = async () => {
-          console.error('[StudioCanvas] ❌ Canvas video track MUTED! This causes black frames.', {
-            trackId: videoTrack.id,
-            enabled: videoTrack.enabled,
-            readyState: videoTrack.readyState,
-          });
-
-          // Try to recreate the stream
-          console.log('[StudioCanvas] 🔄 Attempting to recreate canvas stream...');
-          try {
-            const newStream = canvas.captureStream(30);
-            outputStreamRef.current = newStream;
-            canvasStreamService.setOutputStream(newStream);
-
-            const newTrack = newStream.getVideoTracks()[0];
-            console.log('[StudioCanvas] ✅ Canvas stream recreated:', {
-              newTrackId: newTrack?.id,
-              newTrackMuted: newTrack?.muted,
-            });
-
-            // CRITICAL: Replace the track in the active mediasoup producer
-            // This ensures the media server receives the new unmuted track
-            try {
-              await webrtcService.replaceVideoTrack(newTrack);
-              console.log('[StudioCanvas] ✅ Mediasoup producer track replaced with new canvas track');
-            } catch (replaceErr) {
-              console.error('[StudioCanvas] ❌ Failed to replace mediasoup producer track:', replaceErr);
-            }
-          } catch (err) {
-            console.error('[StudioCanvas] ❌ Failed to recreate canvas stream:', err);
-          }
-        };
-
-        videoTrack.onunmute = () => {
-          console.log('[StudioCanvas] ✅ Canvas video track UNMUTED', { trackId: videoTrack.id });
-        };
-      }
-
-      // TODO: Combine with audio from audioMixerService
-      // For now, the video track is captured - audio will be added separately
-    } catch (error) {
-      console.error('[StudioCanvas] Failed to capture canvas stream:', error);
-    }
+    // CRITICAL: DO NOT capture stream yet - canvas is blank!
+    // Stream will be captured after first frame is rendered
+    // This ensures the stream contains actual video data, not blank frames
 
     // Start rendering loop
     let frameCount = 0;
     let lastFrameTime = performance.now();
+    let streamCaptured = false; // Flag to capture stream after first frame
 
     const render = () => {
       if (!ctx || !canvas) {
@@ -1325,6 +1242,70 @@ export function StudioCanvas({
             hasLogo: !!logoImageRef.current,
             hasAvatar: !!avatarImageRef.current,
           });
+        }
+
+        // CRITICAL: Capture stream AFTER first frame is rendered
+        // This ensures the stream contains actual video data, not blank frames
+        if (frameCount === 1 && !streamCaptured) {
+          streamCaptured = true;
+          console.log('[StudioCanvas] 🎥 Capturing canvas stream AFTER first frame...');
+
+          try {
+            const canvasStream = canvas.captureStream(30);
+            outputStreamRef.current = canvasStream;
+            canvasStreamService.setOutputStream(canvasStream);
+
+            const videoTrack = canvasStream.getVideoTracks()[0];
+            console.log('[StudioCanvas] 📹 Canvas stream captured and registered:', {
+              streamId: canvasStream.id,
+              videoTracks: canvasStream.getVideoTracks().length,
+              audioTracks: canvasStream.getAudioTracks().length,
+              videoTrackId: videoTrack?.id,
+              videoTrackEnabled: videoTrack?.enabled,
+              videoTrackReadyState: videoTrack?.readyState,
+              videoTrackMuted: videoTrack?.muted,
+            });
+
+            // Set up mute event handler
+            if (videoTrack) {
+              videoTrack.onmute = async () => {
+                console.error('[StudioCanvas] ❌ Canvas video track MUTED! This causes black frames.', {
+                  trackId: videoTrack.id,
+                  enabled: videoTrack.enabled,
+                  readyState: videoTrack.readyState,
+                });
+
+                console.log('[StudioCanvas] 🔄 Attempting to recreate canvas stream...');
+                try {
+                  const newStream = canvas.captureStream(30);
+                  outputStreamRef.current = newStream;
+                  canvasStreamService.setOutputStream(newStream);
+
+                  const newTrack = newStream.getVideoTracks()[0];
+                  console.log('[StudioCanvas] ✅ Canvas stream recreated:', {
+                    newTrackId: newTrack?.id,
+                    newTrackMuted: newTrack?.muted,
+                  });
+
+                  // Replace the track in the active mediasoup producer
+                  try {
+                    await webrtcService.replaceVideoTrack(newTrack);
+                    console.log('[StudioCanvas] ✅ Mediasoup producer track replaced with new canvas track');
+                  } catch (replaceErr) {
+                    console.error('[StudioCanvas] ❌ Failed to replace mediasoup producer track:', replaceErr);
+                  }
+                } catch (err) {
+                  console.error('[StudioCanvas] ❌ Failed to recreate canvas stream:', err);
+                }
+              };
+
+              videoTrack.onunmute = () => {
+                console.log('[StudioCanvas] ✅ Canvas video track UNMUTED', { trackId: videoTrack.id });
+              };
+            }
+          } catch (error) {
+            console.error('[StudioCanvas] Failed to capture canvas stream after first frame:', error);
+          }
         }
       }
 
