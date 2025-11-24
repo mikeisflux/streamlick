@@ -1862,6 +1862,19 @@ class CompositorService {
       const audioLevel = this.audioLevels.get(participantId) || 0;
       const isSpeaking = audioLevel > 0.05; // Threshold for detecting speech
 
+      // DIAGNOSTIC: Log audio levels every 60 frames
+      if (this.frameCount % 60 === 0) {
+        console.log('[Compositor] Audio Level Check:', {
+          participantId,
+          audioLevel: audioLevel.toFixed(3),
+          isSpeaking,
+          threshold: 0.05,
+          audioEnabled: participant.audioEnabled,
+          totalAnalyzers: this.audioAnalysers.size,
+          hasAnalyzer: this.audioAnalysers.has(participantId)
+        });
+      }
+
       // Draw pulsating rings when speaking
       if (isSpeaking && participant.audioEnabled) {
         const centerX = x + width / 2;
