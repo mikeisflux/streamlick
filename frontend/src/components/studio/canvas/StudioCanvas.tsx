@@ -1429,7 +1429,10 @@ export function StudioCanvas({
   // Load avatar image
   useEffect(() => {
     const avatarUrl = localStorage.getItem('selectedAvatar');
+    console.log('[StudioCanvas] Loading avatar from localStorage:', avatarUrl);
+
     if (!avatarUrl) {
+      console.warn('[StudioCanvas] No avatar URL in localStorage');
       avatarImageRef.current = null;
       return;
     }
@@ -1438,12 +1441,21 @@ export function StudioCanvas({
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       avatarImageRef.current = img;
-      console.log('[StudioCanvas] Avatar image loaded:', img.width, 'x', img.height);
+      console.log('[StudioCanvas] ✅ Avatar image loaded successfully:', {
+        width: img.width,
+        height: img.height,
+        url: avatarUrl,
+      });
     };
     img.onerror = (err) => {
-      console.error('[StudioCanvas] Failed to load avatar image:', err);
+      console.error('[StudioCanvas] ❌ Failed to load avatar image:', {
+        url: avatarUrl,
+        error: err,
+      });
       avatarImageRef.current = null;
     };
+
+    console.log('[StudioCanvas] Starting avatar image load...');
     img.src = avatarUrl;
   }, []); // Load once on mount
 
