@@ -660,22 +660,37 @@ a=candidate:${candidate.foundation} 1 udp ${candidate.priority} ${candidate.ip} 
   }
 
   async stopBot(): Promise<void> {
+    logger.info('[Puppeteer Bot] Stopping bot...');
 
     if (this.page) {
       await this.page.evaluate(() => {
         const win = window as any;
+        console.log('🛑 Stopping bot...');
+
         if (win.dailyCall) {
+          console.log('Stopping Daily live streaming...');
           win.dailyCall.stopLiveStreaming();
+          console.log('Leaving Daily room...');
           win.dailyCall.leave();
+          console.log('Destroying Daily call...');
           win.dailyCall.destroy();
+          console.log('✅ Daily stopped');
+        } else {
+          console.log('⚠️ No Daily call to stop');
         }
+
         if (win.mediasoupPeerConnection) {
+          console.log('Closing mediasoup peer connection...');
           win.mediasoupPeerConnection.close();
+          console.log('✅ Mediasoup connection closed');
+        } else {
+          console.log('⚠️ No mediasoup connection to close');
         }
       }).catch((err) => logger.warn('[Puppeteer Bot] Error stopping in page:', err));
     }
 
     await this.cleanup();
+    logger.info('[Puppeteer Bot] Bot stopped successfully');
   }
 
   private async cleanup(): Promise<void> {

@@ -439,24 +439,35 @@ export function useBroadcast({
     if (!broadcastId) return false;
 
     try {
+      console.error('🛑 Ending broadcast...', broadcastId);
+
       // Always stop recording if active (auto-recording should be running)
       if (isRecording) {
+        console.error('Stopping recording...');
         await handleStopRecording();
       }
 
       // Stop chat polling
+      console.error('Stopping chat polling...');
       socketService.emit('stop-chat', { broadcastId });
 
       // Stop compositor
+      console.error('Stopping compositor...');
       compositorService.stop();
 
       // Stop RTMP streaming
+      console.error('Sending stop-rtmp to media server...', broadcastId);
       mediaServerSocketService.emit('stop-rtmp', { broadcastId });
+
+      console.error('Calling broadcastService.end...');
       await broadcastService.end(broadcastId);
+
       toast.success('Broadcast ended');
       setIsLive(false);
+      console.error('✅ Broadcast ended successfully');
       return true;
     } catch (error) {
+      console.error('❌ Failed to end broadcast:', error);
       toast.error('Failed to end broadcast');
       return false;
     }
