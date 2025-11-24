@@ -231,7 +231,7 @@ class CompositorService {
     audioMixerService.initialize();
 
     // Create video elements and add audio for each participant
-    logger.info('[Compositor] Processing participants for audio analyzers:', {
+    console.log('[COMPOSITOR INIT] Processing participants for audio analyzers:', {
       participantCount: participants.length,
       participants: participants.map(p => ({
         id: p.id,
@@ -249,7 +249,7 @@ class CompositorService {
       // The audioEnabled flag is checked when rendering animations
       if (participant.stream) {
         const audioTracks = participant.stream.getAudioTracks();
-        logger.info(`[Compositor] Participant ${participant.id} stream has ${audioTracks.length} audio tracks`);
+        console.log(`[AUDIO ANALYZER SETUP] Participant ${participant.id} stream has ${audioTracks.length} audio tracks`);
 
         const audioTrack = audioTracks[0];
         if (audioTrack) {
@@ -258,21 +258,21 @@ class CompositorService {
           // Add to mixer if audio is enabled
           if (participant.audioEnabled) {
             audioMixerService.addStream(participant.id, audioStream);
-            logger.info(`[Compositor] Added participant ${participant.id} to audio mixer`);
+            console.log(`[AUDIO MIXER] Added participant ${participant.id} to audio mixer`);
           }
 
           // Always create audio analyser for visualization (checked at render time)
           try {
             this.createAudioAnalyser(participant.id, audioStream);
-            logger.info(`[Compositor] ✅ Created audio analyser for participant ${participant.id}`);
+            console.log(`[AUDIO ANALYZER SETUP] ✅ Created audio analyser for participant ${participant.id}`);
           } catch (error) {
-            logger.error(`[Compositor] ❌ Failed to create audio analyser for ${participant.id}:`, error);
+            console.error(`[AUDIO ANALYZER SETUP] ❌ Failed to create audio analyser for ${participant.id}:`, error);
           }
         } else {
-          logger.warn(`[Compositor] No audio track found for participant ${participant.id}`);
+          console.warn(`[AUDIO ANALYZER SETUP] ⚠️ No audio track found for participant ${participant.id}`);
         }
       } else {
-        logger.warn(`[Compositor] No stream found for participant ${participant.id}`);
+        console.warn(`[AUDIO ANALYZER SETUP] ⚠️ No stream found for participant ${participant.id}`);
       }
     }
 
@@ -410,9 +410,9 @@ class CompositorService {
       this.audioAnalysers.set(participantId, analyser);
       this.audioLevels.set(participantId, 0);
 
-      logger.info(`Audio analyser created for participant ${participantId}`);
+      console.log(`[AUDIO ANALYZER] Internal analyser created for participant ${participantId}`);
     } catch (error) {
-      logger.error(`Failed to create audio analyser for ${participantId}:`, error);
+      console.error(`[AUDIO ANALYZER] Failed to create internal analyser for ${participantId}:`, error);
     }
   }
 
@@ -1867,12 +1867,13 @@ class CompositorService {
       const audioLevel = this.audioLevels.get(participantId) || 0;
       const isSpeaking = audioLevel > 0.04; // Threshold for detecting speech (lowered for sensitivity)
 
-      // Debug logging
-      if (this.frameCount % 90 === 0 && participant.audioEnabled) {
-        logger.info(`[Compositor Animation] Participant ${participantId}:`, {
+      // Debug logging - always log when participant is showing placeholder
+      if (this.frameCount % 60 === 0) {
+        console.log(`[AUDIO ANIMATION] Participant ${participantId}:`, {
           audioLevel: audioLevel.toFixed(3),
           isSpeaking,
-          audioEnabled: participant.audioEnabled
+          audioEnabled: participant.audioEnabled,
+          willDrawRings: isSpeaking && participant.audioEnabled
         });
       }
 
