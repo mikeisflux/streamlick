@@ -162,16 +162,18 @@ export function StudioCanvas({
   const selectedLayoutRef = useRef(selectedLayout);
   const isSharingScreenRef = useRef(isSharingScreen);
 
+  // Detect if local user is speaking (for voice animations) - use RAW audio before noise gate
+  const isLocalSpeaking = useAudioLevel(rawStream || localStream, audioEnabled);
+  const isLocalSpeakingRef = useRef(isLocalSpeaking);
+
   // Update refs when props change
   useEffect(() => {
     isLocalUserOnStageRef.current = isLocalUserOnStage;
     videoEnabledRef.current = videoEnabled;
     selectedLayoutRef.current = selectedLayout;
     isSharingScreenRef.current = isSharingScreen;
-  }, [isLocalUserOnStage, videoEnabled, selectedLayout, isSharingScreen]);
-
-  // Detect if local user is speaking (for voice animations) - use RAW audio before noise gate
-  const isLocalSpeaking = useAudioLevel(rawStream || localStream, audioEnabled);
+    isLocalSpeakingRef.current = isLocalSpeaking;
+  }, [isLocalUserOnStage, videoEnabled, selectedLayout, isSharingScreen, isLocalSpeaking]);
 
   // Track which remote participants are speaking
   const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
@@ -871,6 +873,32 @@ export function StudioCanvas({
             // Video not ready - draw placeholder
             ctx.fillStyle = '#1a1a1a';
             ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+          }
+
+          // Draw pulsating ring when speaking
+          const isSpeaking = p.type === 'local' ? isLocalSpeakingRef.current : speakingParticipants.has(p.id);
+
+          if (isSpeaking) {
+            // Calculate center of participant box
+            const centerX = pos.x + pos.width / 2;
+            const centerY = pos.y + pos.height / 2;
+            const baseRadius = Math.min(pos.width, pos.height) / 2;
+
+            // Pulsating animation based on time
+            const pulseSpeed = 0.003;
+            const pulseAmount = Math.sin(now * pulseSpeed) * 0.1 + 0.9; // Oscillates between 0.8 and 1.0
+            const radius = baseRadius * pulseAmount;
+
+            // Draw multiple rings for glow effect
+            ctx.save();
+            for (let i = 0; i < 3; i++) {
+              ctx.beginPath();
+              ctx.arc(centerX, centerY, radius + i * 8, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(0, 255, 0, ${0.6 - i * 0.2})`; // Green with decreasing opacity
+              ctx.lineWidth = 4 - i;
+              ctx.stroke();
+            }
+            ctx.restore();
           }
         });
 
