@@ -55,7 +55,6 @@ export async function createRumbleLiveStream(
   streamUrl: string;
 }> {
   try {
-    logger.info('Creating Rumble live stream');
 
     const response = await axios.post(RUMBLE_API_BASE, null, {
       params: {
@@ -100,7 +99,6 @@ export async function startRumbleLiveStream(
   streamId: string
 ): Promise<void> {
   try {
-    logger.info(`Starting Rumble live stream: ${streamId}`);
 
     const response = await axios.post(RUMBLE_API_BASE, null, {
       params: {
@@ -114,7 +112,6 @@ export async function startRumbleLiveStream(
       throw new Error(response.data.error);
     }
 
-    logger.info(`Rumble stream started: ${streamId}`);
   } catch (error: any) {
     logger.error('Error starting Rumble live stream:', error.response?.data || error.message);
     throw new Error(
@@ -131,7 +128,6 @@ export async function stopRumbleLiveStream(
   streamId: string
 ): Promise<void> {
   try {
-    logger.info(`Stopping Rumble live stream: ${streamId}`);
 
     const response = await axios.post(RUMBLE_API_BASE, null, {
       params: {
@@ -145,7 +141,6 @@ export async function stopRumbleLiveStream(
       throw new Error(response.data.error);
     }
 
-    logger.info(`Rumble stream stopped: ${streamId}`);
   } catch (error: any) {
     logger.error('Error stopping Rumble live stream:', error.response?.data || error.message);
     // Don't throw - stopping might fail if already stopped
