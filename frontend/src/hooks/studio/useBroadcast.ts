@@ -169,9 +169,13 @@ export function useBroadcast({
     }
 
     try {
-      // Initialize WebRTC if not already done
+      // Initialize WebRTC device and transport WITHOUT producing individual tracks
+      // (compositor will handle all video/audio)
       if (!webrtcService.getDevice()) {
-        await initializeWebRTC();
+        console.error('🌐 Initializing WebRTC for compositor (no individual tracks)...');
+        await webrtcService.initialize(broadcastId);
+        await webrtcService.createSendTransport();
+        console.error('🌐 WebRTC initialized - ready for compositor tracks');
       }
 
       // Initialize compositor with only LIVE participants (exclude backstage)
