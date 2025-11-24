@@ -155,11 +155,12 @@ class DailyBotPuppeteerService {
       // Get tracks from mediasoup to use as bot's camera/mic
       await this.setupMediasoupTracks(config);
 
-      // Join Daily room
-      await this.joinDailyRoom(config);
+      // IMPORTANT: Set input devices BEFORE joining Daily
+      // This ensures Daily uses our custom tracks from the start
+      await this.setDailyInputTracksBeforeJoin();
 
-      // Set the mediasoup tracks as the bot's camera/mic in Daily
-      await this.setDailyInputTracks();
+      // Join Daily room (will automatically publish the tracks we just set)
+      await this.joinDailyRoom(config);
 
       // Start RTMP streaming
       await this.startRTMPStreaming(config);
@@ -239,13 +240,13 @@ class DailyBotPuppeteerService {
 
   }
 
-  private async setDailyInputTracks(): Promise<void> {
+  private async setDailyInputTracksBeforeJoin(): Promise<void> {
 
     await this.page!.evaluate(async () => {
       const win = window as any;
 
-      if (win.botMediaTracks && win.dailyCall) {
-        console.log('🎥 Setting bot media tracks as Daily input...');
+      if (win.botMediaTracks) {
+        console.log('🎥 Creating Daily call object and setting input devices...');
         console.log('Track info:', JSON.stringify({
           videoId: win.botMediaTracks.video.id,
           videoEnabled: win.botMediaTracks.video.enabled,
@@ -255,34 +256,30 @@ class DailyBotPuppeteerService {
           audioReadyState: win.botMediaTracks.audio.readyState,
         }));
 
+        // Create Daily call object
+        console.log('Creating Daily call object...');
+        win.dailyCall = win.DailyIframe.createCallObject();
+
+        // Set up event handlers
+        win.dailyCall.on('joined-meeting', () => {
+          console.log('✅ Joined Daily meeting');
+          win.botLog.push({ message: 'Joined Daily meeting' });
+        });
+
+        win.dailyCall.on('error', (error: any) => {
+          console.error('❌ Daily error event:', JSON.stringify(error, null, 2));
+          win.botLog.push({ message: 'Daily error', error });
+        });
+
+        // Set input devices BEFORE joining
+        // Daily will automatically use these tracks when we join
         await win.dailyCall.setInputDevicesAsync({
           videoSource: win.botMediaTracks.video,
           audioSource: win.botMediaTracks.audio,
         });
-        console.log('✅ Set bot media tracks as Daily input');
-
-        // Start the camera to actually publish the tracks
-        await win.dailyCall.startCamera();
-        console.log('✅ Started camera to publish tracks');
-
-        // Explicitly enable camera and microphone to publish the tracks
-        await win.dailyCall.setLocalAudio(true);
-        await win.dailyCall.setLocalVideo(true);
-        console.log('✅ Enabled local audio and video publishing');
-
-        // Wait a moment for Daily to process the tracks
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // Verify the tracks are set and publishing
-        const localParticipant = win.dailyCall.participants().local;
-        console.log('📊 Local participant after setting tracks:', JSON.stringify({
-          session_id: localParticipant.session_id,
-          video: localParticipant.video,
-          audio: localParticipant.audio,
-          tracks: localParticipant.tracks,
-        }));
+        console.log('✅ Set bot media tracks as Daily input (tracks will be published on join)');
       } else {
-        console.warn('⚠️ Bot media tracks or Daily call not available');
+        console.warn('⚠️ Bot media tracks not available');
       }
     });
 
@@ -502,27 +499,28 @@ a=candidate:${candidate.foundation} 1 udp ${candidate.priority} ${candidate.ip} 
           const win = window as any;
 
           try {
-            // Create Daily call object
-            console.log('Creating Daily call object...');
-            win.dailyCall = win.DailyIframe.createCallObject();
+            // Daily call object should already be created with input devices set
+            if (!win.dailyCall) {
+              throw new Error('Daily call object not found - should have been created earlier');
+            }
 
-            win.dailyCall.on('joined-meeting', () => {
-              console.log('✅ Joined Daily meeting');
-              win.botLog.push({ message: 'Joined Daily meeting' });
-            });
-
-            win.dailyCall.on('error', (error: any) => {
-              console.error('❌ Daily error event:', JSON.stringify(error, null, 2));
-              win.botLog.push({ message: 'Daily error', error });
-            });
-
-            // Join the room
+            // Join the room (tracks will be published automatically)
             console.log('Attempting to join Daily room...', { roomUrl });
             const joinResponse = await win.dailyCall.join({ url: roomUrl, token });
-            console.log('✅ Successfully joined Daily room', joinResponse);
+            console.log('✅ Successfully joined Daily room', JSON.stringify(joinResponse));
 
-            // Bot joins as a participant without camera/mic
-            // The actual user's media comes from their browser joining Daily directly
+            // Wait a moment for tracks to start publishing
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Verify the local participant has active tracks
+            const localParticipant = win.dailyCall.participants().local;
+            console.log('📊 Local participant after join:', JSON.stringify({
+              session_id: localParticipant.session_id,
+              user_name: localParticipant.user_name,
+              video: localParticipant.video,
+              audio: localParticipant.audio,
+              tracks: localParticipant.tracks,
+            }));
 
             return { success: true };
           } catch (err: any) {
