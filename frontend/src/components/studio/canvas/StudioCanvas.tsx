@@ -583,7 +583,19 @@ export function StudioCanvas({
 
         // TODO: Draw background image
 
-        // TODO: Draw participants based on layout
+        // Draw local participant video if available
+        if (mainVideoRef.current && isLocalUserOnStage && videoEnabled) {
+          const video = mainVideoRef.current;
+          if (video.readyState >= 2) {
+            // Video is ready - draw it
+            // For now, draw full canvas - will add layouts later
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          }
+        }
+
+        // TODO: Draw screen share
+
+        // TODO: Draw remote participants
 
         // TODO: Draw overlay (full-screen)
 
