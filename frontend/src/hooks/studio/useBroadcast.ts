@@ -230,15 +230,29 @@ export function useBroadcast({
       const compositeVideoTrack = compositeStream.getVideoTracks()[0];
       const compositeAudioTrack = compositeStream.getAudioTracks()[0];
 
+      console.error('🎬 Canvas Stream Info:', {
+        hasVideoTrack: !!compositeVideoTrack,
+        hasAudioTrack: !!compositeAudioTrack,
+        videoTrackEnabled: compositeVideoTrack?.enabled,
+        videoTrackReadyState: compositeVideoTrack?.readyState,
+        videoTrackId: compositeVideoTrack?.id,
+      });
+
       let compositeVideoProducerId: string | undefined;
       let compositeAudioProducerId: string | undefined;
 
       if (compositeVideoTrack) {
         compositeVideoProducerId = await webrtcService.produceMedia(compositeVideoTrack);
+        console.error('✅ Canvas video producer created:', compositeVideoProducerId);
+      } else {
+        console.error('❌ No canvas video track available!');
       }
 
       if (compositeAudioTrack) {
         compositeAudioProducerId = await webrtcService.produceMedia(compositeAudioTrack);
+        console.error('✅ Canvas audio producer created:', compositeAudioProducerId);
+      } else {
+        console.error('❌ No canvas audio track available!');
       }
 
       // Prepare destination settings for API (using only valid, connected destinations)
@@ -302,14 +316,25 @@ export function useBroadcast({
         streamKey: bd.streamKey,
       }));
 
-      mediaServerSocketService.emit('start-rtmp', {
+      const rtmpPayload = {
         broadcastId,
         destinations: destinationsToStream,
         compositeProducers: {
           videoProducerId: compositeVideoProducerId,
           audioProducerId: compositeAudioProducerId,
         },
+      };
+
+      console.error('📡 Sending start-rtmp to media server:', {
+        broadcastId,
+        destinationCount: destinationsToStream.length,
+        videoProducerId: compositeVideoProducerId,
+        audioProducerId: compositeAudioProducerId,
+        hasVideoProducer: !!compositeVideoProducerId,
+        hasAudioProducer: !!compositeAudioProducerId,
       });
+
+      mediaServerSocketService.emit('start-rtmp', rtmpPayload);
 
       toast.success('Connected to platforms, starting countdown...');
 
