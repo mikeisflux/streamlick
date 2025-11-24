@@ -1,16 +1,74 @@
-import { memo } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 import { Caption } from '../../../services/caption.service';
 
-// Memoized Caption Overlay Component to prevent re-renders
+// Memoized Caption Overlay Component - Draggable and constrained to canvas
 export const CaptionOverlay = memo(({ caption }: { caption: Caption | null }) => {
+  const [position, setPosition] = useState({ x: 50, y: 85 }); // Start at bottom center (%)
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartPos = useRef({ x: 0, y: 0 });
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!overlayRef.current || !overlayRef.current.parentElement) return;
+
+      const parent = overlayRef.current.parentElement;
+      const parentRect = parent.getBoundingClientRect();
+
+      // Calculate new position in percentage
+      const deltaX = e.clientX - dragStartPos.current.x;
+      const deltaY = e.clientY - dragStartPos.current.y;
+
+      const newX = position.x + (deltaX / parentRect.width) * 100;
+      const newY = position.y + (deltaY / parentRect.height) * 100;
+
+      // Constrain to parent bounds (0-100%)
+      const constrainedX = Math.max(10, Math.min(90, newX));
+      const constrainedY = Math.max(5, Math.min(95, newY));
+
+      setPosition({ x: constrainedX, y: constrainedY });
+      dragStartPos.current = { x: e.clientX, y: e.clientY };
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, position]);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    dragStartPos.current = { x: e.clientX, y: e.clientY };
+  };
+
   if (!caption) return null;
 
   return (
-    <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 max-w-4xl px-4 pointer-events-none">
+    <div
+      ref={overlayRef}
+      className="absolute max-w-4xl px-4 cursor-move select-none"
+      style={{
+        left: `${position.x}%`,
+        top: `${position.y}%`,
+        transform: 'translate(-50%, -50%)',
+        zIndex: 40,
+      }}
+      onMouseDown={handleMouseDown}
+    >
       <div
         className={`px-6 py-3 rounded-lg text-center transition-opacity duration-300 ${
           caption.isFinal ? 'bg-black/90' : 'bg-black/70'
-        }`}
+        } ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         style={{
           backdropFilter: 'blur(8px)',
           boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
