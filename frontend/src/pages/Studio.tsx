@@ -322,6 +322,22 @@ export function Studio() {
 
     console.log('[Studio] Initializing compositor in preview mode');
 
+    // DIAGNOSTIC: Check what tracks are in localStream
+    console.log('[Studio] LocalStream track analysis:', {
+      hasStream: !!localStream,
+      audioTracks: localStream?.getAudioTracks().length || 0,
+      videoTracks: localStream?.getVideoTracks().length || 0,
+      audioTrackDetails: localStream?.getAudioTracks().map(t => ({
+        id: t.id,
+        label: t.label,
+        enabled: t.enabled,
+        muted: t.muted,
+        readyState: t.readyState
+      })) || [],
+      audioEnabled,
+      videoEnabled
+    });
+
     // Build participant list - local user + on-stage remote participants
     const participantStreams = [
       {
