@@ -131,8 +131,7 @@ s=Video Stream
 c=IN IP4 ${ffmpegIp}
 t=0 0
 m=video ${ffmpegVideoPort} RTP/AVP ${videoPayloadType}
-a=rtpmap:${videoPayloadType} H264/90000
-a=fmtp:${videoPayloadType} level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f
+a=rtpmap:${videoPayloadType} VP8/90000
 a=recvonly`;
 
     const audioSdp = `v=0
@@ -177,7 +176,7 @@ a=recvonly`;
       .addOptions([
         '-loglevel', 'verbose',
       ])
-      // Video input - SDP file describes the H.264 stream on port 40200
+      // Video input - SDP file describes the VP8 stream on port 40200
       .input(videoSdpPath)
       .inputOptions([
         '-protocol_whitelist', 'file,rtp,udp',
@@ -189,9 +188,17 @@ a=recvonly`;
         '-protocol_whitelist', 'file,rtp,udp',
         '-f', 'sdp',
       ])
-      // Video encoding - copy H.264 stream (no transcoding needed!)
-      // Browser now produces H.264 directly, which RTMP supports natively
-      .videoCodec('copy')
+      // Video encoding - transcode VP8 to H.264 for RTMP
+      .videoCodec('libx264')
+      .outputOptions([
+        '-preset', 'veryfast',
+        '-tune', 'zerolatency',
+        '-b:v', '4500k',
+        '-maxrate', '4500k',
+        '-bufsize', '9000k',
+        '-pix_fmt', 'yuv420p',
+        '-g', '60',
+      ])
       // Audio encoding - transcode Opus to AAC for RTMP
       .audioCodec('aac')
       .outputOptions([

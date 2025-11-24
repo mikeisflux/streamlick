@@ -164,32 +164,10 @@ class WebRTCService {
       throw new Error('Send transport not created');
     }
 
-    if (!this.device) {
-      throw new Error('Device not initialized');
-    }
-
-    // Force H.264 codec for video to avoid transcoding on media server
-    // H.264 is natively supported by RTMP, so FFmpeg can use -vcodec copy
-    let codecOptions: any = { track };
-
-    if (track.kind === 'video') {
-      // Find H.264 codec in device capabilities
-      const h264Codec = this.device.rtpCapabilities.codecs?.find(
-        codec => codec.mimeType.toLowerCase() === 'video/h264'
-      );
-
-      if (h264Codec) {
-        codecOptions.codec = h264Codec;
-        logger.info('Using H.264 codec for video (avoids transcoding)');
-      } else {
-        logger.warn('H.264 codec not available, falling back to default (VP8)');
-      }
-    }
-
-    const producer = await this.sendTransport.produce(codecOptions);
+    const producer = await this.sendTransport.produce({ track });
     this.producers.set(producer.id, producer);
 
-    logger.info('Producer created:', producer.id, producer.kind, producer.rtpParameters.codecs[0]?.mimeType);
+    logger.info('Producer created:', producer.id, producer.kind);
     return producer.id;
   }
 
