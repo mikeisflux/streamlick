@@ -1597,20 +1597,26 @@ class CompositorService {
     this.ctx.fillStyle = '#1a1a1a';
     this.ctx.fillRect(x, y, width, height);
 
-    // CRITICAL FIX: Check if video is paused (every 60 frames = ~2 seconds at 30fps)
+    // DIAGNOSTIC: Log video element state every 60 frames
     if (this.frameCount % 60 === 0) {
+      console.log('[Compositor] Participant video state:', {
+        participantId,
+        videoEnabled: participant.videoEnabled,
+        readyState: video.readyState,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        paused: video.paused,
+        ended: video.ended,
+        currentTime: video.currentTime,
+        srcObject: !!video.srcObject,
+        srcObjectActive: video.srcObject ? (video.srcObject as MediaStream).active : false,
+        videoTracks: video.srcObject ? (video.srcObject as MediaStream).getVideoTracks().length : 0,
+      });
+
+      // CRITICAL FIX: If video is paused but should be playing, force play
       if (video.paused && video.srcObject) {
-        // Only warn once per participant to reduce console spam
-        if (!this.pausedVideoWarnings.has(participant.id)) {
-          logger.warn(`[Compositor] Video for ${participant.name} is paused. Attempting to resume...`);
-          this.pausedVideoWarnings.add(participant.id);
-        }
-        video.play().catch(err => {
-          // Silently retry - this is common with autoplay policies
-        });
-      } else if (!video.paused && this.pausedVideoWarnings.has(participant.id)) {
-        // Video resumed successfully, clear the warning flag
-        this.pausedVideoWarnings.delete(participant.id);
+        console.warn('[Compositor] Video element is PAUSED! Forcing play...');
+        video.play().catch(err => console.error('[Compositor] Failed to play paused video:', err));
       }
     }
 
@@ -1637,6 +1643,16 @@ class CompositorService {
 
       this.ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
     } else {
+      // DIAGNOSTIC: Log why video is not being drawn every 60 frames
+      if (this.frameCount % 60 === 0) {
+        console.log('[Compositor] Video not drawn - showing placeholder:', {
+          participantId,
+          videoEnabled: participant.videoEnabled,
+          readyState: video.readyState,
+          reason: !participant.videoEnabled ? 'video disabled' : 'readyState < 2',
+        });
+      }
+
       // Video disabled - show placeholder with audio visualization
       this.ctx.fillStyle = '#333333';
       this.ctx.fillRect(x, y, width, height);
