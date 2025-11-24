@@ -624,31 +624,47 @@ export function StudioCanvas({
           ctx.drawImage(backgroundImageRef.current, 0, 0, canvas.width, canvas.height);
         }
 
-        // Draw local participant video or avatar
-        if (mainVideoRef.current && isLocalUserOnStageRef.current) {
-          // DIAGNOSTIC: Log video state every 60 frames
-          if (frameCount % 60 === 0) {
-            console.log('[StudioCanvas] Local participant state:', {
-              isLocalUserOnStage: isLocalUserOnStageRef.current,
-              videoEnabled: videoEnabledRef.current,
-              videoExists: !!mainVideoRef.current,
-              videoReadyState: mainVideoRef.current?.readyState,
-              videoWidth: mainVideoRef.current?.videoWidth,
-              videoHeight: mainVideoRef.current?.videoHeight,
+        // Collect all on-stage participants (local + remote)
+        const onStageRemote = Array.from(remoteParticipants.values()).filter(
+          (p) => p.role !== 'backstage' && p.id !== 'screen-share'
+        );
+
+        const allParticipants: Array<{ type: 'local' | 'remote', id: string, video?: HTMLVideoElement, participant?: any, videoEnabled: boolean }> = [];
+
+        // Add local participant if on stage
+        if (isLocalUserOnStageRef.current && mainVideoRef.current) {
+          allParticipants.push({
+            type: 'local',
+            id: 'local',
+            video: mainVideoRef.current,
+            videoEnabled: videoEnabledRef.current
+          });
+        }
+
+        // Add remote participants
+        onStageRemote.forEach((participant) => {
+          const video = remoteVideoElementsRef.current.get(participant.id);
+          if (video) {
+            allParticipants.push({
+              type: 'remote',
+              id: participant.id,
+              video,
+              participant,
+              videoEnabled: participant.videoEnabled
             });
           }
+        });
 
-          if (videoEnabledRef.current) {
-            // Draw video
-            const video = mainVideoRef.current;
-            if (video.readyState >= 2) {
-              // For now, draw full canvas - will add layouts later
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            }
-          } else {
+        // Draw participants based on layout
+        if (allParticipants.length === 0) {
+          // No participants on stage - just show background
+        } else if (allParticipants.length === 1) {
+          // Single participant - draw full screen
+          const p = allParticipants[0];
+
+          if (p.type === 'local' && !p.videoEnabled) {
             // Draw avatar when camera is off
             if (avatarImageRef.current) {
-              // Draw circular avatar in center
               const size = Math.min(canvas.width, canvas.height) * 0.3;
               const x = (canvas.width - size) / 2;
               const y = (canvas.height - size) / 2;
@@ -661,12 +677,59 @@ export function StudioCanvas({
               ctx.drawImage(avatarImageRef.current, x, y, size, size);
               ctx.restore();
             }
+          } else if (p.video && p.video.readyState >= 2) {
+            // Draw video full screen
+            ctx.drawImage(p.video, 0, 0, canvas.width, canvas.height);
           }
+        } else {
+          // Multiple participants - use 2-column grid layout
+          const cols = 2;
+          const rows = Math.ceil(allParticipants.length / cols);
+          const boxWidth = canvas.width / cols;
+          const boxHeight = canvas.height / rows;
+
+          allParticipants.forEach((p, index) => {
+            const col = index % cols;
+            const row = Math.floor(index / cols);
+            const x = col * boxWidth;
+            const y = row * boxHeight;
+
+            if (p.type === 'local' && !p.videoEnabled) {
+              // Draw avatar for local user when camera off
+              if (avatarImageRef.current) {
+                const size = Math.min(boxWidth, boxHeight) * 0.6;
+                const avatarX = x + (boxWidth - size) / 2;
+                const avatarY = y + (boxHeight - size) / 2;
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(avatarX + size / 2, avatarY + size / 2, size / 2, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.clip();
+                ctx.drawImage(avatarImageRef.current, avatarX, avatarY, size, size);
+                ctx.restore();
+              }
+            } else if (p.video && p.video.readyState >= 2) {
+              // Draw video
+              ctx.drawImage(p.video, x, y, boxWidth, boxHeight);
+            } else {
+              // Video not ready - draw placeholder
+              ctx.fillStyle = '#1a1a1a';
+              ctx.fillRect(x, y, boxWidth, boxHeight);
+            }
+          });
         }
 
-        // TODO: Draw screen share
-
-        // TODO: Draw remote participants
+        // DIAGNOSTIC: Log video state every 60 frames
+        if (frameCount % 60 === 0) {
+          console.log('[StudioCanvas] Participant state:', {
+            totalParticipants: allParticipants.length,
+            localOnStage: isLocalUserOnStageRef.current,
+            localVideoEnabled: videoEnabledRef.current,
+            localVideoReady: mainVideoRef.current?.readyState,
+            remoteCount: onStageRemote.length,
+          });
+        }
 
         // Draw overlay image (full-screen, on top of participants)
         if (overlayImageRef.current) {
@@ -775,6 +838,69 @@ export function StudioCanvas({
       screenShareVideoRef.current.play().catch(err => console.error('[StudioCanvas] Failed to play screen share:', err));
     }
   }, [screenShareStream]);
+
+  // Manage video elements for remote participants
+  useEffect(() => {
+    const currentParticipantIds = Array.from(remoteParticipants.keys());
+    const existingVideoIds = Array.from(remoteVideoElementsRef.current.keys());
+
+    console.log('[StudioCanvas] Managing remote participant videos:', {
+      currentParticipants: currentParticipantIds,
+      existingVideos: existingVideoIds,
+    });
+
+    // Create video elements for new participants
+    currentParticipantIds.forEach((participantId) => {
+      const participant = remoteParticipants.get(participantId);
+      if (!participant || !participant.stream) return;
+
+      // Skip backstage and screen-share participants
+      if (participant.role === 'backstage' || participantId === 'screen-share') return;
+
+      // Skip if video element already exists
+      if (remoteVideoElementsRef.current.has(participantId)) {
+        // Update srcObject if stream changed
+        const existingVideo = remoteVideoElementsRef.current.get(participantId);
+        if (existingVideo && existingVideo.srcObject !== participant.stream) {
+          console.log('[StudioCanvas] Updating stream for participant:', participantId);
+          existingVideo.srcObject = participant.stream;
+          existingVideo.play().catch(err => console.error('[StudioCanvas] Failed to play remote video:', participantId, err));
+        }
+        return;
+      }
+
+      // Create new video element
+      console.log('[StudioCanvas] Creating video element for participant:', participantId);
+      const video = document.createElement('video');
+      video.autoplay = true;
+      video.playsInline = true;
+      video.muted = true; // Muted because audio is handled by audioMixerService
+      video.srcObject = participant.stream;
+      video.play().catch(err => console.error('[StudioCanvas] Failed to play remote video:', participantId, err));
+
+      remoteVideoElementsRef.current.set(participantId, video);
+    });
+
+    // Remove video elements for participants that left
+    existingVideoIds.forEach((videoId) => {
+      if (!currentParticipantIds.includes(videoId)) {
+        console.log('[StudioCanvas] Removing video element for participant:', videoId);
+        const video = remoteVideoElementsRef.current.get(videoId);
+        if (video) {
+          video.srcObject = null;
+        }
+        remoteVideoElementsRef.current.delete(videoId);
+      }
+    });
+
+    // Cleanup on unmount
+    return () => {
+      remoteVideoElementsRef.current.forEach((video) => {
+        video.srcObject = null;
+      });
+      remoteVideoElementsRef.current.clear();
+    };
+  }, [remoteParticipants]);
 
   // Load background image
   useEffect(() => {
