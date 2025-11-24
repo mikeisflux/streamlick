@@ -70,10 +70,8 @@ class MediaServerPool {
         lastHealthCheck: new Date(),
       });
 
-      logger.info(`Registered media server: ${serverId} (${url})`);
     });
 
-    logger.info(`Media server pool initialized with ${this.servers.size} server(s)`);
   }
 
   /**
@@ -94,7 +92,6 @@ class MediaServerPool {
       lastHealthCheck: new Date(),
     });
 
-    logger.info(`Added new media server: ${serverId} (${url})`);
     return serverId;
   }
 
@@ -104,7 +101,6 @@ class MediaServerPool {
   removeServer(serverId: string): boolean {
     const removed = this.servers.delete(serverId);
     if (removed) {
-      logger.info(`Removed media server: ${serverId}`);
     }
     return removed;
   }
@@ -127,7 +123,6 @@ class MediaServerPool {
     healthyServers.sort((a, b) => a.activeStreams - b.activeStreams);
 
     const selected = healthyServers[0];
-    logger.info(
       `Selected ${selected.id} for new stream (${selected.activeStreams} active streams)`
     );
 
@@ -181,7 +176,6 @@ class MediaServerPool {
       await this.checkAllServers();
     }, 10000); // 10 seconds
 
-    logger.info('Started media server health checks (10s interval)');
   }
 
   /**
@@ -191,7 +185,6 @@ class MediaServerPool {
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
       this.healthCheckInterval = null;
-      logger.info('Stopped media server health checks');
     }
   }
 
