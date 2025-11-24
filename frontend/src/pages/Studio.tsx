@@ -321,7 +321,7 @@ export function Studio() {
     const participantStreams = [
       {
         id: 'local',
-        name: 'You',
+        name: user?.name || 'You',
         stream: localStream,
         isLocal: true,
         audioEnabled,
@@ -371,7 +371,7 @@ export function Studio() {
     return () => {
       // No cleanup needed - compositor.initialize() handles cleanup internally
     };
-  }, [localStream, remoteParticipants, audioEnabled, videoEnabled, isLive, selectedLayout]);
+  }, [localStream, remoteParticipants, audioEnabled, videoEnabled, isLive, selectedLayout, user]);
 
   // Update compositor broadcasting status when going live/offline
   useEffect(() => {
