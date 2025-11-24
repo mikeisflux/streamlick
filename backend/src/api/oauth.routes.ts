@@ -32,18 +32,9 @@ export async function getOAuthCredentials(platform: string): Promise<{
       },
     });
 
-    logger.info(`[OAuth] Retrieved ${settings.length} settings for ${platform}:`,
-      settings.map(s => ({ key: s.key, hasValue: !!s.value, isEncrypted: s.isEncrypted })));
-
     const dbClientId = settings.find(s => s.key === `${platform}_client_id`)?.value;
     const dbClientSecret = settings.find(s => s.key === `${platform}_client_secret`)?.value;
     const dbRedirectUri = settings.find(s => s.key === `${platform}_redirect_uri`)?.value;
-
-    logger.info(`[OAuth] Raw database values for ${platform}:`, {
-      clientId: dbClientId ? `${dbClientId.substring(0, 10)}...` : 'missing',
-      clientSecret: dbClientSecret ? 'present' : 'missing',
-      redirectUri: dbRedirectUri ? dbRedirectUri.substring(0, 30) : 'missing'
-    });
 
     // Decrypt all encrypted values
     let clientId = dbClientId;
@@ -53,7 +44,6 @@ export async function getOAuthCredentials(platform: string): Promise<{
     if (clientId) {
       try {
         clientId = decrypt(clientId);
-        logger.info(`[OAuth] Successfully decrypted clientId for ${platform}`);
       } catch (err) {
         logger.warn(`[OAuth] Failed to decrypt clientId for ${platform}, using as-is:`, err);
       }
@@ -62,7 +52,6 @@ export async function getOAuthCredentials(platform: string): Promise<{
     if (clientSecret) {
       try {
         clientSecret = decrypt(clientSecret);
-        logger.info(`[OAuth] Successfully decrypted clientSecret for ${platform}`);
       } catch (err) {
         logger.warn(`[OAuth] Failed to decrypt clientSecret for ${platform}, using as-is:`, err);
       }
@@ -71,7 +60,6 @@ export async function getOAuthCredentials(platform: string): Promise<{
     if (redirectUri) {
       try {
         redirectUri = decrypt(redirectUri);
-        logger.info(`[OAuth] Successfully decrypted redirectUri for ${platform}: ${redirectUri}`);
       } catch (err) {
         logger.warn(`[OAuth] Failed to decrypt redirectUri for ${platform}, using as-is:`, err);
       }
@@ -79,19 +67,11 @@ export async function getOAuthCredentials(platform: string): Promise<{
 
     // Use database values if available, otherwise fall back to environment variables
     const envPrefix = platform.toUpperCase();
-    const finalCreds = {
+    return {
       clientId: clientId || process.env[`${envPrefix}_CLIENT_ID`] || '',
       clientSecret: clientSecret || process.env[`${envPrefix}_CLIENT_SECRET`] || '',
       redirectUri: redirectUri || process.env[`${envPrefix}_REDIRECT_URI`] || '',
     };
-
-    logger.info(`[OAuth] Final credentials for ${platform}:`, {
-      clientId: finalCreds.clientId ? `${finalCreds.clientId.substring(0, 10)}...` : 'MISSING',
-      clientSecret: finalCreds.clientSecret ? 'present' : 'MISSING',
-      redirectUri: finalCreds.redirectUri || 'MISSING'
-    });
-
-    return finalCreds;
   } catch (error) {
     logger.error(`Error getting OAuth credentials for ${platform}:`, error);
     // Fall back to environment variables
@@ -228,20 +208,13 @@ router.get('/youtube/authorize', authenticate, async (req, res) => {
 
     // CRITICAL FIX: Generate cryptographically random state for CSRF protection
     const state = await generateOAuthState(userId, 'youtube');
-
-    logger.info(`[OAuth] YouTube authorize request from user ${userId}`);
     const credentials = await getOAuthCredentials('youtube');
 
-    logger.info(`[OAuth] Checking YouTube credentials - clientId: ${!!credentials.clientId}, redirectUri: ${!!credentials.redirectUri}`);
-
     if (!credentials.clientId || !credentials.redirectUri) {
-      logger.error(`[OAuth] YouTube OAuth validation failed - clientId: ${credentials.clientId ? 'present' : 'MISSING'}, redirectUri: ${credentials.redirectUri || 'MISSING'}`);
       return res.status(400).json({
         error: 'YouTube OAuth not configured. Please configure in Admin Settings.'
       });
     }
-
-    logger.info(`[OAuth] YouTube credentials validated successfully`);
 
     const params = new URLSearchParams({
       client_id: credentials.clientId,
@@ -321,8 +294,6 @@ router.get('/youtube/callback', async (req, res) => {
       },
     });
 
-    logger.info(`YouTube OAuth completed for user ${userId}`);
-
     // Redirect to settings page
     res.redirect(`${process.env.FRONTEND_URL}/oauth-success?success=youtube`);
   } catch (error) {
@@ -341,12 +312,9 @@ router.get('/facebook/authorize', authenticate, async (req, res) => {
     const userId = req.user!.userId;
     // CRITICAL FIX: Generate cryptographically random state for CSRF protection
     const state = await generateOAuthState(userId, 'facebook');
-
-    logger.info(`[OAuth] Facebook authorize request from user ${userId}`);
     const credentials = await getOAuthCredentials('facebook');
 
     if (!credentials.clientId || !credentials.redirectUri) {
-      logger.error('[OAuth] Facebook OAuth not configured');
       return res.status(400).json({
         error: 'Facebook OAuth not configured. Please configure in Admin Settings.'
       });
@@ -360,11 +328,6 @@ router.get('/facebook/authorize', authenticate, async (req, res) => {
     });
 
     const authUrl = `${FACEBOOK_AUTH_URL}?${params.toString()}`;
-    logger.info('[OAuth] Facebook auth URL generated:', {
-      redirectUri: credentials.redirectUri,
-      scopes: FACEBOOK_SCOPES,
-      authUrlLength: authUrl.length
-    });
     res.json({ url: authUrl });
   } catch (error) {
     logger.error('Facebook authorize error:', error);
@@ -375,9 +338,6 @@ router.get('/facebook/authorize', authenticate, async (req, res) => {
 // Step 2: Facebook OAuth Callback
 router.get('/facebook/callback', async (req, res) => {
   try {
-    // Log all query parameters to debug
-    logger.info('[OAuth] Facebook callback received with query params:', req.query);
-
     const { code, state, error, error_reason, error_description } = req.query;
 
     // Check if Facebook returned an error
@@ -387,8 +347,7 @@ router.get('/facebook/callback', async (req, res) => {
     }
 
     if (!code || !state) {
-      logger.error('[OAuth] Missing code or state in callback. Query params:', req.query);
-      return res.status(400).json({ error: 'Missing code or state', receivedParams: Object.keys(req.query) });
+      return res.status(400).json({ error: 'Missing code or state' });
     }
 
     // CRITICAL FIX: Verify state token to prevent CSRF attacks
@@ -470,7 +429,6 @@ router.get('/facebook/callback', async (req, res) => {
       },
     });
 
-    logger.info(`Facebook OAuth completed for user ${userId}`);
     res.redirect(`${process.env.FRONTEND_URL}/oauth-success?success=facebook`);
   } catch (error) {
     logger.error('Facebook OAuth callback error:', error);
@@ -581,7 +539,6 @@ router.get('/twitch/callback', async (req, res) => {
       },
     });
 
-    logger.info(`Twitch OAuth completed for user ${userId}`);
     res.redirect(`${process.env.FRONTEND_URL}/oauth-success?success=twitch`);
   } catch (error) {
     logger.error('Twitch OAuth callback error:', error);
@@ -628,8 +585,6 @@ router.get('/x/authorize', authenticate, async (req, res) => {
         expiresAt,
       },
     });
-
-    logger.info(`[OAuth] Generated PKCE for X/Twitter user ${userId}`);
 
     const params = new URLSearchParams({
       response_type: 'code',
@@ -678,7 +633,6 @@ router.get('/x/callback', async (req, res) => {
     });
 
     if (!pkceRecord) {
-      logger.error(`[OAuth] PKCE record not found or expired for user ${userId}`);
       return res.redirect(`${process.env.FRONTEND_URL}/oauth-success?error=x&reason=pkce_expired`);
     }
 
@@ -689,8 +643,6 @@ router.get('/x/callback', async (req, res) => {
     await prisma.oAuthPKCE.delete({
       where: { id: pkceRecord.id },
     });
-
-    logger.info(`[OAuth] Retrieved and deleted PKCE for user ${userId}`);
 
     const credentials = await getOAuthCredentials('x');
 
@@ -739,7 +691,6 @@ router.get('/x/callback', async (req, res) => {
       },
     });
 
-    logger.info(`X OAuth completed for user ${userId}`);
     res.redirect(`${process.env.FRONTEND_URL}/oauth-success?success=x`);
   } catch (error) {
     logger.error('X OAuth callback error:', error);
@@ -801,7 +752,6 @@ router.post('/rumble/setup', authenticate, async (req, res) => {
       },
     });
 
-    logger.info(`Rumble setup completed for user ${userId}`);
     res.json({ success: true, message: 'Rumble connected successfully' });
   } catch (error: any) {
     logger.error('Rumble setup error:', error);
@@ -905,7 +855,6 @@ router.get('/linkedin/callback', async (req, res) => {
       },
     });
 
-    logger.info(`LinkedIn OAuth completed for user ${userId}`);
     res.redirect(`${process.env.FRONTEND_URL}/oauth-success?success=linkedin`);
   } catch (error: any) {
     logger.error('LinkedIn OAuth callback error:', error);
@@ -926,15 +875,12 @@ router.post('/rumble/setup', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'API key and channel URL are required' });
     }
 
-    logger.info(`[Rumble] Setup request from user ${userId}`);
-
     // Import Rumble service functions
     const { validateRumbleApiKey, getRumbleChannelInfo } = await import('../services/rumble.service');
 
     // Validate API key
     const isValid = await validateRumbleApiKey(apiKey);
     if (!isValid) {
-      logger.warn(`[Rumble] Invalid API key for user ${userId}`);
       return res.status(400).json({ error: 'Invalid Rumble API key. Please check your key and try again.' });
     }
 
@@ -943,7 +889,6 @@ router.post('/rumble/setup', authenticate, async (req, res) => {
     try {
       channelInfo = await getRumbleChannelInfo(apiKey);
     } catch (error: any) {
-      logger.error(`[Rumble] Failed to get channel info for user ${userId}:`, error.message);
       // Continue anyway, use provided channel URL
       channelInfo = {
         channelId: 'unknown',
@@ -972,8 +917,6 @@ router.post('/rumble/setup', authenticate, async (req, res) => {
           isActive: true,
         },
       });
-
-      logger.info(`[Rumble] Updated destination for user ${userId}: ${channelInfo.channelName}`);
     } else {
       // Create new destination
       await prisma.destination.create({
@@ -988,8 +931,6 @@ router.post('/rumble/setup', authenticate, async (req, res) => {
           isActive: true,
         },
       });
-
-      logger.info(`[Rumble] Created new destination for user ${userId}: ${channelInfo.channelName}`);
     }
 
     res.json({
@@ -1036,13 +977,11 @@ router.delete('/disconnect/:destinationId', authenticate, async (req, res) => {
             params: { token: accessToken },
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
           });
-          logger.info(`YouTube token revoked for destination ${destinationId}`);
         } else if (destination.platform === 'facebook') {
           // Facebook revocation endpoint
           await axios.delete(`https://graph.facebook.com/v24.0/me/permissions`, {
             params: { access_token: accessToken }
           });
-          logger.info(`Facebook token revoked for destination ${destinationId}`);
         } else if (destination.platform === 'twitch') {
           // Twitch revocation endpoint
           const credentials = await getOAuthCredentials('twitch');
@@ -1052,7 +991,6 @@ router.delete('/disconnect/:destinationId', authenticate, async (req, res) => {
               token: accessToken
             }
           });
-          logger.info(`Twitch token revoked for destination ${destinationId}`);
         } else if (destination.platform === 'x') {
           // X/Twitter revocation endpoint
           const credentials = await getOAuthCredentials('x');
@@ -1062,7 +1000,6 @@ router.delete('/disconnect/:destinationId', authenticate, async (req, res) => {
           }, {
             headers: { 'Content-Type': 'application/json' }
           });
-          logger.info(`X token revoked for destination ${destinationId}`);
         }
         // LinkedIn and Rumble don't have standard revocation endpoints
       } catch (revokeError: any) {
@@ -1076,7 +1013,6 @@ router.delete('/disconnect/:destinationId', authenticate, async (req, res) => {
       where: { id: destinationId },
     });
 
-    logger.info(`OAuth disconnected: ${destination.platform} for user ${userId}`);
     res.json({ message: 'Disconnected successfully' });
   } catch (error) {
     logger.error('OAuth disconnect error:', error);
