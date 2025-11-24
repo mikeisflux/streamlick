@@ -93,7 +93,6 @@ export class ChatModerationService {
         },
       });
 
-      logger.info(`User ${username} banned from ${platform} chat in broadcast ${broadcastId}`);
 
       return action as ModerationAction;
     } catch (error) {
@@ -152,7 +151,6 @@ export class ChatModerationService {
 
       this.timeoutTimers.set(timeoutKey, timer);
 
-      logger.info(`User ${username} timed out for ${duration}s on ${platform} chat in broadcast ${broadcastId}`);
 
       return action as ModerationAction;
     } catch (error) {
@@ -203,7 +201,6 @@ export class ChatModerationService {
       }
       this.activeTimeouts.delete(timeoutKey);
 
-      logger.info(`User ${username} unbanned from ${platform} chat in broadcast ${broadcastId}`);
     } catch (error) {
       logger.error('Unban user error:', error);
       throw error;
@@ -248,7 +245,6 @@ export class ChatModerationService {
         }
       }
 
-      logger.info(`User ${username} banned cross-platform in broadcast ${broadcastId} (${actions.length} platforms)`);
 
       return actions;
     } catch (error) {
@@ -433,7 +429,6 @@ export class ChatModerationService {
           },
         }
       );
-      logger.info(`YouTube user ${userId} banned successfully`);
     } catch (error: any) {
       logger.error('YouTube ban error:', error.response?.data || error.message);
       throw new Error(`Failed to ban user on YouTube: ${error.response?.data?.error?.message || error.message}`);
@@ -466,7 +461,6 @@ export class ChatModerationService {
           },
         }
       );
-      logger.info(`YouTube user ${userId} timed out for ${duration}s`);
     } catch (error: any) {
       logger.error('YouTube timeout error:', error.response?.data || error.message);
       throw new Error(`Failed to timeout user on YouTube: ${error.response?.data?.error?.message || error.message}`);
@@ -499,7 +493,6 @@ export class ChatModerationService {
             id: ban.id,
           },
         });
-        logger.info(`YouTube user ${userId} unbanned successfully`);
       }
     } catch (error: any) {
       logger.error('YouTube unban error:', error.response?.data || error.message);
@@ -534,7 +527,6 @@ export class ChatModerationService {
           },
         }
       );
-      logger.info(`Twitch user ${username} banned successfully`);
     } catch (error: any) {
       logger.error('Twitch ban error:', error.response?.data || error.message);
       throw new Error(`Failed to ban user on Twitch: ${error.response?.data?.message || error.message}`);
@@ -569,7 +561,6 @@ export class ChatModerationService {
           },
         }
       );
-      logger.info(`Twitch user ${username} timed out for ${duration}s`);
     } catch (error: any) {
       logger.error('Twitch timeout error:', error.response?.data || error.message);
       throw new Error(`Failed to timeout user on Twitch: ${error.response?.data?.message || error.message}`);
@@ -595,7 +586,6 @@ export class ChatModerationService {
           user_id: username,
         },
       });
-      logger.info(`Twitch user ${username} unbanned successfully`);
     } catch (error: any) {
       logger.error('Twitch unban error:', error.response?.data || error.message);
       throw new Error(`Failed to unban user on Twitch: ${error.response?.data?.message || error.message}`);
@@ -618,7 +608,6 @@ export class ChatModerationService {
           },
         }
       );
-      logger.info(`Facebook user ${userId} banned successfully`);
     } catch (error: any) {
       logger.error('Facebook ban error:', error.response?.data || error.message);
       throw new Error(`Failed to ban user on Facebook: ${error.response?.data?.error?.message || error.message}`);
@@ -638,7 +627,6 @@ export class ChatModerationService {
           user: userId,
         },
       });
-      logger.info(`Facebook user ${userId} unbanned successfully`);
     } catch (error: any) {
       logger.error('Facebook unban error:', error.response?.data || error.message);
       throw new Error(`Failed to unban user on Facebook: ${error.response?.data?.error?.message || error.message}`);
@@ -709,7 +697,6 @@ export class ChatModerationService {
         this.activeTimeouts.delete(timeoutKey);
         this.timeoutTimers.delete(timeoutKey);
 
-        logger.info(`Timeout expired for ${username} on ${platform} in broadcast ${broadcastId}`);
       }
     } catch (error) {
       logger.error('Handle timeout expired error:', error);
@@ -760,7 +747,6 @@ export class ChatModerationService {
     this.timeoutTimers.clear();
     this.activeTimeouts.clear();
 
-    logger.info('Chat moderation service cleaned up');
   }
 }
 
