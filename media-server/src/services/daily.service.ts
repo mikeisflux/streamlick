@@ -42,12 +42,9 @@ class DailyMediaServerService {
    */
   async initialize(config: DailyMediaServerConfig): Promise<void> {
     try {
-      logger.info(`[Daily Media Server] Initializing for broadcast ${config.broadcastId}`);
-      logger.info(`[Daily Media Server] Backend API URL: ${config.apiBaseUrl}`);
 
       // Step 1: Create Daily room via backend API
       const url = `${config.apiBaseUrl}/api/daily/broadcasts/${config.broadcastId}/room`;
-      logger.info(`[Daily Media Server] Creating room via: ${url}`);
 
       // Get media server secret for authentication
       const mediaServerSecret = process.env.MEDIA_SERVER_SECRET || 'streamlick-media-server-secret';
@@ -68,14 +65,12 @@ class DailyMediaServerService {
       this.roomName = room.name;
       this.token = token;
 
-      logger.info(`[Daily Media Server] Room created: ${this.roomName}`);
 
       // Step 2: SKIP creating Daily call object
       // The media server only orchestrates via REST API, it doesn't join the room.
       // Daily's RTMP streaming works server-side without needing a WebRTC client.
       // The backend API will handle starting/stopping streams via Daily's REST API.
 
-      logger.info('[Daily Media Server] Initialization complete (REST API mode - no WebRTC client)');
     } catch (error: any) {
       logger.error('[Daily Media Server] Failed to initialize:', {
         message: error.message,
@@ -100,12 +95,10 @@ class DailyMediaServerService {
 
     this.callObject
       .on('joined-meeting', () => {
-        logger.info('[Daily Media Server] Successfully joined Daily room');
         this.isConnected = true;
         this.reconnectAttempts = 0;
       })
       .on('left-meeting', () => {
-        logger.info('[Daily Media Server] Left Daily room');
         this.isConnected = false;
       })
       .on('error', (event) => {
@@ -115,10 +108,8 @@ class DailyMediaServerService {
         }
       })
       .on('live-streaming-started', (event) => {
-        logger.info('[Daily Media Server] Live streaming started:', event);
       })
       .on('live-streaming-stopped', (event) => {
-        logger.info('[Daily Media Server] Live streaming stopped:', event);
       })
       .on('live-streaming-error', (event) => {
         logger.error('[Daily Media Server] Live streaming error:', event);
@@ -162,7 +153,6 @@ class DailyMediaServerService {
     try {
       const url = `https://${this.roomName.split('-')[0]}.daily.co/${this.roomName}`;
 
-      logger.info(`[Daily Media Server] Joining room: ${url}`);
 
       await this.callObject.join({
         url,
@@ -170,7 +160,6 @@ class DailyMediaServerService {
         userName: 'Media Server',
       });
 
-      logger.info('[Daily Media Server] Successfully joined room');
     } catch (error: any) {
       logger.error('[Daily Media Server] Failed to join room:', error.message);
       throw error;
@@ -194,7 +183,6 @@ class DailyMediaServerService {
     this.videoProducer = videoProducer;
     this.audioProducer = audioProducer;
 
-    logger.info('[Daily Media Server] Media streams stored (will use REST API for streaming)');
 
     // NOTE: Server-side Daily doesn't support direct RTP input.
     // Instead, we'll use the backend REST API to start RTMP streaming.
@@ -215,7 +203,6 @@ class DailyMediaServerService {
     destinations: DailyDestination[]
   ): Promise<void> {
     try {
-      logger.info(`[Daily Media Server] Starting RTMP streaming for ${destinations.length} destination(s)`);
 
       // Get media server secret for authentication
       const mediaServerSecret = process.env.MEDIA_SERVER_SECRET || 'streamlick-media-server-secret';
@@ -238,7 +225,6 @@ class DailyMediaServerService {
         }
       );
 
-      logger.info('[Daily Media Server] RTMP streaming started via Daily');
     } catch (error: any) {
       logger.error('[Daily Media Server] Failed to start streaming:', {
         message: error.message,
@@ -256,7 +242,6 @@ class DailyMediaServerService {
    */
   async stopStreaming(apiBaseUrl: string, broadcastId: string): Promise<void> {
     try {
-      logger.info('[Daily Media Server] Stopping RTMP streaming');
 
       // Get media server secret for authentication
       const mediaServerSecret = process.env.MEDIA_SERVER_SECRET || 'streamlick-media-server-secret';
@@ -273,7 +258,6 @@ class DailyMediaServerService {
         }
       );
 
-      logger.info('[Daily Media Server] RTMP streaming stopped');
     } catch (error: any) {
       logger.error('[Daily Media Server] Failed to stop streaming:', error.message);
       throw error;
@@ -286,7 +270,6 @@ class DailyMediaServerService {
   async destroy(): Promise<void> {
     try {
       if (this.callObject && this.isConnected) {
-        logger.info('[Daily Media Server] Leaving room and destroying');
         await this.callObject.leave();
         this.callObject.destroy();
       }
@@ -299,7 +282,6 @@ class DailyMediaServerService {
       this.audioProducer = null;
       this.reconnectAttempts = 0;
 
-      logger.info('[Daily Media Server] Destroyed successfully');
     } catch (error: any) {
       logger.error('[Daily Media Server] Failed to destroy:', error.message);
       throw error;
