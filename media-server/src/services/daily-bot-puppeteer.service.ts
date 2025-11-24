@@ -26,6 +26,23 @@ class DailyBotPuppeteerService {
 
   async startBot(config: PuppeteerBotConfig): Promise<void> {
     try {
+      // LOG: Debug consumer parameters
+      logger.info('[Puppeteer Bot] Starting bot with config:', {
+        broadcastId: config.broadcastId,
+        videoConsumer: {
+          id: config.videoConsumer.id,
+          kind: config.videoConsumer.kind,
+          codecMimeType: config.videoConsumer.rtpParameters?.codecs?.[0]?.mimeType,
+        },
+        audioConsumer: {
+          id: config.audioConsumer.id,
+          kind: config.audioConsumer.kind,
+          codecMimeType: config.audioConsumer.rtpParameters?.codecs?.[0]?.mimeType,
+          codecPayloadType: config.audioConsumer.rtpParameters?.codecs?.[0]?.payloadType,
+          codecClockRate: config.audioConsumer.rtpParameters?.codecs?.[0]?.clockRate,
+          codecChannels: config.audioConsumer.rtpParameters?.codecs?.[0]?.channels,
+        },
+      });
 
       // Launch Puppeteer with WebRTC enabled
       this.browser = await puppeteer.launch({
@@ -315,12 +332,21 @@ class DailyBotPuppeteerService {
         await pc.setLocalDescription(offer);
         console.log('[Bot] Created offer, set as local description');
 
+        // Log the SDP answer we're about to set
+        console.log('[Bot] About to set remote SDP answer:', answerSdp);
+
         // Set remote description from mediasoup (constructed SDP answer)
-        await pc.setRemoteDescription({
-          type: 'answer',
-          sdp: answerSdp,
-        });
-        console.log('[Bot] Set mediasoup SDP as remote description');
+        try {
+          await pc.setRemoteDescription({
+            type: 'answer',
+            sdp: answerSdp,
+          });
+          console.log('[Bot] ✅ Successfully set mediasoup SDP as remote description');
+        } catch (error: any) {
+          console.error('[Bot] ❌ Failed to set remote description:', error.message);
+          console.error('[Bot] SDP that failed:', answerSdp);
+          throw error;
+        }
 
         // Wait for tracks to arrive (with 10 second timeout)
         await Promise.race([
@@ -357,12 +383,27 @@ class DailyBotPuppeteerService {
     const videoCodec = videoConsumerParams.rtpParameters.codecs[0];
     const audioCodec = audioConsumerParams.rtpParameters.codecs[0];
 
+    // LOG: Debug audio codec parameters
+    logger.info('[Puppeteer Bot] Building SDP with audio codec:', {
+      mimeType: audioCodec.mimeType,
+      payloadType: audioCodec.payloadType,
+      clockRate: audioCodec.clockRate,
+      channels: audioCodec.channels,
+      parameters: audioCodec.parameters,
+      rtcpFeedback: audioCodec.rtcpFeedback,
+    });
+
     // Get SSRCs
     const videoSsrc = videoConsumerParams.rtpParameters.encodings?.[0]?.ssrc || 1111;
     const audioSsrc = audioConsumerParams.rtpParameters.encodings?.[0]?.ssrc || 2222;
 
+    logger.info('[Puppeteer Bot] Building SDP with SSRCs:', {
+      videoSsrc,
+      audioSsrc,
+    });
+
     // Build SDP answer
-    return `v=0
+    const sdp = `v=0
 o=- 0 0 IN IP4 127.0.0.1
 s=mediasoup
 t=0 0
@@ -394,6 +435,9 @@ a=ssrc:${audioSsrc} cname:mediasoup
 a=ssrc:${audioSsrc} msid:mediasoup audio
 a=candidate:${candidate.foundation} 1 udp ${candidate.priority} ${candidate.ip} ${candidate.port} typ ${candidate.type}
 `;
+
+    logger.info('[Puppeteer Bot] Generated SDP answer:', sdp);
+    return sdp;
   }
 
   private async joinDailyRoom(config: PuppeteerBotConfig): Promise<void> {
