@@ -231,12 +231,25 @@ class CompositorService {
     audioMixerService.initialize();
 
     // Create video elements and add audio for each participant
+    console.log('[Compositor] Processing participants, count:', participants.length);
     for (const participant of participants) {
+      console.log('[Compositor] Processing participant:', {
+        id: participant.id,
+        audioEnabled: participant.audioEnabled,
+        hasStream: !!participant.stream,
+        streamId: participant.stream?.id
+      });
       await this.addParticipant(participant);
 
       // Add participant audio to mixer and create audio analyser for visualization
       if (participant.audioEnabled && participant.stream) {
+        console.log('[Compositor] Participant has audio enabled and stream, getting audio track...');
         const audioTrack = participant.stream.getAudioTracks()[0];
+        console.log('[Compositor] Audio track:', audioTrack ? {
+          id: audioTrack.id,
+          enabled: audioTrack.enabled,
+          readyState: audioTrack.readyState
+        } : 'NO AUDIO TRACK');
         if (audioTrack) {
           const audioStream = new MediaStream([audioTrack]);
           audioMixerService.addStream(participant.id, audioStream);
@@ -244,6 +257,8 @@ class CompositorService {
           // Create audio analyser for pulsating visualization when camera is off
           this.createAudioAnalyser(participant.id, audioStream);
         }
+      } else {
+        console.log('[Compositor] Skipping audio setup - audioEnabled:', participant.audioEnabled, 'hasStream:', !!participant.stream);
       }
     }
 
@@ -1249,6 +1264,7 @@ class CompositorService {
         }
 
         // Update audio levels for pulsating avatar animations
+        console.log('[Compositor] About to call updateAudioLevels, analyzers:', this.audioAnalysers.size);
         this.updateAudioLevels();
 
         this.drawParticipants();
