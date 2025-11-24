@@ -62,8 +62,6 @@ class DailyBotService {
    */
   async joinRoom(config: DailyBotConfig): Promise<void> {
     try {
-      logger.info('[Daily Bot] Creating call object for room:', config.roomUrl);
-      logger.info('[Daily Bot] Environment check:', {
         hasWindow: typeof window !== 'undefined',
         hasDocument: typeof document !== 'undefined',
         hasNavigator: typeof navigator !== 'undefined',
@@ -84,13 +82,11 @@ class DailyBotService {
       this.setupEventListeners();
 
       // Join the room
-      logger.info('[Daily Bot] Joining room with token...');
       await this.callObject.join({
         url: config.roomUrl,
         token: config.token,
       });
 
-      logger.info('[Daily Bot] ✅ Successfully joined Daily room');
     } catch (error: any) {
       logger.error('[Daily Bot] Failed to join room:', {
         error: error.message,
@@ -105,23 +101,18 @@ class DailyBotService {
    */
   private setupEventListeners(): void {
     this.callObject.on('joined-meeting', (event: any) => {
-      logger.info('[Daily Bot] Event: joined-meeting', event);
     });
 
     this.callObject.on('participant-joined', (event: any) => {
-      logger.info('[Daily Bot] Event: participant-joined', event?.participant?.user_name);
     });
 
     this.callObject.on('participant-left', (event: any) => {
-      logger.info('[Daily Bot] Event: participant-left', event?.participant?.user_name);
     });
 
     this.callObject.on('live-streaming-started', (event: any) => {
-      logger.info('[Daily Bot] Event: live-streaming-started', event);
     });
 
     this.callObject.on('live-streaming-stopped', (event: any) => {
-      logger.info('[Daily Bot] Event: live-streaming-stopped', event);
     });
 
     this.callObject.on('live-streaming-error', (event: any) => {
@@ -133,7 +124,6 @@ class DailyBotService {
     });
 
     this.callObject.on('left-meeting', (event: any) => {
-      logger.info('[Daily Bot] Event: left-meeting', event);
     });
   }
 
@@ -145,7 +135,6 @@ class DailyBotService {
    */
   async setCustomTracks(videoTrack: any, audioTrack: any): Promise<void> {
     try {
-      logger.info('[Daily Bot] Setting custom video and audio tracks...', {
         videoTrackId: videoTrack?.id,
         audioTrackId: audioTrack?.id,
       });
@@ -159,7 +148,6 @@ class DailyBotService {
         audioSource: audioTrack,
       });
 
-      logger.info('[Daily Bot] ✅ Custom tracks set successfully');
     } catch (error: any) {
       logger.error('[Daily Bot] Failed to set custom tracks:', {
         error: error.message,
@@ -178,7 +166,6 @@ class DailyBotService {
         throw new Error('Call object not initialized - must join room first');
       }
 
-      logger.info(`[Daily Bot] Starting live streaming to ${destinations.length} destination(s)...`);
 
       // Format endpoints for Daily API
       const rtmpUrls = destinations.map(dest => `${dest.rtmpUrl}/${dest.streamKey}`);
@@ -200,7 +187,6 @@ class DailyBotService {
         }
       }
 
-      logger.info('[Daily Bot] ✅ Live streaming started successfully');
     } catch (error: any) {
       logger.error('[Daily Bot] Failed to start live streaming:', {
         error: error.message,
@@ -220,9 +206,7 @@ class DailyBotService {
         return;
       }
 
-      logger.info('[Daily Bot] Stopping live streaming...');
       await this.callObject.stopLiveStreaming();
-      logger.info('[Daily Bot] ✅ Live streaming stopped');
     } catch (error: any) {
       logger.error('[Daily Bot] Failed to stop live streaming:', {
         error: error.message,
@@ -242,14 +226,12 @@ class DailyBotService {
         return;
       }
 
-      logger.info('[Daily Bot] Leaving room...');
       await this.callObject.leave();
       await this.callObject.destroy();
 
       this.callObject = null;
       this.broadcastId = null;
 
-      logger.info('[Daily Bot] ✅ Left room and cleaned up');
     } catch (error: any) {
       logger.error('[Daily Bot] Failed to leave room:', {
         error: error.message,
