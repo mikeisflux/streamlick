@@ -35,6 +35,46 @@ class RecordingService {
       throw new Error('No supported video MIME types found');
     }
 
+    // DIAGNOSTICS: Check stream state
+    const videoTracks = stream.getVideoTracks();
+    const audioTracks = stream.getAudioTracks();
+    console.log('🔴 [Recording] Starting recording with stream:', {
+      streamId: stream.id,
+      streamActive: stream.active,
+      videoTracks: videoTracks.length,
+      audioTracks: audioTracks.length,
+      mimeType,
+    });
+
+    if (videoTracks.length > 0) {
+      const videoTrack = videoTracks[0];
+      const settings = videoTrack.getSettings();
+      console.log('📹 [Recording] Video track state:', {
+        id: videoTrack.id,
+        label: videoTrack.label,
+        enabled: videoTrack.enabled,
+        muted: videoTrack.muted,
+        readyState: videoTrack.readyState,
+        width: settings.width,
+        height: settings.height,
+        frameRate: settings.frameRate,
+      });
+    } else {
+      console.error('❌ [Recording] NO VIDEO TRACK IN STREAM!');
+    }
+
+    if (audioTracks.length > 0) {
+      const audioTrack = audioTracks[0];
+      console.log('🎤 [Recording] Audio track state:', {
+        id: audioTrack.id,
+        label: audioTrack.label,
+        enabled: audioTrack.enabled,
+        muted: audioTrack.muted,
+        readyState: audioTrack.readyState,
+      });
+    } else {
+      console.warn('⚠️ [Recording] No audio track in stream');
+    }
 
     // Create MediaRecorder
     this.mediaRecorder = new MediaRecorder(stream, {
@@ -51,11 +91,16 @@ class RecordingService {
     this.mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
         this.recordedChunks.push(event.data);
+        console.log(`📦 [Recording] Received chunk ${this.recordedChunks.length}: ${event.data.size} bytes`);
+      } else {
+        console.warn('⚠️ [Recording] Received empty chunk');
       }
     };
 
     // Handle recording stop
     this.mediaRecorder.onstop = () => {
+      const totalSize = this.recordedChunks.reduce((sum, chunk) => sum + chunk.size, 0);
+      console.log(`⏹️ [Recording] Stopped. Total chunks: ${this.recordedChunks.length}, Total size: ${totalSize} bytes`);
     };
 
     // Handle errors

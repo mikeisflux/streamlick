@@ -9,6 +9,8 @@
 import puppeteer, { Browser, Page } from 'puppeteer';
 import logger from '../utils/logger';
 import { types as mediasoupTypes } from 'mediasoup';
+import * as fs from 'fs';
+import * as path from 'path';
 
 interface PuppeteerBotConfig {
   roomUrl: string;
@@ -253,6 +255,46 @@ class DailyBotPuppeteerService {
         }));
 
         console.log('✅ Displaying mediasoup video in page');
+      }
+
+      // SERVER-SIDE RECORDING: Record what the bot receives from mediasoup
+      // This helps diagnose if the issue is before or after the bot
+      try {
+        const recordStream = new MediaStream([videoTrack, audioTrack]);
+        const recorder = new (window as any).MediaRecorder(recordStream, {
+          mimeType: 'video/webm;codecs=vp8,opus',
+          videoBitsPerSecond: 3000000, // 3 Mbps
+        });
+
+        win.recordingChunks = [];
+
+        recorder.ondataavailable = (event: any) => {
+          if (event.data && event.data.size > 0) {
+            // Convert Blob to ArrayBuffer to pass to Node.js
+            event.data.arrayBuffer().then((buffer: ArrayBuffer) => {
+              win.recordingChunks.push(Array.from(new Uint8Array(buffer)));
+            });
+          }
+        };
+
+        recorder.onstop = () => {
+          console.log('⏹️ Recording stopped. Total chunks:', win.recordingChunks.length);
+          win.recordingStopped = true;
+        };
+
+        recorder.start(1000); // Capture in 1-second chunks
+        console.log('🔴 RECORDING STARTED - Bot is now recording what it receives from mediasoup');
+
+        // Stop recording after 30 seconds (shorter for quicker testing)
+        setTimeout(() => {
+          if (recorder.state === 'recording') {
+            recorder.stop();
+          }
+        }, 30000);
+
+        win.mediaRecorder = recorder; // Store for manual control
+      } catch (err: any) {
+        console.error('❌ Failed to start recording:', err.message);
       }
 
       console.log('✅ Bot media tracks set up with REAL composite stream from StudioCanvas');
@@ -728,9 +770,17 @@ a=candidate:${candidate.foundation} 1 udp ${candidate.priority} ${candidate.ip} 
     logger.info('[Puppeteer Bot] Stopping bot...');
 
     if (this.page) {
-      await this.page.evaluate(() => {
+      // Stop recording and get chunks before closing
+      const recordingData = await this.page.evaluate(() => {
         const win = window as any;
         console.log('🛑 Stopping bot...');
+
+        // Stop recording if active
+        if (win.mediaRecorder && win.mediaRecorder.state === 'recording') {
+          console.log('Stopping recording...');
+          win.mediaRecorder.stop();
+          // Wait a bit for onstop to fire
+        }
 
         if (win.dailyCall) {
           console.log('Stopping Daily live streaming...');
@@ -751,7 +801,37 @@ a=candidate:${candidate.foundation} 1 udp ${candidate.priority} ${candidate.ip} 
         } else {
           console.log('⚠️ No mediasoup connection to close');
         }
-      }).catch((err) => logger.warn('[Puppeteer Bot] Error stopping in page:', err));
+
+        return win.recordingChunks || [];
+      }).catch((err) => {
+        logger.warn('[Puppeteer Bot] Error stopping in page:', err);
+        return [];
+      });
+
+      // Save recording to disk if we have data
+      if (recordingData && recordingData.length > 0) {
+        try {
+          // Convert array of arrays back to Buffer
+          const buffers = recordingData.map((chunk: number[]) => Buffer.from(chunk));
+          const videoBuffer = Buffer.concat(buffers);
+
+          const filename = `bot-recording-${Date.now()}.webm`;
+          const filepath = path.join(__dirname, '../../recordings', filename);
+
+          // Ensure recordings directory exists
+          const recordingsDir = path.dirname(filepath);
+          if (!fs.existsSync(recordingsDir)) {
+            fs.mkdirSync(recordingsDir, { recursive: true });
+          }
+
+          fs.writeFileSync(filepath, videoBuffer);
+          logger.info(`🎥 Recording saved to: ${filepath} (${videoBuffer.length} bytes)`);
+        } catch (err: any) {
+          logger.error('[Puppeteer Bot] Failed to save recording:', err.message);
+        }
+      } else {
+        logger.warn('[Puppeteer Bot] No recording data to save');
+      }
     }
 
     await this.cleanup();
