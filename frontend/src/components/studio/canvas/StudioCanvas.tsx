@@ -682,8 +682,9 @@ export function StudioCanvas({
 
         const allParticipants: Array<{ type: 'local' | 'remote', id: string, video?: HTMLVideoElement, participant?: any, videoEnabled: boolean }> = [];
 
-        // Add local participant if on stage
-        if (isLocalUserOnStageRef.current && mainVideoRef.current) {
+        // CRITICAL: Always add local participant - broadcaster should always be visible
+        // The isLocalUserOnStage prop is only for managing remote guests, not the broadcaster
+        if (mainVideoRef.current) {
           allParticipants.push({
             type: 'local',
             id: 'local',
@@ -692,7 +693,7 @@ export function StudioCanvas({
           });
         }
 
-        // Add remote participants
+        // Add remote participants (only those on stage)
         onStageRemote.forEach((participant) => {
           const video = remoteVideoElementsRef.current.get(participant.id);
           if (video) {
@@ -1276,7 +1277,7 @@ export function StudioCanvas({
   }, [backgroundColor, orientation]);
 
   // Set video srcObject for local stream
-  // CRITICAL: Must depend on isLocalUserOnStage because video element is conditionally rendered
+  // CRITICAL: Video element is always rendered when localStream exists
   useEffect(() => {
     const video = mainVideoRef.current;
     if (!video || !localStream) return;
@@ -1287,7 +1288,6 @@ export function StudioCanvas({
       streamActive: localStream.active,
       videoTracks: localStream.getVideoTracks().length,
       audioTracks: localStream.getAudioTracks().length,
-      isLocalUserOnStage,
     });
 
     video.srcObject = localStream;
@@ -1324,7 +1324,7 @@ export function StudioCanvas({
       video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('error', handleError);
     };
-  }, [localStream, isLocalUserOnStage]);
+  }, [localStream]);
 
   // Set video srcObject for screen share
   useEffect(() => {
@@ -1909,7 +1909,9 @@ export function StudioCanvas({
       </div>
 
       {/* Hidden video elements for stream management */}
-      {localStream && isLocalUserOnStage && (
+      {/* CRITICAL: Always render local video - canvas should always show broadcaster */}
+      {/* The isLocalUserOnStage prop is for managing remote guests, not the broadcaster */}
+      {localStream && (
         <video
           ref={mainVideoRef}
           autoPlay
