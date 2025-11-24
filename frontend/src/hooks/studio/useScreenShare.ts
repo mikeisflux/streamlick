@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useMedia } from '../useMedia';
 import { compositorService } from '../../services/compositor.service';
 import { webrtcService } from '../../services/webrtc.service';
+import { audioMixerService } from '../../services/audio-mixer.service';
 import toast from 'react-hot-toast';
 
 interface UseScreenShareProps {
@@ -37,6 +38,10 @@ export function useScreenShare({ currentLayout, onLayoutChange, isLive = false }
       setScreenShareStream(null);
       compositorService.removeParticipant('screen-share');
 
+      // Remove screen share audio from mixer (system audio)
+      audioMixerService.removeStream('screen-share-audio');
+      console.log('[ScreenShare] Removed system audio from mixer');
+
       // Close WebRTC producer if it exists
       if (producerIdRef.current) {
         try {
@@ -67,11 +72,24 @@ export function useScreenShare({ currentLayout, onLayoutChange, isLive = false }
         setIsSharingScreen(true);
         setScreenShareStream(stream);
 
-        // CRITICAL FIX: Check if screen share has audio tracks (system audio)
-        // If present, enable audio so it gets captured in the output stream
+        // CRITICAL: Check if screen share has audio tracks (system audio)
+        // System audio should be mixed AFTER microphone processing
         const hasAudio = stream.getAudioTracks().length > 0;
         if (hasAudio) {
-          console.log('[ScreenShare] Screen share includes system audio - will be captured in output stream');
+          console.log('[ScreenShare] System audio detected - adding to mixer (bypasses microphone processing)');
+
+          // Add system audio directly to mixer (NOT through microphone processing)
+          const audioTrack = stream.getAudioTracks()[0];
+          const systemAudioStream = new MediaStream([audioTrack]);
+          audioMixerService.addStream('screen-share-audio', systemAudioStream);
+
+          console.log('[ScreenShare] System audio added to mixer:', {
+            trackId: audioTrack.id,
+            trackLabel: audioTrack.label,
+            trackEnabled: audioTrack.enabled
+          });
+        } else {
+          console.log('[ScreenShare] No system audio in screen share');
         }
 
         await compositorService.addParticipant({
