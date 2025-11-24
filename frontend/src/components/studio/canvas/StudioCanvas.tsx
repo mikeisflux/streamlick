@@ -915,6 +915,20 @@ export function StudioCanvas({
               ctx.clip();
               ctx.drawImage(avatarImageRef.current, avatarX, avatarY, size, size);
               ctx.restore();
+            } else {
+              // No avatar - draw placeholder with icon/text
+              ctx.fillStyle = '#2a2a2a';
+              ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+
+              // Draw "camera off" icon text
+              ctx.fillStyle = '#888';
+              ctx.font = 'bold 48px Arial';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('📹', pos.x + pos.width / 2, pos.y + pos.height / 2 - 30);
+
+              ctx.font = '24px Arial';
+              ctx.fillText('Camera Off', pos.x + pos.width / 2, pos.y + pos.height / 2 + 30);
             }
           } else if (p.video && p.video.readyState >= 2) {
             // Draw video
