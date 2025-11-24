@@ -88,7 +88,7 @@ export class YouTubeChatPoller {
       // Start polling
       this.poll();
     } catch (error: any) {
-      logger.error('YouTube chat poller start error:', error.message);
+      logger.error('YouTube chat poller start error:', error?.message || error || 'Unknown error');
     }
   }
 
@@ -149,7 +149,7 @@ export class YouTubeChatPoller {
         this.poll();
       }, pollingIntervalMillis || 5000);
     } catch (error: any) {
-      logger.error('YouTube chat poll error:', error.message);
+      logger.error('YouTube chat poll error:', error?.message || error || 'Unknown error');
 
       // Retry after 10 seconds on error
       this.pollingInterval = setTimeout(() => {
@@ -240,7 +240,7 @@ export class FacebookChatPoller {
       // Start polling
       this.poll();
     } catch (error: any) {
-      logger.error('Facebook chat poller start error:', error.message);
+      logger.error('Facebook chat poller start error:', error?.message || error || 'Unknown error');
     }
   }
 
@@ -413,7 +413,7 @@ export class TwitchChatPoller {
       this.connectToIRC();
 
     } catch (error: any) {
-      logger.error('Twitch chat poller start error:', error.message);
+      logger.error('Twitch chat poller start error:', error?.message || error || 'Unknown error');
     }
   }
 
@@ -464,7 +464,7 @@ export class TwitchChatPoller {
         }
       }, 60000); // Every 60 seconds
     } catch (error: any) {
-      logger.error('Twitch IRC connection error:', error.message);
+      logger.error('Twitch IRC connection error:', error?.message || error || 'Unknown error');
     }
   }
 
@@ -520,7 +520,7 @@ export class TwitchChatPoller {
         }
       }
     } catch (error: any) {
-      logger.error('Twitch IRC message parse error:', error.message);
+      logger.error('Twitch IRC message parse error:', error?.message || error || 'Unknown error');
     }
   }
 
@@ -576,7 +576,7 @@ export class XChatPoller {
 
       this.poll();
     } catch (error: any) {
-      logger.error('X chat poller start error:', error.message);
+      logger.error('X chat poller start error:', error?.message || error || 'Unknown error');
     }
   }
 
@@ -633,7 +633,7 @@ export class XChatPoller {
         this.poll();
       }, 10000);
     } catch (error: any) {
-      logger.error('X chat poll error:', error.message);
+      logger.error('X chat poll error:', error?.message || error || 'Unknown error');
 
       // Retry after 30 seconds on error
       this.pollingInterval = setTimeout(() => {
@@ -688,7 +688,7 @@ export class RumbleChatPoller {
 
       this.poll();
     } catch (error: any) {
-      logger.error('Rumble chat poller start error:', error.message);
+      logger.error('Rumble chat poller start error:', error?.message || error || 'Unknown error');
     }
   }
 
@@ -739,7 +739,7 @@ export class RumbleChatPoller {
         this.poll();
       }, 5000);
     } catch (error: any) {
-      logger.error('Rumble chat poll error:', error.message);
+      logger.error('Rumble chat poll error:', error?.message || error || 'Unknown error');
 
       // Retry after 10 seconds on error
       this.pollingInterval = setTimeout(() => {
