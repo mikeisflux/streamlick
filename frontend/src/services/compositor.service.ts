@@ -145,13 +145,12 @@ class CompositorService {
   private droppedFrames = 0;
   private performanceCallback?: (metrics: PerformanceMetrics) => void;
 
-  // Pixel delta monitoring for frozen canvas detection
-  private lastPixelSample: Uint8ClampedArray | null = null;
-  private lastPixelSampleTime = 0;
-  private pixelSampleInterval = 1000; // Check every 1 second
+  // Frame count monitoring for frozen canvas detection (NO getImageData needed!)
+  private lastCheckedFrameCount = 0;
+  private lastFrameCheckTime = 0;
+  private frameCheckInterval = 1000; // Check every 1 second
   private frozenFrameCount = 0;
-  private readonly PIXEL_SAMPLE_SIZE = 100; // 100x100 pixel sample region
-  private readonly MAX_FROZEN_FRAMES = 3; // Alert after 3 consecutive frozen samples
+  private readonly MAX_FROZEN_FRAMES = 3; // Alert after 3 consecutive frozen checks
 
   // Tab visibility detection for aggressive anti-mute
   private isTabVisible = true;
@@ -1369,66 +1368,45 @@ class CompositorService {
     if (!this.ctx || !this.canvas) return;
 
     // Skip frozen detection when video/image overlay is playing
-    // Video content (especially timer.mp4) may have low pixel delta but is NOT frozen
     if (this.mediaClipOverlay !== null) {
-      // Reset frozen counter since we're skipping checks during video playback
       this.frozenFrameCount = 0;
       return;
     }
 
     const now = Date.now();
-    if (now - this.lastPixelSampleTime < this.pixelSampleInterval) {
+    if (now - this.lastFrameCheckTime < this.frameCheckInterval) {
       return; // Not time to check yet
     }
 
-    this.lastPixelSampleTime = now;
+    this.lastFrameCheckTime = now;
 
     try {
-      // Sample a region from the center of the canvas
-      const sampleX = Math.floor((this.WIDTH - this.PIXEL_SAMPLE_SIZE) / 2);
-      const sampleY = Math.floor((this.HEIGHT - this.PIXEL_SAMPLE_SIZE) / 2);
+      // Check if frame count has increased since last check
+      // This is much more efficient than getImageData() and doesn't trigger browser warnings
+      if (this.lastCheckedFrameCount > 0) {
+        const framesDelta = this.frameCount - this.lastCheckedFrameCount;
 
-      const imageData = this.ctx.getImageData(
-        sampleX,
-        sampleY,
-        this.PIXEL_SAMPLE_SIZE,
-        this.PIXEL_SAMPLE_SIZE
-      );
-
-      const currentSample = imageData.data;
-
-      if (this.lastPixelSample !== null) {
-        // Compare with previous sample
-        let totalDelta = 0;
-        for (let i = 0; i < currentSample.length; i++) {
-          totalDelta += Math.abs(currentSample[i] - this.lastPixelSample[i]);
-        }
-
-        const avgDelta = totalDelta / currentSample.length;
-
-        // Threshold: if average pixel change is less than 0.5 (out of 255), canvas is frozen
-        // This accounts for the imperceptible noise pixel (0.01 alpha) which won't create much delta
-        // But participant video with motion should create significant delta
-        if (avgDelta < 0.5) {
+        // If no frames were rendered in the last second, canvas is frozen
+        if (framesDelta === 0) {
           this.frozenFrameCount++;
 
           if (this.frozenFrameCount >= this.MAX_FROZEN_FRAMES) {
             logger.error(`[Canvas Frozen] CRITICAL: Canvas frozen for ${this.frozenFrameCount} consecutive checks!`, {
-              avgDelta,
               frameCount: this.frameCount,
+              lastCheckedFrameCount: this.lastCheckedFrameCount,
             });
 
             // Could trigger track recreation here if needed
             // For now, just alert - the track mute listener will handle recreation
           }
         } else {
-          // Canvas is changing - reset frozen counter
+          // Canvas is rendering - reset frozen counter
           this.frozenFrameCount = 0;
         }
       }
 
-      // Store current sample for next comparison
-      this.lastPixelSample = new Uint8ClampedArray(currentSample);
+      // Store current frame count for next comparison
+      this.lastCheckedFrameCount = this.frameCount;
     } catch (error) {
       logger.error('[Canvas Frozen] Error checking canvas frozen state:', error);
     }
