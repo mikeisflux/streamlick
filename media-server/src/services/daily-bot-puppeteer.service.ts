@@ -236,11 +236,33 @@ class DailyBotPuppeteerService {
       const win = window as any;
 
       if (win.botMediaTracks && win.dailyCall) {
+        console.log('🎥 Setting bot media tracks as Daily input...');
+        console.log('Track info:', {
+          videoId: win.botMediaTracks.video.id,
+          videoEnabled: win.botMediaTracks.video.enabled,
+          videoReadyState: win.botMediaTracks.video.readyState,
+          audioId: win.botMediaTracks.audio.id,
+          audioEnabled: win.botMediaTracks.audio.enabled,
+          audioReadyState: win.botMediaTracks.audio.readyState,
+        });
+
         await win.dailyCall.setInputDevicesAsync({
           videoSource: win.botMediaTracks.video,
           audioSource: win.botMediaTracks.audio,
         });
         console.log('✅ Set bot media tracks as Daily input');
+
+        // Wait a moment for Daily to process the tracks
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Verify the tracks are set
+        const localParticipant = win.dailyCall.participants().local;
+        console.log('📊 Local participant after setting tracks:', {
+          session_id: localParticipant.session_id,
+          video: localParticipant.video,
+          audio: localParticipant.audio,
+          tracks: localParticipant.tracks,
+        });
       } else {
         console.warn('⚠️ Bot media tracks or Daily call not available');
       }
@@ -583,19 +605,39 @@ a=candidate:${candidate.foundation} 1 udp ${candidate.priority} ${candidate.ip} 
         const participants = win.dailyCall.participants();
         const localParticipant = participants.local;
 
+        console.log('📹 Starting RTMP streaming...');
+        console.log('Local participant details:', {
+          session_id: localParticipant.session_id,
+          user_name: localParticipant.user_name,
+          video: localParticipant.video,
+          audio: localParticipant.audio,
+          tracks: localParticipant.tracks,
+        });
+
+        // Check if bot has active video/audio
+        if (!localParticipant.video || !localParticipant.audio) {
+          console.error('❌ Bot does not have active video/audio!', {
+            video: localParticipant.video,
+            audio: localParticipant.audio,
+          });
+          throw new Error('Bot missing video or audio before starting RTMP');
+        }
+
         // Use the bot's own session since it has video now
         const layoutConfig = {
           preset: 'single-participant',
           session_id: localParticipant.session_id,
         };
 
-        console.log('Starting RTMP stream with bot session_id:', localParticipant.session_id);
+        console.log('Starting RTMP stream with layout:', layoutConfig);
+        console.log('RTMP URL:', rtmpUrl.substring(0, 50) + '...');
 
         await win.dailyCall.startLiveStreaming({
           rtmpUrl,
           layout: layoutConfig,
         });
 
+        console.log('✅ RTMP streaming started successfully');
         win.botLog.push({ message: 'RTMP streaming started', rtmpUrl, layout: layoutConfig });
       },
       config.rtmpDestinations
