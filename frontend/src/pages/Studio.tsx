@@ -300,12 +300,6 @@ export function Studio() {
     compositorService.setInputVolume(canvasSettings.inputVolume);
   }, [canvasSettings.inputVolume]);
 
-  // Apply noise gate settings to audio processor when they change
-  useEffect(() => {
-    audioProcessorService.setNoiseGateEnabled(canvasSettings.noiseGateEnabled);
-    audioProcessorService.setNoiseGateThreshold(canvasSettings.noiseGateThreshold);
-  }, [canvasSettings.noiseGateEnabled, canvasSettings.noiseGateThreshold]);
-
   // ⚠️ MANDATORY - KEEP IN SYNC ⚠️
   // CRITICAL: Initialize compositor in preview mode when not live
   // This enables audio animations, layout previews, and all compositor features
