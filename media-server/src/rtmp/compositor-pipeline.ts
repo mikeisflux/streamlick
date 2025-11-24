@@ -38,7 +38,12 @@ export async function createCompositorPipeline(
   destinations: RTMPDestination[]
 ): Promise<void> {
   try {
-    logger.info(`Creating compositor pipeline for broadcast ${broadcastId}`);
+    logger.info(`🎬 [Compositor Pipeline] createCompositorPipeline() CALLED`, {
+      broadcastId,
+      videoProducerId: videoProducer.id,
+      audioProducerId: audioProducer.id,
+      destinationsCount: destinations.length,
+    });
 
     // Always use Daily.co for RTMP output
     const streamingMethod = process.env.STREAMING_METHOD || 'daily';
@@ -48,6 +53,7 @@ export async function createCompositorPipeline(
       logger.warn('[Compositor Pipeline] FFmpeg mode is deprecated. Falling back to Daily mode.');
     }
 
+    logger.info('🔧 [Compositor Pipeline] Calling createDailyPipeline()...');
     // Use Daily.co pipeline (recommended)
     return await createDailyPipeline(router, broadcastId, videoProducer, audioProducer, destinations);
 
@@ -571,6 +577,13 @@ async function createDailyPipeline(
   audioProducer: Producer,
   destinations: RTMPDestination[]
 ): Promise<void> {
+  logger.info('🚀 [Daily Pipeline] createDailyPipeline() CALLED', {
+    broadcastId,
+    videoProducerId: videoProducer.id,
+    audioProducerId: audioProducer.id,
+    destinationsCount: destinations.length,
+  });
+
   try {
 
     // Check concurrent bot limit
@@ -583,12 +596,15 @@ async function createDailyPipeline(
 
     const backendApiUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
 
+    logger.info('🔧 [Daily Pipeline] Step 1: Creating Daily room and token via REST API...');
     // Step 1: Create Daily room and token via REST API
     await dailyMediaServerService.initialize({
       apiBaseUrl: backendApiUrl,
       broadcastId,
     });
+    logger.info('✅ [Daily Pipeline] Daily room and token created');
 
+    logger.info('🔧 [Daily Pipeline] Step 2: Creating WebRTC transport and consumers for Puppeteer bot...');
     // Step 2: Create WebRTC transport and consumers for Puppeteer bot
 
     const bridgeResult = await rtpBridgeService.createTracksFromProducers(
@@ -596,11 +612,20 @@ async function createDailyPipeline(
       audioProducer,
       router
     );
+    logger.info('✅ [Daily Pipeline] Bridge result received:', {
+      hasVideoTrack: !!bridgeResult.videoTrack,
+      hasAudioTrack: !!bridgeResult.audioTrack,
+      videoConsumerId: bridgeResult.videoConsumer.id,
+      audioConsumerId: bridgeResult.audioConsumer.id,
+    });
 
+    logger.info('🔧 [Daily Pipeline] Step 3: Getting Daily room URL and token...');
     // Step 3: Get Daily room URL and token
     const roomUrl = `https://streamlick.daily.co/streamlick-broadcast-${broadcastId}`;
     const token = await dailyMediaServerService.getMeetingToken(backendApiUrl, broadcastId);
+    logger.info('✅ [Daily Pipeline] Daily room URL and token obtained');
 
+    logger.info('🔧 [Daily Pipeline] Step 4: Starting Puppeteer bot...');
     // Step 4: Start Puppeteer bot (joins mediasoup + Daily, starts RTMP)
     const dailyDestinations = destinations.map((dest) => ({
       rtmpUrl: dest.rtmpUrl,
@@ -616,7 +641,9 @@ async function createDailyPipeline(
       audioConsumer: bridgeResult.audioConsumer,
       rtmpDestinations: dailyDestinations,
     });
+    logger.info('✅ [Daily Pipeline] Puppeteer bot started successfully');
 
+    logger.info('🔧 [Daily Pipeline] Storing pipeline in activePipelines map...');
     // Store pipeline
     activePipelines.set(broadcastId, {
       videoPlainTransport: null,
@@ -627,9 +654,20 @@ async function createDailyPipeline(
       rtpBridgePeerConnection: bridgeResult.peerConnection,
       rtpBridgeWebRtcTransport: bridgeResult.webRtcTransport,
     });
+    logger.info('✅ [Daily Pipeline] Pipeline stored successfully');
 
-  } catch (error) {
-    logger.error('[Daily Pipeline BOT] Failed to create bot pipeline:', error);
+    logger.info('🎉 [Daily Pipeline] createDailyPipeline() COMPLETED SUCCESSFULLY', {
+      broadcastId,
+      videoConsumerId: bridgeResult.videoConsumer.id,
+      audioConsumerId: bridgeResult.audioConsumer.id,
+    });
+
+  } catch (error: any) {
+    logger.error('❌ [Daily Pipeline] Failed to create bot pipeline:', {
+      error: error.message,
+      stack: error.stack,
+      broadcastId,
+    });
     throw error;
   }
 }

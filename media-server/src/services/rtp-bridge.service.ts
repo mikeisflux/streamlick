@@ -43,15 +43,22 @@ class RTPBridgeService {
     audioProducer: mediasoupTypes.Producer,
     router: mediasoupTypes.Router
   ): Promise<BridgeResult> {
+    logger.info('🔧 [RTP Bridge] createTracksFromProducers() CALLED', {
+      videoProducerId: videoProducer.id,
+      audioProducerId: audioProducer.id,
+    });
+
     if (!wrtc) {
       throw new Error('wrtc module not available - cannot create RTP bridge');
     }
 
     try {
+      logger.info('🔧 [RTP Bridge] STEP 1: Creating wrtc peer connection...');
       // STEP 1: Create wrtc peer connection
       const peerConnection = new wrtc.RTCPeerConnection({
         iceServers: [],
       });
+      logger.info('✅ [RTP Bridge] Peer connection created');
 
       // STEP 2: Add transceivers to receive video and audio
       peerConnection.addTransceiver('video', { direction: 'recvonly' });
@@ -64,6 +71,7 @@ class RTPBridgeService {
       // STEP 4: Extract DTLS parameters from offer
       const dtlsParameters = this.extractDtlsParameters(offer.sdp!);
 
+      logger.info('🔧 [RTP Bridge] STEP 5: Creating mediasoup WebRTC Transport...');
       // STEP 5: Create mediasoup WebRTC Transport
       const webRtcTransport = await router.createWebRtcTransport({
         listenIps: [{ ip: '127.0.0.1', announcedIp: undefined }],
@@ -72,24 +80,45 @@ class RTPBridgeService {
         preferUdp: true,
         initialAvailableOutgoingBitrate: 1000000,
       });
+      logger.info('✅ [RTP Bridge] WebRTC Transport created', { transportId: webRtcTransport.id });
 
+      logger.info('🔧 [RTP Bridge] STEP 6: Connecting transport with DTLS params...');
       // STEP 6: Connect mediasoup transport with peer connection's DTLS params
       await webRtcTransport.connect({ dtlsParameters });
+      logger.info('✅ [RTP Bridge] Transport connected');
 
+      logger.info('🔧 [RTP Bridge] STEP 7: Getting RTP capabilities...');
       // STEP 7: Get RTP capabilities that wrtc supports
       const rtpCapabilities = this.getWrtcRtpCapabilities(router);
+      logger.info('✅ [RTP Bridge] RTP capabilities obtained');
 
+      logger.info('🔧 [RTP Bridge] STEP 8: Creating VIDEO CONSUMER from producer...', {
+        producerId: videoProducer.id,
+      });
       // STEP 8: Create consumers on WebRTC transport
       const videoConsumer = await webRtcTransport.consume({
         producerId: videoProducer.id,
         rtpCapabilities,
         paused: false,
       });
+      logger.info('✅ [RTP Bridge] VIDEO CONSUMER CREATED!', {
+        consumerId: videoConsumer.id,
+        producerId: videoProducer.id,
+        kind: videoConsumer.kind,
+      });
 
+      logger.info('🔧 [RTP Bridge] Creating AUDIO CONSUMER from producer...', {
+        producerId: audioProducer.id,
+      });
       const audioConsumer = await webRtcTransport.consume({
         producerId: audioProducer.id,
         rtpCapabilities,
         paused: false,
+      });
+      logger.info('✅ [RTP Bridge] AUDIO CONSUMER CREATED!', {
+        consumerId: audioConsumer.id,
+        producerId: audioProducer.id,
+        kind: audioConsumer.kind,
       });
 
       // STEP 9: Build SDP answer from mediasoup transport and consumers
