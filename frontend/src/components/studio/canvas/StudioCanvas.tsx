@@ -24,6 +24,7 @@ import { compositorService } from '../../../services/compositor.service';
 import { mediaStorageService } from '../../../services/media-storage.service';
 import { audioMixerService } from '../../../services/audio-mixer.service';
 import { canvasStreamService } from '../../../services/canvas-stream.service';
+import { webrtcService } from '../../../services/webrtc.service';
 import { useAudioLevel } from '../../../hooks/studio/useAudioLevel';
 
 interface Banner {
@@ -648,6 +649,9 @@ export function StudioCanvas({
             newTrackId: newTrack?.id,
             newTrackMuted: newTrack?.muted,
           });
+
+          // Note: Don't replace mediasoup producer here since broadcast hasn't started yet
+          // The producer will be created with the new stream when broadcast starts
         } catch (err) {
           console.error('[StudioCanvas] ❌ Failed to recreate initially muted stream:', err);
         }
@@ -656,7 +660,7 @@ export function StudioCanvas({
       // CRITICAL: Monitor track for mute events and fix it
       // Canvas tracks can spontaneously mute in Chrome, causing black frames
       if (videoTrack) {
-        videoTrack.onmute = () => {
+        videoTrack.onmute = async () => {
           console.error('[StudioCanvas] ❌ Canvas video track MUTED! This causes black frames.', {
             trackId: videoTrack.id,
             enabled: videoTrack.enabled,
@@ -675,6 +679,15 @@ export function StudioCanvas({
               newTrackId: newTrack?.id,
               newTrackMuted: newTrack?.muted,
             });
+
+            // CRITICAL: Replace the track in the active mediasoup producer
+            // This ensures the media server receives the new unmuted track
+            try {
+              await webrtcService.replaceVideoTrack(newTrack);
+              console.log('[StudioCanvas] ✅ Mediasoup producer track replaced with new canvas track');
+            } catch (replaceErr) {
+              console.error('[StudioCanvas] ❌ Failed to replace mediasoup producer track:', replaceErr);
+            }
           } catch (err) {
             console.error('[StudioCanvas] ❌ Failed to recreate canvas stream:', err);
           }
