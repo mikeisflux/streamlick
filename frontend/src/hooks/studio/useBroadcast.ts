@@ -355,6 +355,16 @@ export function useBroadcast({
         hasAudioProducer: !!compositeAudioProducerId,
       });
 
+      // Add event listeners to capture media server responses
+      mediaServerSocketService.on<{ broadcastId: string; method: string; note?: string }>('rtmp-started', (data) => {
+        console.error('✅ Media server rtmp-started event received:', data);
+      });
+
+      mediaServerSocketService.on<{ error: string }>('rtmp-error', (data) => {
+        console.error('❌ Media server rtmp-error event received:', data);
+        toast.error(`RTMP Error: ${data.error}`);
+      });
+
       mediaServerSocketService.emit('start-rtmp', rtmpPayload);
 
       toast.success('Connected to platforms, starting countdown...');
