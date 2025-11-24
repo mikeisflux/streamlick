@@ -20,13 +20,11 @@ class Logger {
 
   debug(message: string, ...args: any[]): void {
     if (this.shouldLog('debug')) {
-      console.log(`[DEBUG] ${message}`, ...args);
     }
   }
 
   info(message: string, ...args: any[]): void {
     if (this.shouldLog('info')) {
-      console.log(`[INFO] ${message}`, ...args);
     }
   }
 
@@ -47,7 +45,6 @@ class Logger {
    */
   performance(message: string, metrics: Record<string, any>): void {
     if (this.shouldLog('info')) {
-      console.log(`[PERF] ${message}`, metrics);
     }
   }
 }

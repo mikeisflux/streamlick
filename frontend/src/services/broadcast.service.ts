@@ -36,14 +36,12 @@ export const broadcastService = {
       destinationIds,
       destinationSettings,
     };
-    console.log('[BroadcastService] Sending start request:', {
       broadcastId: id,
       requestBody,
       destinationIds,
       destinationIdsLength: destinationIds?.length,
     });
     const response = await api.post(`/broadcasts/${id}/start`, requestBody);
-    console.log('[BroadcastService] Start response:', response.data);
     return response.data;
   },
 

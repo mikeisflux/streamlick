@@ -83,13 +83,11 @@ export function useMediaDevices() {
       // Remove old microphone and add new one so WebRTC sends updated audio
       audioMixerService.removeStream('local-microphone');
       audioMixerService.addStream('local-microphone', new MediaStream([processedAudioTrack]));
-      console.log('[useMediaDevices] Microphone updated in audio mixer for monitor mode');
 
       // Clean up: stop the raw audio track since we're using the processed one
       newAudioTrack.stop();
 
       toast.success('Microphone changed successfully');
-      console.log('[useMediaDevices] Microphone changed and reprocessed through audio processor');
     } catch (error) {
       console.error('Failed to change audio device:', error);
       toast.error('Failed to change microphone');
