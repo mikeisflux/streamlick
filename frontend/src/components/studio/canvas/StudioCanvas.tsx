@@ -1764,36 +1764,11 @@ export function StudioCanvas({
               if (el && videoClip) {
                 console.log('[VideoClip] Playing:', videoClip);
 
-                // CRITICAL: Unmute and set up audio routing
-                el.muted = false;
-                el.volume = 1.0;
-
-                // Initialize audio mixer
-                audioMixerService.initialize();
-
-                // Get AudioContext and resume it
-                const audioContext = (audioMixerService as any).audioContext;
-                if (audioContext && audioContext.state === 'suspended') {
-                  console.log('[VideoClip] Resuming AudioContext...');
-                  audioContext.resume().then(() => {
-                    console.log('[VideoClip] AudioContext resumed');
-                    // Add video to audio mixer AFTER context is resumed
-                    try {
-                      audioMixerService.addMediaElement('video-clip', el);
-                      console.log('[VideoClip] Video audio routed through mixer');
-                    } catch (error) {
-                      console.error('[VideoClip] Failed to add video to mixer:', error);
-                    }
-                  });
-                } else {
-                  // Context already running, add immediately
-                  try {
-                    audioMixerService.addMediaElement('video-clip', el);
-                    console.log('[VideoClip] Video audio routed through mixer');
-                  } catch (error) {
-                    console.error('[VideoClip] Failed to add video to mixer:', error);
-                  }
-                }
+                // IMPORTANT: Mute the preview video to avoid double audio
+                // The compositor's video is the one that provides audio for the output stream
+                // This is just for visual preview, so it should be silent
+                el.muted = true;
+                el.volume = 0;
               }
             }}
             src={videoClip}
@@ -1801,15 +1776,7 @@ export function StudioCanvas({
             playsInline
             className="w-full h-full object-cover"
             onEnded={() => {
-              console.log('[VideoClip] Video ended');
-              // Remove from audio mixer
-              try {
-                audioMixerService.removeMediaElement('video-clip');
-                console.log('[VideoClip] Removed from audio mixer');
-              } catch (error) {
-                console.error('[VideoClip] Failed to remove from mixer:', error);
-              }
-
+              console.log('[VideoClip] Preview video ended');
               // Auto-remove video clip when it ends
               setVideoClip(null);
               localStorage.removeItem('streamVideoClip');
@@ -1822,13 +1789,6 @@ export function StudioCanvas({
           {/* Close button for video overlay */}
           <button
             onClick={() => {
-              // Remove from audio mixer
-              try {
-                audioMixerService.removeMediaElement('video-clip');
-              } catch (error) {
-                console.error('[VideoClip] Failed to remove from mixer:', error);
-              }
-
               setVideoClip(null);
               localStorage.removeItem('streamVideoClip');
               localStorage.removeItem('streamVideoClipAssetId');
