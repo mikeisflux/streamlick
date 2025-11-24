@@ -586,6 +586,8 @@ export function StudioCanvas({
     if (!canvas) return;
 
     // Initialize canvas context
+    // WARNING: DO NOT add willReadFrequently: true - it breaks canvas rendering completely
+    // This flag switches from GPU to CPU rendering and causes the entire canvas to stop displaying
     const ctx = canvas.getContext('2d', {
       alpha: false,
       desynchronized: true,

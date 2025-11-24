@@ -168,6 +168,8 @@ class CompositorService {
     this.canvas = document.createElement('canvas');
     this.canvas.width = this.WIDTH;
     this.canvas.height = this.HEIGHT;
+    // WARNING: DO NOT add willReadFrequently: true - it breaks canvas rendering completely
+    // This flag switches from GPU to CPU rendering and causes the entire canvas to stop displaying
     this.ctx = this.canvas.getContext('2d', {
       alpha: false,
       desynchronized: true,
