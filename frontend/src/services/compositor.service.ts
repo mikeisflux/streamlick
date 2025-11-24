@@ -168,7 +168,6 @@ class CompositorService {
     window.addEventListener('backgroundUpdated', ((e: CustomEvent) => {
       const { url } = e.detail;
       if (url) {
-        logger.info('[Compositor] Background updated via event:', url);
         this.addOverlay({
           id: 'background',
           type: 'background',
@@ -176,7 +175,6 @@ class CompositorService {
           position: { x: 0, y: 0, width: this.WIDTH, height: this.HEIGHT },
         }).catch(err => logger.error('[Compositor] Failed to set background:', err));
       } else {
-        logger.info('[Compositor] Background removed via event');
         this.removeOverlay('background');
       }
     }) as EventListener);
@@ -185,7 +183,6 @@ class CompositorService {
     window.addEventListener('logoUpdated', ((e: CustomEvent) => {
       const { url } = e.detail;
       if (url) {
-        logger.info('[Compositor] Logo updated via event:', url);
         this.addOverlay({
           id: 'logo',
           type: 'logo',
@@ -193,7 +190,6 @@ class CompositorService {
           position: { x: 20, y: 20, width: 100, height: 100 },
         }).catch(err => logger.error('[Compositor] Failed to set logo:', err));
       } else {
-        logger.info('[Compositor] Logo removed via event');
         this.removeOverlay('logo');
       }
     }) as EventListener);
@@ -202,7 +198,6 @@ class CompositorService {
     window.addEventListener('overlayUpdated', ((e: CustomEvent) => {
       const { url } = e.detail;
       if (url) {
-        logger.info('[Compositor] Overlay updated via event:', url);
         this.addOverlay({
           id: 'overlay',
           type: 'banner',
@@ -210,7 +205,6 @@ class CompositorService {
           position: { x: 0, y: 0, width: this.WIDTH, height: this.HEIGHT },
         }).catch(err => logger.error('[Compositor] Failed to set overlay:', err));
       } else {
-        logger.info('[Compositor] Overlay removed via event');
         this.removeOverlay('overlay');
       }
     }) as EventListener);
@@ -220,8 +214,6 @@ class CompositorService {
    * Initialize compositor with participants
    */
   async initialize(participants: ParticipantStream[]): Promise<void> {
-    logger.info('Initializing compositor with', participants.length, 'participants');
-
     // Clear existing state
     this.stop();
     this.videoElements.clear();
@@ -255,8 +247,6 @@ class CompositorService {
    * Add a participant to the composition
    */
   async addParticipant(participant: ParticipantStream): Promise<void> {
-    logger.info('Adding participant to compositor:', participant.id);
-
     const video = document.createElement('video');
     video.autoplay = true;
     video.playsInline = true;
@@ -284,7 +274,6 @@ class CompositorService {
         const waitForVideoReady = new Promise<void>((resolve) => {
           // If already ready, play immediately
           if (video.readyState >= 2) {
-            logger.info(`Video already ready for participant ${participant.id}, readyState: ${video.readyState}`);
             video.play().catch(err => logger.error('Failed to play video:', err));
             resolve();
             return;
@@ -298,7 +287,6 @@ class CompositorService {
             attempts++;
 
             if (video.readyState >= 2) {
-              logger.info(`Video ready for participant ${participant.id} after ${attempts * 100}ms, readyState: ${video.readyState}`);
               video.play().catch(err => logger.error('Failed to play video:', err));
               resolve();
             } else if (attempts >= maxAttempts) {
@@ -320,8 +308,6 @@ class CompositorService {
         logger.error(`Error loading video for participant ${participant.id}:`, error);
         // Continue anyway - don't fail the whole broadcast
       }
-    } else {
-      logger.info(`Skipping video data wait for participant ${participant.id} (videoEnabled: ${participant.videoEnabled}, hasVideoTracks: ${hasVideoTracks})`);
     }
 
     this.videoElements.set(participant.id, video);
@@ -332,8 +318,6 @@ class CompositorService {
    * Remove a participant from the composition
    */
   removeParticipant(participantId: string): void {
-    logger.info('Removing participant from compositor:', participantId);
-
     const video = this.videoElements.get(participantId);
     if (video) {
       video.pause();
@@ -372,8 +356,6 @@ class CompositorService {
       // Store analyser
       this.audioAnalysers.set(participantId, analyser);
       this.audioLevels.set(participantId, 0);
-
-      logger.info(`Audio analyser created for participant ${participantId}`);
     } catch (error) {
       logger.error(`Failed to create audio analyser for ${participantId}:`, error);
     }
@@ -408,7 +390,6 @@ class CompositorService {
    * Update layout configuration
    */
   setLayout(layout: LayoutConfig): void {
-    logger.info('Updating compositor layout:', layout.type);
     this.layout = layout;
   }
 
@@ -419,7 +400,6 @@ class CompositorService {
   setInputVolume(volume: number): void {
     // Convert from 0-100 to 0-1 range
     const normalizedVolume = Math.max(0, Math.min(100, volume)) / 100;
-    logger.info(`Setting input volume to ${volume}% (${normalizedVolume.toFixed(2)})`);
     audioMixerService.setMasterVolume(normalizedVolume);
   }
 
@@ -429,7 +409,6 @@ class CompositorService {
    */
   setBroadcasting(isBroadcasting: boolean): void {
     this.isBroadcasting = isBroadcasting;
-    logger.info(`Compositor broadcasting status: ${isBroadcasting}`);
   }
 
   /**
@@ -440,15 +419,12 @@ class CompositorService {
   setVideoPlaybackCallbacks(onStart: () => void, onEnd: () => void): void {
     this.onVideoStart = onStart;
     this.onVideoEnd = onEnd;
-    logger.info('Video playback callbacks registered');
   }
 
   /**
    * Add overlay asset (logo, banner, etc.)
    */
   async addOverlay(overlay: OverlayAsset): Promise<void> {
-    logger.info('Adding overlay:', overlay.type, overlay.id);
-
     if (overlay.type === 'background') {
       // Preload background image with 10 second timeout before setting overlay
       const img = new Image();
@@ -621,9 +597,6 @@ class CompositorService {
    */
   setMediaClipOverlay(element: HTMLVideoElement | HTMLImageElement): void {
     this.mediaClipOverlay = element;
-    const elementType = element instanceof HTMLVideoElement ? 'video' : 'image';
-    const src = element instanceof HTMLVideoElement ? element.src : (element as HTMLImageElement).src;
-    logger.info(`[Media Clip] Overlay set - ${elementType}: ${src.substring(src.lastIndexOf('/') + 1)}`);
   }
 
   /**
@@ -665,8 +638,6 @@ class CompositorService {
         // Clear video source to free resources (do this AFTER removing event listeners)
         this.mediaClipOverlay.src = '';
         this.mediaClipOverlay.load(); // Force cleanup
-
-        logger.info('[Media Clip] Video element cleaned up and stopped');
       } else if (this.mediaClipOverlay instanceof HTMLImageElement) {
         // Clear image source
         this.mediaClipOverlay.src = '';
@@ -675,18 +646,10 @@ class CompositorService {
         if (this.mediaClipOverlay.parentNode) {
           this.mediaClipOverlay.parentNode.removeChild(this.mediaClipOverlay);
         }
-
-        logger.info('[Media Clip] Image element cleaned up');
       }
     }
 
     this.mediaClipOverlay = null;
-
-    if (wasActive) {
-      logger.info('[Media Clip] Overlay cleared - participants should now be visible');
-      // The animate() loop is already running via requestAnimationFrame
-      // The next frame will automatically render participants now that overlay is cleared
-    }
   }
 
   /**
@@ -712,8 +675,6 @@ class CompositorService {
       videoElement.preload = 'auto'; // FIX FLICKERING: Preload entire video for smooth playback
       // Note: crossOrigin removed - not needed for same-origin video files and can cause issues
 
-      logger.info(`Loading intro video: ${videoUrl}`);
-
       // CRITICAL FIX: Add timeout for video loading to prevent infinite hang
       const loadingTimeout = setTimeout(() => {
         logger.error(`[Media Clip] Video loading timeout after 10s: ${videoUrl}`);
@@ -726,7 +687,6 @@ class CompositorService {
       const onLoadedMetadata = () => {
         // Clear loading timeout since metadata loaded successfully
         clearTimeout(loadingTimeout);
-        logger.info(`Intro video metadata loaded: ${videoUrl}, dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}, duration: ${videoElement.duration}s`);
 
         // Ensure video has valid dimensions
         if (!videoElement.videoWidth || !videoElement.videoHeight) {
@@ -741,9 +701,7 @@ class CompositorService {
         // CRITICAL FIX: Add intro video audio to the mixer BEFORE playing
         // This ensures the audio is captured and included in the output stream
         try {
-          logger.info('Adding intro video audio to mixer...');
           audioMixerService.addMediaElement('intro-video', videoElement);
-          logger.info('Intro video audio added to mixer successfully');
         } catch (error) {
           logger.error('Failed to add intro video audio to mixer:', error);
           // Continue anyway - video will play without audio in output stream
@@ -752,15 +710,11 @@ class CompositorService {
         // FIX FLICKERING: Wait for video to have buffered data BEFORE setting as overlay
         // This prevents flickering caused by drawing frames before they're ready
         const setOverlayAndPlay = () => {
-          logger.info('Intro video has enough buffered data, setting as overlay...');
-
           // Set as media clip overlay AFTER enough data is buffered
           this.setMediaClipOverlay(videoElement);
-          logger.info('Intro video set as media clip overlay, starting playback...');
 
           // Notify that video is starting (for auto-muting participants)
           if (this.onVideoStart) {
-            logger.info('[Auto-Mute] Calling onVideoStart callback');
             this.onVideoStart();
           }
 
@@ -788,14 +742,12 @@ class CompositorService {
       };
 
       const onEnded = () => {
-        logger.info('Intro video ended, clearing overlay and removing audio from mixer');
         clearTimeout(loadingTimeout); // Clear loading timeout
         this.clearMediaClipOverlay();
         audioMixerService.removeStream('intro-video');
 
         // Notify that video has ended (for auto-unmuting participants)
         if (this.onVideoEnd) {
-          logger.info('[Auto-Mute] Calling onVideoEnd callback');
           this.onVideoEnd();
         }
 
@@ -826,7 +778,6 @@ class CompositorService {
       // If duration is specified, stop video after that duration
       if (duration) {
         setTimeout(() => {
-          logger.info(`Intro video duration limit reached (${duration}s), clearing overlay and removing audio`);
           clearTimeout(loadingTimeout); // Clear loading timeout
           videoElement.pause();
           this.clearMediaClipOverlay();
@@ -834,7 +785,6 @@ class CompositorService {
 
           // Notify that video has ended (for auto-unmuting participants)
           if (this.onVideoEnd) {
-            logger.info('[Auto-Mute] Calling onVideoEnd callback (duration timeout)');
             this.onVideoEnd();
           }
 
@@ -859,19 +809,15 @@ class CompositorService {
 
       // If compositor already running and has rendered frames, resolve immediately
       if (this.frameCount > 0) {
-        logger.info('[Compositor] Already ready, frameCount:', this.frameCount);
         resolve();
         return;
       }
-
-      logger.info('[Compositor] Waiting for first frame to be rendered...');
 
       // Wait for first frame with timeout
       const startTime = Date.now();
       const checkInterval = setInterval(() => {
         if (this.frameCount > 0) {
           clearInterval(checkInterval);
-          logger.info('[Compositor] First frame rendered, compositor ready');
           resolve();
         } else if (Date.now() - startTime > 5000) {
           clearInterval(checkInterval);
@@ -902,9 +848,7 @@ class CompositorService {
     // ANTI-MUTE: Play timer.mp4 video - ONLY METHOD, no fallback
     // Video with audio is MUCH better for preventing browser track muting
     // The video has both visual motion AND audio, making it impossible for browser to detect as "static"
-    logger.info(`[Compositor] Starting countdown using timer.mp4 video (requested duration: ${seconds}s)`);
     await this.playIntroVideo('/backgrounds/timer.mp4', seconds);
-    logger.info('[Compositor] Countdown video finished');
   }
 
   /**
@@ -933,7 +877,6 @@ class CompositorService {
     // When tab is hidden, browsers throttle canvas activity more aggressively
     document.addEventListener('visibilitychange', this.visibilityChangeHandler);
     this.isTabVisible = !document.hidden;
-    logger.info(`[Tab Visibility] Initial state: ${this.isTabVisible ? 'visible' : 'hidden'}`);
 
     // Capture stream from canvas with AUTOMATIC frame capture at 30 fps
     // Using automatic mode instead of manual (0 fps) to prevent browser from muting track
@@ -952,13 +895,6 @@ class CompositorService {
     const videoTrack = this.outputStream.getVideoTracks()[0];
     if (videoTrack) {
       videoTrack.contentHint = 'motion';
-      logger.info('[Canvas Track] Initial state:', {
-        id: videoTrack.id,
-        enabled: videoTrack.enabled,
-        muted: videoTrack.muted,
-        readyState: videoTrack.readyState,
-        contentHint: videoTrack.contentHint,
-      });
 
       // Monitor track ended event
       videoTrack.addEventListener('ended', () => {
@@ -1000,14 +936,6 @@ class CompositorService {
             newVideoTrack.contentHint = 'motion';
           }
 
-          logger.info('[Canvas Track] New stream created after mute', {
-            oldTrackId: videoTrack.id,
-            newTrackId: newVideoTrack.id,
-            newTrackMuted: newVideoTrack.muted,
-            newTrackState: newVideoTrack.readyState,
-            contentHint: newVideoTrack.contentHint,
-          });
-
           // Set up listeners on new track
           newVideoTrack.addEventListener('mute', () => {
             logger.error('[Canvas Track] New track also MUTED!', { id: newVideoTrack.id });
@@ -1018,7 +946,6 @@ class CompositorService {
           if (this.isBroadcasting) {
             try {
               await webrtcService.replaceVideoTrack(newVideoTrack);
-              logger.info('[Canvas Track] Successfully replaced track in WebRTC producer');
 
               // FAILOVER: Hide reconnecting overlay after successful recovery
               // Keep it visible for at least 2 seconds so viewers see the message
@@ -1026,11 +953,9 @@ class CompositorService {
               if (elapsed < 2000) {
                 setTimeout(() => {
                   this.showReconnectingOverlay = false;
-                  logger.info('[Failover] Reconnecting overlay hidden after successful recovery');
                 }, 2000 - elapsed);
               } else {
                 this.showReconnectingOverlay = false;
-                logger.info('[Failover] Reconnecting overlay hidden after successful recovery');
               }
             } catch (error) {
               logger.error('[Canvas Track] Failed to replace track in WebRTC producer:', error);
@@ -1038,20 +963,12 @@ class CompositorService {
             }
           } else {
             // Not broadcasting - just hide the overlay
-            logger.info('[Canvas Track] Not broadcasting, skipping WebRTC track replacement');
             this.showReconnectingOverlay = false;
           }
         } catch (error) {
           logger.error('[Canvas Track] Failed to recreate stream after mute:', error);
           // Keep overlay showing if stream recreation failed
         }
-      });
-
-      // Monitor track unmuted event
-      videoTrack.addEventListener('unmute', () => {
-        logger.info('[Canvas Track] Video track UNMUTED!', {
-          id: videoTrack.id,
-        });
       });
     }
 
@@ -1086,7 +1003,7 @@ class CompositorService {
     }
 
     // CRITICAL FIX: Clean up video elements to prevent DOM memory leaks
-    this.videoElements.forEach((video, participantId) => {
+    this.videoElements.forEach((video) => {
       // Stop video and clear srcObject
       video.pause();
       video.srcObject = null;
@@ -1095,15 +1012,12 @@ class CompositorService {
       if (video.parentNode) {
         video.parentNode.removeChild(video);
       }
-      logger.debug(`Cleaned up video element for participant ${participantId}`);
     });
     this.videoElements.clear();
 
     // NOTE: Do NOT clear overlay images here! Backgrounds/logos/overlays should
     // persist across compositor stop/start cycles (e.g., when going live/stopping).
     // Only clear them when explicitly removed via removeOverlay().
-    // this.backgroundImage = null;
-    // this.overlayImages.clear();
 
     // Stop audio mixer
     audioMixerService.stop();
@@ -1155,12 +1069,12 @@ class CompositorService {
    */
   private animate = (): void => {
     if (!this.isCompositing) {
-      logger.error('❌ Animation loop stopped: isCompositing = false');
+      logger.error('Animation loop stopped: isCompositing = false');
       return;
     }
 
     if (!this.ctx) {
-      logger.error('❌ Animation loop stopped: ctx is null');
+      logger.error('Animation loop stopped: ctx is null');
       return;
     }
 
@@ -1200,17 +1114,6 @@ class CompositorService {
       // CRITICAL FIX: Don't draw participants during countdown/intro to prevent flickering
       // The RGB anti-throttle pixel below is sufficient to keep track active
       const showingFullscreenOverlay = this.countdownValue !== null || this.mediaClipOverlay !== null;
-
-      // DIAGNOSTIC LOGS DISABLED (too spammy)
-      // if (this.frameCount % 30 === 0) {
-      //   console.log('[Compositor] Render state:', {
-      //     showingFullscreenOverlay,
-      //     countdownValue: this.countdownValue,
-      //     hasMediaClipOverlay: this.mediaClipOverlay !== null,
-      //     participantCount: this.participants.size,
-      //     videoElementCount: this.videoElements.size,
-      //   });
-      // }
 
       if (!showingFullscreenOverlay) {
         // Normal mode: Draw background, participants, and overlays
@@ -1252,16 +1155,6 @@ class CompositorService {
       // CRITICAL FIX: Delta must be > 0.5 to avoid frozen detection
       // Drawing MANY pixels with higher alpha, distributed across canvas
       this.ctx!.save();
-
-      // Log anti-mute execution every 60 frames to verify it's running
-      if (this.frameCount % 60 === 0) {
-        logger.info('[Anti-Mute] Drawing noise pixels:', {
-          isTabVisible: this.isTabVisible,
-          pixelCount: this.isTabVisible ? 200 : 300,
-          alpha: this.isTabVisible ? 0.1 : 0.15,
-          frameCount: this.frameCount,
-        });
-      }
 
       // CRITICAL FIX: Draw noise in the SAME region that frozen detection samples from (center 100x100)
       // Previous bug: noise was drawn randomly across entire canvas, so sample region missed it
@@ -1305,24 +1198,6 @@ class CompositorService {
       }
     } catch (error) {
       logger.error('Compositor animation error:', error);
-    }
-
-    // DIAGNOSTIC: Monitor canvas track state periodically
-    // Using automatic frame capture now (30 fps), so no manual requestFrame() needed
-    if (this.outputStream) {
-      const videoTrack = this.outputStream.getVideoTracks()[0];
-      if (videoTrack) {
-        // Log track state every 5 seconds (150 frames at 30fps)
-        if (this.frameCount % 150 === 0) {
-          logger.info('[Canvas Track] State check:', {
-            frameCount: this.frameCount,
-            enabled: videoTrack.enabled,
-            muted: videoTrack.muted,
-            readyState: videoTrack.readyState,
-            trackId: videoTrack.id,
-          });
-        }
-      }
     }
 
     // Track render time
@@ -1377,8 +1252,6 @@ class CompositorService {
     if (this.performanceCallback) {
       this.performanceCallback(metrics);
     }
-
-    logger.performance('Compositor performance:', metrics);
   }
 
   /**
@@ -1456,15 +1329,11 @@ class CompositorService {
         // But participant video with motion should create significant delta
         if (avgDelta < 0.5) {
           this.frozenFrameCount++;
-          logger.warn(`[Canvas Frozen Detection] Canvas appears frozen! Delta: ${avgDelta.toFixed(3)}, consecutive frozen: ${this.frozenFrameCount}`);
 
           if (this.frozenFrameCount >= this.MAX_FROZEN_FRAMES) {
-            logger.error(`[Canvas Frozen Detection] CRITICAL: Canvas frozen for ${this.frozenFrameCount} consecutive checks!`, {
+            logger.error(`[Canvas Frozen] CRITICAL: Canvas frozen for ${this.frozenFrameCount} consecutive checks!`, {
               avgDelta,
               frameCount: this.frameCount,
-              isCompositing: this.isCompositing,
-              countdownActive: this.countdownValue !== null,
-              mediaClipActive: this.mediaClipOverlay !== null,
             });
 
             // Could trigger track recreation here if needed
@@ -1472,9 +1341,6 @@ class CompositorService {
           }
         } else {
           // Canvas is changing - reset frozen counter
-          if (this.frozenFrameCount > 0) {
-            logger.info(`[Canvas Frozen Detection] Canvas motion detected, delta: ${avgDelta.toFixed(3)}, resetting frozen count`);
-          }
           this.frozenFrameCount = 0;
         }
       }
@@ -1482,7 +1348,7 @@ class CompositorService {
       // Store current sample for next comparison
       this.lastPixelSample = new Uint8ClampedArray(currentSample);
     } catch (error) {
-      logger.error('[Canvas Frozen Detection] Error checking canvas frozen state:', error);
+      logger.error('[Canvas Frozen] Error checking canvas frozen state:', error);
     }
   }
 
@@ -1493,12 +1359,10 @@ class CompositorService {
    */
   private handleVisibilityChange(): void {
     this.isTabVisible = !document.hidden;
-    logger.info(`[Tab Visibility] Tab is now ${this.isTabVisible ? 'visible' : 'hidden'} - adjusting anti-mute strategy`);
 
     if (!this.isTabVisible && this.isCompositing) {
       // Tab is hidden - start backup timer to prevent stream muting
       // requestAnimationFrame gets throttled heavily when tab is hidden, so we need setInterval as backup
-      logger.info('[Tab Visibility] Starting backup timer to prevent stream muting');
       this.backupTimerId = window.setInterval(() => {
         // Force a render even if requestAnimationFrame is throttled
         if (this.isCompositing && this.ctx) {
@@ -1526,7 +1390,6 @@ class CompositorService {
       }, 1000 / this.FPS); // Run at target FPS
     } else if (this.isTabVisible && this.backupTimerId !== null) {
       // Tab is visible - stop backup timer, requestAnimationFrame will handle it
-      logger.info('[Tab Visibility] Stopping backup timer');
       window.clearInterval(this.backupTimerId);
       this.backupTimerId = null;
     }
@@ -1728,24 +1591,7 @@ class CompositorService {
     this.ctx.fillStyle = '#1a1a1a';
     this.ctx.fillRect(x, y, width, height);
 
-    // DIAGNOSTIC LOGS DISABLED (too spammy)
-    // if (this.frameCount % 60 === 0) {
-    //   console.log('[Compositor] Participant video state:', {
-    //     participantId,
-    //     videoEnabled: participant.videoEnabled,
-    //     readyState: video.readyState,
-    //     videoWidth: video.videoWidth,
-    //     videoHeight: video.videoHeight,
-    //     paused: video.paused,
-    //     ended: video.ended,
-    //     currentTime: video.currentTime,
-    //     srcObject: !!video.srcObject,
-    //     srcObjectActive: video.srcObject ? (video.srcObject as MediaStream).active : false,
-    //     videoTracks: video.srcObject ? (video.srcObject as MediaStream).getVideoTracks().length : 0,
-    //   });
-    // }
-
-    // CRITICAL FIX: Check if video is paused (not in diagnostic block anymore)
+    // CRITICAL FIX: Check if video is paused
     if (this.frameCount % 60 === 0) {
       if (video.paused && video.srcObject) {
         console.warn('[Compositor] Video element is PAUSED! Forcing play...');
