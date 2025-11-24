@@ -329,26 +329,36 @@ export function ParticipantBox({
       {/* Voice animation rings - overlays entire tile when camera off and speaking */}
       {!videoEnabled && isSpeaking && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
-          {/* Outer pulsating ring - expands beyond avatar */}
-          <div
-            className="absolute rounded-full border-white animate-ping"
-            style={{
-              width: 'min(95%, 600px)',
-              aspectRatio: '1/1',
-              animationDuration: '1s',
-              borderWidth: '24px',
-            }}
-          />
-          {/* Inner pulsating ring - starts bigger than avatar */}
-          <div
-            className="absolute rounded-full border-white"
-            style={{
-              width: 'min(85%, 500px)',
-              aspectRatio: '1/1',
-              animation: 'pulse 2s ease-in-out infinite',
-              borderWidth: '20px',
-            }}
-          />
+          {/* Progressive outward burst rings - start at avatar edge and expand ~20px */}
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="absolute rounded-full border-white"
+              style={{
+                width: '40%', // Start at avatar edge
+                aspectRatio: '1/1',
+                borderWidth: '2px',
+                opacity: 0,
+                animation: `ringBurst 1.5s ease-out infinite`,
+                animationDelay: `${i * 0.3}s`, // Stagger each ring by 300ms
+              }}
+            />
+          ))}
+          <style jsx>{`
+            @keyframes ringBurst {
+              0% {
+                transform: scale(1);
+                opacity: 0.8;
+              }
+              50% {
+                opacity: 0.5;
+              }
+              100% {
+                transform: scale(1.5); /* Expand by 50% = ~20px on typical avatar */
+                opacity: 0;
+              }
+            }
+          `}</style>
         </div>
       )}
 
