@@ -321,23 +321,26 @@ export function useBroadcast({
       });
       await compositorService.startCountdown(30);
 
-      // Step 5: Transition YouTube broadcasts from "testing" to "live"
-      try {
-        await api.post(`/broadcasts/${broadcastId}/transition-youtube-to-live`);
-        toast.success('You are now live!');
-      } catch (error) {
-        console.error('[useBroadcast] Failed to transition YouTube to live:', error);
-        toast.error('Warning: YouTube transition may have failed');
-        // Continue anyway - stream is already connected
-      }
-
-      // Step 6: Play intro video as FIRST thing viewers see on the live stream
+      // Step 5: Play intro video IMMEDIATELY after countdown (no delay!)
+      // This ensures viewers see content right away
       try {
         await compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
       } catch (error) {
         console.error('Intro video failed to play:', error);
         // Continue even if intro video fails - user stream will show immediately
       }
+
+      // Step 6: Transition YouTube broadcasts from "testing" to "live" (in background)
+      // Do this AFTER intro starts so there's no delay between countdown and intro
+      api.post(`/broadcasts/${broadcastId}/transition-youtube-to-live`)
+        .then(() => {
+          toast.success('You are now live!');
+        })
+        .catch((error) => {
+          console.error('[useBroadcast] Failed to transition YouTube to live:', error);
+          toast.error('Warning: YouTube transition may have failed');
+          // Continue anyway - stream is already connected
+        });
 
       // Start chat polling
       socketService.emit('start-chat', { broadcastId});
