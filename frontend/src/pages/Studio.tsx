@@ -326,6 +326,7 @@ export function Studio() {
         isLocal: true,
         audioEnabled,
         videoEnabled,
+        avatarUrl: localStorage.getItem('selectedAvatar') || undefined, // Pass avatar URL
       },
       ...Array.from(remoteParticipants.values())
         .filter((p) => p.role === 'host' || p.role === 'guest') // Only live participants
@@ -337,6 +338,7 @@ export function Studio() {
           isLocal: false,
           audioEnabled: p.audioEnabled,
           videoEnabled: p.videoEnabled,
+          avatarUrl: undefined, // Remote participants don't have avatars yet
         })),
     ];
 

@@ -41,6 +41,7 @@ interface ParticipantStream {
   isLocal: boolean;
   audioEnabled: boolean;
   videoEnabled: boolean;
+  avatarUrl?: string; // Optional avatar image URL for when video is disabled
 }
 
 interface LayoutConfig {
@@ -105,6 +106,7 @@ class CompositorService {
   // Image caching to prevent memory leaks from creating Images every frame
   private backgroundImage: HTMLImageElement | null = null;
   private overlayImages: Map<string, HTMLImageElement> = new Map();
+  private avatarImages: Map<string, HTMLImageElement> = new Map(); // Cache avatar images by participant ID
 
   // Audio visualization for participants with camera off
   private audioAnalysers: Map<string, AnalyserNode> = new Map();
@@ -315,6 +317,27 @@ class CompositorService {
 
     this.videoElements.set(participant.id, video);
     this.participants.set(participant.id, participant);
+
+    // Load avatar image if provided
+    if (participant.avatarUrl) {
+      this.loadAvatarImage(participant.id, participant.avatarUrl);
+    }
+  }
+
+  /**
+   * Load and cache avatar image for a participant
+   */
+  private loadAvatarImage(participantId: string, avatarUrl: string): void {
+    const img = new Image();
+    img.crossOrigin = 'anonymous'; // Enable CORS if needed
+    img.onload = () => {
+      this.avatarImages.set(participantId, img);
+      logger.info(`[Compositor] Avatar loaded for ${participantId}`);
+    };
+    img.onerror = (error) => {
+      logger.error(`[Compositor] Failed to load avatar for ${participantId}:`, error);
+    };
+    img.src = avatarUrl;
   }
 
   /**
@@ -335,6 +358,9 @@ class CompositorService {
       this.audioAnalysers.delete(participantId);
       this.audioLevels.delete(participantId);
     }
+
+    // Clean up avatar image
+    this.avatarImages.delete(participantId);
 
     this.participants.delete(participantId);
   }
@@ -1653,9 +1679,42 @@ class CompositorService {
         });
       }
 
-      // Video disabled - show placeholder with audio visualization
+      // Video disabled - show avatar (if available) or placeholder with audio visualization
       this.ctx.fillStyle = '#333333';
       this.ctx.fillRect(x, y, width, height);
+
+      // Draw avatar image if available
+      const avatarImage = this.avatarImages.get(participantId);
+      if (avatarImage && avatarImage.complete && avatarImage.naturalWidth > 0) {
+        // Calculate size to fit avatar as a circle in the center (similar to preview)
+        const avatarSize = Math.min(width, height) * 0.5; // 50% of smallest dimension
+        const avatarX = x + (width - avatarSize) / 2;
+        const avatarY = y + (height - avatarSize) / 2;
+
+        // Draw circular avatar
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.arc(
+          avatarX + avatarSize / 2,
+          avatarY + avatarSize / 2,
+          avatarSize / 2,
+          0,
+          Math.PI * 2
+        );
+        this.ctx.closePath();
+        this.ctx.clip();
+
+        // Draw avatar image
+        this.ctx.drawImage(
+          avatarImage,
+          avatarX,
+          avatarY,
+          avatarSize,
+          avatarSize
+        );
+
+        this.ctx.restore();
+      }
 
       // Get audio level for pulsating animation
       const audioLevel = this.audioLevels.get(participantId) || 0;

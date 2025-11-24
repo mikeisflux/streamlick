@@ -187,6 +187,7 @@ export function useBroadcast({
           isLocal: true,
           audioEnabled,
           videoEnabled,
+          avatarUrl: localStorage.getItem('selectedAvatar') || undefined, // Pass avatar URL for live stream
         },
         ...Array.from(remoteParticipants.values())
           .filter((p) => p.role === 'host' || p.role === 'guest') // Only live participants
@@ -197,6 +198,7 @@ export function useBroadcast({
             isLocal: false,
             audioEnabled: p.audioEnabled,
             videoEnabled: p.videoEnabled,
+            avatarUrl: undefined, // Remote participants don't have avatars yet
           })),
       ].filter((p) => p.stream);
 
