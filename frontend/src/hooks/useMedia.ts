@@ -25,6 +25,45 @@ export function useMedia() {
 
   const startCamera = useCallback(async () => {
     try {
+      // DIAGNOSTIC: Show all available audio devices and filter out system audio
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter(d => d.kind === 'audioinput');
+      console.log('[useMedia] All audio input devices:', audioInputs.map(d => ({
+        id: d.deviceId,
+        label: d.label,
+        groupId: d.groupId
+      })));
+
+      // Filter out system audio capture devices (Stereo Mix, Wave Out, etc.)
+      const microphoneDevices = audioInputs.filter(device => {
+        const name = device.label.toLowerCase();
+        const isSystemAudio =
+          name.includes('stereo mix') ||
+          name.includes('wave out') ||
+          name.includes('what u hear') ||
+          name.includes('loopback') ||
+          name.includes('system audio') ||
+          name.includes('wave out mix') ||
+          name.includes('waveout') ||
+          name.includes('monitor');
+
+        if (isSystemAudio) {
+          console.warn('[useMedia] ⚠️  EXCLUDING system audio device:', device.label);
+        }
+        return !isSystemAudio;
+      });
+
+      console.log('[useMedia] ✅ Microphone devices (system audio excluded):', microphoneDevices.map(d => d.label));
+
+      // Use first microphone device, not default (which might be system audio)
+      const preferredDevice = microphoneDevices.length > 0 ? microphoneDevices[0].deviceId : undefined;
+
+      if (!preferredDevice) {
+        throw new Error('No microphone devices found! Only system audio devices detected. Please ensure a microphone is connected.');
+      }
+
+      console.log('[useMedia] 🎤 Using microphone:', microphoneDevices[0].label);
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 1920 },
@@ -32,7 +71,9 @@ export function useMedia() {
           frameRate: { ideal: 30 },
         },
         audio: {
-          // Enable all noise reduction features
+          // Force use of microphone, not default device (which might be system audio)
+          deviceId: { exact: preferredDevice },
+          // Enable all noise reduction features for microphone
           echoCancellation: { ideal: true },
           noiseSuppression: { ideal: true },
           autoGainControl: { ideal: true },
@@ -43,11 +84,41 @@ export function useMedia() {
         },
       });
 
+      // DIAGNOSTIC: Show which audio device was actually selected
+      const audioTrack = stream.getAudioTracks()[0];
+      if (audioTrack) {
+        const settings = audioTrack.getSettings();
+        const capabilities = audioTrack.getCapabilities();
+        console.log('[useMedia] ⚠️  AUDIO DEVICE IN USE:', {
+          deviceId: settings.deviceId,
+          label: audioTrack.label,
+          sampleRate: settings.sampleRate,
+          channelCount: settings.channelCount,
+          echoCancellation: settings.echoCancellation,
+          noiseSuppression: settings.noiseSuppression,
+          autoGainControl: settings.autoGainControl,
+          capabilities: capabilities
+        });
+
+        // Warn if device name suggests system audio capture
+        const deviceName = audioTrack.label.toLowerCase();
+        if (deviceName.includes('stereo mix') ||
+            deviceName.includes('wave out') ||
+            deviceName.includes('what u hear') ||
+            deviceName.includes('loopback') ||
+            deviceName.includes('system audio')) {
+          console.error('[useMedia] ⚠️⚠️⚠️ WARNING: System audio capture device detected!');
+          console.error('[useMedia] Device:', audioTrack.label);
+          console.error('[useMedia] This will capture your music/system sounds instead of microphone!');
+          console.error('[useMedia] Please select a microphone device in your browser settings.');
+        }
+      }
+
       // Store raw stream
       rawStreamRef.current = stream;
 
       // Process audio through noise gate (always active, even when not live)
-      logger.info('[useMedia] Processing audio through noise gate');
+      logger.info('[useMedia] Processing microphone audio through noise gate');
       const audioTrack = stream.getAudioTracks()[0];
       const videoTrack = stream.getVideoTracks()[0];
 
