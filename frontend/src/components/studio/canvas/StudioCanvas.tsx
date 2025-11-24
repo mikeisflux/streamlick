@@ -651,6 +651,21 @@ export function StudioCanvas({
         lastFrameTime = now - (elapsed % 33);
         frameCount++;
 
+        // Log render loop activity every 30 frames (~1 second)
+        if (frameCount % 30 === 0) {
+          console.log('[StudioCanvas] Render loop running:', {
+            frameCount,
+            canvasSize: { width: canvas.width, height: canvas.height },
+            backgroundColor,
+            hasBackgroundImage: !!backgroundImageRef.current,
+            isLocalUserOnStage: isLocalUserOnStageRef.current,
+            hasMainVideo: !!mainVideoRef.current,
+            videoEnabled: videoEnabledRef.current,
+            hasAvatar: !!avatarImageRef.current,
+            remoteParticipantCount: remoteParticipants.size,
+          });
+        }
+
         // Clear canvas
         ctx.fillStyle = backgroundColor;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -690,6 +705,22 @@ export function StudioCanvas({
             });
           }
         });
+
+        // Log participant collection every 30 frames
+        if (frameCount % 30 === 0) {
+          console.log('[StudioCanvas] Participants collected:', {
+            participantCount: allParticipants.length,
+            participants: allParticipants.map(p => ({
+              type: p.type,
+              id: p.id,
+              hasVideo: !!p.video,
+              videoEnabled: p.videoEnabled,
+              videoReadyState: p.video?.readyState,
+              videoWidth: p.video?.videoWidth,
+              videoHeight: p.video?.videoHeight,
+            })),
+          });
+        }
 
         // Calculate layout based on selected layout and screen share state
         const layout = selectedLayoutRef.current;

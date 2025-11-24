@@ -20,7 +20,9 @@ export function useStudioHandlers({
   const [editMode, setEditMode] = useState(false);
   const [showCanvasSettings, setShowCanvasSettings] = useState(false);
   const [showResetConfirmation, setShowResetConfirmation] = useState(false);
-  const [isLocalUserOnStage, setIsLocalUserOnStage] = useState(false);
+  // CRITICAL: Default to true so broadcaster is on stage immediately
+  // Without this, canvas renders nothing and stream is black
+  const [isLocalUserOnStage, setIsLocalUserOnStage] = useState(true);
   const [displayedComment, setDisplayedComment] = useState<{
     id: string;
     platform: 'youtube' | 'facebook' | 'twitch' | 'linkedin' | 'x' | 'rumble';
