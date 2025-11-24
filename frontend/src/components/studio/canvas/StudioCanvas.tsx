@@ -141,7 +141,15 @@ export function StudioCanvas({
   const [volume, setVolume] = useState(100);
 
   // Detect if local user is speaking (for voice animations)
+  console.log('[StudioCanvas] Calling useAudioLevel with:', {
+    hasLocalStream: !!localStream,
+    localStreamId: localStream?.id,
+    audioEnabled,
+    audioTracks: localStream?.getAudioTracks().length,
+    audioTrackState: localStream?.getAudioTracks()[0]?.readyState
+  });
   const isLocalSpeaking = useAudioLevel(localStream, audioEnabled);
+  console.log('[StudioCanvas] useAudioLevel returned:', isLocalSpeaking);
 
   // Track which remote participants are speaking
   const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
