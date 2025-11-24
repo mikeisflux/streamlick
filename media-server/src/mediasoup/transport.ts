@@ -92,7 +92,7 @@ export async function createProducer(
         const producerStats = Array.from(stats)[0];
 
         if (producerStats) {
-          logger.info(`📊 VIDEO PRODUCER STATS [${producer.id.substring(0, 8)}]:`, producerStats);
+          logger.info(`📊 VIDEO PRODUCER STATS [${producer.id.substring(0, 8)}]: ${JSON.stringify(producerStats, null, 2)}`);
         }
       } catch (err: any) {
         logger.error('Failed to get producer stats:', err.message);
