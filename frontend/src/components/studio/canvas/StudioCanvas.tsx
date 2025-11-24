@@ -693,10 +693,51 @@ export function StudioCanvas({
 
   // Set video srcObject for local stream
   useEffect(() => {
-    if (mainVideoRef.current && localStream) {
-      mainVideoRef.current.srcObject = localStream;
-      mainVideoRef.current.play().catch(err => console.error('[StudioCanvas] Failed to play local video:', err));
-    }
+    const video = mainVideoRef.current;
+    if (!video || !localStream) return;
+
+    console.log('[StudioCanvas] Setting video srcObject:', {
+      hasVideo: !!video,
+      hasStream: !!localStream,
+      streamActive: localStream.active,
+      videoTracks: localStream.getVideoTracks().length,
+      audioTracks: localStream.getAudioTracks().length,
+    });
+
+    video.srcObject = localStream;
+
+    // Add event listeners to track video loading
+    const handleLoadedMetadata = () => {
+      console.log('[StudioCanvas] Video metadata loaded:', {
+        readyState: video.readyState,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+      });
+    };
+
+    const handleCanPlay = () => {
+      console.log('[StudioCanvas] Video can play:', {
+        readyState: video.readyState,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+      });
+    };
+
+    const handleError = (err: Event) => {
+      console.error('[StudioCanvas] Video error:', err);
+    };
+
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('canplay', handleCanPlay);
+    video.addEventListener('error', handleError);
+
+    video.play().catch(err => console.error('[StudioCanvas] Failed to play local video:', err));
+
+    return () => {
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('error', handleError);
+    };
   }, [localStream]);
 
   // Set video srcObject for screen share
