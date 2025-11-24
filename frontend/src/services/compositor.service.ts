@@ -235,14 +235,21 @@ class CompositorService {
       await this.addParticipant(participant);
 
       // Add participant audio to mixer and create audio analyser for visualization
-      if (participant.audioEnabled && participant.stream) {
+      // Create analyzer if stream has audio tracks (regardless of audioEnabled state)
+      // The audioEnabled flag is checked when rendering animations
+      if (participant.stream) {
         const audioTrack = participant.stream.getAudioTracks()[0];
         if (audioTrack) {
           const audioStream = new MediaStream([audioTrack]);
-          audioMixerService.addStream(participant.id, audioStream);
 
-          // Create audio analyser for pulsating visualization when camera is off
+          // Add to mixer if audio is enabled
+          if (participant.audioEnabled) {
+            audioMixerService.addStream(participant.id, audioStream);
+          }
+
+          // Always create audio analyser for visualization (checked at render time)
           this.createAudioAnalyser(participant.id, audioStream);
+          logger.info(`Created audio analyser for participant ${participant.id}`);
         }
       }
     }
