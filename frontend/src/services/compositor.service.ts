@@ -952,14 +952,9 @@ class CompositorService {
    * @returns Promise that resolves when countdown finishes
    */
   async startCountdown(seconds: number): Promise<void> {
-    // CRITICAL FIX: Ensure compositor is ready before starting countdown
-    // This prevents the "black canvas" issue where countdown is set but not rendered
-    try {
-      await this.waitForCompositorReady();
-    } catch (error) {
-      logger.error('[Compositor] Failed to wait for compositor ready:', error);
-      throw new Error('Compositor not ready for countdown');
-    }
+    // MODIFIED: Allow countdown to work without compositor actively compositing
+    // The countdown video overlay doesn't require the compositor rendering pipeline
+    // It just displays a video element on top of StudioCanvas
 
     // ANTI-MUTE: Play timer.mp4 video - ONLY METHOD, no fallback
     // Video with audio is MUCH better for preventing browser track muting

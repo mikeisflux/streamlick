@@ -367,17 +367,23 @@ export function useBroadcast({
 
       mediaServerSocketService.emit('start-rtmp', rtmpPayload);
 
-      toast.success('Connected to platforms, you are now live!');
+      toast.success('Connected to platforms, starting countdown...');
 
-      // REMOVED: Old compositor countdown and intro video - using StudioCanvas now
-      // TODO: Re-implement countdown and intro video features in StudioCanvas
-      // await compositorService.startCountdown(30);
-      // await compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
+      // Display countdown timer (30 seconds)
+      await compositorService.startCountdown(30);
+
+      // Play intro video after countdown
+      try {
+        await compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
+      } catch (error) {
+        console.error('Intro video failed to play:', error);
+        // Continue even if intro video fails
+      }
 
       // Transition YouTube broadcasts from "testing" to "live"
       api.post(`/broadcasts/${broadcastId}/transition-youtube-to-live`)
         .then(() => {
-          toast.success('YouTube transitioned to live!');
+          toast.success('You are now live!');
         })
         .catch((error) => {
           console.error('[useBroadcast] Failed to transition YouTube to live:', error);
@@ -388,8 +394,8 @@ export function useBroadcast({
       // Start chat polling
       socketService.emit('start-chat', { broadcastId});
 
-      // REMOVED: Chat overlay - compositor disabled, will re-implement in StudioCanvas
-      // compositorService.setShowChat(showChatOnStream);
+      // Enable chat display
+      compositorService.setShowChat(showChatOnStream);
 
       // Automatically start recording
       try {
