@@ -1549,20 +1549,6 @@ class CompositorService {
   private drawParticipants(): void {
     const participantArray = Array.from(this.participants.values());
 
-    // DIAGNOSTIC: Log participant state every 60 frames when we have participants
-    if (this.frameCount % 60 === 0 && participantArray.length > 0) {
-      console.log('[Compositor] Drawing participants:', {
-        count: participantArray.length,
-        layout: this.layout.type,
-        participants: participantArray.map(p => ({
-          id: p.id,
-          name: p.name,
-          videoEnabled: p.videoEnabled,
-          hasVideoElement: this.videoElements.has(p.id),
-        })),
-      });
-    }
-
     switch (this.layout.type) {
       case 'grid':
         this.drawGridLayout(participantArray);
@@ -1735,14 +1721,6 @@ class CompositorService {
     const participant = this.participants.get(participantId);
 
     if (!video || !participant) {
-      // DIAGNOSTIC: Log missing video/participant every 60 frames
-      if (this.frameCount % 60 === 0) {
-        console.log('[Compositor] Cannot draw participant video:', {
-          participantId,
-          hasVideo: !!video,
-          hasParticipant: !!participant,
-        });
-      }
       return;
     }
 
@@ -1798,16 +1776,6 @@ class CompositorService {
 
       this.ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
     } else {
-      // DIAGNOSTIC: Log why video is not being drawn every 60 frames
-      if (this.frameCount % 60 === 0) {
-        console.log('[Compositor] Video not drawn - showing placeholder:', {
-          participantId,
-          videoEnabled: participant.videoEnabled,
-          readyState: video.readyState,
-          reason: !participant.videoEnabled ? 'video disabled' : 'readyState < 2',
-        });
-      }
-
       // Video disabled - show placeholder with audio visualization
       this.ctx.fillStyle = '#333333';
       this.ctx.fillRect(x, y, width, height);
@@ -2215,20 +2183,6 @@ class CompositorService {
 
     // CRITICAL FIX: Check if video is ready before attempting to draw
     if (element instanceof HTMLVideoElement) {
-      // DIAGNOSTIC: Log video state every 30 frames to debug why it's not drawing
-      if (this.frameCount % 30 === 0) {
-        console.log('[Media Clip] Video state:', {
-          readyState: element.readyState,
-          videoWidth: element.videoWidth,
-          videoHeight: element.videoHeight,
-          paused: element.paused,
-          ended: element.ended,
-          currentTime: element.currentTime,
-          duration: element.duration,
-          src: element.src.substring(0, 50),
-        });
-      }
-
       // Video must have metadata loaded (readyState >= 2) to draw properly
       if (element.readyState < 2) {
         // Video metadata not loaded yet - skip drawing this frame
