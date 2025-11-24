@@ -38,7 +38,6 @@ router.use(authenticateOrMediaServer);
 export async function initializeDailyService(): Promise<void> {
   try {
     await dailyServiceBackend.initialize();
-    logger.info('[Daily Routes] Daily service initialized');
   } catch (error) {
     logger.error('[Daily Routes] Failed to initialize Daily service:', error);
   }
@@ -52,7 +51,6 @@ router.post('/broadcasts/:broadcastId/room', async (req: AuthRequest, res) => {
   try {
     const { broadcastId } = req.params;
 
-    logger.info(`[Daily Routes] Creating/getting room for broadcast ${broadcastId}`);
 
     const room = await dailyServiceBackend.getOrCreateBroadcastRoom(broadcastId);
 
@@ -92,7 +90,6 @@ router.post('/broadcasts/:broadcastId/streaming/start', async (req: AuthRequest,
       return res.status(400).json({ error: 'At least one destination is required' });
     }
 
-    logger.info(`[Daily Routes] Starting streaming for broadcast ${broadcastId} to ${destinations.length} destination(s)`);
 
     const roomName = `streamlick-broadcast-${broadcastId}`;
 
@@ -135,7 +132,6 @@ router.post('/broadcasts/:broadcastId/streaming/stop', async (req: AuthRequest, 
   try {
     const { broadcastId } = req.params;
 
-    logger.info(`[Daily Routes] Stopping streaming for broadcast ${broadcastId}`);
 
     const roomName = `streamlick-broadcast-${broadcastId}`;
 
@@ -185,7 +181,6 @@ router.post('/broadcasts/:broadcastId/streaming/add-endpoints', async (req: Auth
       return res.status(400).json({ error: 'At least one destination is required' });
     }
 
-    logger.info(`[Daily Routes] Adding ${destinations.length} output(s) for broadcast ${broadcastId}`);
 
     const roomName = `streamlick-broadcast-${broadcastId}`;
 
@@ -215,7 +210,6 @@ router.delete('/broadcasts/:broadcastId/room', async (req: AuthRequest, res) => 
     const { broadcastId } = req.params;
     const roomName = `streamlick-broadcast-${broadcastId}`;
 
-    logger.info(`[Daily Routes] Deleting room for broadcast ${broadcastId}`);
 
     await dailyServiceBackend.deleteRoom(roomName);
 
