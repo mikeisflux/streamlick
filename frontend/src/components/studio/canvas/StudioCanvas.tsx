@@ -161,6 +161,8 @@ export function StudioCanvas({
   const videoEnabledRef = useRef(videoEnabled);
   const selectedLayoutRef = useRef(selectedLayout);
   const isSharingScreenRef = useRef(isSharingScreen);
+  const captionsEnabledRef = useRef(captionsEnabled);
+  const currentCaptionRef = useRef(currentCaption);
 
   // Detect if local user is speaking (for voice animations) - use RAW audio before noise gate
   const isLocalSpeaking = useAudioLevel(rawStream || localStream, audioEnabled);
@@ -173,7 +175,9 @@ export function StudioCanvas({
     selectedLayoutRef.current = selectedLayout;
     isSharingScreenRef.current = isSharingScreen;
     isLocalSpeakingRef.current = isLocalSpeaking;
-  }, [isLocalUserOnStage, videoEnabled, selectedLayout, isSharingScreen, isLocalSpeaking]);
+    captionsEnabledRef.current = captionsEnabled;
+    currentCaptionRef.current = currentCaption;
+  }, [isLocalUserOnStage, videoEnabled, selectedLayout, isSharingScreen, isLocalSpeaking, captionsEnabled, currentCaption]);
 
   // Track which remote participants are speaking
   const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
@@ -939,11 +943,51 @@ export function StudioCanvas({
           ctx.drawImage(logoImageRef.current, 20, 20, logoSize, logoSize);
         }
 
+        // Draw captions (bottom center)
+        if (captionsEnabledRef.current && currentCaptionRef.current) {
+          const caption = currentCaptionRef.current;
+          const padding = 20;
+          const maxWidth = canvas.width - padding * 2;
+          const bottomMargin = 80;
+
+          // Set caption text style
+          ctx.font = 'bold 32px Arial, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+
+          // Measure text for background box
+          const textMetrics = ctx.measureText(caption.text);
+          const textWidth = Math.min(textMetrics.width, maxWidth);
+          const textHeight = 40; // Approximate text height
+          const boxPadding = 15;
+
+          // Draw semi-transparent background
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+          ctx.fillRect(
+            canvas.width / 2 - textWidth / 2 - boxPadding,
+            canvas.height - bottomMargin - textHeight - boxPadding,
+            textWidth + boxPadding * 2,
+            textHeight + boxPadding * 2
+          );
+
+          // Draw white text with shadow for better readability
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+          ctx.shadowBlur = 4;
+          ctx.shadowOffsetX = 2;
+          ctx.shadowOffsetY = 2;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(caption.text, canvas.width / 2, canvas.height - bottomMargin, maxWidth);
+
+          // Reset shadow
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+        }
+
         // TODO: Draw banners
 
         // TODO: Draw chat
-
-        // TODO: Draw captions
 
         // Log FPS and rendering state every 60 frames
         if (frameCount % 60 === 0) {
