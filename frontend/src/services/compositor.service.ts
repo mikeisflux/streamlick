@@ -420,7 +420,6 @@ class CompositorService {
    * Called every frame to detect speaking participants
    */
   private updateAudioLevels(): void {
-    console.log('[Compositor updateAudioLevels] Called, analyzers:', this.audioAnalysers.size);
     this.audioAnalysers.forEach((analyser, participantId) => {
       const bufferLength = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
@@ -435,14 +434,6 @@ class CompositorService {
 
       // Normalize to 0-1 range (0-255 → 0-1)
       const normalizedLevel = average / 255;
-
-      console.log('[Compositor Audio Level]', {
-        participantId,
-        average: average.toFixed(2),
-        normalizedLevel: normalizedLevel.toFixed(3),
-        isSpeaking: normalizedLevel > 0.05,
-        firstFewValues: Array.from(dataArray.slice(0, 10))
-      });
 
       // Store level for drawing
       this.audioLevels.set(participantId, normalizedLevel);
@@ -1264,7 +1255,6 @@ class CompositorService {
         }
 
         // Update audio levels for pulsating avatar animations
-        console.log('[Compositor] About to call updateAudioLevels, analyzers:', this.audioAnalysers.size);
         this.updateAudioLevels();
 
         this.drawParticipants();
