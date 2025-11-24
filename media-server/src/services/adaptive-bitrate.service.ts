@@ -147,7 +147,6 @@ export class AdaptiveBitrateService extends EventEmitter {
     this.stabilityCounters.set(broadcastId, { bad: 0, good: 0 });
     this.adjustmentHistory.set(broadcastId, []);
 
-    logger.info(`Starting adaptive bitrate for broadcast ${broadcastId} with profile: ${profile.name}`);
 
     // Monitor and adjust every 10 seconds
     const interval = setInterval(() => {
@@ -170,7 +169,6 @@ export class AdaptiveBitrateService extends EventEmitter {
     this.currentProfiles.delete(broadcastId);
     this.stabilityCounters.delete(broadcastId);
 
-    logger.info(`Stopped adaptive bitrate for broadcast ${broadcastId}`);
   }
 
   /**
@@ -225,7 +223,6 @@ export class AdaptiveBitrateService extends EventEmitter {
     // Emit event
     this.emit('bitrate-adjusted', adjustment);
 
-    logger.info(`Manually set profile for broadcast ${broadcastId} to ${profile.name}`);
     return true;
   }
 
@@ -366,7 +363,6 @@ export class AdaptiveBitrateService extends EventEmitter {
 
     const currentIndex = this.profiles.findIndex((p) => p.name === currentProfile.name);
     if (currentIndex === -1 || currentIndex === 0) {
-      logger.info(`Already at highest profile for broadcast ${broadcastId}`);
       return;
     }
 
@@ -384,7 +380,6 @@ export class AdaptiveBitrateService extends EventEmitter {
     this.recordAdjustment(broadcastId, adjustment);
     this.emit('bitrate-adjusted', adjustment);
 
-    logger.info(`Upgraded broadcast ${broadcastId}: ${currentProfile.name} → ${newProfile.name}`);
   }
 
   /**
@@ -413,12 +408,10 @@ export class AdaptiveBitrateService extends EventEmitter {
    * Stop all adaptive bitrate monitoring (cleanup)
    */
   stopAll(): void {
-    logger.info('Stopping all adaptive bitrate monitoring');
 
     // Clear all intervals
     this.monitoringIntervals.forEach((interval, broadcastId) => {
       clearInterval(interval);
-      logger.info(`Cleared monitoring interval for broadcast ${broadcastId}`);
     });
 
     // Clear all maps
@@ -427,7 +420,6 @@ export class AdaptiveBitrateService extends EventEmitter {
     this.stabilityCounters.clear();
     this.adjustmentHistory.clear();
 
-    logger.info('All adaptive bitrate monitoring stopped');
   }
 }
 
