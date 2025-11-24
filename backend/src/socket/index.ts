@@ -121,7 +121,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
   });
 
   io.on('connection', (socket: Socket) => {
-    logger.info(`Socket connected: ${socket.id}`);
 
     // Join studio room
     socket.on('join-studio', async ({ broadcastId, participantId }) => {
@@ -172,7 +171,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
                 role: 'host',
               },
             });
-            logger.info(`Created host participant ${participant.id} for broadcast ${broadcastId}`);
           }
         } else {
           // Use provided participantId
@@ -216,7 +214,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           participantId: participant.id,
         });
 
-        logger.info(`Participant ${participant.id} joined broadcast ${broadcastId}`);
       } catch (error) {
         logger.error('Join studio error:', error);
         socket.emit('error', { message: 'Failed to join studio' });
@@ -231,7 +228,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           participantId,
         });
         socket.leave(`broadcast:${broadcastId}`);
-        logger.info(`Participant ${participantId} left broadcast ${broadcastId}`);
       }
     });
 
@@ -301,7 +297,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           role: 'guest',
         });
 
-        logger.info(`Participant ${participantId} promoted to live in broadcast ${broadcastId}`);
       } catch (error) {
         logger.error('Promote to live error:', error);
         socket.emit('error', { message: 'Failed to promote participant' });
@@ -343,7 +338,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           role: 'backstage',
         });
 
-        logger.info(`Participant ${participantId} demoted to backstage in broadcast ${broadcastId}`);
       } catch (error) {
         logger.error('Demote to backstage error:', error);
         socket.emit('error', { message: 'Failed to demote participant' });
@@ -376,7 +370,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           participantId,
           volume,
         });
-        logger.info(`Participant ${participantId} volume set to ${volume}% in broadcast ${broadcastId}`);
       } catch (error) {
         logger.error('Set participant volume error:', error);
         socket.emit('error', { message: 'Failed to set volume' });
@@ -408,7 +401,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         io.to(`broadcast:${broadcastId}`).emit('participant-muted', {
           participantId,
         });
-        logger.info(`Participant ${participantId} muted in broadcast ${broadcastId}`);
       } catch (error) {
         logger.error('Mute participant error:', error);
         socket.emit('error', { message: 'Failed to mute participant' });
@@ -440,7 +432,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         io.to(`broadcast:${broadcastId}`).emit('participant-unmuted', {
           participantId,
         });
-        logger.info(`Participant ${participantId} unmuted in broadcast ${broadcastId}`);
       } catch (error) {
         logger.error('Unmute participant error:', error);
         socket.emit('error', { message: 'Failed to unmute participant' });
@@ -472,7 +463,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         io.to(`broadcast:${broadcastId}`).emit('participant-kicked', {
           participantId,
         });
-        logger.info(`Participant ${participantId} kicked from broadcast ${broadcastId}`);
       } catch (error) {
         logger.error('Kick participant error:', error);
         socket.emit('error', { message: 'Failed to kick participant' });
@@ -504,7 +494,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         io.to(`broadcast:${broadcastId}`).emit('participant-banned', {
           participantId,
         });
-        logger.info(`Participant ${participantId} banned from broadcast ${broadcastId}`);
       } catch (error) {
         logger.error('Ban participant error:', error);
         socket.emit('error', { message: 'Failed to ban participant' });
@@ -558,7 +547,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         await chatManager.startAll();
         activeChatManagers.set(broadcastId, chatManager);
 
-        logger.info(`Chat polling started for broadcast ${broadcastId}`);
         socket.emit('chat-started', { broadcastId });
       } catch (error: any) {
         logger.error('Start chat error:', error);
@@ -582,7 +570,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         if (chatManager) {
           chatManager.stopAll();
           activeChatManagers.delete(broadcastId);
-          logger.info(`Chat polling stopped for broadcast ${broadcastId}`);
         }
         socket.emit('chat-stopped', { broadcastId });
       } catch (error: any) {
@@ -603,7 +590,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           socket.emit('health-metrics', metrics);
         }
 
-        logger.info(`Health monitoring started for broadcast ${broadcastId}`);
       } catch (error: any) {
         logger.error('Start health monitoring error:', error);
         socket.emit('error', { message: 'Failed to start health monitoring' });
@@ -614,7 +600,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     socket.on('stop-health-monitoring', ({ broadcastId }) => {
       try {
         streamHealthMonitor.stopMonitoring(broadcastId);
-        logger.info(`Health monitoring stopped for broadcast ${broadcastId}`);
       } catch (error: any) {
         logger.error('Stop health monitoring error:', error);
       }
@@ -660,7 +645,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     socket.on('start-adaptive-bitrate', ({ broadcastId, initialProfile }) => {
       try {
         // This would integrate with the media-server's adaptive bitrate service
-        logger.info(`Adaptive bitrate enabled for broadcast ${broadcastId}`);
         socket.emit('adaptive-bitrate-started', { broadcastId, profile: initialProfile });
       } catch (error: any) {
         logger.error('Start adaptive bitrate error:', error);
@@ -671,7 +655,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     // Stop adaptive bitrate
     socket.on('stop-adaptive-bitrate', ({ broadcastId }) => {
       try {
-        logger.info(`Adaptive bitrate disabled for broadcast ${broadcastId}`);
         socket.emit('adaptive-bitrate-stopped', { broadcastId });
       } catch (error: any) {
         logger.error('Stop adaptive bitrate error:', error);
@@ -681,7 +664,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     // Set bitrate profile manually
     socket.on('set-bitrate-profile', ({ broadcastId, profileName }) => {
       try {
-        logger.info(`Manual profile set for broadcast ${broadcastId}: ${profileName}`);
         socket.emit('bitrate-profile-updated', { broadcastId, profileName });
       } catch (error: any) {
         logger.error('Set bitrate profile error:', error);
@@ -739,7 +721,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           participantName,
           hasAudio,
         });
-        logger.info(`Screen share request from ${participantName} in broadcast ${broadcastId}`);
       }
     });
 
@@ -763,7 +744,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         io.to(`broadcast:${broadcastId}`).emit('screen-share-approved', {
           participantId,
         });
-        logger.info(`Screen share approved for participant ${participantId} in broadcast ${broadcastId}`);
       } catch (error) {
         logger.error('Approve screen share error:', error);
         socket.emit('error', { message: 'Failed to approve screen share' });
@@ -791,7 +771,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           participantId,
           reason,
         });
-        logger.info(`Screen share denied for participant ${participantId} in broadcast ${broadcastId}`);
       } catch (error) {
         logger.error('Deny screen share error:', error);
         socket.emit('error', { message: 'Failed to deny screen share' });
@@ -807,7 +786,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           hasCamera,
           hasSystemAudio,
         });
-        logger.info(`Broadcaster screen share started in broadcast ${broadcastId} (camera: ${hasCamera}, audio: ${hasSystemAudio})`);
       }
     });
 
@@ -818,7 +796,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         socket.to(`broadcast:${broadcastId}`).emit('broadcaster-screen-share-stopped', {
           participantId,
         });
-        logger.info(`Broadcaster screen share stopped in broadcast ${broadcastId}`);
       }
     });
 
@@ -830,7 +807,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           participantId,
           hasAudio,
         });
-        logger.info(`Participant ${participantId} screen share started in broadcast ${broadcastId}`);
       }
     });
 
@@ -841,7 +817,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         io.to(`broadcast:${broadcastId}`).emit('participant-screen-share-stopped', {
           participantId,
         });
-        logger.info(`Participant ${participantId} screen share stopped in broadcast ${broadcastId}`);
       }
     });
 
@@ -861,7 +836,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           return socket.emit('error', { message: 'Not authorized' });
         }
 
-        logger.info(`Starting RTMP streaming for broadcast ${broadcastId} to ${destinations.length} destinations`);
 
         // In a production environment, this would:
         // 1. Connect to the media server
@@ -882,7 +856,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           });
         }
 
-        logger.info(`RTMP streaming started for broadcast ${broadcastId}`);
       } catch (error: any) {
         logger.error('Start RTMP error:', error);
         socket.emit('error', { message: 'Failed to start RTMP streaming' });
@@ -905,14 +878,12 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           return socket.emit('error', { message: 'Not authorized' });
         }
 
-        logger.info(`Stopping RTMP streaming for broadcast ${broadcastId}`);
 
         // In a production environment, this would stop all RTMP streams
         io.to(`broadcast:${broadcastId}`).emit('rtmp-stopped', {
           broadcastId,
         });
 
-        logger.info(`RTMP streaming stopped for broadcast ${broadcastId}`);
       } catch (error: any) {
         logger.error('Stop RTMP error:', error);
         socket.emit('error', { message: 'Failed to stop RTMP streaming' });
@@ -928,7 +899,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         // Stop health monitoring for this broadcast
         try {
           streamHealthMonitor.stopMonitoring(broadcastId);
-          logger.info(`Health monitoring stopped for broadcast ${broadcastId} (disconnect)`);
         } catch (error) {
           logger.error('Error stopping health monitoring on disconnect:', error);
         }
@@ -941,7 +911,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
             try {
               chatManager.stopAll();
               activeChatManagers.delete(broadcastId);
-              logger.info(`Chat polling stopped for broadcast ${broadcastId} (last participant disconnect)`);
             } catch (error) {
               logger.error('Error stopping chat manager on disconnect:', error);
             }
@@ -956,7 +925,6 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         }
       }
 
-      logger.info(`Socket disconnected: ${socket.id} (broadcast: ${broadcastId}, participant: ${participantId})`);
     });
   });
 
