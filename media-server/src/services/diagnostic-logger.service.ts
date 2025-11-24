@@ -124,7 +124,6 @@ export class DiagnosticLoggerService extends EventEmitter {
   private checkAndRotateIfNeeded(): void {
     const date = new Date().toISOString().split('T')[0];
     if (date !== this.currentDate) {
-      logger.info('Date changed, rotating diagnostic log file');
       this.rotateLogFile();
     }
   }
@@ -142,7 +141,6 @@ export class DiagnosticLoggerService extends EventEmitter {
     this.currentLogFile = path.join(this.LOG_DIR, `diagnostic-${date}.jsonl`);
     this.logStream = fs.createWriteStream(this.currentLogFile, { flags: 'a' });
 
-    logger.info(`Diagnostic log file rotated: ${this.currentLogFile}`);
   }
 
   /**
@@ -462,7 +460,6 @@ export class DiagnosticLoggerService extends EventEmitter {
    */
   clear(): void {
     this.logs = [];
-    logger.info('Diagnostic logs cleared');
   }
 
   /**
