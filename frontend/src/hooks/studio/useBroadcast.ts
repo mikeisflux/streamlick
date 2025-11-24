@@ -95,8 +95,11 @@ export function useBroadcast({
   }, []);
 
   const handleStopRecording = useCallback(async () => {
+    console.error('🎙️ STOPPING RECORDING - Starting process...');
     try {
+      console.error('🎙️ Calling recordingService.stopRecording()...');
       const blob = await recordingService.stopRecording();
+      console.error('🎙️ Recording stopped, blob size:', blob.size, 'bytes');
       const duration = recordingDuration;
 
       setIsRecording(false);
@@ -113,15 +116,17 @@ export function useBroadcast({
       const title = broadcast?.title || 'Untitled Broadcast';
       const filename = `${title}-${timestamp}.webm`;
 
+      console.error('🎙️ Calling downloadRecording() with filename:', filename);
       await recordingService.downloadRecording(blob, filename, {
         title,
         broadcastId,
         duration,
       });
+      console.error('🎙️ Download completed successfully');
 
       toast.success(`Recording saved to Downloads: ${filename}`);
     } catch (error) {
-      console.error('Recording stop error:', error);
+      console.error('🎙️ Recording stop error:', error);
       toast.error('Failed to stop recording');
     }
   }, [broadcast, broadcastId, recordingDuration]);
