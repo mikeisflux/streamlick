@@ -364,26 +364,39 @@ class CompositorService {
    * Create audio analyser for visualizing participant audio levels
    */
   private createAudioAnalyser(participantId: string, audioStream: MediaStream): void {
+    console.log('[Compositor] createAudioAnalyser called for:', participantId, {
+      streamId: audioStream.id,
+      active: audioStream.active,
+      audioTracks: audioStream.getAudioTracks().length
+    });
     try {
       // Create a separate audio context for analysis (not the mixer context)
       const audioContext = new AudioContext();
+      console.log('[Compositor] AudioContext created, state:', audioContext.state);
+
       const source = audioContext.createMediaStreamSource(audioStream);
+      console.log('[Compositor] MediaStreamSource created');
+
       const analyser = audioContext.createAnalyser();
 
       // Configure analyser for speech detection
       analyser.fftSize = 256;
       analyser.smoothingTimeConstant = 0.8;
+      console.log('[Compositor] Analyser configured, fftSize:', analyser.fftSize);
 
       // Connect source to analyser (don't connect to destination - just analyze)
       source.connect(analyser);
+      console.log('[Compositor] Source connected to analyser');
 
       // Store analyser
       this.audioAnalysers.set(participantId, analyser);
       this.audioLevels.set(participantId, 0);
 
       logger.info(`Audio analyser created for participant ${participantId}`);
+      console.log('[Compositor] Audio analyser stored, total analyzers:', this.audioAnalysers.size);
     } catch (error) {
       logger.error(`Failed to create audio analyser for ${participantId}:`, error);
+      console.error('[Compositor] createAudioAnalyser ERROR:', error);
     }
   }
 
@@ -392,6 +405,7 @@ class CompositorService {
    * Called every frame to detect speaking participants
    */
   private updateAudioLevels(): void {
+    console.log('[Compositor updateAudioLevels] Called, analyzers:', this.audioAnalysers.size);
     this.audioAnalysers.forEach((analyser, participantId) => {
       const bufferLength = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
@@ -406,6 +420,14 @@ class CompositorService {
 
       // Normalize to 0-1 range (0-255 → 0-1)
       const normalizedLevel = average / 255;
+
+      console.log('[Compositor Audio Level]', {
+        participantId,
+        average: average.toFixed(2),
+        normalizedLevel: normalizedLevel.toFixed(3),
+        isSpeaking: normalizedLevel > 0.05,
+        firstFewValues: Array.from(dataArray.slice(0, 10))
+      });
 
       // Store level for drawing
       this.audioLevels.set(participantId, normalizedLevel);
