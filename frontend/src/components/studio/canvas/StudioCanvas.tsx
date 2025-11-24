@@ -1244,6 +1244,12 @@ export function StudioCanvas({
           });
         }
 
+        // ANTI-STATIC: Draw a tiny changing pixel to prevent Chrome from detecting stream as static
+        // Chrome will stop sending RTP packets if it thinks frames are identical
+        // This ensures every frame is unique so packets keep flowing
+        ctx.fillStyle = `rgba(0, 0, 0, ${(frameCount % 256) / 255})`;
+        ctx.fillRect(0, 0, 1, 1);
+
         // CRITICAL: Capture stream AFTER first frame is rendered
         // This ensures the stream contains actual video data, not blank frames
         if (frameCount === 1 && !streamCaptured) {
