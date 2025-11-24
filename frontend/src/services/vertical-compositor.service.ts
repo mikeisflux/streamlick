@@ -107,7 +107,6 @@ class VerticalCompositorService {
       this.outputStream!.addTrack(track);
     });
 
-    console.log('📱 Vertical video compositor started (9:16 format)');
     return this.outputStream;
   }
 
@@ -140,7 +139,6 @@ class VerticalCompositorService {
     this.canvas = null;
     this.ctx = null;
 
-    console.log('📱 Vertical video compositor stopped');
   }
 
   /**
@@ -306,7 +304,6 @@ class VerticalCompositorService {
    */
   updateCropMode(mode: 'center' | 'smart' | 'follow-face'): void {
     this.config.cropMode = mode;
-    console.log(`📱 Vertical crop mode changed to: ${mode}`);
   }
 
   /**
@@ -356,7 +353,6 @@ class VerticalCompositorService {
       this.config.outputHeight = resolution.height;
       this.canvas.width = resolution.width;
       this.canvas.height = resolution.height;
-      console.log(`📱 Vertical resolution set to ${preset}`);
     }
   }
 }
