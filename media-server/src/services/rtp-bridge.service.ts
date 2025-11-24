@@ -18,7 +18,6 @@ import logger from '../utils/logger';
 let wrtc: any;
 try {
   wrtc = require('wrtc');
-  logger.info('[RTP Bridge] wrtc module loaded successfully');
 } catch (error) {
   logger.warn('[RTP Bridge] wrtc module not available - Daily bot will not work');
   logger.warn('[RTP Bridge] Install with: npm install wrtc');
@@ -50,14 +49,12 @@ class RTPBridgeService {
     }
 
     try {
-      logger.info('[RTP Bridge] Creating MediaStreamTracks with full WebRTC signaling...');
 
       // STEP 1: Create wrtc peer connection
       const peerConnection = new wrtc.RTCPeerConnection({
         iceServers: [],
       });
 
-      logger.info('[RTP Bridge] Created RTCPeerConnection');
 
       // STEP 2: Add transceivers to receive video and audio
       peerConnection.addTransceiver('video', { direction: 'recvonly' });
@@ -67,12 +64,10 @@ class RTPBridgeService {
       const offer = await peerConnection.createOffer();
       await peerConnection.setLocalDescription(offer);
 
-      logger.info('[RTP Bridge] Created offer from peer connection');
 
       // STEP 4: Extract DTLS parameters from offer
       const dtlsParameters = this.extractDtlsParameters(offer.sdp!);
 
-      logger.info('[RTP Bridge] Extracted DTLS parameters:', dtlsParameters);
 
       // STEP 5: Create mediasoup WebRTC Transport
       const webRtcTransport = await router.createWebRtcTransport({
@@ -83,12 +78,10 @@ class RTPBridgeService {
         initialAvailableOutgoingBitrate: 1000000,
       });
 
-      logger.info('[RTP Bridge] Created mediasoup WebRTC transport');
 
       // STEP 6: Connect mediasoup transport with peer connection's DTLS params
       await webRtcTransport.connect({ dtlsParameters });
 
-      logger.info('[RTP Bridge] Connected WebRTC transport');
 
       // STEP 7: Get RTP capabilities that wrtc supports
       const rtpCapabilities = this.getWrtcRtpCapabilities(router);
@@ -106,7 +99,6 @@ class RTPBridgeService {
         paused: false,
       });
 
-      logger.info('[RTP Bridge] Created consumers on WebRTC transport');
 
       // STEP 9: Build SDP answer from mediasoup transport and consumers
       const answerSdp = this.buildAnswerSdp(
@@ -115,7 +107,6 @@ class RTPBridgeService {
         audioConsumer
       );
 
-      logger.info('[RTP Bridge] Built answer SDP');
 
       // STEP 10: Set answer on peer connection
       await peerConnection.setRemoteDescription({
@@ -123,12 +114,10 @@ class RTPBridgeService {
         sdp: answerSdp,
       });
 
-      logger.info('[RTP Bridge] Set answer on peer connection');
 
       // STEP 11: Wait for tracks to arrive
       const tracks = await this.waitForTracks(peerConnection);
 
-      logger.info('[RTP Bridge] ✅ Tracks received:', {
         videoTrack: tracks.videoTrack?.id,
         audioTrack: tracks.audioTrack?.id,
       });
@@ -288,7 +277,6 @@ a=candidate:${candidate.foundation} 1 udp ${candidate.priority} ${candidate.ip} 
       const tracks: any = { videoTrack: null, audioTrack: null };
 
       peerConnection.ontrack = (event: any) => {
-        logger.info('[RTP Bridge] Track received:', {
           kind: event.track.kind,
           id: event.track.id,
         });
@@ -332,7 +320,6 @@ a=candidate:${candidate.foundation} 1 udp ${candidate.priority} ${candidate.ip} 
     try {
       if (peerConnection) {
         peerConnection.close();
-        logger.info('[RTP Bridge] Peer connection closed');
       }
     } catch (error: any) {
       logger.error('[RTP Bridge] Cleanup error:', error);
