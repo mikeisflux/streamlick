@@ -149,6 +149,22 @@ export function StudioCanvas({
   const outputStreamRef = useRef<MediaStream | null>(null);
   const remoteVideoElementsRef = useRef<Map<string, HTMLVideoElement>>(new Map());
 
+  // Cached images for canvas rendering
+  const backgroundImageRef = useRef<HTMLImageElement | null>(null);
+  const logoImageRef = useRef<HTMLImageElement | null>(null);
+  const overlayImageRef = useRef<HTMLImageElement | null>(null);
+  const avatarImageRef = useRef<HTMLImageElement | null>(null);
+
+  // Refs for props (to avoid stale closures in render loop)
+  const isLocalUserOnStageRef = useRef(isLocalUserOnStage);
+  const videoEnabledRef = useRef(videoEnabled);
+
+  // Update refs when props change
+  useEffect(() => {
+    isLocalUserOnStageRef.current = isLocalUserOnStage;
+    videoEnabledRef.current = videoEnabled;
+  }, [isLocalUserOnStage, videoEnabled]);
+
   // Detect if local user is speaking (for voice animations) - use RAW audio before noise gate
   const isLocalSpeaking = useAudioLevel(rawStream || localStream, audioEnabled);
 
@@ -581,15 +597,48 @@ export function StudioCanvas({
         ctx.fillStyle = backgroundColor;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // TODO: Draw background image
+        // Draw background image (full canvas)
+        if (backgroundImageRef.current) {
+          ctx.drawImage(backgroundImageRef.current, 0, 0, canvas.width, canvas.height);
+        }
 
-        // Draw local participant video if available
-        if (mainVideoRef.current && isLocalUserOnStage && videoEnabled) {
-          const video = mainVideoRef.current;
-          if (video.readyState >= 2) {
-            // Video is ready - draw it
-            // For now, draw full canvas - will add layouts later
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // Draw local participant video or avatar
+        if (mainVideoRef.current && isLocalUserOnStageRef.current) {
+          // DIAGNOSTIC: Log video state every 60 frames
+          if (frameCount % 60 === 0) {
+            console.log('[StudioCanvas] Local participant state:', {
+              isLocalUserOnStage: isLocalUserOnStageRef.current,
+              videoEnabled: videoEnabledRef.current,
+              videoExists: !!mainVideoRef.current,
+              videoReadyState: mainVideoRef.current?.readyState,
+              videoWidth: mainVideoRef.current?.videoWidth,
+              videoHeight: mainVideoRef.current?.videoHeight,
+            });
+          }
+
+          if (videoEnabledRef.current) {
+            // Draw video
+            const video = mainVideoRef.current;
+            if (video.readyState >= 2) {
+              // For now, draw full canvas - will add layouts later
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            }
+          } else {
+            // Draw avatar when camera is off
+            if (avatarImageRef.current) {
+              // Draw circular avatar in center
+              const size = Math.min(canvas.width, canvas.height) * 0.3;
+              const x = (canvas.width - size) / 2;
+              const y = (canvas.height - size) / 2;
+
+              ctx.save();
+              ctx.beginPath();
+              ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+              ctx.closePath();
+              ctx.clip();
+              ctx.drawImage(avatarImageRef.current, x, y, size, size);
+              ctx.restore();
+            }
           }
         }
 
@@ -597,9 +646,16 @@ export function StudioCanvas({
 
         // TODO: Draw remote participants
 
-        // TODO: Draw overlay (full-screen)
+        // Draw overlay image (full-screen, on top of participants)
+        if (overlayImageRef.current) {
+          ctx.drawImage(overlayImageRef.current, 0, 0, canvas.width, canvas.height);
+        }
 
-        // TODO: Draw logo
+        // Draw logo (top-left corner)
+        if (logoImageRef.current) {
+          const logoSize = 150;
+          ctx.drawImage(logoImageRef.current, 20, 20, logoSize, logoSize);
+        }
 
         // TODO: Draw banners
 
@@ -644,6 +700,87 @@ export function StudioCanvas({
       screenShareVideoRef.current.play().catch(err => console.error('[StudioCanvas] Failed to play screen share:', err));
     }
   }, [screenShareStream]);
+
+  // Load background image
+  useEffect(() => {
+    if (!streamBackground) {
+      backgroundImageRef.current = null;
+      return;
+    }
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      backgroundImageRef.current = img;
+      console.log('[StudioCanvas] Background image loaded:', img.width, 'x', img.height);
+    };
+    img.onerror = (err) => {
+      console.error('[StudioCanvas] Failed to load background image:', err);
+      backgroundImageRef.current = null;
+    };
+    img.src = streamBackground;
+  }, [streamBackground]);
+
+  // Load logo image
+  useEffect(() => {
+    if (!streamLogo) {
+      logoImageRef.current = null;
+      return;
+    }
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      logoImageRef.current = img;
+      console.log('[StudioCanvas] Logo image loaded:', img.width, 'x', img.height);
+    };
+    img.onerror = (err) => {
+      console.error('[StudioCanvas] Failed to load logo image:', err);
+      logoImageRef.current = null;
+    };
+    img.src = streamLogo;
+  }, [streamLogo]);
+
+  // Load overlay image (full-screen)
+  useEffect(() => {
+    if (!streamOverlay) {
+      overlayImageRef.current = null;
+      return;
+    }
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      overlayImageRef.current = img;
+      console.log('[StudioCanvas] Overlay image loaded:', img.width, 'x', img.height);
+    };
+    img.onerror = (err) => {
+      console.error('[StudioCanvas] Failed to load overlay image:', err);
+      overlayImageRef.current = null;
+    };
+    img.src = streamOverlay;
+  }, [streamOverlay]);
+
+  // Load avatar image
+  useEffect(() => {
+    const avatarUrl = localStorage.getItem('selectedAvatar');
+    if (!avatarUrl) {
+      avatarImageRef.current = null;
+      return;
+    }
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      avatarImageRef.current = img;
+      console.log('[StudioCanvas] Avatar image loaded:', img.width, 'x', img.height);
+    };
+    img.onerror = (err) => {
+      console.error('[StudioCanvas] Failed to load avatar image:', err);
+      avatarImageRef.current = null;
+    };
+    img.src = avatarUrl;
+  }, []); // Load once on mount
 
   // Calculate total participants (local user if on stage + remote on-stage)
   const onStageParticipants = Array.from(remoteParticipants.values()).filter(
