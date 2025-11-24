@@ -177,6 +177,9 @@ export function StudioCanvas({
   const isLocalSpeaking = useAudioLevel(rawStream || localStream, audioEnabled);
   const isLocalSpeakingRef = useRef(isLocalSpeaking);
 
+  // Load banners from localStorage
+  const [banners, setBanners] = useState<Banner[]>([]);
+
   // Banners ref
   const bannersRef = useRef(banners);
 
@@ -205,9 +208,6 @@ export function StudioCanvas({
 
   // Track which remote participants are speaking
   const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
-
-  // Load banners from localStorage
-  const [banners, setBanners] = useState<Banner[]>([]);
 
   // Load style settings from localStorage
   const [styleSettings, setStyleSettings] = useState({

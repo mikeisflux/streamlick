@@ -1972,6 +1972,8 @@ class CompositorService {
   private drawBanners(): void {
     if (!this.ctx || !this.banners || this.banners.length === 0) return;
 
+    const ctx = this.ctx; // Assign to local variable for TypeScript
+
     // Draw all visible banners
     const visibleBanners = this.banners.filter(b => b.visible);
 
@@ -2012,24 +2014,24 @@ class CompositorService {
       }
 
       // Draw background with rounded corners
-      this.ctx.fillStyle = banner.backgroundColor;
-      this.ctx.beginPath();
+      ctx.fillStyle = banner.backgroundColor;
+      ctx.beginPath();
       const radius = 8;
-      this.ctx.roundRect(x, y, bannerWidth, bannerHeight, radius);
-      this.ctx.fill();
+      ctx.roundRect(x, y, bannerWidth, bannerHeight, radius);
+      ctx.fill();
 
       // Draw title
-      this.ctx.fillStyle = banner.textColor;
-      this.ctx.font = 'bold 28px Arial';
-      this.ctx.textAlign = 'left';
-      this.ctx.textBaseline = 'top';
+      ctx.fillStyle = banner.textColor;
+      ctx.font = 'bold 28px Arial';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
       const textPadding = 20;
-      this.ctx.fillText(banner.title, x + textPadding, y + textPadding);
+      ctx.fillText(banner.title, x + textPadding, y + textPadding);
 
       // Draw subtitle if present
       if (banner.subtitle) {
-        this.ctx.font = '20px Arial';
-        this.ctx.fillText(banner.subtitle, x + textPadding, y + textPadding + 40);
+        ctx.font = '20px Arial';
+        ctx.fillText(banner.subtitle, x + textPadding, y + textPadding + 40);
       }
     });
   }
