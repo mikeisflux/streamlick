@@ -38,11 +38,9 @@ export async function createCompositorPipeline(
   destinations: RTMPDestination[]
 ): Promise<void> {
   try {
-    logger.info(`Creating compositor pipeline for broadcast ${broadcastId}`);
 
     // Always use Daily.co for RTMP output
     const streamingMethod = process.env.STREAMING_METHOD || 'daily';
-    logger.info(`[Compositor Pipeline] Streaming method: ${streamingMethod}`);
 
     if (streamingMethod === 'ffmpeg') {
       logger.warn('[Compositor Pipeline] FFmpeg mode is deprecated. Falling back to Daily mode.');
@@ -71,10 +69,8 @@ export async function createCompositorPipeline(
       comedia: false, // MediaSoup will send to FFmpeg's listening address
     });
 
-    logger.info(
       `Plain transports created - Video: ${videoTransport.tuple.localPort}, Audio: ${audioTransport.tuple.localPort}`
     );
-    logger.info(
       `FFmpeg deployment mode: ${useExternalFFmpeg ? 'EXTERNAL (multi-server)' : 'LOCAL (same server)'}`
     );
 
@@ -91,20 +87,17 @@ export async function createCompositorPipeline(
       paused: false,
     });
 
-    logger.info('Video and audio consumers created on separate plain transports');
 
     // Verify video producer is actually producing
     if (videoProducer.paused) {
       logger.error(`❌ VIDEO PRODUCER IS PAUSED! This will cause no video packets to be sent.`);
     } else {
-      logger.info(`✅ Video producer is active (not paused)`);
     }
 
     // Verify video consumer is actually consuming
     if (videoConsumer.paused) {
       logger.error(`❌ VIDEO CONSUMER IS PAUSED! This will cause no video packets to be received.`);
     } else {
-      logger.info(`✅ Video consumer is active (not paused)`);
     }
 
     // Get RTP parameters from consumers
@@ -130,7 +123,6 @@ export async function createCompositorPipeline(
       ? (process.env.MEDIASOUP_ANNOUNCED_IP || 'localhost')
       : '127.0.0.1';
 
-    logger.info(`Setting up FFmpeg for ${destinations.length} destination(s)`);
 
     // FFmpeg will listen on separate ports for video and audio
     // MediaSoup uses ports 40000-40100 for WebRTC, FFmpeg uses 40200-40203
@@ -143,15 +135,11 @@ export async function createCompositorPipeline(
     // DO NOT CONNECT TRANSPORTS YET - we need FFmpeg to be listening first!
     // Connecting will cause MediaSoup to start sending immediately,
     // and FFmpeg will miss the initial packets with SPS/PPS headers
-    logger.info(`Transports ready but NOT connected yet - will connect after FFmpeg starts`);
-    logger.info(`Video will go to ${ffmpegIp}:${ffmpegVideoPort}, Audio to ${ffmpegIp}:${ffmpegAudioPort}`);
 
     // Request a keyframe from the producer before we start FFmpeg
     // This ensures the browser generates a keyframe with SPS/PPS headers
     try {
-      logger.info('Requesting initial keyframe from video producer...');
       await videoConsumer.requestKeyFrame();
-      logger.info('Initial keyframe requested');
     } catch (error) {
       logger.warn('Could not request initial keyframe:', error);
     }
@@ -192,7 +180,6 @@ a=recvonly`;
 
     fs.writeFileSync(sdpPath, unifiedSdp);
 
-    logger.info(`SDP file created: ${sdpPath}`);
 
     // Start FFmpeg for destinations
     const ffmpegProcesses = new Map<string, any>();
@@ -206,9 +193,7 @@ a=recvonly`;
     const videoCodecName = useVideoCopy ? 'copy' : 'libx264';
 
     if (useVideoCopy) {
-      logger.info('⚡ Using H.264 stream copy (no transcoding) for maximum performance');
     } else {
-      logger.info('🎬 Using libx264 transcoding to ensure fresh SPS/PPS headers for RTMP');
     }
 
     // Build output based on number of destinations
@@ -219,7 +204,6 @@ a=recvonly`;
       const dest = destinations[0];
       const rtmpUrl = `${dest.rtmpUrl}/${dest.streamKey}`;
 
-      logger.info(`Starting FFmpeg for ${dest.platform}`);
 
       command = ffmpeg()
         // Global options
@@ -303,7 +287,6 @@ a=recvonly`;
         return `[f=flv:flvflags=no_duration_filesize]${rtmpUrl}`;
       }).join('|');
 
-      logger.info(`Starting FFmpeg with tee muxer for ${destinations.length} destinations`);
 
       command = ffmpeg()
         // Global options
@@ -382,7 +365,6 @@ a=recvonly`;
 
     command
       .on('start', (commandLine: string) => {
-        logger.info(`FFmpeg started for ${destinations.length} destination(s)`);
       })
       .on('error', (err: Error, stdout: string | null, stderr: string | null) => {
         logger.error(`========== FFMPEG MULTI-STREAM ERROR ==========`);
@@ -408,7 +390,6 @@ a=recvonly`;
         logger.error(`========== END FFMPEG ERROR ==========`);
       })
       .on('end', () => {
-        logger.info(`FFmpeg multi-stream process ended for ${destinations.length} destination(s)`);
       })
       .on('stderr', (stderrLine: string) => {
         // Filter out repetitive debug noise that provides no diagnostic value
