@@ -74,6 +74,17 @@ interface LowerThird {
   position?: 'left' | 'center' | 'right';
 }
 
+interface Banner {
+  id: string;
+  type: 'lower-third' | 'text-overlay' | 'cta' | 'countdown';
+  title: string;
+  subtitle?: string;
+  position: 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
+  backgroundColor: string;
+  textColor: string;
+  visible: boolean;
+}
+
 class CompositorService {
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
@@ -89,6 +100,7 @@ class CompositorService {
   private chatMessages: ChatMessage[] = [];
   private showChat = false;
   private lowerThird: LowerThird | null = null;
+  private banners: Banner[] = []; // Store banners for rendering on output stream
   private mediaClipOverlay: HTMLVideoElement | HTMLImageElement | null = null;
   private mediaClipOverlayHandlers: {
     ended?: () => void;
@@ -213,6 +225,26 @@ class CompositorService {
         this.removeOverlay('overlay');
       }
     }) as EventListener);
+
+    // Banners updates (text-based banners from BannerEditorPanel)
+    window.addEventListener('bannersUpdated', ((e: CustomEvent) => {
+      const banners = e.detail;
+      if (Array.isArray(banners)) {
+        this.banners = banners;
+        logger.info('[Compositor] Banners updated:', banners.length);
+      }
+    }) as EventListener);
+
+    // Load initial banners from localStorage
+    try {
+      const saved = localStorage.getItem('banners');
+      if (saved) {
+        this.banners = JSON.parse(saved);
+        logger.info('[Compositor] Loaded initial banners:', this.banners.length);
+      }
+    } catch (error) {
+      logger.error('[Compositor] Failed to load initial banners:', error);
+    }
   }
 
   /**
@@ -1178,6 +1210,9 @@ class CompositorService {
           this.drawChatMessages();
         }
 
+        // Draw banners (text-based overlays)
+        this.drawBanners();
+
         // Draw lower third if active
         if (this.lowerThird) {
           this.drawLowerThird();
@@ -1927,6 +1962,75 @@ class CompositorService {
         }
       }
       this.ctx!.fillText(line, textX, lineY);
+    });
+  }
+
+  /**
+   * Draw banners (text-based overlays from BannerEditorPanel)
+   * Supports: lower-third, text-overlay, cta, countdown
+   */
+  private drawBanners(): void {
+    if (!this.ctx || !this.banners || this.banners.length === 0) return;
+
+    // Draw all visible banners
+    const visibleBanners = this.banners.filter(b => b.visible);
+
+    visibleBanners.forEach(banner => {
+      // Calculate position based on banner.position
+      let x = 0;
+      let y = 0;
+      const padding = 30;
+      const bannerWidth = banner.type === 'lower-third' ? 500 : 800;
+      const bannerHeight = banner.subtitle ? 120 : 80;
+
+      // Position calculation
+      switch (banner.position) {
+        case 'top-left':
+          x = padding;
+          y = padding;
+          break;
+        case 'top-center':
+          x = (this.WIDTH - bannerWidth) / 2;
+          y = padding;
+          break;
+        case 'top-right':
+          x = this.WIDTH - bannerWidth - padding;
+          y = padding;
+          break;
+        case 'bottom-left':
+          x = padding;
+          y = this.HEIGHT - bannerHeight - padding;
+          break;
+        case 'bottom-center':
+          x = (this.WIDTH - bannerWidth) / 2;
+          y = this.HEIGHT - bannerHeight - padding;
+          break;
+        case 'bottom-right':
+          x = this.WIDTH - bannerWidth - padding;
+          y = this.HEIGHT - bannerHeight - padding;
+          break;
+      }
+
+      // Draw background with rounded corners
+      this.ctx.fillStyle = banner.backgroundColor;
+      this.ctx.beginPath();
+      const radius = 8;
+      this.ctx.roundRect(x, y, bannerWidth, bannerHeight, radius);
+      this.ctx.fill();
+
+      // Draw title
+      this.ctx.fillStyle = banner.textColor;
+      this.ctx.font = 'bold 28px Arial';
+      this.ctx.textAlign = 'left';
+      this.ctx.textBaseline = 'top';
+      const textPadding = 20;
+      this.ctx.fillText(banner.title, x + textPadding, y + textPadding);
+
+      // Draw subtitle if present
+      if (banner.subtitle) {
+        this.ctx.font = '20px Arial';
+        this.ctx.fillText(banner.subtitle, x + textPadding, y + textPadding + 40);
+      }
     });
   }
 
