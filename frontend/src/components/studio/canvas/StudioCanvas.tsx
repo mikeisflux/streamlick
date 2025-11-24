@@ -663,10 +663,16 @@ export function StudioCanvas({
 
         // TODO: Draw captions
 
-        // Log FPS every 60 frames
+        // Log FPS and rendering state every 60 frames
         if (frameCount % 60 === 0) {
           const fps = 1000 / elapsed;
-          console.log('[StudioCanvas] Canvas FPS:', fps.toFixed(1));
+          console.log('[StudioCanvas] Render state:', {
+            fps: fps.toFixed(1),
+            hasBackground: !!backgroundImageRef.current,
+            hasOverlay: !!overlayImageRef.current,
+            hasLogo: !!logoImageRef.current,
+            hasAvatar: !!avatarImageRef.current,
+          });
         }
       }
 
