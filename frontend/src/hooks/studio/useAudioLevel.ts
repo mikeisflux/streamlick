@@ -32,8 +32,18 @@ export function useAudioLevel(stream: MediaStream | null, audioEnabled: boolean)
       analyserRef.current.fftSize = 512;
       analyserRef.current.smoothingTimeConstant = 0.8;
 
-      // Create source from stream
-      sourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
+      // Get audio track from stream
+      const audioTrack = stream.getAudioTracks()[0];
+      if (!audioTrack) {
+        console.error('[useAudioLevel] No audio track found in stream');
+        setIsSpeaking(false);
+        return;
+      }
+
+      // Use createMediaStreamTrackSource instead of createMediaStreamSource
+      // This allows multiple connections to the same audio track (captions + voice animations)
+      // Unlike createMediaStreamSource which only allows one connection per stream
+      sourceRef.current = audioContextRef.current.createMediaStreamTrackSource(audioTrack);
       sourceRef.current.connect(analyserRef.current);
 
       // Start analyzing audio levels
