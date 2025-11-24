@@ -1631,8 +1631,17 @@ class CompositorService {
       const isSpeaking = audioLevel > 0.05; // Threshold for detecting speech
 
       // DIAGNOSTIC: Log audio state every 30 frames
-      if (this.frameCount % 30 === 0) {
-        console.warn('🔊 AUDIO:', participantId, 'level:', audioLevel, 'speaking:', isSpeaking, 'analyzers:', this.audioAnalysers.size);
+      if (this.frameCount % 30 === 0 && participantId === 'local') {
+        // Get noise gate status for better diagnostics
+        const { audioProcessorService } = require('./audio-processor.service');
+        const gateStatus = audioProcessorService.getStatus();
+        const currentLevel = audioProcessorService.getCurrentLevel();
+        console.warn('🔊 AUDIO DIAGNOSTICS:',
+                     '\n  Processed level:', audioLevel.toFixed(3), '(what compositor sees)',
+                     '\n  Raw input level:', currentLevel.level.toFixed(3), '(' + currentLevel.dB.toFixed(1) + 'dB)',
+                     '\n  Gate status:', gateStatus.isOpen ? '✅ OPEN' : '❌ CLOSED',
+                     '\n  Threshold:', gateStatus.openThreshold + 'dB / ' + gateStatus.closeThreshold + 'dB',
+                     '\n  Current gain:', (gateStatus.currentGain * 100).toFixed(0) + '%');
       }
 
       // Draw pulsating rings when speaking
