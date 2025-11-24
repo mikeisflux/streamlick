@@ -159,12 +159,16 @@ export function StudioCanvas({
   // Refs for props (to avoid stale closures in render loop)
   const isLocalUserOnStageRef = useRef(isLocalUserOnStage);
   const videoEnabledRef = useRef(videoEnabled);
+  const selectedLayoutRef = useRef(selectedLayout);
+  const isSharingScreenRef = useRef(isSharingScreen);
 
   // Update refs when props change
   useEffect(() => {
     isLocalUserOnStageRef.current = isLocalUserOnStage;
     videoEnabledRef.current = videoEnabled;
-  }, [isLocalUserOnStage, videoEnabled]);
+    selectedLayoutRef.current = selectedLayout;
+    isSharingScreenRef.current = isSharingScreen;
+  }, [isLocalUserOnStage, videoEnabled, selectedLayout, isSharingScreen]);
 
   // Detect if local user is speaking (for voice animations) - use RAW audio before noise gate
   const isLocalSpeaking = useAudioLevel(rawStream || localStream, audioEnabled);
@@ -655,69 +659,232 @@ export function StudioCanvas({
           }
         });
 
-        // Draw participants based on layout
-        if (allParticipants.length === 0) {
-          // No participants on stage - just show background
-        } else if (allParticipants.length === 1) {
-          // Single participant - draw full screen
-          const p = allParticipants[0];
+        // Calculate layout based on selected layout and screen share state
+        const layout = selectedLayoutRef.current;
+        const isScreenSharing = isSharingScreenRef.current;
+        const participantCount = allParticipants.length;
+
+        // Layout 6 (Screen Share) takes priority when screen sharing
+        const activeLayout = (isScreenSharing || screenShareVideoRef.current?.srcObject) ? 6 : layout;
+
+        // Calculate participant positions based on layout
+        interface ParticipantPosition {
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+        }
+
+        const positions: ParticipantPosition[] = [];
+
+        switch (activeLayout) {
+          case 1: // Solo - single participant fills screen (centered at 50% size for solo)
+            if (participantCount === 1) {
+              const size = Math.min(canvas.width, canvas.height) * 0.5;
+              positions.push({
+                x: (canvas.width - size) / 2,
+                y: (canvas.height - size) / 2,
+                width: size,
+                height: size
+              });
+            } else {
+              // Fallback to grid for multiple
+              const cols = Math.ceil(Math.sqrt(participantCount));
+              const rows = Math.ceil(participantCount / cols);
+              const boxWidth = canvas.width / cols;
+              const boxHeight = canvas.height / rows;
+              allParticipants.forEach((_, i) => {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                positions.push({ x: col * boxWidth, y: row * boxHeight, width: boxWidth, height: boxHeight });
+              });
+            }
+            break;
+
+          case 2: // Cropped - 2x2 grid
+            {
+              const cols = 2;
+              const rows = 2;
+              const boxWidth = canvas.width / cols;
+              const boxHeight = canvas.height / rows;
+              allParticipants.forEach((_, i) => {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                positions.push({ x: col * boxWidth, y: row * boxHeight, width: boxWidth, height: boxHeight });
+              });
+            }
+            break;
+
+          case 3: // Group - auto-calculated equal grid
+            {
+              const cols = Math.ceil(Math.sqrt(participantCount));
+              const rows = Math.ceil(participantCount / cols);
+              const boxWidth = canvas.width / cols;
+              const boxHeight = canvas.height / rows;
+              allParticipants.forEach((_, i) => {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                positions.push({ x: col * boxWidth, y: row * boxHeight, width: boxWidth, height: boxHeight });
+              });
+            }
+            break;
+
+          case 4: // Spotlight - one large + small boxes above
+            if (participantCount === 1) {
+              positions.push({ x: 0, y: 0, width: canvas.width, height: canvas.height });
+            } else {
+              const topBarHeight = canvas.height * 0.25;
+              const mainHeight = canvas.height * 0.75;
+              const thumbnailWidth = canvas.width / Math.min(3, participantCount - 1);
+
+              // First participant is main (large)
+              positions.push({ x: 0, y: topBarHeight, width: canvas.width, height: mainHeight });
+
+              // Rest are thumbnails in top bar
+              for (let i = 1; i < participantCount; i++) {
+                positions.push({
+                  x: (i - 1) * thumbnailWidth,
+                  y: 0,
+                  width: thumbnailWidth,
+                  height: topBarHeight
+                });
+              }
+            }
+            break;
+
+          case 5: // News - side by side
+            {
+              const boxWidth = canvas.width / 2;
+              allParticipants.forEach((_, i) => {
+                positions.push({ x: i * boxWidth, y: 0, width: boxWidth, height: canvas.height });
+              });
+            }
+            break;
+
+          case 6: // Screen Share - thumbnails on top, screen share below
+            // For now, just layout participants - screen share will be added later
+            {
+              const topBarHeight = canvas.height * 0.12;
+              const thumbnailWidth = participantCount > 0 ? canvas.width / participantCount : canvas.width;
+              allParticipants.forEach((_, i) => {
+                positions.push({
+                  x: i * thumbnailWidth,
+                  y: 0,
+                  width: thumbnailWidth,
+                  height: topBarHeight
+                });
+              });
+            }
+            break;
+
+          case 7: // Picture-in-Picture - main + corner overlay
+            if (participantCount === 1) {
+              positions.push({ x: 0, y: 0, width: canvas.width, height: canvas.height });
+            } else {
+              // First participant fullscreen
+              positions.push({ x: 0, y: 0, width: canvas.width, height: canvas.height });
+
+              // Others in bottom-right corner
+              const pipWidth = 240;
+              const pipHeight = 180;
+              const gap = 10;
+              for (let i = 1; i < participantCount; i++) {
+                positions.push({
+                  x: canvas.width - pipWidth - gap,
+                  y: canvas.height - (pipHeight + gap) * (i),
+                  width: pipWidth,
+                  height: pipHeight
+                });
+              }
+            }
+            break;
+
+          case 8: // Cinema - wide format
+            {
+              const boxWidth = participantCount > 1 ? canvas.width / 2 : canvas.width;
+              allParticipants.forEach((_, i) => {
+                positions.push({ x: i * boxWidth, y: 0, width: boxWidth, height: canvas.height });
+              });
+            }
+            break;
+
+          case 9: // Video Grid - auto grid with gaps
+            {
+              const cols = Math.ceil(Math.sqrt(participantCount));
+              const rows = Math.ceil(participantCount / cols);
+              const gap = 4;
+              const boxWidth = (canvas.width - gap * (cols + 1)) / cols;
+              const boxHeight = (canvas.height - gap * (rows + 1)) / rows;
+              allParticipants.forEach((_, i) => {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                positions.push({
+                  x: gap + col * (boxWidth + gap),
+                  y: gap + row * (boxHeight + gap),
+                  width: boxWidth,
+                  height: boxHeight
+                });
+              });
+            }
+            break;
+
+          default:
+            // Fallback to group layout
+            {
+              const cols = Math.ceil(Math.sqrt(participantCount));
+              const rows = Math.ceil(participantCount / cols);
+              const boxWidth = canvas.width / cols;
+              const boxHeight = canvas.height / rows;
+              allParticipants.forEach((_, i) => {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                positions.push({ x: col * boxWidth, y: row * boxHeight, width: boxWidth, height: boxHeight });
+              });
+            }
+        }
+
+        // Draw all participants using calculated positions
+        allParticipants.forEach((p, index) => {
+          if (index >= positions.length) return;
+
+          const pos = positions[index];
 
           if (p.type === 'local' && !p.videoEnabled) {
             // Draw avatar when camera is off
             if (avatarImageRef.current) {
-              const size = Math.min(canvas.width, canvas.height) * 0.3;
-              const x = (canvas.width - size) / 2;
-              const y = (canvas.height - size) / 2;
+              const size = Math.min(pos.width, pos.height) * 0.6;
+              const avatarX = pos.x + (pos.width - size) / 2;
+              const avatarY = pos.y + (pos.height - size) / 2;
 
               ctx.save();
               ctx.beginPath();
-              ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+              ctx.arc(avatarX + size / 2, avatarY + size / 2, size / 2, 0, Math.PI * 2);
               ctx.closePath();
               ctx.clip();
-              ctx.drawImage(avatarImageRef.current, x, y, size, size);
+              ctx.drawImage(avatarImageRef.current, avatarX, avatarY, size, size);
               ctx.restore();
             }
           } else if (p.video && p.video.readyState >= 2) {
-            // Draw video full screen
-            ctx.drawImage(p.video, 0, 0, canvas.width, canvas.height);
+            // Draw video
+            ctx.drawImage(p.video, pos.x, pos.y, pos.width, pos.height);
+          } else {
+            // Video not ready - draw placeholder
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
           }
-        } else {
-          // Multiple participants - use 2-column grid layout
-          const cols = 2;
-          const rows = Math.ceil(allParticipants.length / cols);
-          const boxWidth = canvas.width / cols;
-          const boxHeight = canvas.height / rows;
+        });
 
-          allParticipants.forEach((p, index) => {
-            const col = index % cols;
-            const row = Math.floor(index / cols);
-            const x = col * boxWidth;
-            const y = row * boxHeight;
+        // Draw screen share video (Layout 6 only)
+        if (activeLayout === 6 && screenShareVideoRef.current && screenShareVideoRef.current.srcObject) {
+          const video = screenShareVideoRef.current;
+          if (video.readyState >= 2) {
+            const topBarHeight = canvas.height * 0.12;
+            const screenShareY = topBarHeight;
+            const screenShareHeight = canvas.height - topBarHeight;
 
-            if (p.type === 'local' && !p.videoEnabled) {
-              // Draw avatar for local user when camera off
-              if (avatarImageRef.current) {
-                const size = Math.min(boxWidth, boxHeight) * 0.6;
-                const avatarX = x + (boxWidth - size) / 2;
-                const avatarY = y + (boxHeight - size) / 2;
-
-                ctx.save();
-                ctx.beginPath();
-                ctx.arc(avatarX + size / 2, avatarY + size / 2, size / 2, 0, Math.PI * 2);
-                ctx.closePath();
-                ctx.clip();
-                ctx.drawImage(avatarImageRef.current, avatarX, avatarY, size, size);
-                ctx.restore();
-              }
-            } else if (p.video && p.video.readyState >= 2) {
-              // Draw video
-              ctx.drawImage(p.video, x, y, boxWidth, boxHeight);
-            } else {
-              // Video not ready - draw placeholder
-              ctx.fillStyle = '#1a1a1a';
-              ctx.fillRect(x, y, boxWidth, boxHeight);
-            }
-          });
+            // Draw screen share full width below participant thumbnails
+            ctx.drawImage(video, 0, screenShareY, canvas.width, screenShareHeight);
+          }
         }
 
         // DIAGNOSTIC: Log video state every 60 frames
@@ -728,6 +895,8 @@ export function StudioCanvas({
             localVideoEnabled: videoEnabledRef.current,
             localVideoReady: mainVideoRef.current?.readyState,
             remoteCount: onStageRemote.length,
+            layout: activeLayout,
+            isScreenSharing: isScreenSharing,
           });
         }
 
