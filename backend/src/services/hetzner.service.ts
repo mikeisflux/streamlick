@@ -53,7 +53,6 @@ class HetznerService {
       if (setting) {
         const apiKey = setting.isEncrypted ? decrypt(setting.value) : setting.value;
         if (apiKey) {
-          logger.debug('Loaded Hetzner API key from database');
           return apiKey;
         }
       }
@@ -63,7 +62,6 @@ class HetznerService {
 
     // Fall back to environment variable
     if (process.env.HETZNER_API_KEY) {
-      logger.debug('Loaded Hetzner API key from environment variable');
       return process.env.HETZNER_API_KEY;
     }
 
@@ -101,7 +99,6 @@ class HetznerService {
       throw new Error('Hetzner API key not configured. Add HETZNER_API_KEY to Admin Settings.');
     }
 
-    logger.debug('Creating Hetzner API client', {
       baseURL: this.baseURL,
       keyPrefix: apiKey.substring(0, 20) + '...',
     });
@@ -167,7 +164,6 @@ class HetznerService {
     try {
       const client = await this.getClient();
 
-      logger.info(`Deploying ${options.role}: ${options.name} (${options.serverType}) in ${options.location}`);
 
       // Get role-specific cloud-init script
       const cloudInitScript = this.getCloudInitScript(options.role, options);
@@ -185,7 +181,6 @@ class HetznerService {
 
       const server: HetznerServer = response.data.server;
 
-      logger.info(`Server created: ${server.name} (${server.public_net.ipv4.ip})`);
 
       return server;
     } catch (error: any) {
@@ -897,7 +892,6 @@ echo "========================================="
     try {
       const client = await this.getClient();
       await client.delete(`/servers/${serverId}`);
-      logger.info(`Server deleted: ${serverId}`);
     } catch (error: any) {
       logger.error('Failed to delete server:', error);
       throw new Error(`Delete failed: ${error.message}`);
@@ -979,7 +973,6 @@ echo "========================================="
       await client.put(`/servers/${serverId}`, {
         labels,
       });
-      logger.info(`Updated server ${serverId} labels:`, labels);
     } catch (error: any) {
       logger.error('Failed to update server labels:', error);
       throw new Error(`Failed to update labels: ${error.response?.data?.error?.message || error.message}`);
