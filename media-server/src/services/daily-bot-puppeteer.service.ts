@@ -203,7 +203,12 @@ class DailyBotPuppeteerService {
 
   private async setupMediasoupTracks(config: PuppeteerBotConfig): Promise<void> {
 
-    await this.page!.evaluate(async () => {
+    // Add timeout to prevent hanging indefinitely
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('setupMediasoupTracks timed out after 15 seconds')), 15000);
+    });
+
+    const setupPromise = this.page!.evaluate(async () => {
       const win = window as any;
 
       // CRITICAL FIX: Use the REAL tracks from mediasoup, not fake placeholder tracks
@@ -235,13 +240,12 @@ class DailyBotPuppeteerService {
         const stream = new MediaStream([videoTrack, audioTrack]);
         videoEl.srcObject = stream;
 
-        // Try to play immediately (don't wait for events that might never fire)
-        try {
-          await videoEl.play();
-        } catch (err: any) {
+        // Try to play with timeout - don't let this block the setup
+        const playPromise = videoEl.play().catch((err: any) => {
           console.error('❌ Video play failed:', err.message);
-        }
+        });
 
+        // Don't await play - just start it and move on
         // Check video element state immediately (synchronously)
         console.log('📹 Video element state:', JSON.stringify({
           hasVideoTrack: stream.getVideoTracks().length > 0,
@@ -300,6 +304,9 @@ class DailyBotPuppeteerService {
       console.log('✅ Bot media tracks set up with REAL composite stream from StudioCanvas');
     });
 
+    // Race between setup and timeout
+    await Promise.race([setupPromise, timeoutPromise]);
+    logger.info('[Puppeteer Bot] Media tracks setup completed');
   }
 
   private async setDailyInputTracksBeforeJoin(): Promise<void> {
