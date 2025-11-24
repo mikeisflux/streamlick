@@ -73,7 +73,6 @@ class ClipRecordingService {
       this.startTime = Date.now();
       this.isBuffering = true;
 
-      console.log('✅ Clip recording buffer started');
     } catch (error) {
       console.error('Failed to start clip buffer:', error);
       throw error;
@@ -99,7 +98,6 @@ class ClipRecordingService {
     this.chunkTimestamps = [];
     this.mediaRecorder = null;
 
-    console.log('⏹️ Clip recording buffer stopped');
   }
 
   /**
@@ -154,7 +152,6 @@ class ClipRecordingService {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    console.log(`💾 Clip saved: ${defaultFilename}`);
   }
 
   /**
@@ -184,7 +181,6 @@ class ClipRecordingService {
     }
 
     const result = await response.json();
-    console.log('📤 Clip uploaded:', result);
 
     return result;
   }
