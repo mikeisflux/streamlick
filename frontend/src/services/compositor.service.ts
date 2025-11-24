@@ -231,6 +231,16 @@ class CompositorService {
     audioMixerService.initialize();
 
     // Create video elements and add audio for each participant
+    logger.info('[Compositor] Processing participants for audio analyzers:', {
+      participantCount: participants.length,
+      participants: participants.map(p => ({
+        id: p.id,
+        hasStream: !!p.stream,
+        audioEnabled: p.audioEnabled,
+        videoEnabled: p.videoEnabled
+      }))
+    });
+
     for (const participant of participants) {
       await this.addParticipant(participant);
 
@@ -238,19 +248,31 @@ class CompositorService {
       // Create analyzer if stream has audio tracks (regardless of audioEnabled state)
       // The audioEnabled flag is checked when rendering animations
       if (participant.stream) {
-        const audioTrack = participant.stream.getAudioTracks()[0];
+        const audioTracks = participant.stream.getAudioTracks();
+        logger.info(`[Compositor] Participant ${participant.id} stream has ${audioTracks.length} audio tracks`);
+
+        const audioTrack = audioTracks[0];
         if (audioTrack) {
           const audioStream = new MediaStream([audioTrack]);
 
           // Add to mixer if audio is enabled
           if (participant.audioEnabled) {
             audioMixerService.addStream(participant.id, audioStream);
+            logger.info(`[Compositor] Added participant ${participant.id} to audio mixer`);
           }
 
           // Always create audio analyser for visualization (checked at render time)
-          this.createAudioAnalyser(participant.id, audioStream);
-          logger.info(`Created audio analyser for participant ${participant.id}`);
+          try {
+            this.createAudioAnalyser(participant.id, audioStream);
+            logger.info(`[Compositor] ✅ Created audio analyser for participant ${participant.id}`);
+          } catch (error) {
+            logger.error(`[Compositor] ❌ Failed to create audio analyser for ${participant.id}:`, error);
+          }
+        } else {
+          logger.warn(`[Compositor] No audio track found for participant ${participant.id}`);
         }
+      } else {
+        logger.warn(`[Compositor] No stream found for participant ${participant.id}`);
       }
     }
 
