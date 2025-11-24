@@ -624,10 +624,15 @@ export function StudioCanvas({
       // Make stream available to useBroadcast via canvasStreamService
       canvasStreamService.setOutputStream(canvasStream);
 
-      console.log('[StudioCanvas] Canvas stream captured and registered:', {
+      const videoTrack = canvasStream.getVideoTracks()[0];
+      console.log('[StudioCanvas] 📹 Canvas stream captured and registered:', {
         streamId: canvasStream.id,
         videoTracks: canvasStream.getVideoTracks().length,
         audioTracks: canvasStream.getAudioTracks().length,
+        videoTrackId: videoTrack?.id,
+        videoTrackEnabled: videoTrack?.enabled,
+        videoTrackReadyState: videoTrack?.readyState,
+        videoTrackMuted: videoTrack?.muted,
       });
 
       // TODO: Combine with audio from audioMixerService
@@ -641,7 +646,10 @@ export function StudioCanvas({
     let lastFrameTime = performance.now();
 
     const render = () => {
-      if (!ctx || !canvas) return;
+      if (!ctx || !canvas) {
+        console.error('[StudioCanvas] ❌ Render called but missing ctx or canvas!', { ctx: !!ctx, canvas: !!canvas });
+        return;
+      }
 
       const now = performance.now();
       const elapsed = now - lastFrameTime;
@@ -651,9 +659,9 @@ export function StudioCanvas({
         lastFrameTime = now - (elapsed % 33);
         frameCount++;
 
-        // Log render loop activity every 30 frames (~1 second)
-        if (frameCount % 30 === 0) {
-          console.log('[StudioCanvas] Render loop running:', {
+        // Log first frame and every 30 frames (~1 second)
+        if (frameCount === 1 || frameCount % 30 === 0) {
+          console.log(`[StudioCanvas] ${frameCount === 1 ? '🎨 FIRST FRAME RENDERED!' : 'Render loop running:'}`, {
             frameCount,
             canvasSize: { width: canvas.width, height: canvas.height },
             backgroundColor,
@@ -1261,7 +1269,9 @@ export function StudioCanvas({
     };
 
     // Start render loop
+    console.log('[StudioCanvas] 🎬 Starting render loop NOW');
     render();
+    console.log('[StudioCanvas] ✅ Render loop started (first frame scheduled)');
 
     // Cleanup
     return () => {
