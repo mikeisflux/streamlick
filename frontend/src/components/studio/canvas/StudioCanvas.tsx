@@ -163,10 +163,22 @@ export function StudioCanvas({
   const isSharingScreenRef = useRef(isSharingScreen);
   const captionsEnabledRef = useRef(captionsEnabled);
   const currentCaptionRef = useRef(currentCaption);
+  const chatMessagesRef = useRef(chatMessages);
+  const showChatOnStreamRef = useRef(showChatOnStream);
+  const chatOverlayPositionRef = useRef(chatOverlayPosition);
+  const chatOverlaySizeRef = useRef(chatOverlaySize);
+  const teleprompterNotesRef = useRef(teleprompterNotes);
+  const showTeleprompterOnCanvasRef = useRef(showTeleprompterOnCanvas);
+  const teleprompterFontSizeRef = useRef(teleprompterFontSize);
+  const teleprompterScrollPositionRef = useRef(teleprompterScrollPosition);
+  const displayedCommentRef = useRef(displayedComment);
 
   // Detect if local user is speaking (for voice animations) - use RAW audio before noise gate
   const isLocalSpeaking = useAudioLevel(rawStream || localStream, audioEnabled);
   const isLocalSpeakingRef = useRef(isLocalSpeaking);
+
+  // Banners ref
+  const bannersRef = useRef(banners);
 
   // Update refs when props change
   useEffect(() => {
@@ -177,7 +189,19 @@ export function StudioCanvas({
     isLocalSpeakingRef.current = isLocalSpeaking;
     captionsEnabledRef.current = captionsEnabled;
     currentCaptionRef.current = currentCaption;
-  }, [isLocalUserOnStage, videoEnabled, selectedLayout, isSharingScreen, isLocalSpeaking, captionsEnabled, currentCaption]);
+    chatMessagesRef.current = chatMessages;
+    showChatOnStreamRef.current = showChatOnStream;
+    chatOverlayPositionRef.current = chatOverlayPosition;
+    chatOverlaySizeRef.current = chatOverlaySize;
+    teleprompterNotesRef.current = teleprompterNotes;
+    showTeleprompterOnCanvasRef.current = showTeleprompterOnCanvas;
+    teleprompterFontSizeRef.current = teleprompterFontSize;
+    teleprompterScrollPositionRef.current = teleprompterScrollPosition;
+    displayedCommentRef.current = displayedComment;
+    bannersRef.current = banners;
+  }, [isLocalUserOnStage, videoEnabled, selectedLayout, isSharingScreen, isLocalSpeaking, captionsEnabled, currentCaption,
+      chatMessages, showChatOnStream, chatOverlayPosition, chatOverlaySize, teleprompterNotes, showTeleprompterOnCanvas,
+      teleprompterFontSize, teleprompterScrollPosition, displayedComment, banners]);
 
   // Track which remote participants are speaking
   const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
@@ -985,9 +1009,162 @@ export function StudioCanvas({
           ctx.shadowOffsetY = 0;
         }
 
-        // TODO: Draw banners
+        // Draw banners (lower thirds, text overlays, CTAs)
+        const visibleBanners = bannersRef.current.filter(b => b.visible);
+        visibleBanners.forEach((banner) => {
+          let x = 0, y = 0;
+          const bannerHeight = 80;
+          const bannerWidth = banner.type === 'lower-third' ? 400 : canvas.width * 0.8;
 
-        // TODO: Draw chat
+          // Position based on banner.position
+          switch (banner.position) {
+            case 'top-left':
+              x = 20; y = 100;
+              break;
+            case 'top-center':
+              x = (canvas.width - bannerWidth) / 2; y = 100;
+              break;
+            case 'top-right':
+              x = canvas.width - bannerWidth - 20; y = 100;
+              break;
+            case 'bottom-left':
+              x = 20; y = canvas.height - bannerHeight - 20;
+              break;
+            case 'bottom-center':
+              x = (canvas.width - bannerWidth) / 2; y = canvas.height - bannerHeight - 20;
+              break;
+            case 'bottom-right':
+              x = canvas.width - bannerWidth - 20; y = canvas.height - bannerHeight - 20;
+              break;
+          }
+
+          // Draw banner background
+          ctx.fillStyle = banner.backgroundColor || 'rgba(0, 0, 0, 0.7)';
+          ctx.fillRect(x, y, bannerWidth, bannerHeight);
+
+          // Draw banner text
+          ctx.font = 'bold 24px Arial, sans-serif';
+          ctx.fillStyle = banner.textColor || '#ffffff';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+          ctx.fillText(banner.title, x + 15, y + 15, bannerWidth - 30);
+
+          if (banner.subtitle) {
+            ctx.font = '18px Arial, sans-serif';
+            ctx.fillText(banner.subtitle, x + 15, y + 45, bannerWidth - 30);
+          }
+        });
+
+        // Draw chat overlay
+        if (showChatOnStreamRef.current && chatMessagesRef.current.length > 0) {
+          const chatPos = chatOverlayPositionRef.current;
+          const chatSize = chatOverlaySizeRef.current;
+          const padding = 10;
+          const messageHeight = 40;
+          const maxMessages = Math.floor((chatSize.height - padding * 2) / messageHeight);
+          const recentMessages = chatMessagesRef.current.slice(-maxMessages);
+
+          // Draw chat background
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          ctx.fillRect(chatPos.x, chatPos.y, chatSize.width, chatSize.height);
+
+          // Draw chat messages
+          ctx.font = '16px Arial, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+
+          recentMessages.forEach((msg, index) => {
+            const y = chatPos.y + padding + index * messageHeight;
+
+            // Author name in bold
+            ctx.fillStyle = '#4a9eff';
+            ctx.font = 'bold 16px Arial, sans-serif';
+            ctx.fillText(msg.author + ':', chatPos.x + padding, y, chatSize.width - padding * 2);
+
+            // Message text
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '16px Arial, sans-serif';
+            ctx.fillText(msg.message, chatPos.x + padding, y + 20, chatSize.width - padding * 2);
+          });
+        }
+
+        // Draw teleprompter
+        if (showTeleprompterOnCanvasRef.current && teleprompterNotesRef.current) {
+          const fontSize = teleprompterFontSizeRef.current || 24;
+          const scrollPos = teleprompterScrollPositionRef.current || 0;
+          const teleprompterWidth = 600;
+          const teleprompterHeight = 200;
+          const x = (canvas.width - teleprompterWidth) / 2;
+          const y = canvas.height - teleprompterHeight - 150; // Above captions
+
+          // Semi-transparent background
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.fillRect(x, y, teleprompterWidth, teleprompterHeight);
+
+          // Teleprompter text
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(x, y, teleprompterWidth, teleprompterHeight);
+          ctx.clip();
+
+          ctx.font = `${fontSize}px Arial, sans-serif`;
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+
+          const lines = teleprompterNotesRef.current.split('\n');
+          const lineHeight = fontSize * 1.4;
+          lines.forEach((line, index) => {
+            const lineY = y + 10 - scrollPos + index * lineHeight;
+            if (lineY > y - lineHeight && lineY < y + teleprompterHeight) {
+              ctx.fillText(line, x + 10, lineY, teleprompterWidth - 20);
+            }
+          });
+
+          ctx.restore();
+        }
+
+        // Draw displayed comment (from social media)
+        if (displayedCommentRef.current) {
+          const comment = displayedCommentRef.current;
+          const commentWidth = 400;
+          const commentHeight = 120;
+          const x = canvas.width - commentWidth - 20;
+          const y = 200;
+
+          // Comment background
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+          ctx.fillRect(x, y, commentWidth, commentHeight);
+
+          // Platform badge
+          const platformColors: Record<string, string> = {
+            youtube: '#FF0000',
+            facebook: '#1877F2',
+            twitch: '#9146FF',
+            linkedin: '#0A66C2',
+            x: '#000000',
+            rumble: '#85C742'
+          };
+          ctx.fillStyle = platformColors[comment.platform] || '#666666';
+          ctx.fillRect(x, y, commentWidth, 8);
+
+          // Author name
+          ctx.font = 'bold 16px Arial, sans-serif';
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+          ctx.fillText(comment.authorName, x + 10, y + 15, commentWidth - 20);
+
+          // Comment text
+          ctx.font = '14px Arial, sans-serif';
+          ctx.fillStyle = '#cccccc';
+          ctx.fillText(comment.message, x + 10, y + 40, commentWidth - 20);
+
+          // Platform name
+          ctx.font = '12px Arial, sans-serif';
+          ctx.fillStyle = '#888888';
+          ctx.fillText(comment.platform.toUpperCase(), x + 10, y + commentHeight - 25, commentWidth - 20);
+        }
 
         // Log FPS and rendering state every 60 frames
         if (frameCount % 60 === 0) {
