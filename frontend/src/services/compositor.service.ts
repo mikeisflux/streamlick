@@ -23,6 +23,7 @@
  */
 
 import { audioMixerService } from './audio-mixer.service';
+import { audioProcessorService } from './audio-processor.service';
 import { webrtcService } from './webrtc.service';
 import type { PerformanceMetrics } from '../types';
 import logger from '../utils/logger';
@@ -1752,7 +1753,6 @@ class CompositorService {
       // DIAGNOSTIC: Log audio state every 30 frames
       if (this.frameCount % 30 === 0 && participantId === 'local') {
         // Get noise gate status for better diagnostics
-        const { audioProcessorService } = require('./audio-processor.service');
         const gateStatus = audioProcessorService.getStatus();
         const currentLevel = audioProcessorService.getCurrentLevel();
         console.warn('🔊 AUDIO DIAGNOSTICS:',
