@@ -62,6 +62,17 @@ export const authService = {
   },
 
   /**
+   * Update user profile (name, etc.)
+   */
+  async updateProfile(updates: { name?: string }): Promise<User> {
+    const response = await api.patch('/auth/profile', updates);
+    // Update cached user data
+    const updatedUser = response.data;
+    this.setAuth(updatedUser);
+    return updatedUser;
+  },
+
+  /**
    * Store user data in localStorage (tokens are in httpOnly cookies)
    */
   setAuth(user: User): void {

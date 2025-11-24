@@ -21,6 +21,7 @@ interface PreviewAreaProps {
   onAddToStage?: (participantId: string) => void;
   onRemoveFromStage?: (participantId: string) => void;
   onInviteGuests?: () => void;
+  onEditName?: () => void;
 }
 
 export function PreviewArea({
@@ -34,6 +35,7 @@ export function PreviewArea({
   onAddToStage,
   onRemoveFromStage,
   onInviteGuests,
+  onEditName,
 }: PreviewAreaProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
@@ -158,10 +160,29 @@ export function PreviewArea({
               </div>
             )}
 
-            <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 z-0">
-              <span className="text-white text-xs font-medium">
+            <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 z-0 flex items-center justify-between gap-1">
+              <span className="text-white text-xs font-medium truncate">
                 {isLocalUserOnStage ? 'You (Preview)' : 'You (Backstage)'}
               </span>
+              {onEditName && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditName();
+                  }}
+                  className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-white/20 rounded"
+                  title="Edit name"
+                >
+                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                    />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
         </div>

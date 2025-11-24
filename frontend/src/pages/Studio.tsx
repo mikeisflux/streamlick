@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { compositorService } from '../services/compositor.service';
 import { audioProcessorService } from '../services/audio-processor.service';
 import { broadcastService } from '../services/broadcast.service';
+import { authService } from '../services/auth.service';
 import { useMedia } from '../hooks/useMedia';
 import { useStudioStore } from '../store/studioStore';
 import { useAuthStore } from '../store/authStore';
@@ -49,7 +50,7 @@ import { socketService } from '../services/socket.service';
 
 export function Studio() {
   const { broadcastId } = useParams<{ broadcastId: string }>();
-  const { user } = useAuthStore();
+  const { user, setUser } = useAuthStore();
   const { messages: hotkeyMessages } = useHotkeyFeedback();
 
   // Countdown state
@@ -394,6 +395,25 @@ export function Studio() {
     }
   };
 
+  // Edit name handler for host user
+  const handleEditName = async () => {
+    if (!user) return;
+
+    const newName = window.prompt('Enter your new name:', user.name);
+    if (!newName || newName.trim() === '' || newName === user.name) {
+      return; // User cancelled or entered same name
+    }
+
+    try {
+      const updatedUser = await authService.updateProfile({ name: newName.trim() });
+      setUser(updatedUser);
+      toast.success('Name updated successfully');
+    } catch (error) {
+      console.error('Failed to update name:', error);
+      toast.error('Failed to update name');
+    }
+  };
+
   // Studio handlers (event handlers, state, and effects)
   const {
     editMode,
@@ -541,6 +561,7 @@ export function Studio() {
               onAddToStage={handleAddToStage}
               onRemoveFromStage={handleRemoveFromStage}
               onInviteGuests={() => setShowInviteDrawer(true)}
+              onEditName={handleEditName}
             />
           </div>
 
