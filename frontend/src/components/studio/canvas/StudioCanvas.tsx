@@ -243,7 +243,6 @@ export function StudioCanvas({
 
   // Load stream background
   useEffect(() => {
-    console.log('[StudioCanvas] Setting up background event listener');
 
     // CRITICAL: Load background immediately on mount to avoid race condition
     const loadInitialBackground = async () => {
@@ -252,18 +251,15 @@ export function StudioCanvas({
 
       if (streamBackgroundAssetId) {
         try {
-          console.log('[StudioCanvas] Loading background from IndexedDB on mount');
           const mediaData = await mediaStorageService.getMedia(streamBackgroundAssetId);
           if (mediaData) {
             const objectURL = URL.createObjectURL(mediaData.blob);
-            console.log('[StudioCanvas] Background loaded from IndexedDB');
             setStreamBackground(objectURL);
           }
         } catch (error) {
           console.error('[StudioCanvas] Failed to load background from IndexedDB:', error);
         }
       } else if (streamBackground) {
-        console.log('[StudioCanvas] Loading background from localStorage on mount');
         setStreamBackground(streamBackground);
       }
     };
@@ -272,14 +268,12 @@ export function StudioCanvas({
 
     // Listen for custom event for background updates
     const handleBackgroundUpdated = ((e: CustomEvent) => {
-      console.log('[StudioCanvas] Background updated event received:', e.detail);
       setStreamBackground(e.detail.url);
     }) as EventListener;
 
     window.addEventListener('backgroundUpdated', handleBackgroundUpdated);
 
     return () => {
-      console.log('[StudioCanvas] Removing background event listener');
       window.removeEventListener('backgroundUpdated', handleBackgroundUpdated);
     };
   }, []);
@@ -335,7 +329,6 @@ export function StudioCanvas({
 
           // Debug logging for remote participants
           if (Math.random() < 0.033) {
-            console.log(`[Remote Audio ${participantId}]`, {
               average: average.toFixed(2),
               threshold: speakingThreshold,
               speaking
@@ -427,7 +420,6 @@ export function StudioCanvas({
   const saveCustomLayout = () => {
     const positions = Array.from(customLayoutPositions.entries());
     localStorage.setItem(`customLayout_${selectedLayout}`, JSON.stringify(positions));
-    console.log('Custom layout saved for layout', selectedLayout);
   };
 
   // Handle position change for a participant
@@ -459,7 +451,6 @@ export function StudioCanvas({
 
       if (streamLogoAssetId) {
         try {
-          console.log('[StudioCanvas] Loading logo from IndexedDB on mount');
           const mediaData = await mediaStorageService.getMedia(streamLogoAssetId);
           if (mediaData) {
             const objectURL = URL.createObjectURL(mediaData.blob);
@@ -478,7 +469,6 @@ export function StudioCanvas({
 
       if (streamOverlayAssetId) {
         try {
-          console.log('[StudioCanvas] Loading overlay from IndexedDB on mount');
           const mediaData = await mediaStorageService.getMedia(streamOverlayAssetId);
           if (mediaData) {
             const objectURL = URL.createObjectURL(mediaData.blob);
@@ -497,7 +487,6 @@ export function StudioCanvas({
 
       if (streamVideoClipAssetId) {
         try {
-          console.log('[StudioCanvas] Loading video clip from IndexedDB on mount');
           const mediaData = await mediaStorageService.getMedia(streamVideoClipAssetId);
           if (mediaData) {
             const objectURL = URL.createObjectURL(mediaData.blob);
@@ -723,7 +712,6 @@ export function StudioCanvas({
     // Setting HTML element .volume property doesn't affect Web Audio API routing
     compositorService.setInputVolume(newVolume);
 
-    console.log(`[StudioCanvas] Master volume set to ${newVolume}%`);
   };
 
   return (
