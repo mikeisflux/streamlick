@@ -63,7 +63,6 @@ class MultiTrackRecordingService {
     }
 
     this.isRecording = true;
-    console.log(`🎬 Multi-track recording started for ${participants.length} participants`);
   }
 
   /**
@@ -131,7 +130,6 @@ class MultiTrackRecordingService {
     }
 
     this.participantTracks.set(participantId, tracks);
-    console.log(`✅ Added ${participantName} to multi-track recording (${tracks.length} tracks)`);
   }
 
   /**
@@ -148,7 +146,6 @@ class MultiTrackRecordingService {
     });
 
     this.participantTracks.delete(participantId);
-    console.log(`🗑️ Removed participant ${participantId} from recording`);
   }
 
   /**
@@ -180,7 +177,6 @@ class MultiTrackRecordingService {
       allRecordedTracks.push(...tracks);
     });
 
-    console.log(`⏹️ Multi-track recording stopped. ${allRecordedTracks.length} tracks recorded.`);
     this.participantTracks.clear();
 
     return allRecordedTracks;
@@ -274,10 +270,8 @@ class MultiTrackRecordingService {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      console.log(`💾 Downloaded: ${filename} (${(track.size / 1024 / 1024).toFixed(2)} MB)`);
     });
 
-    console.log(`✅ All ${tracks.length} tracks downloaded`);
   }
 
   /**
