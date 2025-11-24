@@ -362,11 +362,12 @@ export function Studio() {
         console.error('[Studio] Failed to initialize compositor in preview mode:', error);
       });
 
-    // Cleanup when component unmounts or when going live
+    // Cleanup when component unmounts
+    // CRITICAL: Don't stop compositor here when going live!
+    // The cleanup runs with STALE closure value of isLive, causing compositor to stop
+    // when isLive changes from false→true. handleGoLive manages compositor when live.
     return () => {
-      if (!isLive) {
-        compositorService.stop();
-      }
+      // No cleanup needed - compositor.initialize() handles cleanup internally
     };
   }, [localStream, remoteParticipants, audioEnabled, videoEnabled, isLive, selectedLayout]);
 
