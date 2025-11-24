@@ -13,7 +13,7 @@ import { LeftSidebar } from '../components/studio/LeftSidebar';
 import { RightSidebar } from '../components/studio/RightSidebar';
 import { BottomControlBar } from '../components/studio/BottomControlBar';
 import { DeviceSelectors } from '../components/studio/DeviceSelectors';
-import { StudioCanvas, LayoutSelector, PreviewArea, CanvasSettingsModal, CountdownOverlay, CompositorPreview } from '../components/studio/canvas';
+import { StudioCanvas, LayoutSelector, PreviewArea, CanvasSettingsModal, CountdownOverlay } from '../components/studio/canvas';
 import { StudioHeader } from '../components/studio/StudioHeader';
 import { StudioDrawers } from '../components/studio/StudioDrawers';
 import { StudioModals } from '../components/studio/StudioModals';
@@ -468,50 +468,46 @@ export function Studio() {
         <main className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#F5F5F5' }}>
           {/* Canvas Container - constrained to leave room for Layout Selector and Preview Area */}
           <div className="flex items-center justify-center px-6 pb-20 relative" style={{ minHeight: 0, maxHeight: 'calc(100% - 350px)', flexShrink: 1, paddingTop: '144px' }}>
-            {/* CRITICAL FIX: Show CompositorPreview when live, StudioCanvas when not live */}
-            {/* This ensures users can see countdown, intro video, and compositor output */}
-            {isLive ? (
-              <CompositorPreview orientation={canvasSettings.orientation} />
-            ) : (
-              <StudioCanvas
-                localStream={processedStream || localStream}
-                rawStream={rawStream}
-                videoEnabled={videoEnabled}
-                audioEnabled={audioEnabled}
-                isLocalUserOnStage={isLocalUserOnStage}
-                remoteParticipants={remoteParticipants}
-                isSharingScreen={isSharingScreen}
-                screenShareStream={screenShareStream}
-                selectedLayout={selectedLayout}
-                chatMessages={chatMessages}
-                showChatOnStream={showChatOnStream}
-                chatOverlayPosition={chatOverlayPosition}
-                chatOverlaySize={chatOverlaySize}
-                isDraggingChat={isDraggingChat}
-                isResizingChat={isResizingChat}
-                chatOverlayRef={chatOverlayRef}
-                onChatOverlayDragStart={handleChatOverlayDragStart}
-                onChatOverlayResizeStart={handleChatOverlayResizeStart}
-                captionsEnabled={captionsEnabled}
-                currentCaption={currentCaption}
-                editMode={editMode}
-                backgroundColor={canvasSettings.canvasBackgroundColor}
-                showResolutionBadge={canvasSettings.showResolutionBadge}
-                showPositionNumbers={canvasSettings.showPositionNumbers}
-                showConnectionQuality={canvasSettings.showConnectionQuality}
-                showLowerThirds={canvasSettings.showLowerThirds}
-                orientation={canvasSettings.orientation}
-                onRemoveFromStage={handleRemoveFromStage}
-                teleprompterNotes={teleprompterState.notes}
-                teleprompterFontSize={teleprompterState.fontSize}
-                teleprompterIsScrolling={teleprompterState.isScrolling}
-                teleprompterScrollSpeed={teleprompterState.scrollSpeed}
-                teleprompterScrollPosition={teleprompterState.scrollPosition}
-                showTeleprompterOnCanvas={teleprompterState.showOnCanvas}
-                displayedComment={displayedComment}
-                onDismissComment={() => setDisplayedComment(null)}
-              />
-            )}
+            {/* ALWAYS show StudioCanvas - compositor runs invisibly in background */}
+            {/* User should see their designed canvas at all times, not the compositor output */}
+            <StudioCanvas
+              localStream={processedStream || localStream}
+              rawStream={rawStream}
+              videoEnabled={videoEnabled}
+              audioEnabled={audioEnabled}
+              isLocalUserOnStage={isLocalUserOnStage}
+              remoteParticipants={remoteParticipants}
+              isSharingScreen={isSharingScreen}
+              screenShareStream={screenShareStream}
+              selectedLayout={selectedLayout}
+              chatMessages={chatMessages}
+              showChatOnStream={showChatOnStream}
+              chatOverlayPosition={chatOverlayPosition}
+              chatOverlaySize={chatOverlaySize}
+              isDraggingChat={isDraggingChat}
+              isResizingChat={isResizingChat}
+              chatOverlayRef={chatOverlayRef}
+              onChatOverlayDragStart={handleChatOverlayDragStart}
+              onChatOverlayResizeStart={handleChatOverlayResizeStart}
+              captionsEnabled={captionsEnabled}
+              currentCaption={currentCaption}
+              editMode={editMode}
+              backgroundColor={canvasSettings.canvasBackgroundColor}
+              showResolutionBadge={canvasSettings.showResolutionBadge}
+              showPositionNumbers={canvasSettings.showPositionNumbers}
+              showConnectionQuality={canvasSettings.showConnectionQuality}
+              showLowerThirds={canvasSettings.showLowerThirds}
+              orientation={canvasSettings.orientation}
+              onRemoveFromStage={handleRemoveFromStage}
+              teleprompterNotes={teleprompterState.notes}
+              teleprompterFontSize={teleprompterState.fontSize}
+              teleprompterIsScrolling={teleprompterState.isScrolling}
+              teleprompterScrollSpeed={teleprompterState.scrollSpeed}
+              teleprompterScrollPosition={teleprompterState.scrollPosition}
+              showTeleprompterOnCanvas={teleprompterState.showOnCanvas}
+              displayedComment={displayedComment}
+              onDismissComment={() => setDisplayedComment(null)}
+            />
             {/* Countdown Overlay */}
             <CountdownOverlay seconds={countdownSeconds} />
           </div>
