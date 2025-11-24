@@ -119,6 +119,9 @@ class CompositorService {
   private readonly HEIGHT = parseInt(import.meta.env.VITE_CANVAS_HEIGHT || '1080');
   private readonly FPS = parseInt(import.meta.env.VITE_CANVAS_FPS || '30');
 
+  // Track which videos have been warned about pausing (to reduce console spam)
+  private pausedVideoWarnings: Set<string> = new Set();
+
   // Performance tracking
   private frameCount = 0;
   private lastFrameTime = 0;
@@ -983,6 +986,9 @@ class CompositorService {
     logger.info('Stopping compositor');
     this.isCompositing = false;
 
+    // Clear paused video warnings
+    this.pausedVideoWarnings.clear();
+
     // ANTI-MUTE: Remove visibility change listener
     document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
 
@@ -1591,11 +1597,20 @@ class CompositorService {
     this.ctx.fillStyle = '#1a1a1a';
     this.ctx.fillRect(x, y, width, height);
 
-    // CRITICAL FIX: Check if video is paused
+    // CRITICAL FIX: Check if video is paused (every 60 frames = ~2 seconds at 30fps)
     if (this.frameCount % 60 === 0) {
       if (video.paused && video.srcObject) {
-        console.warn('[Compositor] Video element is PAUSED! Forcing play...');
-        video.play().catch(err => console.error('[Compositor] Failed to play paused video:', err));
+        // Only warn once per participant to reduce console spam
+        if (!this.pausedVideoWarnings.has(participant.id)) {
+          logger.warn(`[Compositor] Video for ${participant.name} is paused. Attempting to resume...`);
+          this.pausedVideoWarnings.add(participant.id);
+        }
+        video.play().catch(err => {
+          // Silently retry - this is common with autoplay policies
+        });
+      } else if (!video.paused && this.pausedVideoWarnings.has(participant.id)) {
+        // Video resumed successfully, clear the warning flag
+        this.pausedVideoWarnings.delete(participant.id);
       }
     }
 
