@@ -261,10 +261,15 @@ class DailyBotPuppeteerService {
         });
         console.log('✅ Set bot media tracks as Daily input');
 
+        // Explicitly enable camera and microphone to publish the tracks
+        await win.dailyCall.setLocalAudio(true);
+        await win.dailyCall.setLocalVideo(true);
+        console.log('✅ Enabled local audio and video publishing');
+
         // Wait a moment for Daily to process the tracks
         await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Verify the tracks are set
+        // Verify the tracks are set and publishing
         const localParticipant = win.dailyCall.participants().local;
         console.log('📊 Local participant after setting tracks:', JSON.stringify({
           session_id: localParticipant.session_id,
