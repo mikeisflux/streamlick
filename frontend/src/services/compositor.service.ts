@@ -220,6 +220,18 @@ class CompositorService {
    * Initialize compositor with participants
    */
   async initialize(participants: ParticipantStream[]): Promise<void> {
+    console.log('[COMPOSITOR INIT] initialize() called with participants:', {
+      count: participants.length,
+      participants: participants.map(p => ({
+        id: p.id,
+        hasStream: !!p.stream,
+        audioTracks: p.stream?.getAudioTracks().length || 0,
+        videoTracks: p.stream?.getVideoTracks().length || 0,
+        audioEnabled: p.audioEnabled,
+        videoEnabled: p.videoEnabled
+      }))
+    });
+
     logger.info('Initializing compositor with', participants.length, 'participants');
 
     // Clear existing state
