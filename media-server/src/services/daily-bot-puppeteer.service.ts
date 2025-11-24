@@ -26,7 +26,6 @@ class DailyBotPuppeteerService {
 
   async startBot(config: PuppeteerBotConfig): Promise<void> {
     try {
-      logger.info('[Puppeteer Bot] Launching headless browser...');
 
       // Launch Puppeteer with WebRTC enabled
       this.browser = await puppeteer.launch({
@@ -51,7 +50,6 @@ class DailyBotPuppeteerService {
       this.page.on('console', (msg) => {
         const type = msg.type();
         const text = msg.text();
-        logger.info(`[Browser Console ${type}]: ${text}`);
       });
 
       // Forward page errors
@@ -66,7 +64,6 @@ class DailyBotPuppeteerService {
         'microphone',
       ]);
 
-      logger.info('[Puppeteer Bot] Browser launched');
 
       // Navigate to Daily.co domain to get a valid origin for postMessage
       // This is required because Daily SDK uses postMessage internally and needs a non-null origin
@@ -118,12 +115,10 @@ class DailyBotPuppeteerService {
         </html>
       `, { waitUntil: 'networkidle0' });
 
-      logger.info('[Puppeteer Bot] Page content set');
 
       // Wait for Daily SDK to load
       await this.page.waitForFunction(() => typeof (window as any).DailyIframe !== 'undefined', { timeout: 10000 });
 
-      logger.info('[Puppeteer Bot] Daily SDK loaded');
 
       // Wait for active video/audio in mediasoup before joining Daily
       await this.waitForMediasoupProducers(config);
@@ -140,7 +135,6 @@ class DailyBotPuppeteerService {
       // Start RTMP streaming
       await this.startRTMPStreaming(config);
 
-      logger.info('[Puppeteer Bot] ✅ Bot started successfully');
     } catch (error: any) {
       logger.error('[Puppeteer Bot] Failed to start bot:', {
         error: error.message,
@@ -152,7 +146,6 @@ class DailyBotPuppeteerService {
   }
 
   private async waitForMediasoupProducers(config: PuppeteerBotConfig): Promise<void> {
-    logger.info('[Puppeteer Bot] Waiting for active video/audio in mediasoup...');
 
     const maxWaitTime = 30000; // 30 seconds
     const startTime = Date.now();
@@ -163,13 +156,9 @@ class DailyBotPuppeteerService {
       const videoActive = !config.videoConsumer.paused && config.videoConsumer.producerPaused === false;
       const audioActive = !config.audioConsumer.paused && config.audioConsumer.producerPaused === false;
 
-      logger.info(`[Puppeteer Bot] Mediasoup status: video=${videoActive}, audio=${audioActive}`);
 
       if (videoActive && audioActive) {
-        logger.info('[Puppeteer Bot] ✅ Active video and audio detected in mediasoup');
-        logger.info('[Puppeteer Bot] Waiting 2 seconds for stability...');
         await new Promise((resolve) => setTimeout(resolve, 2000));
-        logger.info('[Puppeteer Bot] ✅ Ready to join Daily room');
         return;
       }
 
@@ -181,7 +170,6 @@ class DailyBotPuppeteerService {
   }
 
   private async setupMediasoupTracks(config: PuppeteerBotConfig): Promise<void> {
-    logger.info('[Puppeteer Bot] Setting up media tracks...');
 
     await this.page!.evaluate(async () => {
       const win = window as any;
@@ -222,11 +210,9 @@ class DailyBotPuppeteerService {
       console.log('✅ Created bot media tracks (canvas video + silent audio)');
     });
 
-    logger.info('[Puppeteer Bot] Media tracks created');
   }
 
   private async setDailyInputTracks(): Promise<void> {
-    logger.info('[Puppeteer Bot] Setting Daily input tracks...');
 
     await this.page!.evaluate(async () => {
       const win = window as any;
@@ -242,11 +228,9 @@ class DailyBotPuppeteerService {
       }
     });
 
-    logger.info('[Puppeteer Bot] Daily input tracks set');
   }
 
   private async connectToMediasoup(config: PuppeteerBotConfig): Promise<void> {
-    logger.info('[Puppeteer Bot] Connecting to mediasoup...');
 
     // Get transport parameters
     const transportParams = {
@@ -334,11 +318,9 @@ class DailyBotPuppeteerService {
       { transportParams, videoConsumerParams, audioConsumerParams }
     );
 
-    logger.info('[Puppeteer Bot] Connected to mediasoup');
   }
 
   private async joinDailyRoom(config: PuppeteerBotConfig): Promise<void> {
-    logger.info('[Puppeteer Bot] Joining Daily room...');
 
     // First check what WebRTC APIs are available
     const webrtcCheck = await this.page!.evaluate(() => {
@@ -352,7 +334,6 @@ class DailyBotPuppeteerService {
       };
     });
 
-    logger.info(`[Puppeteer Bot] WebRTC API check: ${JSON.stringify(webrtcCheck, null, 2)}`);
 
     try {
       const joinResult = await this.page!.evaluate(
@@ -401,7 +382,6 @@ class DailyBotPuppeteerService {
         throw new Error(`Daily join failed: ${joinResult.error} (${joinResult.errorType})`);
       }
 
-      logger.info('[Puppeteer Bot] Joined Daily room');
     } catch (error: any) {
       logger.error(`[Puppeteer Bot] Error joining Daily room: ${error.message || String(error)}`);
       if (error.stack) {
@@ -412,7 +392,6 @@ class DailyBotPuppeteerService {
   }
 
   private async waitForActiveMedia(): Promise<void> {
-    logger.info('[Puppeteer Bot] Waiting for active video and audio...');
 
     await this.page!.evaluate(async () => {
       const win = window as any;
@@ -471,11 +450,9 @@ class DailyBotPuppeteerService {
       console.warn('⚠️ NOTE: User frontend needs to join the Daily room, not just send to mediasoup');
     });
 
-    logger.info('[Puppeteer Bot] Proceeding to start RTMP streaming');
   }
 
   private async startRTMPStreaming(config: PuppeteerBotConfig): Promise<void> {
-    logger.info('[Puppeteer Bot] Starting RTMP streaming...');
 
     await this.page!.evaluate(
       async (destinations) => {
@@ -504,11 +481,9 @@ class DailyBotPuppeteerService {
       config.rtmpDestinations
     );
 
-    logger.info('[Puppeteer Bot] RTMP streaming started');
   }
 
   async stopBot(): Promise<void> {
-    logger.info('[Puppeteer Bot] Stopping bot...');
 
     if (this.page) {
       await this.page.evaluate(() => {
@@ -525,7 +500,6 @@ class DailyBotPuppeteerService {
     }
 
     await this.cleanup();
-    logger.info('[Puppeteer Bot] ✅ Bot stopped');
   }
 
   private async cleanup(): Promise<void> {
