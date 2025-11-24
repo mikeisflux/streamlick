@@ -26,6 +26,7 @@ import { audioMixerService } from './audio-mixer.service';
 import { webrtcService } from './webrtc.service';
 import type { PerformanceMetrics } from '../types';
 import logger from '../utils/logger';
+import type { Caption } from './caption.service';
 
 // CanvasCaptureMediaStreamTrack extends MediaStreamTrack with requestFrame() method
 // This is returned by canvas.captureStream(0) for manual frame capture mode
@@ -95,6 +96,11 @@ class CompositorService {
     loadedmetadata?: () => void;
   } = {};
   private countdownValue: number | null = null;
+
+  // AI Captions
+  private currentCaption: Caption | null = null;
+  private captionPosition = { x: 50, y: 85 }; // x, y in percentage (matches CaptionOverlay)
+  private captionSize = { width: 600, height: 80 }; // width, height in pixels
 
   // Image caching to prevent memory leaks from creating Images every frame
   private backgroundImage: HTMLImageElement | null = null;
@@ -585,6 +591,34 @@ class CompositorService {
    */
   getLowerThird(): LowerThird | null {
     return this.lowerThird;
+  }
+
+  /**
+   * Set current AI caption
+   */
+  setCaption(caption: Caption | null): void {
+    this.currentCaption = caption;
+  }
+
+  /**
+   * Get current caption
+   */
+  getCaption(): Caption | null {
+    return this.currentCaption;
+  }
+
+  /**
+   * Update caption position (percentage)
+   */
+  setCaptionPosition(x: number, y: number): void {
+    this.captionPosition = { x, y };
+  }
+
+  /**
+   * Update caption size (pixels)
+   */
+  setCaptionSize(width: number, height: number): void {
+    this.captionSize = { width, height };
   }
 
   /**
@@ -1198,6 +1232,11 @@ class CompositorService {
         // Draw lower third if active
         if (this.lowerThird) {
           this.drawLowerThird();
+        }
+
+        // Draw AI captions if active
+        if (this.currentCaption) {
+          this.drawCaptions();
         }
       } else {
         // Fullscreen overlay mode: Skip participants to prevent bleeding through
@@ -1996,6 +2035,130 @@ class CompositorService {
       this.ctx.fillStyle = style === 'minimal' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(229, 231, 235, 0.8)';
       this.ctx.font = '20px Arial';
       this.ctx.fillText(lt.subtitle, textX, textY);
+    }
+  }
+
+  /**
+   * Draw AI captions on the output stream
+   * Matches the styling from CaptionOverlay component in StudioCanvas
+   */
+  private drawCaptions(): void {
+    if (!this.ctx || !this.currentCaption) return;
+
+    const caption = this.currentCaption;
+
+    // Convert percentage position to pixels
+    const x = (this.captionPosition.x / 100) * this.WIDTH;
+    const y = (this.captionPosition.y / 100) * this.HEIGHT;
+
+    // Calculate actual position (centered)
+    const boxX = x - this.captionSize.width / 2;
+    const boxY = y - this.captionSize.height / 2;
+
+    // Draw background box with rounded corners
+    const bgOpacity = caption.isFinal ? 0.9 : 0.7;
+    this.ctx.fillStyle = `rgba(0, 0, 0, ${bgOpacity})`;
+
+    // Draw rounded rectangle for background
+    const borderRadius = 12;
+    this.ctx.beginPath();
+    this.ctx.roundRect(boxX, boxY, this.captionSize.width, this.captionSize.height, borderRadius);
+    this.ctx.fill();
+
+    // Add subtle shadow effect
+    this.ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+    this.ctx.shadowBlur = 6;
+    this.ctx.shadowOffsetX = 0;
+    this.ctx.shadowOffsetY = 4;
+    this.ctx.fill();
+
+    // Reset shadow for text
+    this.ctx.shadowColor = 'transparent';
+    this.ctx.shadowBlur = 0;
+    this.ctx.shadowOffsetX = 0;
+    this.ctx.shadowOffsetY = 0;
+
+    // Draw caption text
+    const fontSize = caption.isFinal ? 24 : 20;
+    this.ctx.fillStyle = '#FFFFFF';
+    this.ctx.font = `600 ${fontSize}px Arial`;
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'middle';
+
+    // Add text shadow for better readability
+    this.ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+    this.ctx.shadowBlur = 4;
+    this.ctx.shadowOffsetX = 2;
+    this.ctx.shadowOffsetY = 2;
+
+    // Set opacity for interim results
+    if (!caption.isFinal) {
+      this.ctx.globalAlpha = 0.8;
+    }
+
+    // Wrap text if it exceeds the caption width
+    const maxWidth = this.captionSize.width - 48; // Account for padding (24px each side)
+    const words = caption.text.split(' ');
+    let line = '';
+    let lineY = y;
+    const lineHeight = fontSize * 1.2;
+
+    // Simple text wrapping
+    const lines: string[] = [];
+    for (const word of words) {
+      const testLine = line + word + ' ';
+      const metrics = this.ctx.measureText(testLine);
+
+      if (metrics.width > maxWidth && line.length > 0) {
+        lines.push(line.trim());
+        line = word + ' ';
+      } else {
+        line = testLine;
+      }
+    }
+    if (line.length > 0) {
+      lines.push(line.trim());
+    }
+
+    // Draw lines centered vertically
+    const totalHeight = lines.length * lineHeight;
+    lineY = y - totalHeight / 2 + lineHeight / 2;
+
+    for (const textLine of lines) {
+      this.ctx.fillText(textLine, x, lineY);
+      lineY += lineHeight;
+    }
+
+    // Reset alpha
+    this.ctx.globalAlpha = 1.0;
+
+    // Reset shadow
+    this.ctx.shadowColor = 'transparent';
+    this.ctx.shadowBlur = 0;
+    this.ctx.shadowOffsetX = 0;
+    this.ctx.shadowOffsetY = 0;
+
+    // Draw pulsing indicator for interim results
+    if (!caption.isFinal) {
+      const time = Date.now() / 1000;
+      const pulse = Math.sin(time * 3) * 0.5 + 0.5; // Pulse at 3Hz
+      const dotRadius = 3;
+      const dotSpacing = 8;
+      const dotsY = boxY + this.captionSize.height - 15;
+      const dotsX = x - (dotSpacing * 2); // Center 3 dots
+
+      this.ctx.fillStyle = `rgba(96, 165, 250, ${0.6 + pulse * 0.4})`; // blue-400 with pulsing alpha
+
+      // Draw 3 pulsing dots
+      for (let i = 0; i < 3; i++) {
+        const dotX = dotsX + i * dotSpacing;
+        const delay = i * 0.2;
+        const dotPulse = Math.sin(time * 3 - delay) * 0.5 + 0.5;
+
+        this.ctx.beginPath();
+        this.ctx.arc(dotX, dotsY, dotRadius * (0.8 + dotPulse * 0.2), 0, Math.PI * 2);
+        this.ctx.fill();
+      }
     }
   }
 

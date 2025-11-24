@@ -31,11 +31,15 @@ export function useCaptions(enabled: boolean, language: string) {
           captionService.onCaption((caption: Caption) => {
             setCurrentCaption(caption);
 
+            // CRITICAL: Also send caption to compositor service for output stream rendering
+            compositorService.setCaption(caption);
+
             // Clear interim captions after 3 seconds
             if (!caption.isFinal) {
               const timer = setTimeout(() => {
                 setCurrentCaption((prev) => {
                   if (prev && !prev.isFinal && prev.text === caption.text) {
+                    compositorService.setCaption(null); // Clear from output stream too
                     return null;
                   }
                   return prev;
@@ -47,6 +51,7 @@ export function useCaptions(enabled: boolean, language: string) {
               const timer = setTimeout(() => {
                 setCurrentCaption((prev) => {
                   if (prev && prev.isFinal && prev.text === caption.text) {
+                    compositorService.setCaption(null); // Clear from output stream too
                     return null;
                   }
                   return prev;
@@ -96,6 +101,7 @@ export function useCaptions(enabled: boolean, language: string) {
     } else if (!enabled && captionService.active()) {
       captionService.stop();
       setCurrentCaption(null);
+      compositorService.setCaption(null); // Clear from output stream too
       toast.success('AI Captions stopped');
     }
 
@@ -107,6 +113,9 @@ export function useCaptions(enabled: boolean, language: string) {
       if (captionService.active()) {
         captionService.stop();
       }
+
+      // Clear captions from compositor
+      compositorService.setCaption(null);
     };
   }, [enabled, language]);
 
