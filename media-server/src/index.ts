@@ -551,19 +551,21 @@ io.on('connection', (socket) => {
             socket.emit('rtmp-started', { broadcastId, method: 'compositor-pipeline' });
           }
         } else {
-          logger.warn('⚠️  Composite producers not found, falling back to legacy RTMP');
-          logger.warn(`Available producers: ${Array.from(broadcast.producers.keys()).join(', ')}`);
-          startRTMPStream(broadcastId, finalDestinations);
-          if (socket.connected) {
-            socket.emit('rtmp-started', { broadcastId, method: 'legacy' });
-          }
+          // ERROR: Composite producers not found - this should never happen with Daily.co pipeline
+          logger.error('❌ Composite producers not found in broadcast.producers map');
+          logger.error(`❌ Requested: video=${compositeProducers.videoProducerId}, audio=${compositeProducers.audioProducerId}`);
+          logger.error(`❌ Available producers: ${Array.from(broadcast.producers.keys()).join(', ')}`);
+          logger.error('❌ This indicates the canvas stream was not produced via WebRTC before going live');
+
+          throw new Error('Composite producers not found. Ensure canvas stream is being produced before starting RTMP.');
         }
       } else {
-        // Fallback to legacy RTMP (for backwards compatibility)
-        startRTMPStream(broadcastId, finalDestinations);
-        if (socket.connected) {
-          socket.emit('rtmp-started', { broadcastId, method: 'legacy' });
-        }
+        // ERROR: No composite producers provided - this should never happen with current architecture
+        logger.error('❌ No composite producers provided in start-rtmp event');
+        logger.error('❌ Current architecture requires canvas stream (via StudioCanvas + compositor)');
+        logger.error('❌ Legacy FFmpeg streaming is deprecated and disabled');
+
+        throw new Error('No composite producers provided. Cannot start RTMP without canvas stream.');
       }
 
     } catch (error) {

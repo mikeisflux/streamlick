@@ -487,7 +487,7 @@ a=recvonly`;
 export async function stopCompositorPipeline(broadcastId: string): Promise<void> {
 
   // Check streaming method to determine which pipeline to stop
-  const streamingMethod = process.env.STREAMING_METHOD || 'ffmpeg';
+  const streamingMethod = process.env.STREAMING_METHOD || 'daily';
 
   if (streamingMethod === 'daily') {
     return await stopDailyPipeline(broadcastId);

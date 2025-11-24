@@ -584,12 +584,20 @@ router.post('/:id/transition-youtube-to-live', authenticate, async (req: AuthReq
           status: 'success',
         });
       } catch (error: any) {
-        logger.error(`[YouTube Transition] ❌ Failed to transition ${liveVideoId}:`, error.message);
+        const errorMessage = error?.message || error?.toString() || 'Unknown error';
+        const errorDetails = {
+          message: errorMessage,
+          code: error?.response?.data?.error?.code || error?.code,
+          apiError: error?.response?.data?.error?.message,
+          status: error?.response?.status,
+        };
+
+        logger.error(`[YouTube Transition] ❌ Failed to transition ${liveVideoId}:`, errorDetails);
         results.push({
           destinationId: destination.id,
           liveVideoId,
           status: 'error',
-          error: error.message,
+          error: errorMessage,
         });
       }
     }
