@@ -25,18 +25,44 @@ export function useMedia() {
 
   const startCamera = useCallback(async () => {
     try {
+      // Get all audio devices and select MICROPHONE, not system audio
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter(d => d.kind === 'audioinput');
+
+      // Filter out system audio devices - only use actual microphones
+      const microphones = audioInputs.filter(device => {
+        const name = device.label.toLowerCase();
+        return !(
+          name.includes('stereo mix') ||
+          name.includes('wave out') ||
+          name.includes('what u hear') ||
+          name.includes('loopback') ||
+          name.includes('system audio') ||
+          name.includes('monitor')
+        );
+      });
+
+      const micDeviceId = microphones.length > 0 ? microphones[0].deviceId : undefined;
+      console.log('[useMedia] Using microphone:', microphones[0]?.label || 'default');
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 1920 },
           height: { ideal: 1080 },
           frameRate: { ideal: 30 },
         },
-        audio: {
-          // Enable all noise reduction features
+        audio: micDeviceId ? {
+          deviceId: { exact: micDeviceId },
           echoCancellation: { ideal: true },
           noiseSuppression: { ideal: true },
           autoGainControl: { ideal: true },
-          // High-quality audio settings
+          sampleRate: { ideal: 48000 },
+          sampleSize: { ideal: 16 },
+          channelCount: { ideal: 2 },
+        } : {
+          echoCancellation: { ideal: true },
+          noiseSuppression: { ideal: true },
+          autoGainControl: { ideal: true },
           sampleRate: { ideal: 48000 },
           sampleSize: { ideal: 16 },
           channelCount: { ideal: 2 },
