@@ -344,41 +344,32 @@ export function Studio() {
         })),
     ];
 
-    // Initialize compositor with current participants
-    compositorService.initialize(participantStreams)
-      .then(() => {
+    // REMOVED: Old compositor initialization - now using StudioCanvas for all rendering
+    // The old compositor.service was creating a competing canvas that would detect
+    // the canvas.captureStream() track as muted and try to recreate it, causing issues.
+    // StudioCanvas now handles all rendering and streaming directly.
 
-        // Apply current layout
-        const layoutMap: { [key: number]: 'grid' | 'spotlight' | 'sidebar' | 'pip' | 'screenshare' } = {
-          1: 'grid',        // Solo
-          2: 'grid',        // Cropped
-          3: 'grid',        // Group
-          4: 'spotlight',   // Spotlight
-          5: 'sidebar',     // News
-          6: 'screenshare', // Screen
-          7: 'pip',         // Picture-in-Picture
-          8: 'sidebar',     // Cinema
-        };
-        const layoutType = layoutMap[selectedLayout] || 'grid';
-        compositorService.setLayout({ type: layoutType });
-      })
-      .catch((error) => {
-        console.error('[Studio] Failed to initialize compositor in preview mode:', error);
-      });
+    // compositorService.initialize(participantStreams)
+    //   .then(() => {
+    //     const layoutMap: { [key: number]: 'grid' | 'spotlight' | 'sidebar' | 'pip' | 'screenshare' } = {
+    //       1: 'grid', 2: 'grid', 3: 'grid', 4: 'spotlight', 5: 'sidebar', 6: 'screenshare', 7: 'pip', 8: 'sidebar',
+    //     };
+    //     const layoutType = layoutMap[selectedLayout] || 'grid';
+    //     compositorService.setLayout({ type: layoutType });
+    //   })
+    //   .catch((error) => {
+    //     console.error('[Studio] Failed to initialize compositor in preview mode:', error);
+    //   });
 
-    // Cleanup when component unmounts
-    // CRITICAL: Don't stop compositor here when going live!
-    // The cleanup runs with STALE closure value of isLive, causing compositor to stop
-    // when isLive changes from false→true. handleGoLive manages compositor when live.
     return () => {
-      // No cleanup needed - compositor.initialize() handles cleanup internally
+      // No cleanup needed
     };
   }, [localStream, remoteParticipants, audioEnabled, videoEnabled, isLive, selectedLayout, user]);
 
-  // Update compositor broadcasting status when going live/offline
-  useEffect(() => {
-    compositorService.setBroadcasting(isLive);
-  }, [isLive]);
+  // REMOVED: Compositor broadcasting status - not needed with StudioCanvas
+  // useEffect(() => {
+  //   compositorService.setBroadcasting(isLive);
+  // }, [isLive]);
 
   // Broadcast title update handler
   const handleTitleChange = async (newTitle: string) => {
