@@ -392,31 +392,9 @@ a=recvonly`;
       .on('end', () => {
       })
       .on('stderr', (stderrLine: string) => {
-        // Filter out repetitive debug noise that provides no diagnostic value
-        // These messages can appear thousands of times per second and overwhelm logs
-        if (
-          stderrLine.includes('non-existing PPS') ||           // Repetitive decoder errors (handled by -err_detect ignore_err)
-          stderrLine.includes('RTP: dropping old packet') ||   // Normal RTP jitter handling
-          stderrLine.includes('nal_unit_type:') ||             // Low-level NAL unit debug spam
-          stderrLine.includes('decode_slice_header error') ||  // Repetitive decoding errors
-          stderrLine.includes('no frame!') ||                  // Repetitive frame drops
-          stderrLine.includes('Last message repeated') ||      // Meta noise
-          stderrLine.includes('sq: send') ||                   // Scheduler queue operations (per-packet spam)
-          stderrLine.includes('sq: receive')                   // Scheduler queue operations (per-packet spam)
-        ) {
-          return; // Skip packet-level noise
-        }
-
-        // Only log errors and warnings - skip routine FFmpeg output
-        if (stderrLine.includes('error') || stderrLine.includes('Error') ||
-            stderrLine.includes('failed') || stderrLine.includes('Failed') ||
-            stderrLine.includes('I/O error') || stderrLine.includes('Connection reset') ||
-            stderrLine.includes('Broken pipe') || stderrLine.includes('Connection timed out') ||
-            stderrLine.includes('rtmp') && (stderrLine.includes('error') || stderrLine.includes('failed'))) {
-          logger.error(`[FFmpeg] ${stderrLine}`);
-        } else if (stderrLine.includes('warning') || stderrLine.includes('Warning')) {
-          logger.warn(`[FFmpeg] ${stderrLine}`);
-        }
+        // Log ALL FFmpeg stderr output without filtering
+        // This allows full visibility into compositor behavior for debugging
+        logger.info(`[FFmpeg] ${stderrLine}`);
       });
 
     // Start FFmpeg process - it will start listening on the RTP ports
