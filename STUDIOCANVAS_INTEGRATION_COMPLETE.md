@@ -35,6 +35,7 @@ All sidebar panels and settings are now properly wired to both the StudioCanvas 
   - Dispatches: `videoClipUpdated` event
   - Listeners: StudioCanvas ✓, Compositor ✓
   - Integration: `compositorService.playIntroVideo()` called from `useBroadcast.ts:336`
+  - ✅ WYSIWYG: Compositor dispatches events when playing videos so preview stays in sync
 
 - ✅ **Banners** (Image-based)
   - Dispatches: `addBanner` event
@@ -156,7 +157,8 @@ All sidebar panels and settings are now properly wired to both the StudioCanvas 
 
 #### Countdown
 - ✅ Countdown Timer → `compositorService.startCountdown()` (useBroadcast.ts:322)
-- ✅ Rendering: Compositor ✓
+- ✅ Rendering: StudioCanvas ✓, Compositor ✓
+- ✅ WYSIWYG: Dispatches `videoClipUpdated` event to show timer.mp4 in preview
 
 #### Teleprompter
 - ✅ Teleprompter Notes → Passed as props to StudioCanvas
