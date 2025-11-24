@@ -692,6 +692,7 @@ export function StudioCanvas({
   }, [backgroundColor, orientation]);
 
   // Set video srcObject for local stream
+  // CRITICAL: Must depend on isLocalUserOnStage because video element is conditionally rendered
   useEffect(() => {
     const video = mainVideoRef.current;
     if (!video || !localStream) return;
@@ -702,6 +703,7 @@ export function StudioCanvas({
       streamActive: localStream.active,
       videoTracks: localStream.getVideoTracks().length,
       audioTracks: localStream.getAudioTracks().length,
+      isLocalUserOnStage,
     });
 
     video.srcObject = localStream;
@@ -738,7 +740,7 @@ export function StudioCanvas({
       video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('error', handleError);
     };
-  }, [localStream]);
+  }, [localStream, isLocalUserOnStage]);
 
   // Set video srcObject for screen share
   useEffect(() => {
