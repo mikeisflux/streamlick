@@ -167,7 +167,6 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req: Reques
       },
     });
 
-    logger.info(`Media clip uploaded: ${clip.name} (${clip.type}) by user ${userId}`);
 
     return res.status(201).json({ clip });
   } catch (error: any) {
@@ -258,7 +257,6 @@ router.post('/link', authMiddleware, async (req: Request, res: Response) => {
       },
     });
 
-    logger.info(`Media clip linked: ${clip.name} (${clip.type}) by user ${userId}`);
 
     return res.status(201).json({ clip });
   } catch (error: any) {
@@ -309,7 +307,6 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
       },
     });
 
-    logger.info(`Media clip updated: ${id} by user ${userId}`);
 
     return res.json({ clip: updated });
   } catch (error: any) {
@@ -356,7 +353,6 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
     // Delete from database
     await prisma.mediaClip.delete({ where: { id } });
 
-    logger.info(`Media clip deleted: ${id} by user ${userId}`);
 
     return res.json({ success: true });
   } catch (error: any) {
