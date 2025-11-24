@@ -173,13 +173,11 @@ export function Studio() {
       Object.values(destinationSettings.description).some(v => v === 'Loading');
 
     if (hasLoadingPlaceholder) {
-      console.log('[Studio] Skipping save - settings contain Loading placeholders');
       return;
     }
 
     try {
       localStorage.setItem(`destinationSettings_${broadcastId}`, JSON.stringify(destinationSettings));
-      console.log('[Studio] Saved destination settings:', destinationSettings);
     } catch (error) {
       console.error('Failed to save destination settings to localStorage:', error);
     }
@@ -188,12 +186,10 @@ export function Studio() {
   // Countdown socket listeners
   useEffect(() => {
     const handleCountdownTick = (data: { secondsRemaining: number }) => {
-      console.log('[Studio] Countdown tick:', data.secondsRemaining);
       setCountdownSeconds(data.secondsRemaining);
     };
 
     const handleCountdownComplete = () => {
-      console.log('[Studio] Countdown complete');
       setCountdownSeconds(null);
     };
 
@@ -320,10 +316,8 @@ export function Studio() {
       return;
     }
 
-    console.log('[Studio] Initializing compositor in preview mode');
 
     // DIAGNOSTIC: Check what tracks are in localStream
-    console.log('[Studio] LocalStream track analysis:', {
       hasStream: !!localStream,
       audioTracks: localStream?.getAudioTracks().length || 0,
       videoTracks: localStream?.getVideoTracks().length || 0,
@@ -364,7 +358,6 @@ export function Studio() {
     // Initialize compositor with current participants
     compositorService.initialize(participantStreams)
       .then(() => {
-        console.log('[Studio] Compositor initialized in preview mode with', participantStreams.length, 'participants');
 
         // Apply current layout
         const layoutMap: { [key: number]: 'grid' | 'spotlight' | 'sidebar' | 'pip' | 'screenshare' } = {
@@ -379,7 +372,6 @@ export function Studio() {
         };
         const layoutType = layoutMap[selectedLayout] || 'grid';
         compositorService.setLayout({ type: layoutType });
-        console.log('[Studio] Applied layout in preview mode:', layoutType);
       })
       .catch((error) => {
         console.error('[Studio] Failed to initialize compositor in preview mode:', error);
@@ -388,7 +380,6 @@ export function Studio() {
     // Cleanup when component unmounts or when going live
     return () => {
       if (!isLive) {
-        console.log('[Studio] Stopping compositor preview mode');
         compositorService.stop();
       }
     };
