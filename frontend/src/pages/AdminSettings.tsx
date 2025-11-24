@@ -73,10 +73,6 @@ export default function AdminSettings() {
 
   // Debug: Log API_URL on mount
   useEffect(() => {
-    console.log('[Branding Debug] API_URL:', API_URL);
-    console.log('[Branding Debug] Current logo URL:', currentLogoUrl);
-    console.log('[Branding Debug] Current favicon URL:', currentFaviconUrl);
-    console.log('[Branding Debug] Current hero URL:', currentHeroUrl);
   }, [currentLogoUrl, currentFaviconUrl, currentHeroUrl]);
 
   const loadConfig = async () => {
@@ -536,10 +532,6 @@ export default function AdminSettings() {
       setFaviconPreview('');
       setHeroPreview('');
 
-      console.log('[Branding Debug] Saved response:', response.data);
-      console.log('[Branding Debug] Logo URL from server:', response.data.logoUrl);
-      console.log('[Branding Debug] Favicon URL from server:', response.data.faviconUrl);
-      console.log('[Branding Debug] Hero URL from server:', response.data.heroUrl);
 
       // Reload branding to get updated URLs
       await loadConfig();
