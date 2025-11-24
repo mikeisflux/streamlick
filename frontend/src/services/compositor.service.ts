@@ -1824,29 +1824,37 @@ class CompositorService {
       const audioLevel = this.audioLevels.get(participantId) || 0;
       const isSpeaking = audioLevel > 0.05; // Threshold for detecting speech
 
-      // Draw pulsating rings when speaking
+      // Draw pulsating rings when speaking - BRIGHT WHITE, THICK, LARGE
       if (isSpeaking && participant.audioEnabled) {
         const centerX = x + width / 2;
         const centerY = y + height / 2;
-        const baseRadius = Math.min(width, height) * 0.25;
 
         // Create pulsating effect using time-based animation
         const time = Date.now() / 1000;
-        const pulse = Math.sin(time * 4) * 0.5 + 0.5; // Pulsate at 4Hz (0-1)
 
-        // Draw 3 concentric rings that pulse with audio
-        for (let i = 0; i < 3; i++) {
-          const ringDelay = i * 0.3; // Stagger the rings
-          const ringPulse = Math.sin(time * 4 - ringDelay) * 0.5 + 0.5;
-          const radius = baseRadius + (i * 20) + (ringPulse * audioLevel * 30);
-          const alpha = (1 - i * 0.3) * audioLevel * 0.6;
+        // Inner ring - starts at max(100% of tile, 700px diameter)
+        const innerDiameter = Math.max(Math.max(width, height), 700);
+        const innerRadius = innerDiameter / 2;
+        const innerPulse = Math.sin(time * Math.PI) * 0.5 + 0.5; // Pulse at 2s interval
+        const innerRadiusAnimated = innerRadius * (0.9 + innerPulse * 0.1);
 
-          this.ctx.strokeStyle = `rgba(66, 153, 225, ${alpha})`; // Blue rings
-          this.ctx.lineWidth = 3 + audioLevel * 5;
-          this.ctx.beginPath();
-          this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-          this.ctx.stroke();
-        }
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 1)'; // Bright white
+        this.ctx.lineWidth = 20;
+        this.ctx.beginPath();
+        this.ctx.arc(centerX, centerY, innerRadiusAnimated, 0, Math.PI * 2);
+        this.ctx.stroke();
+
+        // Outer ring - expands to max(120% of tile, 900px diameter)
+        const outerDiameter = Math.max(Math.max(width, height) * 1.2, 900);
+        const outerRadius = outerDiameter / 2;
+        const outerPulse = Math.sin(time * 2 * Math.PI) * 0.5 + 0.5; // Ping animation at 1s interval
+        const outerRadiusAnimated = outerRadius * (0.8 + outerPulse * 0.2);
+
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 1)'; // Bright white
+        this.ctx.lineWidth = 24;
+        this.ctx.beginPath();
+        this.ctx.arc(centerX, centerY, outerRadiusAnimated, 0, Math.PI * 2);
+        this.ctx.stroke();
       }
 
       // Draw camera off icon
