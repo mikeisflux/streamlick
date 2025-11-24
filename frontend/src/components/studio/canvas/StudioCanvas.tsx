@@ -921,6 +921,16 @@ export function StudioCanvas({
             ctx.drawImage(p.video, pos.x, pos.y, pos.width, pos.height);
           } else {
             // Video not ready - draw placeholder
+            if (frameCount % 30 === 0 && p.type === 'local') {
+              console.error('[StudioCanvas] Local video NOT READY:', {
+                hasVideo: !!p.video,
+                readyState: p.video?.readyState,
+                videoWidth: p.video?.videoWidth,
+                videoHeight: p.video?.videoHeight,
+                srcObject: !!p.video?.srcObject,
+                paused: p.video?.paused,
+              });
+            }
             ctx.fillStyle = '#1a1a1a';
             ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
           }
