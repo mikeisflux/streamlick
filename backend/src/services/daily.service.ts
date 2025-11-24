@@ -89,7 +89,6 @@ class DailyServiceBackend {
       // Update axios client with authorization header
       this.apiClient.defaults.headers.common['Authorization'] = `Bearer ${this.apiKey}`;
 
-      logger.info('[Daily Backend] Service initialized successfully');
     } catch (error) {
       logger.error('[Daily Backend] Failed to initialize:', error);
       throw error;
@@ -112,7 +111,6 @@ class DailyServiceBackend {
     this.ensureInitialized();
 
     try {
-      logger.info('[Daily Backend] Creating room:', config);
 
       const response = await this.apiClient.post('/rooms', {
         name: config.name,
@@ -129,7 +127,6 @@ class DailyServiceBackend {
 
       const room: DailyRoom = response.data;
 
-      logger.info('[Daily Backend] Room created successfully:', {
         id: room.id,
         name: room.name,
         url: room.url,
@@ -167,9 +164,7 @@ class DailyServiceBackend {
     this.ensureInitialized();
 
     try {
-      logger.info('[Daily Backend] Deleting room:', roomName);
       await this.apiClient.delete(`/rooms/${roomName}`);
-      logger.info('[Daily Backend] Room deleted successfully');
     } catch (error: any) {
       if (error.response?.status === 404) {
         logger.warn(`[Daily Backend] Room ${roomName} not found, already deleted`);
@@ -188,7 +183,6 @@ class DailyServiceBackend {
     this.ensureInitialized();
 
     try {
-      logger.info('[Daily Backend] Creating meeting token for room:', roomName);
 
       const response = await this.apiClient.post('/meeting-tokens', {
         properties: {
@@ -201,7 +195,6 @@ class DailyServiceBackend {
 
       const token: string = response.data.token;
 
-      logger.info('[Daily Backend] Meeting token created successfully');
 
       return token;
     } catch (error: any) {
@@ -218,7 +211,6 @@ class DailyServiceBackend {
     this.ensureInitialized();
 
     try {
-      logger.info(`[Daily Backend] Starting live streaming for room ${roomName} with ${params.outputs.length} output(s)`);
 
       // Use correct Daily API format: /start-live-streaming with 'outputs' array
       const response = await this.apiClient.post(`/rooms/${roomName}/start-live-streaming`, {
@@ -227,7 +219,6 @@ class DailyServiceBackend {
         instanceId: params.instanceId,
       });
 
-      logger.info('[Daily Backend] Live streaming started successfully:', response.data);
     } catch (error: any) {
       logger.error('[Daily Backend] Failed to start live streaming:', {
         status: error.response?.status,
@@ -248,7 +239,6 @@ class DailyServiceBackend {
     this.ensureInitialized();
 
     try {
-      logger.info('[Daily Backend] Stopping live streaming for room:', roomName);
 
       const body: any = {};
       if (instanceId) {
@@ -257,7 +247,6 @@ class DailyServiceBackend {
 
       await this.apiClient.post(`/rooms/${roomName}/live-streaming/stop`, body);
 
-      logger.info('[Daily Backend] Live streaming stopped successfully');
     } catch (error: any) {
       if (error.response?.status === 404) {
         logger.warn(`[Daily Backend] No active stream found for room ${roomName}`);
@@ -275,7 +264,6 @@ class DailyServiceBackend {
     this.ensureInitialized();
 
     try {
-      logger.info(`[Daily Backend] Updating live streaming outputs for room ${roomName}`);
 
       const body: any = { outputs };
       if (instanceId) {
@@ -285,7 +273,6 @@ class DailyServiceBackend {
       // Note: Update endpoint might use different path - verify with Daily.co docs if needed
       await this.apiClient.post(`/rooms/${roomName}/live-streaming/update`, body);
 
-      logger.info('[Daily Backend] Live streaming outputs updated successfully');
     } catch (error: any) {
       logger.error('[Daily Backend] Failed to update outputs:', error.response?.data || error);
       throw error;
@@ -321,12 +308,10 @@ class DailyServiceBackend {
       // Try to get existing room
       const existingRoom = await this.getRoom(roomName);
       if (existingRoom) {
-        logger.info(`[Daily Backend] Using existing room: ${roomName}`);
         return existingRoom;
       }
 
       // Create new room
-      logger.info(`[Daily Backend] Creating new room: ${roomName}`);
       return await this.createRoom({
         name: roomName,
         privacy: 'private',
