@@ -407,6 +407,14 @@ class CompositorService {
       // Normalize to 0-1 range (0-255 → 0-1)
       const normalizedLevel = average / 255;
 
+      // Debug logging - log periodically
+      if (this.frameCount % 90 === 0 && normalizedLevel > 0.01) {
+        logger.info(`[Audio Level] Participant ${participantId}:`, {
+          average: average.toFixed(2),
+          normalized: normalizedLevel.toFixed(3)
+        });
+      }
+
       // Store level for drawing
       this.audioLevels.set(participantId, normalizedLevel);
     });
@@ -1822,7 +1830,16 @@ class CompositorService {
 
       // Get audio level for pulsating animation
       const audioLevel = this.audioLevels.get(participantId) || 0;
-      const isSpeaking = audioLevel > 0.05; // Threshold for detecting speech
+      const isSpeaking = audioLevel > 0.04; // Threshold for detecting speech (lowered for sensitivity)
+
+      // Debug logging
+      if (this.frameCount % 90 === 0 && participant.audioEnabled) {
+        logger.info(`[Compositor Animation] Participant ${participantId}:`, {
+          audioLevel: audioLevel.toFixed(3),
+          isSpeaking,
+          audioEnabled: participant.audioEnabled
+        });
+      }
 
       // Draw pulsating rings when speaking - BRIGHT WHITE, THICK, LARGE
       if (isSpeaking && participant.audioEnabled) {

@@ -321,7 +321,7 @@ export function StudioCanvas({
         source.connect(analyser);
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        const speakingThreshold = 20;
+        const speakingThreshold = 10;
 
         const checkAudioLevel = () => {
           analyser.getByteFrequencyData(dataArray);
@@ -332,6 +332,15 @@ export function StudioCanvas({
           }
           const average = sum / dataArray.length;
           const speaking = average > speakingThreshold;
+
+          // Debug logging for remote participants
+          if (Math.random() < 0.033) {
+            console.log(`[Remote Audio ${participantId}]`, {
+              average: average.toFixed(2),
+              threshold: speakingThreshold,
+              speaking
+            });
+          }
 
           setSpeakingParticipants(prev => {
             const next = new Set(prev);

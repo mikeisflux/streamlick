@@ -61,14 +61,19 @@ export function useAudioLevel(stream: MediaStream | null, audioEnabled: boolean)
         }
         const average = sum / dataArray.length;
 
-        // Speaking threshold - adjust sensitivity here
-        // Values typically range 0-255, threshold of 15-30 works well
-        const speakingThreshold = 20;
+        // Speaking threshold - adjusted to be more sensitive
+        // Values typically range 0-255, threshold of 10-15 works well for most mics
+        const speakingThreshold = 10;
         const speaking = average > speakingThreshold;
 
-        // Debug logging
-        if (speaking) {
-          console.log('[Audio Level] Speaking detected:', { average, threshold: speakingThreshold });
+        // Debug logging - log every 30 frames to monitor audio levels
+        if (Math.random() < 0.033) { // ~1 in 30 frames
+          console.log('[Audio Level]', {
+            average: average.toFixed(2),
+            threshold: speakingThreshold,
+            speaking,
+            audioEnabled
+          });
         }
 
         setIsSpeaking(speaking);
