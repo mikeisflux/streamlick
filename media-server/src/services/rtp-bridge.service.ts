@@ -19,8 +19,7 @@ let wrtc: any;
 try {
   wrtc = require('wrtc');
 } catch (error) {
-  logger.warn('[RTP Bridge] wrtc module not available - Daily bot will not work');
-  logger.warn('[RTP Bridge] Install with: npm install wrtc');
+  // wrtc not available
 }
 
 interface BridgeResult {
@@ -49,12 +48,10 @@ class RTPBridgeService {
     }
 
     try {
-
       // STEP 1: Create wrtc peer connection
       const peerConnection = new wrtc.RTCPeerConnection({
         iceServers: [],
       });
-
 
       // STEP 2: Add transceivers to receive video and audio
       peerConnection.addTransceiver('video', { direction: 'recvonly' });
@@ -64,10 +61,8 @@ class RTPBridgeService {
       const offer = await peerConnection.createOffer();
       await peerConnection.setLocalDescription(offer);
 
-
       // STEP 4: Extract DTLS parameters from offer
       const dtlsParameters = this.extractDtlsParameters(offer.sdp!);
-
 
       // STEP 5: Create mediasoup WebRTC Transport
       const webRtcTransport = await router.createWebRtcTransport({
@@ -78,10 +73,8 @@ class RTPBridgeService {
         initialAvailableOutgoingBitrate: 1000000,
       });
 
-
       // STEP 6: Connect mediasoup transport with peer connection's DTLS params
       await webRtcTransport.connect({ dtlsParameters });
-
 
       // STEP 7: Get RTP capabilities that wrtc supports
       const rtpCapabilities = this.getWrtcRtpCapabilities(router);
@@ -99,7 +92,6 @@ class RTPBridgeService {
         paused: false,
       });
 
-
       // STEP 9: Build SDP answer from mediasoup transport and consumers
       const answerSdp = this.buildAnswerSdp(
         webRtcTransport,
@@ -107,20 +99,14 @@ class RTPBridgeService {
         audioConsumer
       );
 
-
       // STEP 10: Set answer on peer connection
       await peerConnection.setRemoteDescription({
         type: 'answer',
         sdp: answerSdp,
       });
 
-
       // STEP 11: Wait for tracks to arrive
       const tracks = await this.waitForTracks(peerConnection);
-
-        videoTrack: tracks.videoTrack?.id,
-        audioTrack: tracks.audioTrack?.id,
-      });
 
       return {
         videoTrack: tracks.videoTrack,
@@ -277,10 +263,6 @@ a=candidate:${candidate.foundation} 1 udp ${candidate.priority} ${candidate.ip} 
       const tracks: any = { videoTrack: null, audioTrack: null };
 
       peerConnection.ontrack = (event: any) => {
-          kind: event.track.kind,
-          id: event.track.id,
-        });
-
         if (event.track.kind === 'video') {
           tracks.videoTrack = event.track;
         } else if (event.track.kind === 'audio') {

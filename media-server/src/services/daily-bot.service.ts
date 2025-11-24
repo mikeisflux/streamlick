@@ -62,13 +62,6 @@ class DailyBotService {
    */
   async joinRoom(config: DailyBotConfig): Promise<void> {
     try {
-        hasWindow: typeof window !== 'undefined',
-        hasDocument: typeof document !== 'undefined',
-        hasNavigator: typeof navigator !== 'undefined',
-        hasRTCPeerConnection: typeof RTCPeerConnection !== 'undefined',
-        hasMediaStream: typeof MediaStream !== 'undefined',
-      });
-
       // Create Daily call object with strictMode disabled
       this.callObject = DailyIframe.createCallObject({
         audioSource: false, // We'll set custom audio source
@@ -86,7 +79,6 @@ class DailyBotService {
         url: config.roomUrl,
         token: config.token,
       });
-
     } catch (error: any) {
       logger.error('[Daily Bot] Failed to join room:', {
         error: error.message,
@@ -135,10 +127,6 @@ class DailyBotService {
    */
   async setCustomTracks(videoTrack: any, audioTrack: any): Promise<void> {
     try {
-        videoTrackId: videoTrack?.id,
-        audioTrackId: audioTrack?.id,
-      });
-
       if (!videoTrack || !audioTrack) {
         throw new Error('Both videoTrack and audioTrack are required');
       }
@@ -147,7 +135,6 @@ class DailyBotService {
         videoSource: videoTrack,
         audioSource: audioTrack,
       });
-
     } catch (error: any) {
       logger.error('[Daily Bot] Failed to set custom tracks:', {
         error: error.message,
@@ -165,7 +152,6 @@ class DailyBotService {
       if (!this.callObject) {
         throw new Error('Call object not initialized - must join room first');
       }
-
 
       // Format endpoints for Daily API
       const rtmpUrls = destinations.map(dest => `${dest.rtmpUrl}/${dest.streamKey}`);
@@ -186,7 +172,6 @@ class DailyBotService {
           });
         }
       }
-
     } catch (error: any) {
       logger.error('[Daily Bot] Failed to start live streaming:', {
         error: error.message,
@@ -202,7 +187,6 @@ class DailyBotService {
   async stopLiveStreaming(): Promise<void> {
     try {
       if (!this.callObject) {
-        logger.warn('[Daily Bot] No call object to stop streaming');
         return;
       }
 
@@ -222,7 +206,6 @@ class DailyBotService {
   async leaveRoom(): Promise<void> {
     try {
       if (!this.callObject) {
-        logger.warn('[Daily Bot] No call object to leave');
         return;
       }
 
@@ -231,7 +214,6 @@ class DailyBotService {
 
       this.callObject = null;
       this.broadcastId = null;
-
     } catch (error: any) {
       logger.error('[Daily Bot] Failed to leave room:', {
         error: error.message,
