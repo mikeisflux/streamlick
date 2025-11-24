@@ -277,7 +277,7 @@ export function ParticipantBox({
           autoPlay
           playsInline
           muted
-          className="w-full h-full object-cover"
+          className="w-full h-full object-contain"
           style={{
             willChange: 'auto',
             border: cameraFrame !== 'none' && borderWidth > 0 ? `${borderWidth}px solid ${borderColor}` : 'none',
