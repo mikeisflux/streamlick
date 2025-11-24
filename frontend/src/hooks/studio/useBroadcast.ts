@@ -163,7 +163,6 @@ export function useBroadcast({
       return false;
     }
 
-    console.log('[useBroadcast] Final validated destinations:', {
       selected: selectedDestinations.length,
       deduplicated: deduplicatedDestinations.length,
       valid: validDestinations.length,
@@ -240,7 +239,6 @@ export function useBroadcast({
         };
       });
 
-      console.log('[useBroadcast] Starting broadcast with validated destinations:', {
         validDestinations,
         destinationCount: validDestinations.length,
         apiDestinationSettings
@@ -251,7 +249,6 @@ export function useBroadcast({
       await broadcastService.start(broadcastId, validDestinations, apiDestinationSettings);
 
       // CRITICAL: Set isLive=true NOW so countdown is visible!
-      console.log('[useBroadcast] Setting isLive=true to show countdown and CompositorPreview...');
       setIsLive(true);
       toast.success('Preparing broadcast...');
 
@@ -259,7 +256,6 @@ export function useBroadcast({
 
       // Step 1: Wait for YouTube/Facebook broadcasts to be created (happens async on backend)
       // Then poll until destinations are ready (with timeout)
-      console.log('[useBroadcast] Waiting for broadcast destinations to be created...');
 
       let broadcastDestinations: any[] = [];
       let attempts = 0;
@@ -269,12 +265,10 @@ export function useBroadcast({
         await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second between attempts
         attempts++;
 
-        console.log(`[useBroadcast] Fetching destinations (attempt ${attempts}/${maxAttempts})...`);
         const response = await api.get(`/broadcasts/${broadcastId}/destinations`);
         broadcastDestinations = response.data;
 
         if (broadcastDestinations.length > 0) {
-          console.log(`[useBroadcast] ✅ Got ${broadcastDestinations.length} destination(s) after ${attempts} attempt(s)`);
           break;
         }
       }
@@ -283,7 +277,6 @@ export function useBroadcast({
         throw new Error('No broadcast destinations were created. Please try again.');
       }
 
-      console.log('[useBroadcast] Fetched broadcast destinations:', broadcastDestinations);
 
       // Step 3: Start RTMP streaming IMMEDIATELY (before countdown)
       // This connects to YouTube/Facebook and starts sending video in "testing" mode
@@ -294,7 +287,6 @@ export function useBroadcast({
         streamKey: bd.streamKey,
       }));
 
-      console.log('[useBroadcast] Starting RTMP streaming to prep platforms:',
         destinationsToStream.map((d: any) => ({ platform: d.platform, rtmpUrl: d.rtmpUrl })));
 
       mediaServerSocketService.emit('start-rtmp', {
@@ -306,19 +298,14 @@ export function useBroadcast({
         },
       });
 
-      console.log('[useBroadcast] RTMP streaming started - platforms receiving video (testing mode)');
       toast.success('Connected to platforms, starting countdown...');
 
       // Step 4: Display 30-second countdown on canvas (stream is already flowing to YouTube)
-      console.log('[useBroadcast] Starting 30-second countdown on canvas...');
       await compositorService.startCountdown(30);
-      console.log('[useBroadcast] Countdown finished!');
 
       // Step 5: Transition YouTube broadcasts from "testing" to "live"
       try {
-        console.log('[useBroadcast] Transitioning YouTube broadcasts to LIVE...');
         await api.post(`/broadcasts/${broadcastId}/transition-youtube-to-live`);
-        console.log('[useBroadcast] ✅ YouTube transitioned to LIVE!');
         toast.success('You are now live!');
       } catch (error) {
         console.error('[useBroadcast] Failed to transition YouTube to live:', error);
@@ -327,10 +314,8 @@ export function useBroadcast({
       }
 
       // Step 6: Play intro video as FIRST thing viewers see on the live stream
-      console.log('[useBroadcast] Now playing intro video as first content viewers see...');
       try {
         await compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
-        console.log('[useBroadcast] Intro video finished, transitioning to user stream');
       } catch (error) {
         console.error('Intro video failed to play:', error);
         // Continue even if intro video fails - user stream will show immediately
@@ -345,7 +330,6 @@ export function useBroadcast({
       // Automatically start recording
       try {
         await handleStartRecording();
-        console.log('Auto-recording started');
       } catch (error) {
         console.error('Failed to auto-start recording:', error);
         // Don't fail the broadcast if recording fails
