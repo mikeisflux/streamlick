@@ -203,12 +203,12 @@ export function ParticipantBox({
     }
   }, [isDragging, isResizing, dragStart, position, editMode, onPositionChange, resizeHandle]);
 
-  // Connection quality color mapping
+  // Connection quality color mapping (4 shades as requested)
   const qualityColors = {
-    excellent: '#10b981', // green
-    good: '#f59e0b', // yellow
-    poor: '#ef4444', // red
-    disconnected: '#6b7280', // gray
+    excellent: '#10b981', // green - good connection
+    good: '#fbbf24',      // yellow - not good
+    poor: '#f97316',      // orange - failing
+    disconnected: '#ef4444', // red - bad/disconnected
   };
 
   return (
@@ -370,7 +370,7 @@ export function ParticipantBox({
         </div>
       )}
 
-      {/* Lower Third Name Display - 40px from bottom - Always visible */}
+      {/* Lower Third Name Display - 40px from bottom - Always visible, adapts to name width */}
       {showLowerThird && (
         <div
           className="absolute flex items-center px-3 gap-2 z-40"
@@ -381,6 +381,7 @@ export function ParticipantBox({
             backgroundColor: 'rgba(0, 0, 0, 0.75)',
             borderRadius: '20px',
             maxWidth: 'calc(100% - 32px)',
+            width: 'fit-content', // Adapts to content width
           }}
         >
           <div className="text-white flex-1">

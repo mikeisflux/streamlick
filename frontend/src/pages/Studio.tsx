@@ -6,6 +6,7 @@ import { broadcastService } from '../services/broadcast.service';
 import { useMedia } from '../hooks/useMedia';
 import { useStudioStore } from '../store/studioStore';
 import { useAuthStore } from '../store/authStore';
+import api from '../services/api';
 import toast from 'react-hot-toast';
 import { HotkeyReference } from '../components/HotkeyReference';
 import { HotkeyFeedback, useHotkeyFeedback } from '../components/HotkeyFeedback';
