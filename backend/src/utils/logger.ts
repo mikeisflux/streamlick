@@ -9,7 +9,7 @@ if (!fs.existsSync(logsDir)) {
 }
 
 const logger = winston.createLogger({
-  level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+  level: 'debug', // Always log debug and above, regardless of environment
   format: winston.format.combine(
     winston.format.timestamp(),
     winston.format.errors({ stack: true }),
@@ -19,18 +19,14 @@ const logger = winston.createLogger({
   transports: [
     new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
     new winston.transports.File({ filename: 'logs/combined.log' }),
-  ],
-});
-
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(
+    // ALWAYS add console transport for full visibility regardless of environment
     new winston.transports.Console({
       format: winston.format.combine(
         winston.format.colorize(),
         winston.format.simple()
       ),
-    })
-  );
-}
+    }),
+  ],
+});
 
 export default logger;
