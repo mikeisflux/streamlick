@@ -5,6 +5,7 @@ import { mediaServerSocketService } from '../../services/media-server-socket.ser
 import { webrtcService } from '../../services/webrtc.service';
 import { compositorService } from '../../services/compositor.service';
 import { canvasStreamService } from '../../services/canvas-stream.service';
+import { audioMixerService } from '../../services/audio-mixer.service';
 import { recordingService } from '../../services/recording.service';
 import { useStudioStore } from '../../store/studioStore';
 import api from '../../services/api';
@@ -220,10 +221,27 @@ export function useBroadcast({
       // await compositorService.initialize(participantStreams);
       // compositorService.setLayout({ type: currentLayout });
 
-      // Get canvas stream from StudioCanvas and produce it via WebRTC
-      const compositeStream = canvasStreamService.getOutputStream();
-      if (!compositeStream) {
+      // Get canvas stream from StudioCanvas (VIDEO ONLY - canvas.captureStream() doesn't include audio)
+      const canvasVideoStream = canvasStreamService.getOutputStream();
+      if (!canvasVideoStream) {
         throw new Error('Failed to get canvas stream - StudioCanvas may not be initialized');
+      }
+
+      // Get audio from the audio mixer
+      const audioMixerStream = audioMixerService.getOutputStream();
+      if (!audioMixerStream) {
+        throw new Error('Failed to get audio mixer stream - audio may not be initialized');
+      }
+
+      const mixedAudioTrack = audioMixerStream.getAudioTracks()[0];
+      if (!mixedAudioTrack) {
+        throw new Error('No audio track in mixer stream');
+      }
+
+      // Combine canvas video with mixed audio to create the final composite stream
+      const compositeStream = canvasStreamService.combineWithAudio(mixedAudioTrack);
+      if (!compositeStream) {
+        throw new Error('Failed to combine video and audio streams');
       }
 
       // Produce composite video and audio tracks
@@ -236,6 +254,9 @@ export function useBroadcast({
         videoTrackEnabled: compositeVideoTrack?.enabled,
         videoTrackReadyState: compositeVideoTrack?.readyState,
         videoTrackId: compositeVideoTrack?.id,
+        audioTrackEnabled: compositeAudioTrack?.enabled,
+        audioTrackReadyState: compositeAudioTrack?.readyState,
+        audioTrackId: compositeAudioTrack?.id,
       });
 
       let compositeVideoProducerId: string | undefined;
