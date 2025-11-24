@@ -231,25 +231,12 @@ class CompositorService {
     audioMixerService.initialize();
 
     // Create video elements and add audio for each participant
-    console.log('[Compositor] Processing participants, count:', participants.length);
     for (const participant of participants) {
-      console.log('[Compositor] Processing participant:', {
-        id: participant.id,
-        audioEnabled: participant.audioEnabled,
-        hasStream: !!participant.stream,
-        streamId: participant.stream?.id
-      });
       await this.addParticipant(participant);
 
       // Add participant audio to mixer and create audio analyser for visualization
       if (participant.audioEnabled && participant.stream) {
-        console.log('[Compositor] Participant has audio enabled and stream, getting audio track...');
         const audioTrack = participant.stream.getAudioTracks()[0];
-        console.log('[Compositor] Audio track:', audioTrack ? {
-          id: audioTrack.id,
-          enabled: audioTrack.enabled,
-          readyState: audioTrack.readyState
-        } : 'NO AUDIO TRACK');
         if (audioTrack) {
           const audioStream = new MediaStream([audioTrack]);
           audioMixerService.addStream(participant.id, audioStream);
@@ -257,8 +244,6 @@ class CompositorService {
           // Create audio analyser for pulsating visualization when camera is off
           this.createAudioAnalyser(participant.id, audioStream);
         }
-      } else {
-        console.log('[Compositor] Skipping audio setup - audioEnabled:', participant.audioEnabled, 'hasStream:', !!participant.stream);
       }
     }
 
@@ -282,14 +267,6 @@ class CompositorService {
 
     // Set the stream source
     video.srcObject = participant.stream;
-
-    // DIAGNOSTIC: Log initial video element state
-    console.log('[Compositor] Video element setup:', {
-      participantId: participant.id,
-      videoEnabled: participant.videoEnabled,
-      hasVideoTracks,
-      initialReadyState: video.readyState,
-    });
 
     // ⚠️ CRITICAL - DO NOT CHANGE: MediaStream readyState Polling Strategy ⚠️
     //
@@ -379,39 +356,26 @@ class CompositorService {
    * Create audio analyser for visualizing participant audio levels
    */
   private createAudioAnalyser(participantId: string, audioStream: MediaStream): void {
-    console.log('[Compositor] createAudioAnalyser called for:', participantId, {
-      streamId: audioStream.id,
-      active: audioStream.active,
-      audioTracks: audioStream.getAudioTracks().length
-    });
     try {
       // Create a separate audio context for analysis (not the mixer context)
       const audioContext = new AudioContext();
-      console.log('[Compositor] AudioContext created, state:', audioContext.state);
-
       const source = audioContext.createMediaStreamSource(audioStream);
-      console.log('[Compositor] MediaStreamSource created');
-
       const analyser = audioContext.createAnalyser();
 
       // Configure analyser for speech detection
       analyser.fftSize = 256;
       analyser.smoothingTimeConstant = 0.8;
-      console.log('[Compositor] Analyser configured, fftSize:', analyser.fftSize);
 
       // Connect source to analyser (don't connect to destination - just analyze)
       source.connect(analyser);
-      console.log('[Compositor] Source connected to analyser');
 
       // Store analyser
       this.audioAnalysers.set(participantId, analyser);
       this.audioLevels.set(participantId, 0);
 
       logger.info(`Audio analyser created for participant ${participantId}`);
-      console.log('[Compositor] Audio analyser stored, total analyzers:', this.audioAnalysers.size);
     } catch (error) {
       logger.error(`Failed to create audio analyser for ${participantId}:`, error);
-      console.error('[Compositor] createAudioAnalyser ERROR:', error);
     }
   }
 
@@ -1852,17 +1816,9 @@ class CompositorService {
       const audioLevel = this.audioLevels.get(participantId) || 0;
       const isSpeaking = audioLevel > 0.05; // Threshold for detecting speech
 
-      // DIAGNOSTIC: Log audio levels every 60 frames
-      if (this.frameCount % 60 === 0) {
-        console.log('[Compositor] Audio Level Check:', {
-          participantId,
-          audioLevel: audioLevel.toFixed(3),
-          isSpeaking,
-          threshold: 0.05,
-          audioEnabled: participant.audioEnabled,
-          totalAnalyzers: this.audioAnalysers.size,
-          hasAnalyzer: this.audioAnalysers.has(participantId)
-        });
+      // DIAGNOSTIC: Log audio state every 30 frames
+      if (this.frameCount % 30 === 0) {
+        console.warn('🔊 AUDIO:', participantId, 'level:', audioLevel, 'speaking:', isSpeaking, 'analyzers:', this.audioAnalysers.size);
       }
 
       // Draw pulsating rings when speaking
