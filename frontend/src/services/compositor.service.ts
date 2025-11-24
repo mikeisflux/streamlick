@@ -220,19 +220,7 @@ class CompositorService {
    * Initialize compositor with participants
    */
   async initialize(participants: ParticipantStream[]): Promise<void> {
-    console.log('[COMPOSITOR INIT] ========================================');
-    console.log('[COMPOSITOR INIT] initialize() called with participants:', {
-      count: participants.length,
-      participants: participants.map(p => ({
-        id: p.id,
-        hasStream: !!p.stream,
-        audioTracks: p.stream?.getAudioTracks().length || 0,
-        videoTracks: p.stream?.getVideoTracks().length || 0,
-        audioEnabled: p.audioEnabled,
-        videoEnabled: p.videoEnabled
-      }))
-    });
-    console.log('[COMPOSITOR INIT] ========================================');
+    logger.info('Initializing compositor with', participants.length, 'participants');
 
     // Clear existing state
     this.stop();
@@ -243,16 +231,6 @@ class CompositorService {
     audioMixerService.initialize();
 
     // Create video elements and add audio for each participant
-    console.log('[COMPOSITOR INIT] Processing participants for audio analyzers:', {
-      participantCount: participants.length,
-      participants: participants.map(p => ({
-        id: p.id,
-        hasStream: !!p.stream,
-        audioEnabled: p.audioEnabled,
-        videoEnabled: p.videoEnabled
-      }))
-    });
-
     for (const participant of participants) {
       await this.addParticipant(participant);
 
@@ -277,7 +255,7 @@ class CompositorService {
    * Add a participant to the composition
    */
   async addParticipant(participant: ParticipantStream): Promise<void> {
-    console.log('[COMPOSITOR] Adding participant:', participant.id);
+    logger.info('Adding participant to compositor:', participant.id);
 
     const video = document.createElement('video');
     video.autoplay = true;
@@ -403,9 +381,9 @@ class CompositorService {
       this.audioAnalysers.set(participantId, analyser);
       this.audioLevels.set(participantId, 0);
 
-      console.log(`[AUDIO ANALYZER] Internal analyser created for participant ${participantId}`);
+      logger.info(`Audio analyser created for participant ${participantId}`);
     } catch (error) {
-      console.error(`[AUDIO ANALYZER] Failed to create internal analyser for ${participantId}:`, error);
+      logger.error(`Failed to create audio analyser for ${participantId}:`, error);
     }
   }
 
@@ -428,15 +406,6 @@ class CompositorService {
 
       // Normalize to 0-1 range (0-255 → 0-1)
       const normalizedLevel = average / 255;
-
-      // Debug logging - log periodically
-      if (this.frameCount % 60 === 0 && normalizedLevel > 0.01) {
-        console.log(`[AUDIO LEVEL COMPOSITOR] Participant ${participantId}:`, {
-          average: average.toFixed(2),
-          normalized: normalizedLevel.toFixed(3),
-          speakingThreshold: 0.04
-        });
-      }
 
       // Store level for drawing
       this.audioLevels.set(participantId, normalizedLevel);
@@ -632,12 +601,6 @@ class CompositorService {
    */
   setCaption(caption: Caption | null): void {
     this.currentCaption = caption;
-    if (caption) {
-      logger.info('[Captions] Caption set on compositor:', {
-        text: caption.text,
-        isFinal: caption.isFinal
-      });
-    }
   }
 
   /**
@@ -1859,49 +1822,31 @@ class CompositorService {
 
       // Get audio level for pulsating animation
       const audioLevel = this.audioLevels.get(participantId) || 0;
-      const isSpeaking = audioLevel > 0.04; // Threshold for detecting speech (lowered for sensitivity)
+      const isSpeaking = audioLevel > 0.05; // Threshold for detecting speech
 
-      // Debug logging - always log when participant is showing placeholder
-      if (this.frameCount % 60 === 0) {
-        console.log(`[AUDIO ANIMATION] Participant ${participantId}:`, {
-          audioLevel: audioLevel.toFixed(3),
-          isSpeaking,
-          audioEnabled: participant.audioEnabled,
-          willDrawRings: isSpeaking && participant.audioEnabled
-        });
-      }
-
-      // Draw pulsating rings when speaking - BRIGHT WHITE, THICK, LARGE
+      // Draw pulsating rings when speaking
       if (isSpeaking && participant.audioEnabled) {
         const centerX = x + width / 2;
         const centerY = y + height / 2;
+        const baseRadius = Math.min(width, height) * 0.25;
 
         // Create pulsating effect using time-based animation
         const time = Date.now() / 1000;
+        const pulse = Math.sin(time * 4) * 0.5 + 0.5; // Pulsate at 4Hz (0-1)
 
-        // Inner ring - starts at max(100% of tile, 700px diameter)
-        const innerDiameter = Math.max(Math.max(width, height), 700);
-        const innerRadius = innerDiameter / 2;
-        const innerPulse = Math.sin(time * Math.PI) * 0.5 + 0.5; // Pulse at 2s interval
-        const innerRadiusAnimated = innerRadius * (0.9 + innerPulse * 0.1);
+        // Draw 3 concentric rings that pulse with audio
+        for (let i = 0; i < 3; i++) {
+          const ringDelay = i * 0.3; // Stagger the rings
+          const ringPulse = Math.sin(time * 4 - ringDelay) * 0.5 + 0.5;
+          const radius = baseRadius + (i * 20) + (ringPulse * audioLevel * 30);
+          const alpha = (1 - i * 0.3) * audioLevel * 0.6;
 
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 1)'; // Bright white
-        this.ctx.lineWidth = 20;
-        this.ctx.beginPath();
-        this.ctx.arc(centerX, centerY, innerRadiusAnimated, 0, Math.PI * 2);
-        this.ctx.stroke();
-
-        // Outer ring - expands to max(120% of tile, 900px diameter)
-        const outerDiameter = Math.max(Math.max(width, height) * 1.2, 900);
-        const outerRadius = outerDiameter / 2;
-        const outerPulse = Math.sin(time * 2 * Math.PI) * 0.5 + 0.5; // Ping animation at 1s interval
-        const outerRadiusAnimated = outerRadius * (0.8 + outerPulse * 0.2);
-
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 1)'; // Bright white
-        this.ctx.lineWidth = 24;
-        this.ctx.beginPath();
-        this.ctx.arc(centerX, centerY, outerRadiusAnimated, 0, Math.PI * 2);
-        this.ctx.stroke();
+          this.ctx.strokeStyle = `rgba(66, 153, 225, ${alpha})`; // Blue rings
+          this.ctx.lineWidth = 3 + audioLevel * 5;
+          this.ctx.beginPath();
+          this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+          this.ctx.stroke();
+        }
       }
 
       // Draw camera off icon
@@ -2146,15 +2091,6 @@ class CompositorService {
     if (!this.ctx || !this.currentCaption) return;
 
     const caption = this.currentCaption;
-
-    // Debug logging every 30 frames
-    if (this.frameCount % 30 === 0) {
-      logger.info('[Captions] Drawing caption:', {
-        text: caption.text.substring(0, 50),
-        isFinal: caption.isFinal,
-        position: this.captionPosition
-      });
-    }
 
     // Convert percentage position to pixels
     const x = (this.captionPosition.x / 100) * this.WIDTH;

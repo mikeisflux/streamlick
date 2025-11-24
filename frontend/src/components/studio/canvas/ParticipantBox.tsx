@@ -329,21 +329,24 @@ export function ParticipantBox({
       {/* Voice animation rings - overlays entire tile when camera off and speaking */}
       {!videoEnabled && isSpeaking && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
-          {/* Pulsating ring for speaking animation */}
+          {/* Outer pulsating ring - expands beyond avatar */}
           <div
-            className="absolute rounded-full border-4 border-blue-500 animate-ping"
+            className="absolute rounded-full border-white animate-ping"
             style={{
-              width: 'min(80%, 400px)',
+              width: 'min(95%, 600px)',
               aspectRatio: '1/1',
               animationDuration: '1s',
+              borderWidth: '24px',
             }}
           />
+          {/* Inner pulsating ring - starts bigger than avatar */}
           <div
-            className="absolute rounded-full border-2 border-blue-400"
+            className="absolute rounded-full border-white"
             style={{
-              width: 'min(76%, 380px)',
+              width: 'min(85%, 500px)',
               aspectRatio: '1/1',
               animation: 'pulse 2s ease-in-out infinite',
+              borderWidth: '20px',
             }}
           />
         </div>
