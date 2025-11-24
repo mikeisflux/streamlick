@@ -635,6 +635,24 @@ export function StudioCanvas({
         videoTrackMuted: videoTrack?.muted,
       });
 
+      // CRITICAL: If track is ALREADY muted at creation, fix it immediately
+      if (videoTrack?.muted) {
+        console.error('[StudioCanvas] ⚠️ Canvas track is MUTED at creation! Recreating immediately...');
+        try {
+          const newStream = canvas.captureStream(30);
+          outputStreamRef.current = newStream;
+          canvasStreamService.setOutputStream(newStream);
+
+          const newTrack = newStream.getVideoTracks()[0];
+          console.log('[StudioCanvas] ✅ Recreated stream:', {
+            newTrackId: newTrack?.id,
+            newTrackMuted: newTrack?.muted,
+          });
+        } catch (err) {
+          console.error('[StudioCanvas] ❌ Failed to recreate initially muted stream:', err);
+        }
+      }
+
       // CRITICAL: Monitor track for mute events and fix it
       // Canvas tracks can spontaneously mute in Chrome, causing black frames
       if (videoTrack) {
@@ -663,7 +681,7 @@ export function StudioCanvas({
         };
 
         videoTrack.onunmute = () => {
-          console.log('[StudioCanvas] ✅ Canvas video track UN MUTED', { trackId: videoTrack.id });
+          console.log('[StudioCanvas] ✅ Canvas video track UNMUTED', { trackId: videoTrack.id });
         };
       }
 
