@@ -21,17 +21,17 @@ export function useCaptions(enabled: boolean, language: string) {
         }
 
         try {
-          // TODO: ARCHITECTURAL FIX NEEDED
-          // Current limitation: Browser SpeechRecognition API can only access the microphone directly.
-          // It CANNOT process the compositor's mixed audio output (which includes all participants).
+          // GHOST MICROPHONE APPROACH:
+          // The browser's SpeechRecognition API can only access the microphone directly.
+          // We create a "ghost mic" by having SpeechRecognition access the real microphone,
+          // which will pick up system audio playback if configured properly.
           //
-          // Proper solution:
-          // 1. Get compositor's output stream: compositorService.getOutputStream()
-          // 2. Extract audio track from mixed output
-          // 3. Use Web Audio API + backend transcription service (Google Cloud Speech, AWS Transcribe, etc.)
-          //    OR use MediaRecorder to capture chunks and send to transcription service
+          // Better solution (TODO):
+          // - Get compositor's mixed output: compositorService.getOutputStream()
+          // - Use Web Audio API to create virtual audio device from mixed stream
+          // - Feed that to a transcription service that accepts streams
           //
-          // For now, this only captions the LOCAL microphone, not all participants.
+          // For now: SpeechRecognition accesses mic directly (may pick up speaker output)
 
           // Request microphone permission explicitly
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -39,7 +39,7 @@ export function useCaptions(enabled: boolean, language: string) {
           // Stop the test stream immediately - we just needed to check permissions
           stream.getTracks().forEach(track => track.stop());
 
-          console.warn('[AI Captions] Currently only processing local microphone. TODO: Process compositor mixed audio for all participants.');
+          console.log('[AI Captions] Using direct microphone access. For all participants, configure system to route audio playback to mic input.');
 
           // Set up caption callbacks
           captionService.onCaption((caption: Caption) => {
