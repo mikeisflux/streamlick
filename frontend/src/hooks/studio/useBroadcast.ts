@@ -367,30 +367,17 @@ export function useBroadcast({
 
       mediaServerSocketService.emit('start-rtmp', rtmpPayload);
 
-      toast.success('Connected to platforms, starting countdown...');
+      toast.success('Connected to platforms, you are now live!');
 
-      // Step 4: Display 30-second countdown on canvas (stream is already flowing to YouTube)
-      console.error('🎬 ABOUT TO START COUNTDOWN - Compositor state:', {
-        isCompositing: (compositorService as any).isCompositing,
-        frameCount: (compositorService as any).frameCount,
-        outputStream: !!(compositorService as any).outputStream,
-      });
-      await compositorService.startCountdown(30);
+      // REMOVED: Old compositor countdown and intro video - using StudioCanvas now
+      // TODO: Re-implement countdown and intro video features in StudioCanvas
+      // await compositorService.startCountdown(30);
+      // await compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
 
-      // Step 5: Play intro video IMMEDIATELY after countdown (no delay!)
-      // This ensures viewers see content right away
-      try {
-        await compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
-      } catch (error) {
-        console.error('Intro video failed to play:', error);
-        // Continue even if intro video fails - user stream will show immediately
-      }
-
-      // Step 6: Transition YouTube broadcasts from "testing" to "live" (in background)
-      // Do this AFTER intro starts so there's no delay between countdown and intro
+      // Transition YouTube broadcasts from "testing" to "live"
       api.post(`/broadcasts/${broadcastId}/transition-youtube-to-live`)
         .then(() => {
-          toast.success('You are now live!');
+          toast.success('YouTube transitioned to live!');
         })
         .catch((error) => {
           console.error('[useBroadcast] Failed to transition YouTube to live:', error);
@@ -401,8 +388,8 @@ export function useBroadcast({
       // Start chat polling
       socketService.emit('start-chat', { broadcastId});
 
-      // Enable chat display on compositor
-      compositorService.setShowChat(showChatOnStream);
+      // REMOVED: Chat overlay - compositor disabled, will re-implement in StudioCanvas
+      // compositorService.setShowChat(showChatOnStream);
 
       // Automatically start recording
       try {
