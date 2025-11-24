@@ -616,6 +616,12 @@ class CompositorService {
    */
   setCaption(caption: Caption | null): void {
     this.currentCaption = caption;
+    if (caption) {
+      logger.info('[Captions] Caption set on compositor:', {
+        text: caption.text,
+        isFinal: caption.isFinal
+      });
+    }
   }
 
   /**
@@ -2123,6 +2129,15 @@ class CompositorService {
     if (!this.ctx || !this.currentCaption) return;
 
     const caption = this.currentCaption;
+
+    // Debug logging every 30 frames
+    if (this.frameCount % 30 === 0) {
+      logger.info('[Captions] Drawing caption:', {
+        text: caption.text.substring(0, 50),
+        isFinal: caption.isFinal,
+        position: this.captionPosition
+      });
+    }
 
     // Convert percentage position to pixels
     const x = (this.captionPosition.x / 100) * this.WIDTH;
