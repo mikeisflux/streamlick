@@ -272,12 +272,16 @@ class DailyBotPuppeteerService {
         });
 
         // Set input devices BEFORE joining
-        // Daily will automatically use these tracks when we join
         await win.dailyCall.setInputDevicesAsync({
           videoSource: win.botMediaTracks.video,
           audioSource: win.botMediaTracks.audio,
         });
-        console.log('✅ Set bot media tracks as Daily input (tracks will be published on join)');
+        console.log('✅ Set bot media tracks as Daily input');
+
+        // Start camera to actually begin capturing from the input devices
+        // This must be called BEFORE joining
+        await win.dailyCall.startCamera();
+        console.log('✅ Started camera - now capturing from mediasoup tracks');
       } else {
         console.warn('⚠️ Bot media tracks not available');
       }
