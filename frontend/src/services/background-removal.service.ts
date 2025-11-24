@@ -37,7 +37,6 @@ class BackgroundRemovalService {
     if (this.model || this.isLoading) return;
 
     this.isLoading = true;
-    console.log('Loading BodyPix model...');
 
     try {
       // Load BodyPix with optimized settings for real-time performance
@@ -48,7 +47,6 @@ class BackgroundRemovalService {
         quantBytes: 2,
       });
 
-      console.log('BodyPix model loaded successfully');
     } catch (error) {
       console.error('Failed to load BodyPix model:', error);
       throw error;
@@ -108,7 +106,6 @@ class BackgroundRemovalService {
       throw new Error(`Invalid video dimensions: ${width}x${height}`);
     }
 
-    console.log(`Initializing background removal with dimensions: ${width}x${height}`);
 
     // Create canvas for output
     this.canvasElement = document.createElement('canvas');
@@ -176,7 +173,6 @@ class BackgroundRemovalService {
     if (this.model) {
       try {
         await this.model.dispose();
-        console.log('BodyPix model disposed');
       } catch (error) {
         console.error('Error disposing BodyPix model:', error);
       }
