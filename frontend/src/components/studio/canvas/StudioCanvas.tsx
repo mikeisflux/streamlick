@@ -1750,6 +1750,103 @@ export function StudioCanvas({
         </div>
       )}
 
+      {/* Video Clip Overlay - Plays on top of canvas */}
+      {videoClip && (
+        <div
+          className="absolute inset-0"
+          style={{
+            zIndex: 35,
+            pointerEvents: 'auto',
+          }}
+        >
+          <video
+            ref={(el) => {
+              if (el && videoClip) {
+                console.log('[VideoClip] Playing:', videoClip);
+
+                // CRITICAL: Unmute and set up audio routing
+                el.muted = false;
+                el.volume = 1.0;
+
+                // Initialize audio mixer
+                audioMixerService.initialize();
+
+                // Get AudioContext and resume it
+                const audioContext = (audioMixerService as any).audioContext;
+                if (audioContext && audioContext.state === 'suspended') {
+                  console.log('[VideoClip] Resuming AudioContext...');
+                  audioContext.resume().then(() => {
+                    console.log('[VideoClip] AudioContext resumed');
+                    // Add video to audio mixer AFTER context is resumed
+                    try {
+                      audioMixerService.addMediaElement('video-clip', el);
+                      console.log('[VideoClip] Video audio routed through mixer');
+                    } catch (error) {
+                      console.error('[VideoClip] Failed to add video to mixer:', error);
+                    }
+                  });
+                } else {
+                  // Context already running, add immediately
+                  try {
+                    audioMixerService.addMediaElement('video-clip', el);
+                    console.log('[VideoClip] Video audio routed through mixer');
+                  } catch (error) {
+                    console.error('[VideoClip] Failed to add video to mixer:', error);
+                  }
+                }
+              }
+            }}
+            src={videoClip}
+            autoPlay
+            playsInline
+            className="w-full h-full object-cover"
+            onEnded={() => {
+              console.log('[VideoClip] Video ended');
+              // Remove from audio mixer
+              try {
+                audioMixerService.removeMediaElement('video-clip');
+                console.log('[VideoClip] Removed from audio mixer');
+              } catch (error) {
+                console.error('[VideoClip] Failed to remove from mixer:', error);
+              }
+
+              // Auto-remove video clip when it ends
+              setVideoClip(null);
+              localStorage.removeItem('streamVideoClip');
+              localStorage.removeItem('streamVideoClipAssetId');
+              localStorage.removeItem('streamVideoClipName');
+              window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
+            }}
+          />
+
+          {/* Close button for video overlay */}
+          <button
+            onClick={() => {
+              // Remove from audio mixer
+              try {
+                audioMixerService.removeMediaElement('video-clip');
+              } catch (error) {
+                console.error('[VideoClip] Failed to remove from mixer:', error);
+              }
+
+              setVideoClip(null);
+              localStorage.removeItem('streamVideoClip');
+              localStorage.removeItem('streamVideoClipAssetId');
+              localStorage.removeItem('streamVideoClipName');
+              window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
+            }}
+            className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg shadow-lg flex items-center gap-2 transition-colors"
+            title="Close video overlay"
+            style={{ zIndex: 36 }}
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            <span className="text-sm font-medium">Close Video</span>
+          </button>
+        </div>
+      )}
+
       {/* Fullscreen button - bottom right */}
       <button
         onClick={handleFullscreen}

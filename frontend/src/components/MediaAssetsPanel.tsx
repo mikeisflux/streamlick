@@ -83,8 +83,26 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
     return localStorage.getItem('streamLogo');
   });
 
+  // Track active video clip
+  const [activeVideoClipUrl, setActiveVideoClipUrl] = useState<string | null>(() => {
+    return localStorage.getItem('streamVideoClip');
+  });
+
   // Load assets from localStorage metadata only
   const [assets, setAssets] = useState<Asset[]>([]);
+
+  // Listen for video clip updates from canvas (e.g., when video ends)
+  useEffect(() => {
+    const handleVideoClipUpdate = (e: CustomEvent) => {
+      const { url } = e.detail;
+      setActiveVideoClipUrl(url);
+    };
+
+    window.addEventListener('videoClipUpdated', handleVideoClipUpdate as EventListener);
+    return () => {
+      window.removeEventListener('videoClipUpdated', handleVideoClipUpdate as EventListener);
+    };
+  }, []);
 
   // Initialize IndexedDB and load assets on mount
   useEffect(() => {
@@ -435,10 +453,12 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
     const logoAssetId = localStorage.getItem('streamLogoAssetId');
     const overlayAssetId = localStorage.getItem('streamOverlayAssetId');
     const backgroundAssetId = localStorage.getItem('streamBackgroundAssetId');
+    const videoClipAssetId = localStorage.getItem('streamVideoClipAssetId');
 
     const isActiveLogo = asset.type === 'logo' && (activeLogoUrl === asset.url || logoAssetId === asset.id);
     const isActiveOverlay = asset.type === 'overlay' && (activeOverlayUrl === asset.url || overlayAssetId === asset.id);
     const isActiveBackground = (asset.type === 'background' || asset.type === 'videoBackground') && (activeBackgroundUrl === asset.url || backgroundAssetId === asset.id);
+    const isActiveVideoClip = asset.type === 'videoClip' && (activeVideoClipUrl === asset.url || videoClipAssetId === asset.id);
 
     if (isActiveLogo) {
       // Remove the logo
@@ -464,6 +484,14 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
       setActiveBackgroundUrl(null);
       window.dispatchEvent(new CustomEvent('backgroundUpdated', { detail: { url: null, name: null } }));
       toast.success('Background removed');
+    } else if (isActiveVideoClip) {
+      // Stop the video clip (toggle off)
+      localStorage.removeItem('streamVideoClip');
+      localStorage.removeItem('streamVideoClipAssetId');
+      localStorage.removeItem('streamVideoClipName');
+      setActiveVideoClipUrl(null);
+      window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: null } }));
+      toast.success('Video stopped');
     } else {
       // Apply asset based on type
       switch (asset.type) {
@@ -585,6 +613,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
                 localStorage.setItem('streamVideoClip', objectURL);
                 localStorage.setItem('streamVideoClipAssetId', asset.id);
                 localStorage.setItem('streamVideoClipName', asset.name);
+                setActiveVideoClipUrl(objectURL);
                 window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: objectURL, name: asset.name } }));
                 toast.success(`Playing: ${asset.name}`);
               }
@@ -596,6 +625,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
             localStorage.setItem('streamVideoClip', asset.url);
             localStorage.setItem('streamVideoClipName', asset.name);
             localStorage.removeItem('streamVideoClipAssetId');
+            setActiveVideoClipUrl(asset.url);
             window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: asset.url, name: asset.name } }));
             toast.success(`Playing: ${asset.name}`);
           }
@@ -621,10 +651,12 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
     const logoAssetId = localStorage.getItem('streamLogoAssetId');
     const overlayAssetId = localStorage.getItem('streamOverlayAssetId');
     const backgroundAssetId = localStorage.getItem('streamBackgroundAssetId');
+    const videoClipAssetId = localStorage.getItem('streamVideoClipAssetId');
 
     const isActive = (asset.type === 'logo' && (activeLogoUrl === asset.url || logoAssetId === asset.id)) ||
                      (asset.type === 'overlay' && (activeOverlayUrl === asset.url || overlayAssetId === asset.id)) ||
-                     ((asset.type === 'background' || asset.type === 'videoBackground') && (activeBackgroundUrl === asset.url || backgroundAssetId === asset.id));
+                     ((asset.type === 'background' || asset.type === 'videoBackground') && (activeBackgroundUrl === asset.url || backgroundAssetId === asset.id)) ||
+                     (asset.type === 'videoClip' && (activeVideoClipUrl === asset.url || videoClipAssetId === asset.id));
 
     return (
       <div
