@@ -591,7 +591,7 @@ export function StudioCanvas({
 
     // Use absolute positioning for all other layouts
     return {
-      container: 'relative',
+      container: '', // Don't add 'relative' - let the parent's 'absolute inset-0' work
       mainVideo: '',
       useAbsolutePositioning: true,
     };
