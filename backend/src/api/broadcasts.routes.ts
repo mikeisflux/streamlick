@@ -18,6 +18,24 @@ import { getIOInstance } from '../socket/io-instance';
 
 const router = Router();
 
+// CRITICAL FIX: Track countdown intervals to prevent memory leaks
+// Stores interval IDs for each broadcast so they can be cleared on stop
+const countdownIntervals = new Map<string, NodeJS.Timeout>();
+
+// CRITICAL FIX: Helper function for type-safe error message extraction
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String(error.message);
+  }
+  return 'Unknown error';
+}
+
 // Get all broadcasts for user (with pagination)
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
@@ -202,7 +220,13 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
     });
 
     // Return immediately to start countdown on frontend
-    const countdownDuration = parseInt(process.env.BROADCAST_COUNTDOWN_SECONDS || '15', 10);
+    // CRITICAL FIX: Validate parsed countdown duration to prevent NaN
+    let countdownDuration = parseInt(process.env.BROADCAST_COUNTDOWN_SECONDS || '10', 10);
+    if (isNaN(countdownDuration) || countdownDuration < 0 || countdownDuration > 300) {
+      logger.warn(`Invalid BROADCAST_COUNTDOWN_SECONDS: ${process.env.BROADCAST_COUNTDOWN_SECONDS}, using default 10`);
+      countdownDuration = 10; // Safe default (reduced from 15 to match intro video)
+    }
+
     res.json({
       message: 'Countdown started',
       broadcastId: broadcast.id,
@@ -220,8 +244,13 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
         logger.info(`[ASYNC IIFE] destinationIds: ${JSON.stringify(destinationIds)}`);
 
         const io = getIOInstance();
-        // Configurable countdown duration (default 15 seconds)
-        let countdownSeconds = parseInt(process.env.BROADCAST_COUNTDOWN_SECONDS || '15', 10);
+        // Configurable countdown duration (default 10 seconds for intro video)
+        // CRITICAL FIX: Validate parsed countdown duration to prevent NaN
+        let countdownSeconds = parseInt(process.env.BROADCAST_COUNTDOWN_SECONDS || '10', 10);
+        if (isNaN(countdownSeconds) || countdownSeconds < 0 || countdownSeconds > 300) {
+          logger.warn(`[ASYNC IIFE] Invalid BROADCAST_COUNTDOWN_SECONDS: ${process.env.BROADCAST_COUNTDOWN_SECONDS}, using default 10`);
+          countdownSeconds = 10; // Safe default (reduced from 15 to match intro video)
+        }
 
         logger.info(`[ASYNC IIFE] Starting countdown: ${countdownSeconds} seconds`);
 
@@ -238,15 +267,31 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
           }
         }, 1000);
 
+        // Delete any existing broadcast destinations for this broadcast to prevent duplicates
+        const deletedCount = await prisma.broadcastDestination.deleteMany({
+          where: { broadcastId: broadcast.id },
+        });
+        if (deletedCount.count > 0) {
+          logger.info(`[ASYNC IIFE] Deleted ${deletedCount.count} existing broadcast destinations`);
+        }
+
         const broadcastDestinations: any[] = [];
 
         // If destinations are specified, create live videos for each platform
         if (destinationIds && destinationIds.length > 0) {
+          // CRITICAL: Deduplicate destination IDs to prevent creating multiple stream keys for the same destination
+          const uniqueDestinationIds = Array.from(new Set(destinationIds as string[])) as string[];
+
           logger.info(`[ASYNC IIFE] Processing ${destinationIds.length} selected destinations: ${JSON.stringify(destinationIds)}`);
+          if (uniqueDestinationIds.length !== destinationIds.length) {
+            logger.warn(`[ASYNC IIFE] ⚠️  Detected ${destinationIds.length - uniqueDestinationIds.length} duplicate destination IDs`);
+            logger.warn(`[ASYNC IIFE] Original array: ${JSON.stringify(destinationIds)}`);
+            logger.warn(`[ASYNC IIFE] Deduplicated to: ${JSON.stringify(uniqueDestinationIds)}`);
+          }
 
           const destinations = await prisma.destination.findMany({
             where: {
-              id: { in: destinationIds },
+              id: { in: uniqueDestinationIds },
               userId: req.user!.userId,
               isActive: true,
             },
@@ -333,10 +378,14 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
                       logger.error(`[YouTube] ❌ Broadcast ${liveVideoId} monitoring failed: ${error.message}`);
                       // Don't fail the entire broadcast - it's already created
                     });
-                } catch (error: any) {
-                  logger.error(`[YouTube] ❌ Failed to create broadcast for destination ${destination.id}: ${error.message}`);
-                  if (error.response?.data) {
-                    logger.error(`[YouTube] Error response: ${JSON.stringify(error.response.data)}`);
+                } catch (error: unknown) {
+                  // CRITICAL FIX: Type-safe error handling
+                  logger.error(`[YouTube] ❌ Failed to create broadcast for destination ${destination.id}: ${getErrorMessage(error)}`);
+                  if (error && typeof error === 'object' && 'response' in error) {
+                    const axiosError = error as { response?: { data?: unknown } };
+                    if (axiosError.response?.data) {
+                      logger.error(`[YouTube] Error response: ${JSON.stringify(axiosError.response.data)}`);
+                    }
                   }
                   continue; // Skip this destination
                 }
@@ -431,9 +480,12 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
             }
           }
         }, 15000); // 15 seconds
-      } catch (error: any) {
-        logger.error(`[ASYNC IIFE] ❌ Error preparing broadcast destinations: ${error.message}`);
-        logger.error(`[ASYNC IIFE] Stack: ${error.stack}`);
+      } catch (error: unknown) {
+        // CRITICAL FIX: Type-safe error handling
+        logger.error(`[ASYNC IIFE] ❌ Error preparing broadcast destinations: ${getErrorMessage(error)}`);
+        if (error instanceof Error && error.stack) {
+          logger.error(`[ASYNC IIFE] Stack: ${error.stack}`);
+        }
       }
     })(); // CRITICAL: Invoke the IIFE!
   } catch (error) {
@@ -558,6 +610,50 @@ router.get('/:id/stats', authenticate, async (req: AuthRequest, res) => {
   } catch (error) {
     logger.error('Get stats error:', error);
     res.status(500).json({ error: 'Failed to get statistics' });
+  }
+});
+
+// Get broadcast destinations with RTMP details for media server
+router.get('/:id/destinations', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const broadcast = await prisma.broadcast.findFirst({
+      where: {
+        id: req.params.id,
+        userId: req.user!.userId,
+      },
+    });
+
+    if (!broadcast) {
+      return res.status(404).json({ error: 'Broadcast not found' });
+    }
+
+    // Get broadcast destinations with decrypted stream keys
+    const broadcastDestinations = await prisma.broadcastDestination.findMany({
+      where: { broadcastId: req.params.id },
+      include: {
+        destination: {
+          select: {
+            id: true,
+            platform: true,
+          },
+        },
+      },
+    });
+
+    // Decrypt stream keys for media server
+    const destinationsForMediaServer = broadcastDestinations.map((bd) => ({
+      id: bd.destination.id,
+      platform: bd.destination.platform,
+      rtmpUrl: bd.streamUrl,
+      streamKey: bd.streamKey ? decrypt(bd.streamKey) : '',
+      liveVideoId: bd.liveVideoId,
+      status: bd.status,
+    }));
+
+    res.json(destinationsForMediaServer);
+  } catch (error) {
+    logger.error('Get broadcast destinations error:', error);
+    res.status(500).json({ error: 'Failed to get broadcast destinations' });
   }
 });
 

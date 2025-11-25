@@ -1,11 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { broadcastService } from '../../services/broadcast.service';
 import { socketService } from '../../services/socket.service';
-import { mediaServerSocketService } from '../../services/media-server-socket.service';
-import { webrtcService } from '../../services/webrtc.service';
+import { antMediaService } from '../../services/antmedia.service';
 import { compositorService } from '../../services/compositor.service';
 import { recordingService } from '../../services/recording.service';
 import { useStudioStore } from '../../store/studioStore';
+import api from '../../services/api';
 import toast from 'react-hot-toast';
 
 interface RemoteParticipant {
@@ -45,7 +45,7 @@ export function useBroadcast({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [currentLayout, setCurrentLayout] = useState<'grid' | 'spotlight' | 'sidebar' | 'pip'>('grid');
-  const [selectedLayout, setSelectedLayout] = useState<number>(9);
+  const [selectedLayout, setSelectedLayout] = useState<number>(1);
 
   const { broadcast, setIsLive } = useStudioStore();
 
@@ -128,16 +128,25 @@ export function useBroadcast({
   const handleGoLive = useCallback(async () => {
     if (!broadcastId) return false;
 
-    if (selectedDestinations.length === 0) {
+    // CRITICAL: Deduplicate selected destinations before processing
+    const deduplicatedDestinations = Array.from(new Set(selectedDestinations));
+
+    if (deduplicatedDestinations.length !== selectedDestinations.length) {
+      console.warn('[useBroadcast] Found duplicate destination IDs before going live:', {
+        original: selectedDestinations,
+        deduplicated: deduplicatedDestinations,
+        duplicateCount: selectedDestinations.length - deduplicatedDestinations.length,
+      });
+    }
+
+    if (deduplicatedDestinations.length === 0) {
       toast.error('Please select at least one destination');
       return false;
     }
 
     try {
-      // Initialize WebRTC if not already done
-      if (!webrtcService.getDevice()) {
-        await initializeWebRTC();
-      }
+      // Initialize Ant Media service
+      await antMediaService.initialize(broadcastId);
 
       // Initialize compositor with only LIVE participants (exclude backstage)
       const participantStreams = [
@@ -164,69 +173,134 @@ export function useBroadcast({
       await compositorService.initialize(participantStreams);
       compositorService.setLayout({ type: currentLayout });
 
-      // Get composite stream and produce it via WebRTC
+      // Get composite stream
       const compositeStream = compositorService.getOutputStream();
       if (!compositeStream) {
         throw new Error('Failed to get composite stream');
       }
 
-      // Produce composite video and audio tracks
-      const compositeVideoTrack = compositeStream.getVideoTracks()[0];
-      const compositeAudioTrack = compositeStream.getAudioTracks()[0];
-
-      let compositeVideoProducerId: string | undefined;
-      let compositeAudioProducerId: string | undefined;
-
-      if (compositeVideoTrack) {
-        compositeVideoProducerId = await webrtcService.produceMedia(compositeVideoTrack);
-      }
-
-      if (compositeAudioTrack) {
-        compositeAudioProducerId = await webrtcService.produceMedia(compositeAudioTrack);
-      }
+      // Log composite stream details for debugging
+      const videoTracks = compositeStream.getVideoTracks();
+      const audioTracks = compositeStream.getAudioTracks();
+      console.log('[useBroadcast] Composite stream obtained:', {
+        videoTracks: videoTracks.length,
+        audioTracks: audioTracks.length,
+        videoTrackSettings: videoTracks[0]?.getSettings(),
+        videoTrackEnabled: videoTracks[0]?.enabled,
+        videoTrackReadyState: videoTracks[0]?.readyState,
+        audioTrackEnabled: audioTracks[0]?.enabled,
+        audioTrackReadyState: audioTracks[0]?.readyState,
+      });
 
       // Prepare destination settings for API
       const apiDestinationSettings: Record<string, { privacyStatus?: string; scheduledStartTime?: string; title?: string; description?: string }> = {};
-      selectedDestinations.forEach((destId) => {
-        const title = destinationSettings.title[destId];
-        const description = destinationSettings.description[destId];
+      deduplicatedDestinations.forEach((destId) => {
+        const destTitle = destinationSettings.title[destId];
+        const destDescription = destinationSettings.description[destId];
+
+        // Use destination-specific title/description if set, otherwise fall back to broadcast's title/description
+        const title = (destTitle && destTitle !== 'Loading') ? destTitle : broadcast?.title;
+        const description = (destDescription && destDescription !== 'Loading') ? destDescription : broadcast?.description;
 
         apiDestinationSettings[destId] = {
           privacyStatus: destinationSettings.privacy[destId] || 'public',
           scheduledStartTime: destinationSettings.schedule[destId] || undefined,
-          // Only include title/description if they're set and not placeholder values
-          title: (title && title !== 'Loading') ? title : undefined,
-          description: (description && description !== 'Loading') ? description : undefined,
+          title,
+          description,
         };
       });
 
       console.log('[useBroadcast] Starting broadcast with:', {
-        selectedDestinations,
-        destinationCount: selectedDestinations.length,
+        selectedDestinations: deduplicatedDestinations,
+        destinationCount: deduplicatedDestinations.length,
         apiDestinationSettings
       });
 
-      // Start broadcast with destination settings
-      await broadcastService.start(broadcastId, selectedDestinations, apiDestinationSettings);
+      // Start broadcast with destination settings (using deduplicated array)
+      // This triggers the 10-second countdown on the backend
+      await broadcastService.start(broadcastId, deduplicatedDestinations, apiDestinationSettings);
 
-      // Start RTMP streaming with composite producers
-      const destinationsToStream = destinations
-        .filter((d) => selectedDestinations.includes(d.id))
-        .map((d) => ({
-          id: d.id,
-          platform: d.platform,
-          rtmpUrl: d.rtmpUrl,
-          streamKey: 'encrypted-key', // In production, decrypt on backend
-        }));
+      // FLOW: Play intro video (which includes countdown) → user stream
+      // The intro video (StreamLick.mp4) contains the countdown - no separate countdown overlay needed
+      console.log('[useBroadcast] Starting intro video (includes countdown)...');
+      try {
+        await compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
+        console.log('[useBroadcast] Intro video finished, transitioning to user stream');
+      } catch (error) {
+        console.error('Intro video failed to play:', error);
+        // Continue even if intro video fails
+      }
 
-      mediaServerSocketService.emit('start-rtmp', {
-        broadcastId,
-        destinations: destinationsToStream,
-        compositeProducers: {
-          videoProducerId: compositeVideoProducerId,
-          audioProducerId: compositeAudioProducerId,
-        },
+      // Wait for broadcast destinations to be ready
+      console.log('[useBroadcast] Waiting for broadcast destinations to be ready...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Step 3: Fetch broadcast destinations with decrypted RTMP URLs and stream keys
+      const broadcastDestinationsResponse = await api.get(`/broadcasts/${broadcastId}/destinations`);
+      const broadcastDestinations = broadcastDestinationsResponse.data;
+
+      console.log('[useBroadcast] Fetched broadcast destinations:', broadcastDestinations);
+
+      // Step 4: Create Ant Media broadcast and add RTMP endpoints
+      const antBroadcast = await antMediaService.createBroadcast(`streamlick-${broadcastId}`);
+      console.log('[useBroadcast] Ant Media broadcast created:', antBroadcast.streamId);
+
+      // Deduplicate broadcast destinations by ID
+      const seenDestinations = new Set<string>();
+      const uniqueDestinations = broadcastDestinations.filter((bd: { id: string }) => {
+        if (seenDestinations.has(bd.id)) {
+          console.warn('[useBroadcast] Skipping duplicate destination:', bd.id);
+          return false;
+        }
+        seenDestinations.add(bd.id);
+        return true;
       });
+
+      console.log('[useBroadcast] Unique destinations:', uniqueDestinations.length, 'of', broadcastDestinations.length);
+
+      // Step 5: Start publishing composite stream via WebRTC to Ant Media FIRST
+      // IMPORTANT: RTMP endpoints must be added AFTER stream is active
+      console.log('[useBroadcast] Starting WebRTC publish to Ant Media...');
+      await antMediaService.startPublishing(
+        compositeStream,
+        antBroadcast.streamId,
+        (info) => {
+          console.log('[useBroadcast] Ant Media status:', info);
+          if (info === 'publish_started') {
+            console.log('[useBroadcast] WebRTC stream is now active on Ant Media');
+          }
+        },
+        (error, message) => {
+          console.error('[useBroadcast] Ant Media error:', error, message);
+          toast.error(`Streaming error: ${error}`);
+        }
+      );
+
+      // Step 6: Add RTMP endpoints AFTER WebRTC stream is active
+      // This ensures Ant Media has an active stream to forward to RTMP destinations
+      console.log('[useBroadcast] Stream active, now adding RTMP endpoints...');
+      for (const bd of uniqueDestinations) {
+        const fullRtmpUrl = bd.streamKey
+          ? `${bd.rtmpUrl}/${bd.streamKey}`
+          : bd.rtmpUrl;
+
+        console.log('[useBroadcast] Adding RTMP endpoint:', {
+          platform: bd.platform,
+          destinationId: bd.id,
+          hasStreamKey: !!bd.streamKey,
+          rtmpUrlPreview: bd.rtmpUrl?.substring(0, 40) + '...',
+        });
+
+        try {
+          await antMediaService.addRtmpEndpoint(antBroadcast.streamId, fullRtmpUrl, bd.id);
+          console.log('[useBroadcast] RTMP endpoint added successfully for:', bd.platform);
+        } catch (error) {
+          console.error('[useBroadcast] Failed to add RTMP endpoint:', error);
+          // Continue with other destinations
+        }
+      }
+
+      console.log('[useBroadcast] All RTMP endpoints configured, stream is being forwarded');
 
       // Start chat polling
       socketService.emit('start-chat', { broadcastId });
@@ -261,10 +335,10 @@ export function useBroadcast({
     destinations,
     currentLayout,
     showChatOnStream,
-    initializeWebRTC,
     setIsLive,
     handleStartRecording,
     destinationSettings,
+    broadcast,
   ]);
 
   const handleEndBroadcast = useCallback(async () => {
@@ -282,8 +356,9 @@ export function useBroadcast({
       // Stop compositor
       compositorService.stop();
 
-      // Stop RTMP streaming
-      mediaServerSocketService.emit('stop-rtmp', { broadcastId });
+      // Stop Ant Media streaming and clean up
+      await antMediaService.close();
+
       await broadcastService.end(broadcastId);
       toast.success('Broadcast ended');
       setIsLive(false);
@@ -311,7 +386,8 @@ export function useBroadcast({
     };
 
     const layoutType = layoutMap[layoutId] || 'grid';
-    compositorService.setLayout({ type: layoutType });
+    // Pass both type and layoutId for precise positioning
+    compositorService.setLayout({ type: layoutType, layoutId });
 
     // Get layout name for toast
     const layoutNames: { [key: number]: string } = {

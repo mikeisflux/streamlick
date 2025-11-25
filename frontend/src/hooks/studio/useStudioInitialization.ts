@@ -28,7 +28,21 @@ export function useStudioInitialization({
     if (!broadcastId) return [];
     try {
       const saved = localStorage.getItem(getStorageKey());
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+
+      const parsed = JSON.parse(saved);
+      // CRITICAL: Deduplicate array when loading from localStorage
+      const deduplicated = Array.from(new Set(parsed as string[])) as string[];
+
+      if (deduplicated.length !== parsed.length) {
+        console.warn('[Studio Init] Found duplicates in localStorage:', {
+          original: parsed,
+          deduplicated,
+          duplicateCount: parsed.length - deduplicated.length,
+        });
+      }
+
+      return deduplicated;
     } catch (error) {
       console.error('Failed to load selected destinations from localStorage:', error);
       return [];
@@ -39,8 +53,19 @@ export function useStudioInitialization({
   useEffect(() => {
     if (!broadcastId || selectedDestinations.length === 0) return;
     try {
-      localStorage.setItem(getStorageKey(), JSON.stringify(selectedDestinations));
-      console.log('[Studio Init] Saved selected destinations:', selectedDestinations);
+      // CRITICAL: Deduplicate before saving to localStorage to prevent corruption
+      const deduplicated = Array.from(new Set(selectedDestinations));
+
+      if (deduplicated.length !== selectedDestinations.length) {
+        console.warn('[Studio Init] Preventing duplicate save to localStorage:', {
+          original: selectedDestinations,
+          deduplicated,
+          duplicateCount: selectedDestinations.length - deduplicated.length,
+        });
+      }
+
+      localStorage.setItem(getStorageKey(), JSON.stringify(deduplicated));
+      console.log('[Studio Init] Saved selected destinations:', deduplicated);
     } catch (error) {
       console.error('Failed to save selected destinations to localStorage:', error);
     }
@@ -127,11 +152,39 @@ export function useStudioInitialization({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [broadcastId]);
 
+  // Wrap setSelectedDestinations to always deduplicate
+  const setSelectedDestinationsSafe = (destinations: string[] | ((prev: string[]) => string[])) => {
+    if (typeof destinations === 'function') {
+      setSelectedDestinations((prev) => {
+        const updated = destinations(prev);
+        const deduplicated = Array.from(new Set(updated));
+        if (deduplicated.length !== updated.length) {
+          console.warn('[Studio Init] Auto-deduplicating in setSelectedDestinations:', {
+            original: updated,
+            deduplicated,
+            duplicateCount: updated.length - deduplicated.length,
+          });
+        }
+        return deduplicated;
+      });
+    } else {
+      const deduplicated = Array.from(new Set(destinations));
+      if (deduplicated.length !== destinations.length) {
+        console.warn('[Studio Init] Auto-deduplicating in setSelectedDestinations:', {
+          original: destinations,
+          deduplicated,
+          duplicateCount: destinations.length - deduplicated.length,
+        });
+      }
+      setSelectedDestinations(deduplicated);
+    }
+  };
+
   return {
     isLoading,
     destinations,
     setDestinations,
     selectedDestinations,
-    setSelectedDestinations,
+    setSelectedDestinations: setSelectedDestinationsSafe,
   };
 }

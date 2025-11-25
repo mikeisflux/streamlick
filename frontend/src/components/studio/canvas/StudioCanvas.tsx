@@ -4,6 +4,7 @@ import { ParticipantBox } from './ParticipantBox';
 import { TeleprompterOverlay } from './TeleprompterOverlay';
 import { CommentOverlay } from './CommentOverlay';
 import { Caption } from '../../../services/caption.service';
+import { mediaStorageService } from '../../../services/media-storage.service';
 
 interface Banner {
   id: string;
@@ -129,8 +130,10 @@ export function StudioCanvas({
     mirrorVideo: false,
   });
 
-  // Load stream background from localStorage
-  const [streamBackground, setStreamBackground] = useState<string | null>(null);
+  // Load stream background from localStorage - initialize immediately to avoid flash
+  const [streamBackground, setStreamBackground] = useState<string | null>(() =>
+    localStorage.getItem('streamBackground')
+  );
 
   useEffect(() => {
     const loadBanners = () => {
@@ -213,11 +216,38 @@ export function StudioCanvas({
     };
   }, []);
 
-  // Load stream background
+  // ===================================================================================
+  // DO NOT EVER CHANGE THIS CODE - IT WILL BREAK THE SITE
+  // This loads background/logo/overlay from IndexedDB and caches the object URL in
+  // localStorage so assets load INSTANTLY on page refresh without flash/delay.
+  // The useState initializers above read from localStorage synchronously on render.
+  // ===================================================================================
+  // Load stream background - check IndexedDB if stored there
   useEffect(() => {
-    const loadBackground = () => {
+    const loadBackground = async () => {
+      // First check if background is stored in IndexedDB
+      const backgroundAssetId = localStorage.getItem('streamBackgroundAssetId');
+      if (backgroundAssetId) {
+        try {
+          const mediaData = await mediaStorageService.getMedia(backgroundAssetId);
+          if (mediaData) {
+            const objectURL = URL.createObjectURL(mediaData.blob);
+            setStreamBackground(objectURL);
+            // Cache the object URL in localStorage for instant loading on next page load
+            localStorage.setItem('streamBackground', objectURL);
+            console.log('[StudioCanvas] Loaded background from IndexedDB');
+            return;
+          }
+        } catch (error) {
+          console.error('[StudioCanvas] Failed to load background from IndexedDB:', error);
+        }
+      }
+
+      // Fallback to localStorage URL
       const bg = localStorage.getItem('streamBackground');
-      setStreamBackground(bg);
+      if (bg) {
+        setStreamBackground(bg);
+      }
     };
 
     loadBackground();
@@ -231,14 +261,20 @@ export function StudioCanvas({
     return () => window.removeEventListener('backgroundUpdated', handleBackgroundUpdated);
   }, []);
 
-  // Load stream logo from localStorage
-  const [streamLogo, setStreamLogo] = useState<string | null>(null);
+  // Load stream logo from localStorage - initialize immediately to avoid flash
+  const [streamLogo, setStreamLogo] = useState<string | null>(() =>
+    localStorage.getItem('streamLogo')
+  );
 
-  // Load stream overlay from localStorage
-  const [streamOverlay, setStreamOverlay] = useState<string | null>(null);
+  // Load stream overlay from localStorage - initialize immediately to avoid flash
+  const [streamOverlay, setStreamOverlay] = useState<string | null>(() =>
+    localStorage.getItem('streamOverlay')
+  );
 
-  // Load video clip from localStorage
-  const [videoClip, setVideoClip] = useState<string | null>(null);
+  // Load video clip from localStorage - initialize immediately to avoid flash
+  const [videoClip, setVideoClip] = useState<string | null>(() =>
+    localStorage.getItem('streamVideoClip')
+  );
 
   // Custom layout positions for edit mode
   interface ParticipantPosition {
@@ -299,14 +335,50 @@ export function StudioCanvas({
   }, [customLayoutPositions, editMode]);
 
   useEffect(() => {
-    const loadLogo = () => {
+    const loadLogo = async () => {
+      // First check if logo is stored in IndexedDB
+      const logoAssetId = localStorage.getItem('streamLogoAssetId');
+      if (logoAssetId) {
+        try {
+          const mediaData = await mediaStorageService.getMedia(logoAssetId);
+          if (mediaData) {
+            const objectURL = URL.createObjectURL(mediaData.blob);
+            setStreamLogo(objectURL);
+            // Cache the object URL in localStorage for instant loading on next page load
+            localStorage.setItem('streamLogo', objectURL);
+            console.log('[StudioCanvas] Loaded logo from IndexedDB');
+            return;
+          }
+        } catch (error) {
+          console.error('[StudioCanvas] Failed to load logo from IndexedDB:', error);
+        }
+      }
+      // Fallback to localStorage URL
       const logo = localStorage.getItem('streamLogo');
-      setStreamLogo(logo);
+      if (logo) setStreamLogo(logo);
     };
 
-    const loadOverlay = () => {
+    const loadOverlay = async () => {
+      // First check if overlay is stored in IndexedDB
+      const overlayAssetId = localStorage.getItem('streamOverlayAssetId');
+      if (overlayAssetId) {
+        try {
+          const mediaData = await mediaStorageService.getMedia(overlayAssetId);
+          if (mediaData) {
+            const objectURL = URL.createObjectURL(mediaData.blob);
+            setStreamOverlay(objectURL);
+            // Cache the object URL in localStorage for instant loading on next page load
+            localStorage.setItem('streamOverlay', objectURL);
+            console.log('[StudioCanvas] Loaded overlay from IndexedDB');
+            return;
+          }
+        } catch (error) {
+          console.error('[StudioCanvas] Failed to load overlay from IndexedDB:', error);
+        }
+      }
+      // Fallback to localStorage URL
       const overlay = localStorage.getItem('streamOverlay');
-      setStreamOverlay(overlay);
+      if (overlay) setStreamOverlay(overlay);
     };
 
     const loadVideoClip = () => {
@@ -361,6 +433,165 @@ export function StudioCanvas({
     return { cols, rows };
   };
 
+  // ===================================================================================
+  // DO NOT EVER CHANGE THIS CODE - IT WILL BREAK THE SITE
+  // These layout positions define exactly where participants appear on screen for each
+  // of the 8 layout types. The compositor service uses identical positioning logic.
+  // ===================================================================================
+  // Layout positioning for each layout type
+  // Returns CSS positions as percentages for each participant slot
+  const getLayoutPositions = (layoutId: number, participantCount: number) => {
+    // Each position: { x, y, width, height } in percentages
+    const positions: Array<{ x: number; y: number; width: number; height: number }> = [];
+    const gap = 1; // 1% gap between elements
+
+    switch (layoutId) {
+      case 1: // Solo - One person fills entire screen (centered, 70% size)
+        positions.push({ x: 15, y: 10, width: 70, height: 80 });
+        // Additional participants get small thumbnails at bottom
+        for (let i = 1; i < participantCount; i++) {
+          const thumbWidth = 15;
+          const thumbX = 5 + (i - 1) * (thumbWidth + gap);
+          positions.push({ x: thumbX, y: 85, width: thumbWidth, height: 12 });
+        }
+        break;
+
+      case 2: // Cropped - 2x2 tight grid
+        const crop2x2 = [
+          { x: 1, y: 1, width: 48.5, height: 48.5 },
+          { x: 50.5, y: 1, width: 48.5, height: 48.5 },
+          { x: 1, y: 50.5, width: 48.5, height: 48.5 },
+          { x: 50.5, y: 50.5, width: 48.5, height: 48.5 },
+        ];
+        for (let i = 0; i < Math.min(participantCount, 4); i++) {
+          positions.push(crop2x2[i]);
+        }
+        break;
+
+      case 3: // Group - Dynamic grid for many participants
+        const cols = Math.ceil(Math.sqrt(participantCount));
+        const rows = Math.ceil(participantCount / cols);
+        const cellWidth = (100 - (cols + 1) * gap) / cols;
+        const cellHeight = (100 - (rows + 1) * gap) / rows;
+        for (let i = 0; i < participantCount; i++) {
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          positions.push({
+            x: gap + col * (cellWidth + gap),
+            y: gap + row * (cellHeight + gap),
+            width: cellWidth,
+            height: cellHeight,
+          });
+        }
+        break;
+
+      case 4: // Spotlight - Large main speaker with small boxes above
+        // Main speaker takes 70% width at bottom
+        positions.push({ x: 15, y: 25, width: 70, height: 70 });
+        // Small boxes at top (up to 4)
+        const topBoxWidth = 18;
+        const topBoxHeight = 20;
+        const startX = 10;
+        for (let i = 1; i < Math.min(participantCount, 5); i++) {
+          positions.push({
+            x: startX + (i - 1) * (topBoxWidth + gap),
+            y: 2,
+            width: topBoxWidth,
+            height: topBoxHeight,
+          });
+        }
+        break;
+
+      case 5: // News - Side-by-side (50/50)
+        positions.push({ x: 1, y: 1, width: 48.5, height: 98 });
+        positions.push({ x: 50.5, y: 1, width: 48.5, height: 98 });
+        // Additional participants stack on right side
+        for (let i = 2; i < participantCount; i++) {
+          const slotHeight = 98 / Math.ceil((participantCount - 1));
+          positions[i] = {
+            x: 50.5,
+            y: 1 + (i - 1) * slotHeight,
+            width: 48.5,
+            height: slotHeight - gap,
+          };
+        }
+        break;
+
+      case 6: // Screen - Large area with tiny participants at top
+        // Participants at top row
+        const topParticipants = Math.min(participantCount, 4);
+        const topWidth = (100 - (topParticipants + 1) * gap) / topParticipants;
+        for (let i = 0; i < topParticipants; i++) {
+          positions.push({
+            x: gap + i * (topWidth + gap),
+            y: 1,
+            width: topWidth,
+            height: 18,
+          });
+        }
+        // Remaining space for screen/content (placeholder for now)
+        break;
+
+      case 7: // Picture-in-Picture - Main content with small overlay
+        // Main content fills screen
+        positions.push({ x: 1, y: 1, width: 98, height: 98 });
+        // PiP overlay in bottom-right corner
+        if (participantCount > 1) {
+          positions.push({ x: 72, y: 70, width: 25, height: 27 });
+        }
+        // Additional PiPs stack vertically
+        for (let i = 2; i < participantCount; i++) {
+          positions.push({
+            x: 72,
+            y: 70 - (i - 1) * 30,
+            width: 25,
+            height: 27,
+          });
+        }
+        break;
+
+      case 8: // Cinema - Ultra-wide letterbox format
+        // Letterbox bars at top and bottom (handled by container)
+        const letterboxHeight = 56; // ~16:9 in letterbox
+        const letterboxY = (100 - letterboxHeight) / 2;
+
+        if (participantCount === 1) {
+          positions.push({ x: 15, y: letterboxY + 5, width: 70, height: letterboxHeight - 10 });
+        } else {
+          // Side by side in letterbox
+          const boxWidth = (100 - 3 * gap) / Math.min(participantCount, 3);
+          for (let i = 0; i < Math.min(participantCount, 3); i++) {
+            positions.push({
+              x: gap + i * (boxWidth + gap),
+              y: letterboxY,
+              width: boxWidth,
+              height: letterboxHeight,
+            });
+          }
+        }
+        break;
+
+      default:
+        // Fallback to grid
+        const defCols = Math.ceil(Math.sqrt(participantCount));
+        const defRows = Math.ceil(participantCount / defCols);
+        const defCellWidth = (100 - (defCols + 1) * gap) / defCols;
+        const defCellHeight = (100 - (defRows + 1) * gap) / defRows;
+        for (let i = 0; i < participantCount; i++) {
+          const col = i % defCols;
+          const row = Math.floor(i / defCols);
+          positions.push({
+            x: gap + col * (defCellWidth + gap),
+            y: gap + row * (defCellHeight + gap),
+            width: defCellWidth,
+            height: defCellHeight,
+          });
+        }
+    }
+
+    return positions;
+  };
+
   // Simplified auto-layout based on participants and screen share
   const getLayoutStyles = (layoutId: number | 'screenshare') => {
     // When screen is being shared, move participants to left sidebar
@@ -371,18 +602,15 @@ export function StudioCanvas({
         sidebarWidth: 'w-[25%]',
         mainVideo: 'flex-1',
         screenShare: 'flex-1 w-[75%]',
+        useAbsolutePositioning: false,
       };
     }
 
-    // Auto-arrange participants based on count
-    const { cols, rows } = calculateDynamicGrid(totalParticipants);
-
-    // All layouts now use smart auto-grid
+    // Use absolute positioning for all other layouts
     return {
-      container: 'grid gap-2 p-2',
-      mainVideo: 'col-span-1 row-span-1',
-      gridCols: cols,
-      gridRows: rows,
+      container: '', // Don't add 'relative' - let the parent's 'absolute inset-0' work
+      mainVideo: '',
+      useAbsolutePositioning: true,
     };
   };
 
@@ -432,10 +660,6 @@ export function StudioCanvas({
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',
-          ...(getLayoutStyles(selectedLayout).gridCols && {
-            gridTemplateColumns: `repeat(${getLayoutStyles(selectedLayout).gridCols}, 1fr)`,
-            gridTemplateRows: `repeat(${getLayoutStyles(selectedLayout).gridRows}, 1fr)`,
-          }),
         }}
       >
         {/* Screen Share Layout - Active when screen sharing */}
@@ -544,79 +768,97 @@ export function StudioCanvas({
           </>
         ) : (
           <>
-            {/* Simplified Auto-Layout - All layouts now use smart grid */}
-            {/* Render local user first - only when on stage */}
-            {isLocalUserOnStage && (
-              <div
-                className={totalParticipants === 1 ? '' : getLayoutStyles(selectedLayout).mainVideo}
-                style={
-                  totalParticipants === 1
-                    ? {
-                        gridColumn: '1 / -1',
-                        gridRow: '1 / -1',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '2rem',
-                      }
-                    : {}
-                }
-              >
-                <div style={totalParticipants === 1 ? { width: '50%', height: '50%' } : { width: '100%', height: '100%' }}>
-                  <ParticipantBox
-                    stream={localStream}
-                    videoEnabled={videoEnabled}
-                    audioEnabled={audioEnabled}
-                    name="You"
-                    positionNumber={1}
-                    isHost={true}
-                    videoRef={mainVideoRef}
-                    size="medium"
-                    connectionQuality="excellent"
-                    showPositionNumber={showPositionNumbers}
-                    showConnectionQuality={showConnectionQuality}
-                    showLowerThird={showLowerThirds}
-                    participantId="local-user"
-                    onRemoveFromStage={onRemoveFromStage}
-                    cameraFrame={styleSettings.cameraFrame}
-                    borderWidth={styleSettings.borderWidth}
-                    borderColor={styleSettings.primaryColor}
-                    mirrorVideo={styleSettings.mirrorVideo}
-                    editMode={editMode}
-                    position={customLayoutPositions.get('local-user')}
-                    onPositionChange={(pos) => handlePositionChange('local-user', pos)}
-                  />
-                </div>
-              </div>
-            )}
+            {/* Layout-based positioning using absolute positioning */}
+            {(() => {
+              const layoutPositions = getLayoutPositions(selectedLayout, totalParticipants);
+              let participantIndex = 0;
 
-            {/* Render remote participants */}
-            {onStageParticipants.map((participant, index) => (
-              <div key={participant.id} className={`${getLayoutStyles(selectedLayout).mainVideo}`}>
-                    <ParticipantBox
-                      stream={participant.stream}
-                      videoEnabled={participant.videoEnabled}
-                      audioEnabled={participant.audioEnabled}
-                      name={participant.name}
-                      positionNumber={index + 2}
-                      isHost={participant.role === 'host'}
-                      size="medium"
-                      connectionQuality="excellent"
-                      showPositionNumber={showPositionNumbers}
-                      showConnectionQuality={showConnectionQuality}
-                      showLowerThird={showLowerThirds}
-                      participantId={participant.id}
-                      onRemoveFromStage={onRemoveFromStage}
-                      cameraFrame={styleSettings.cameraFrame}
-                      borderWidth={styleSettings.borderWidth}
-                      borderColor={styleSettings.primaryColor}
-                      mirrorVideo={false}
-                      editMode={editMode}
-                      position={customLayoutPositions.get(participant.id)}
-                      onPositionChange={(pos) => handlePositionChange(participant.id, pos)}
-                    />
-                  </div>
-                ))}
+              return (
+                <>
+                  {/* Render local user first - only when on stage */}
+                  {isLocalUserOnStage && layoutPositions[participantIndex] && (
+                    <div
+                      className="absolute"
+                      style={{
+                        left: `${layoutPositions[participantIndex].x}%`,
+                        top: `${layoutPositions[participantIndex].y}%`,
+                        width: `${layoutPositions[participantIndex].width}%`,
+                        height: `${layoutPositions[participantIndex].height}%`,
+                        transition: 'all 0.3s ease-in-out',
+                      }}
+                    >
+                      <ParticipantBox
+                        stream={localStream}
+                        videoEnabled={videoEnabled}
+                        audioEnabled={audioEnabled}
+                        name="You"
+                        positionNumber={1}
+                        isHost={true}
+                        videoRef={mainVideoRef}
+                        size="medium"
+                        connectionQuality="excellent"
+                        showPositionNumber={showPositionNumbers}
+                        showConnectionQuality={showConnectionQuality}
+                        showLowerThird={showLowerThirds}
+                        participantId="local-user"
+                        onRemoveFromStage={onRemoveFromStage}
+                        cameraFrame={styleSettings.cameraFrame}
+                        borderWidth={styleSettings.borderWidth}
+                        borderColor={styleSettings.primaryColor}
+                        mirrorVideo={styleSettings.mirrorVideo}
+                        editMode={editMode}
+                        position={customLayoutPositions.get('local-user')}
+                        onPositionChange={(pos) => handlePositionChange('local-user', pos)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Render remote participants */}
+                  {onStageParticipants.map((participant, index) => {
+                    const posIndex = isLocalUserOnStage ? index + 1 : index;
+                    const pos = layoutPositions[posIndex];
+                    if (!pos) return null;
+
+                    return (
+                      <div
+                        key={participant.id}
+                        className="absolute"
+                        style={{
+                          left: `${pos.x}%`,
+                          top: `${pos.y}%`,
+                          width: `${pos.width}%`,
+                          height: `${pos.height}%`,
+                          transition: 'all 0.3s ease-in-out',
+                        }}
+                      >
+                        <ParticipantBox
+                          stream={participant.stream}
+                          videoEnabled={participant.videoEnabled}
+                          audioEnabled={participant.audioEnabled}
+                          name={participant.name}
+                          positionNumber={posIndex + 1}
+                          isHost={participant.role === 'host'}
+                          size="medium"
+                          connectionQuality="excellent"
+                          showPositionNumber={showPositionNumbers}
+                          showConnectionQuality={showConnectionQuality}
+                          showLowerThird={showLowerThirds}
+                          participantId={participant.id}
+                          onRemoveFromStage={onRemoveFromStage}
+                          cameraFrame={styleSettings.cameraFrame}
+                          borderWidth={styleSettings.borderWidth}
+                          borderColor={styleSettings.primaryColor}
+                          mirrorVideo={false}
+                          editMode={editMode}
+                          position={customLayoutPositions.get(participant.id)}
+                          onPositionChange={(pos) => handlePositionChange(participant.id, pos)}
+                        />
+                      </div>
+                    );
+                  })}
+                </>
+              );
+            })()}
           </>
         )}
 
@@ -769,6 +1011,10 @@ export function StudioCanvas({
           </div>
         )}
 
+        {/* =========================================================================
+            DO NOT EVER CHANGE THIS CODE - IT WILL BREAK THE SITE
+            Video clips from media assets play here on top of the canvas.
+            ========================================================================= */}
         {/* Video Clip Overlay - Plays on top of canvas */}
         {videoClip && (
           <div

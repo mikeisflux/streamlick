@@ -34,8 +34,19 @@ export function Dashboard() {
 
   const createBroadcast = async () => {
     try {
+      // Prompt user for broadcast title
+      const title = window.prompt('Enter a title for your broadcast:', `Live Stream - ${new Date().toLocaleDateString()}`);
+
+      // User cancelled
+      if (title === null) {
+        return;
+      }
+
+      // Use provided title or default if empty
+      const finalTitle = title.trim() || `Live Stream - ${new Date().toLocaleDateString()}`;
+
       const broadcast = await broadcastService.create({
-        title: 'New Broadcast',
+        title: finalTitle,
         description: '',
       });
       navigate(`/studio/${broadcast.id}`);

@@ -22,7 +22,7 @@ export function AdminLogs() {
   const [selectedCategory, setSelectedCategory] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [limit, setLimit] = useState(500);
-  const [activeTab, setActiveTab] = useState<'diagnostic' | 'application' | 'oauth'>('application');
+  const [activeTab, setActiveTab] = useState<'diagnostic' | 'application' | 'oauth' | 'media-server'>('application');
 
   useEffect(() => {
     fetchLogs();
@@ -45,6 +45,11 @@ export function AdminLogs() {
         }
       } else if (activeTab === 'oauth') {
         endpoint = '/logs/oauth';
+      } else if (activeTab === 'media-server') {
+        endpoint = '/logs/media-server';
+        if (searchQuery) {
+          params.search = searchQuery;
+        }
       } else {
         // Diagnostic logs
         if (selectedLevel.length > 0) {
@@ -211,6 +216,16 @@ export function AdminLogs() {
               }`}
             >
               🔧 Diagnostic Logs
+            </button>
+            <button
+              onClick={() => setActiveTab('media-server')}
+              className={`px-6 py-3 font-medium transition-colors ${
+                activeTab === 'media-server'
+                  ? 'text-white border-b-2 border-blue-500'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              📡 Media Server
             </button>
           </div>
         </div>

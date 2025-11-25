@@ -14,6 +14,7 @@ import { Settings } from './pages/Settings';
 import { Recordings } from './pages/Recordings';
 import { AdminAssets } from './pages/AdminAssets';
 import { AdminLogs } from './pages/AdminLogs';
+import { MediaServerDashboard } from './pages/MediaServerDashboard';
 import AdminSettings from './pages/AdminSettings';
 import AdminTesting from './pages/AdminTesting';
 import { AdminServers } from './pages/AdminServers';
@@ -142,6 +143,14 @@ function App() {
           element={
             <AdminRoute>
               <AdminLogs />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/admin/media-server"
+          element={
+            <AdminRoute>
+              <MediaServerDashboard />
             </AdminRoute>
           }
         />

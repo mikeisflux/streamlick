@@ -24,6 +24,7 @@ interface ParticipantStream {
 
 interface LayoutConfig {
   type: 'grid' | 'spotlight' | 'sidebar' | 'pip';
+  layoutId?: number; // 1-8 for specific layout styles
   spotlightId?: string; // For spotlight layout
   positions?: Array<{ x: number; y: number; width: number; height: number }>;
 }
@@ -67,10 +68,16 @@ class CompositorService {
   private showChat = false;
   private lowerThird: LowerThird | null = null;
   private mediaClipOverlay: HTMLVideoElement | HTMLImageElement | null = null;
+  private countdownValue: number | null = null;
 
   // Image caching to prevent memory leaks from creating Images every frame
   private backgroundImage: HTMLImageElement | null = null;
   private overlayImages: Map<string, HTMLImageElement> = new Map();
+
+  // Audio analyzers for voice visualization
+  private audioAnalysers: Map<string, AnalyserNode> = new Map();
+  private audioLevels: Map<string, number> = new Map(); // 0-1 normalized audio level
+  private audioContexts: Map<string, AudioContext> = new Map(); // Track contexts for cleanup
 
   // Canvas dimensions - configurable via environment or defaults to 4K UHD (3840x2160)
   private readonly WIDTH = parseInt(import.meta.env.VITE_CANVAS_WIDTH || '3840');
@@ -111,20 +118,149 @@ class CompositorService {
 
     // Create video elements and add audio for each participant
     for (const participant of participants) {
+      console.log(`[Compositor] Processing participant ${participant.id}:`, {
+        hasStream: !!participant.stream,
+        audioTracks: participant.stream?.getAudioTracks().length || 0,
+        videoTracks: participant.stream?.getVideoTracks().length || 0,
+        audioEnabled: participant.audioEnabled,
+        videoEnabled: participant.videoEnabled,
+      });
+
       await this.addParticipant(participant);
 
-      // Add participant audio to mixer
-      if (participant.audioEnabled && participant.stream) {
+      // Add participant audio to mixer and create audio analyser for visualization
+      if (participant.stream) {
         const audioTrack = participant.stream.getAudioTracks()[0];
         if (audioTrack) {
+          console.log(`[Compositor] Found audio track for ${participant.id}, creating analyser...`);
           const audioStream = new MediaStream([audioTrack]);
-          audioMixerService.addStream(participant.id, audioStream);
+          if (participant.audioEnabled) {
+            audioMixerService.addStream(participant.id, audioStream);
+          }
+          // Always create analyser for voice visualization (even if muted in mix)
+          // AWAIT to ensure AudioContext is running before continuing
+          await this.createAudioAnalyser(participant.id, audioStream);
+        } else {
+          console.warn(`[Compositor] No audio track in stream for ${participant.id}! Audio visualization will not work for this participant.`);
         }
+      } else {
+        console.warn(`[Compositor] No stream for participant ${participant.id}!`);
       }
     }
 
+    console.log(`[Compositor] Initialization complete. Analysers: ${this.audioAnalysers.size}, Participants: ${this.participants.size}`);
+
     // Start compositing
     this.start();
+  }
+
+  /**
+   * Create an audio analyser for voice visualization (pulsating rings)
+   * Uses the same approach as PreviewArea for consistency
+   */
+  private async createAudioAnalyser(participantId: string, audioStream: MediaStream): Promise<void> {
+    try {
+      const audioTrack = audioStream.getAudioTracks()[0];
+
+      console.log(`[Compositor] Creating audio analyser for ${participantId}:`, {
+        audioTracks: audioStream.getAudioTracks().length,
+        trackId: audioTrack?.id,
+        trackLabel: audioTrack?.label,
+        trackEnabled: audioTrack?.enabled,
+        trackReadyState: audioTrack?.readyState,
+        trackMuted: audioTrack?.muted,
+      });
+
+      if (!audioTrack) {
+        console.error(`[Compositor] No audio track found for ${participantId}! Cannot create analyser.`);
+        return;
+      }
+
+      // Create a separate audio context for analysis (not the mixer context)
+      const audioContext = new AudioContext();
+      console.log(`[Compositor] AudioContext created for ${participantId}, state: ${audioContext.state}`);
+
+      // CRITICAL: Wait for AudioContext to be running before connecting
+      if (audioContext.state === 'suspended') {
+        console.log(`[Compositor] AudioContext suspended for ${participantId}, waiting for resume...`);
+        await audioContext.resume();
+        console.log(`[Compositor] AudioContext resumed for ${participantId}, new state: ${audioContext.state}`);
+      }
+
+      // Create analyser with same settings as PreviewArea
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.3;
+
+      // Create a fresh MediaStream from just the audio track (like PreviewArea does)
+      const monitorStream = new MediaStream([audioTrack]);
+      const source = audioContext.createMediaStreamSource(monitorStream);
+      source.connect(analyser);
+
+      // Store analyser and context
+      this.audioAnalysers.set(participantId, analyser);
+      this.audioContexts.set(participantId, audioContext);
+      this.audioLevels.set(participantId, 0);
+
+      console.log(`[Compositor] ✓ Audio analyser created successfully for ${participantId}. Total analysers: ${this.audioAnalysers.size}`);
+
+      // Test the analyser after a short delay
+      setTimeout(() => {
+        const testData = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(testData);
+        const testSum = testData.reduce((a, b) => a + b, 0);
+        console.log(`[Compositor] Audio analyser test for ${participantId}: sum=${testSum}, context.state=${audioContext.state}`);
+      }, 500);
+
+    } catch (error) {
+      console.error(`[Compositor] Failed to create audio analyser for ${participantId}:`, error);
+    }
+  }
+
+  // Frame counter for periodic logging
+  private audioLogCounter = 0;
+
+  /**
+   * Update audio levels for all participants (called every frame)
+   */
+  private updateAudioLevels(): void {
+    this.audioLogCounter++;
+
+    // Log if no analysers exist
+    if (this.audioLogCounter % 300 === 0 && this.audioAnalysers.size === 0) {
+      console.warn('[Compositor] WARNING: No audio analysers exist! Audio visualization will not work.');
+    }
+
+    this.audioAnalysers.forEach((analyser, participantId) => {
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      analyser.getByteFrequencyData(dataArray);
+
+      // Calculate average volume
+      let sum = 0;
+      let max = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        sum += dataArray[i];
+        if (dataArray[i] > max) max = dataArray[i];
+      }
+      const average = sum / bufferLength;
+
+      // Normalize to 0-1 range (0-255 → 0-1)
+      const normalizedLevel = average / 255;
+
+      // Store level for drawing
+      this.audioLevels.set(participantId, normalizedLevel);
+
+      // Log audio levels every second (at 30fps, every 30 frames)
+      if (this.audioLogCounter % 30 === 0) {
+        console.log(`[Compositor] Audio level for ${participantId}: ${normalizedLevel.toFixed(3)} (max: ${max}, avg: ${average.toFixed(1)}) isSpeaking: ${normalizedLevel > 0.05}`);
+      }
+    });
+
+    // Log analyser count occasionally
+    if (this.audioLogCounter % 300 === 0) {
+      console.log('[Compositor] Audio analysers active:', this.audioAnalysers.size, 'participants:', this.participants.size);
+    }
   }
 
   /**
@@ -192,6 +328,15 @@ class CompositorService {
       video.srcObject = null;
       this.videoElements.delete(participantId);
     }
+
+    // Clean up audio analyser
+    const audioContext = this.audioContexts.get(participantId);
+    if (audioContext && audioContext.state !== 'closed') {
+      audioContext.close().catch(err => logger.error('Failed to close audio context:', err));
+    }
+    this.audioContexts.delete(participantId);
+    this.audioAnalysers.delete(participantId);
+    this.audioLevels.delete(participantId);
 
     this.participants.delete(participantId);
   }
@@ -371,6 +516,168 @@ class CompositorService {
   }
 
   /**
+   * Play intro video
+   * @param videoUrl - URL of the intro video (defaults to StreamLick intro)
+   * @param duration - Optional duration in seconds (defaults to video duration)
+   * @returns Promise that resolves when video finishes
+   */
+  async playIntroVideo(videoUrl: string = '/backgrounds/videos/StreamLick.mp4', duration?: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      console.log('[Compositor] playIntroVideo called with:', videoUrl);
+
+      const videoElement = document.createElement('video');
+      videoElement.src = videoUrl;
+      videoElement.muted = false; // Enable audio for intro video
+      videoElement.autoplay = false;
+      videoElement.preload = 'auto'; // Load full video, not just metadata
+      videoElement.crossOrigin = 'anonymous'; // Allow CORS for local files
+      videoElement.playsInline = true; // Required for iOS
+
+      console.log('[Compositor] Created video element, waiting for events...');
+      logger.info(`Loading intro video: ${videoUrl}`);
+
+      // Emit event so visible UI can show intro video too
+      window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: videoUrl, playing: true } }));
+
+      // Wait for metadata (dimensions) to load first
+      videoElement.addEventListener('loadedmetadata', () => {
+        console.log('[Compositor] Intro video metadata loaded:', {
+          url: videoUrl,
+          width: videoElement.videoWidth,
+          height: videoElement.videoHeight,
+          duration: videoElement.duration,
+          readyState: videoElement.readyState,
+        });
+
+        // Ensure video has valid dimensions
+        if (!videoElement.videoWidth || !videoElement.videoHeight) {
+          console.error('[Compositor] Intro video has invalid dimensions:', videoElement.videoWidth, videoElement.videoHeight);
+          window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
+          reject(new Error('Invalid video dimensions'));
+          return;
+        }
+
+        // Wait for 'playing' event before setting overlay - this ensures frame data is available
+        videoElement.addEventListener('playing', () => {
+          console.log('[Compositor] Intro video is now playing, setting as overlay');
+          this.setMediaClipOverlay(videoElement);
+        }, { once: true });
+
+        // Now wait for enough data to play
+        const playWhenReady = () => {
+          console.log('[Compositor] Intro video ready to play, attempting playback... readyState:', videoElement.readyState);
+          videoElement.play()
+            .then(() => {
+              console.log('[Compositor] Intro video play() succeeded');
+            })
+            .catch((error) => {
+              console.error('[Compositor] Failed to play intro video with audio, trying muted:', error.message);
+              // Try playing muted as fallback (autoplay policy)
+              videoElement.muted = true;
+              videoElement.play()
+                .then(() => {
+                  console.log('[Compositor] Intro video playing muted (fallback)');
+                })
+                .catch((mutedError) => {
+                  console.error('[Compositor] Failed to play intro video even muted:', mutedError);
+                  this.clearMediaClipOverlay();
+                  window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
+                  reject(mutedError);
+                });
+            });
+        };
+
+        if (videoElement.readyState >= 3) {
+          // HAVE_FUTURE_DATA or better - can play
+          console.log('[Compositor] Video already has enough data, playing immediately');
+          playWhenReady();
+        } else {
+          console.log('[Compositor] Waiting for canplay event, current readyState:', videoElement.readyState);
+          videoElement.addEventListener('canplay', () => {
+            console.log('[Compositor] canplay event fired');
+            playWhenReady();
+          }, { once: true });
+        }
+      });
+
+      // Clear overlay when video ends
+      videoElement.addEventListener('ended', () => {
+        logger.info('Intro video ended, clearing overlay');
+        this.clearMediaClipOverlay();
+        window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
+        resolve();
+      });
+
+      // Handle errors
+      videoElement.addEventListener('error', (event) => {
+        const errorMsg = videoElement.error
+          ? `Code: ${videoElement.error.code}, Message: ${videoElement.error.message}`
+          : 'Unknown error';
+        console.error(`[Compositor] Intro video error: ${errorMsg}`, event);
+        this.clearMediaClipOverlay();
+        window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
+        reject(new Error(`Video error: ${errorMsg}`));
+      });
+
+      // Timeout if video fails to load metadata within 10 seconds
+      const loadTimeout = setTimeout(() => {
+        console.error('[Compositor] Intro video load timeout - skipping intro');
+        this.clearMediaClipOverlay();
+        window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
+        resolve(); // Resolve instead of reject to continue the flow
+      }, 10000);
+
+      // Clear timeout when metadata loads
+      videoElement.addEventListener('loadedmetadata', () => {
+        clearTimeout(loadTimeout);
+      }, { once: true });
+
+      // If duration is specified, stop video after that duration
+      if (duration) {
+        setTimeout(() => {
+          console.log(`[Compositor] Intro video duration limit reached (${duration}s), clearing overlay`);
+          videoElement.pause();
+          this.clearMediaClipOverlay();
+          window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
+          resolve();
+        }, duration * 1000);
+      }
+    });
+  }
+
+  /**
+   * Start countdown timer
+   * @param seconds - Number of seconds to countdown from
+   * @returns Promise that resolves when countdown finishes
+   */
+  async startCountdown(seconds: number): Promise<void> {
+    return new Promise((resolve) => {
+      logger.info(`Starting ${seconds}-second countdown on canvas`);
+      this.countdownValue = seconds;
+
+      // Emit event so visible UI can show countdown too
+      window.dispatchEvent(new CustomEvent('compositor-countdown', { detail: { seconds: this.countdownValue } }));
+
+      const intervalId = setInterval(() => {
+        if (this.countdownValue === null || this.countdownValue <= 0) {
+          clearInterval(intervalId);
+          this.countdownValue = null;
+          // Emit countdown complete event
+          window.dispatchEvent(new CustomEvent('compositor-countdown', { detail: { seconds: null } }));
+          logger.info('Countdown finished');
+          resolve();
+          return;
+        }
+
+        this.countdownValue--;
+        // Emit tick event for visible UI
+        window.dispatchEvent(new CustomEvent('compositor-countdown', { detail: { seconds: this.countdownValue } }));
+        logger.debug(`Countdown: ${this.countdownValue}`);
+      }, 1000);
+    });
+  }
+
+  /**
    * Start compositing loop
    */
   start(): void {
@@ -404,6 +711,33 @@ class CompositorService {
       this.outputStream = null;
     }
 
+    // CRITICAL FIX: Clean up video elements to prevent DOM memory leaks
+    this.videoElements.forEach((video, participantId) => {
+      // Stop video and clear srcObject
+      video.pause();
+      video.srcObject = null;
+      video.load(); // Force cleanup
+      // Remove from DOM if attached
+      if (video.parentNode) {
+        video.parentNode.removeChild(video);
+      }
+      logger.debug(`Cleaned up video element for participant ${participantId}`);
+    });
+    this.videoElements.clear();
+
+    // CRITICAL FIX: Clean up audio analysers and contexts
+    this.audioContexts.forEach((audioContext, participantId) => {
+      if (audioContext.state !== 'closed') {
+        audioContext.close().catch(err => {
+          logger.error(`Failed to close audio context for ${participantId}:`, err);
+        });
+      }
+    });
+    this.audioContexts.clear();
+    this.audioAnalysers.clear();
+    this.audioLevels.clear();
+    console.log('[Compositor] Audio analysers cleaned up');
+
     // Clean up cached images
     this.backgroundImage = null;
     this.overlayImages.clear();
@@ -413,7 +747,17 @@ class CompositorService {
   }
 
   /**
+   * Get the RAW canvas output stream (video only)
+   * This is the persistent stream from canvas.captureStream()
+   */
+  getRawOutputStream(): MediaStream | null {
+    return this.outputStream;
+  }
+
+  /**
    * Get the composite output stream (video + mixed audio)
+   * IMPORTANT: This adds the audio track directly to the canvas stream
+   * instead of creating a new MediaStream (which WebRTCAdaptor ignores)
    */
   getOutputStream(): MediaStream | null {
     if (!this.outputStream) {
@@ -424,26 +768,35 @@ class CompositorService {
     const mixedAudioStream = audioMixerService.getOutputStream();
 
     if (!mixedAudioStream) {
-      // Return video-only stream if no audio
+      console.log('[Compositor] No mixed audio stream, returning video-only');
       return this.outputStream;
     }
 
-    // Combine video from canvas with mixed audio
-    const compositeStream = new MediaStream();
+    // Add audio track directly to the canvas outputStream
+    // This ensures we use the SAME stream object that canvas.captureStream() created
+    const existingAudioTracks = this.outputStream.getAudioTracks();
+    const mixedAudioTrack = mixedAudioStream.getAudioTracks()[0];
 
-    // Add video track from canvas
-    const videoTrack = this.outputStream.getVideoTracks()[0];
-    if (videoTrack) {
-      compositeStream.addTrack(videoTrack);
+    if (mixedAudioTrack) {
+      // Remove any existing audio tracks first
+      existingAudioTracks.forEach(track => {
+        console.log('[Compositor] Removing existing audio track:', track.id);
+        this.outputStream!.removeTrack(track);
+      });
+
+      // Add the mixed audio track to the canvas stream
+      console.log('[Compositor] Adding mixed audio track to canvas stream:', mixedAudioTrack.id);
+      this.outputStream.addTrack(mixedAudioTrack);
     }
 
-    // Add mixed audio track
-    const audioTrack = mixedAudioStream.getAudioTracks()[0];
-    if (audioTrack) {
-      compositeStream.addTrack(audioTrack);
-    }
+    console.log('[Compositor] getOutputStream returning canvas stream with tracks:', {
+      videoTracks: this.outputStream.getVideoTracks().length,
+      audioTracks: this.outputStream.getAudioTracks().length,
+      videoTrackId: this.outputStream.getVideoTracks()[0]?.id,
+      audioTrackId: this.outputStream.getAudioTracks()[0]?.id,
+    });
 
-    return compositeStream;
+    return this.outputStream;
   }
 
   /**
@@ -483,6 +836,9 @@ class CompositorService {
         this.drawBackground();
       }
 
+      // Update audio levels for voice visualization
+      this.updateAudioLevels();
+
       // Draw participants based on layout
       this.drawParticipants();
 
@@ -502,6 +858,11 @@ class CompositorService {
       // Draw media clip overlay if active (on top of everything)
       if (this.mediaClipOverlay) {
         this.drawMediaClipOverlay();
+      }
+
+      // Draw countdown if active (on top of everything else)
+      if (this.countdownValue !== null) {
+        this.drawCountdown();
       }
     } catch (error) {
       logger.error('Compositor animation error:', error);
@@ -596,11 +957,160 @@ class CompositorService {
   }
 
   /**
+   * Calculate layout positions based on layout ID (1-8)
+   */
+  private getLayoutPositions(layoutId: number, participantCount: number): Array<{ x: number; y: number; width: number; height: number }> {
+    const positions: Array<{ x: number; y: number; width: number; height: number }> = [];
+    const gap = 1; // 1% gap between elements
+
+    switch (layoutId) {
+      case 1: // Solo - One person centered (35% width, 40% height - 50% smaller than before)
+        positions.push({ x: 32.5, y: 30, width: 35, height: 40 });
+        for (let i = 1; i < participantCount; i++) {
+          const thumbWidth = 12;
+          const thumbX = 5 + (i - 1) * (thumbWidth + gap);
+          positions.push({ x: thumbX, y: 85, width: thumbWidth, height: 12 });
+        }
+        break;
+
+      case 2: // Cropped - 2x2 tight grid
+        const crop2x2 = [
+          { x: 1, y: 1, width: 48.5, height: 48.5 },
+          { x: 50.5, y: 1, width: 48.5, height: 48.5 },
+          { x: 1, y: 50.5, width: 48.5, height: 48.5 },
+          { x: 50.5, y: 50.5, width: 48.5, height: 48.5 },
+        ];
+        for (let i = 0; i < Math.min(participantCount, 4); i++) {
+          positions.push(crop2x2[i]);
+        }
+        break;
+
+      case 3: // Group - Dynamic grid
+        const cols = Math.ceil(Math.sqrt(participantCount));
+        const rows = Math.ceil(participantCount / cols);
+        const cellWidth = (100 - (cols + 1) * gap) / cols;
+        const cellHeight = (100 - (rows + 1) * gap) / rows;
+        for (let i = 0; i < participantCount; i++) {
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          positions.push({
+            x: gap + col * (cellWidth + gap),
+            y: gap + row * (cellHeight + gap),
+            width: cellWidth,
+            height: cellHeight,
+          });
+        }
+        break;
+
+      case 4: // Spotlight - Large main speaker with small boxes above
+        positions.push({ x: 15, y: 25, width: 70, height: 70 });
+        const topBoxWidth = 18;
+        const topBoxHeight = 20;
+        const startX = 10;
+        for (let i = 1; i < Math.min(participantCount, 5); i++) {
+          positions.push({
+            x: startX + (i - 1) * (topBoxWidth + gap),
+            y: 2,
+            width: topBoxWidth,
+            height: topBoxHeight,
+          });
+        }
+        break;
+
+      case 5: // News - Side-by-side (50/50)
+        positions.push({ x: 1, y: 1, width: 48.5, height: 98 });
+        positions.push({ x: 50.5, y: 1, width: 48.5, height: 98 });
+        for (let i = 2; i < participantCount; i++) {
+          const slotHeight = 98 / Math.ceil((participantCount - 1));
+          positions[i] = {
+            x: 50.5,
+            y: 1 + (i - 1) * slotHeight,
+            width: 48.5,
+            height: slotHeight - gap,
+          };
+        }
+        break;
+
+      case 6: // Screen - Tiny participants at top
+        const topParticipants = Math.min(participantCount, 4);
+        const topWidthScreen = (100 - (topParticipants + 1) * gap) / topParticipants;
+        for (let i = 0; i < topParticipants; i++) {
+          positions.push({
+            x: gap + i * (topWidthScreen + gap),
+            y: 1,
+            width: topWidthScreen,
+            height: 18,
+          });
+        }
+        break;
+
+      case 7: // Picture-in-Picture
+        positions.push({ x: 1, y: 1, width: 98, height: 98 });
+        if (participantCount > 1) {
+          positions.push({ x: 72, y: 70, width: 25, height: 27 });
+        }
+        for (let i = 2; i < participantCount; i++) {
+          positions.push({
+            x: 72,
+            y: 70 - (i - 1) * 30,
+            width: 25,
+            height: 27,
+          });
+        }
+        break;
+
+      case 8: // Cinema - Ultra-wide letterbox
+        const letterboxHeight = 56;
+        const letterboxY = (100 - letterboxHeight) / 2;
+        if (participantCount === 1) {
+          positions.push({ x: 15, y: letterboxY + 5, width: 70, height: letterboxHeight - 10 });
+        } else {
+          const boxWidth = (100 - 3 * gap) / Math.min(participantCount, 3);
+          for (let i = 0; i < Math.min(participantCount, 3); i++) {
+            positions.push({
+              x: gap + i * (boxWidth + gap),
+              y: letterboxY,
+              width: boxWidth,
+              height: letterboxHeight,
+            });
+          }
+        }
+        break;
+
+      default:
+        // Fallback to grid
+        const defCols = Math.ceil(Math.sqrt(participantCount));
+        const defRows = Math.ceil(participantCount / defCols);
+        const defCellWidth = (100 - (defCols + 1) * gap) / defCols;
+        const defCellHeight = (100 - (defRows + 1) * gap) / defRows;
+        for (let i = 0; i < participantCount; i++) {
+          const col = i % defCols;
+          const row = Math.floor(i / defCols);
+          positions.push({
+            x: gap + col * (defCellWidth + gap),
+            y: gap + row * (defCellHeight + gap),
+            width: defCellWidth,
+            height: defCellHeight,
+          });
+        }
+    }
+
+    return positions;
+  }
+
+  /**
    * Draw all participants based on current layout
    */
   private drawParticipants(): void {
     const participantArray = Array.from(this.participants.values());
 
+    // If we have a specific layoutId, use the precise positioning
+    if (this.layout.layoutId && this.layout.layoutId >= 1 && this.layout.layoutId <= 8) {
+      this.drawLayoutById(participantArray, this.layout.layoutId);
+      return;
+    }
+
+    // Fallback to legacy layout types
     switch (this.layout.type) {
       case 'grid':
         this.drawGridLayout(participantArray);
@@ -615,6 +1125,29 @@ class CompositorService {
         this.drawPipLayout(participantArray);
         break;
     }
+  }
+
+  /**
+   * Draw layout using specific layout ID (1-8)
+   */
+  private drawLayoutById(participants: ParticipantStream[], layoutId: number): void {
+    if (participants.length === 0 || !this.ctx) return;
+
+    const positions = this.getLayoutPositions(layoutId, participants.length);
+
+    participants.forEach((participant, index) => {
+      const pos = positions[index];
+      if (!pos) return;
+
+      // Convert percentage to pixels
+      const x = (pos.x / 100) * this.WIDTH;
+      const y = (pos.y / 100) * this.HEIGHT;
+      const width = (pos.width / 100) * this.WIDTH;
+      const height = (pos.height / 100) * this.HEIGHT;
+
+      this.drawParticipantVideo(participant.id, x, y, width, height);
+      this.drawParticipantName(participant.name, x, y, width, height);
+    });
   }
 
   /**
@@ -756,9 +1289,37 @@ class CompositorService {
 
       this.ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
     } else {
-      // Video disabled - show placeholder
+      // Video disabled - show placeholder with audio visualization
       this.ctx.fillStyle = '#333333';
       this.ctx.fillRect(x, y, width, height);
+
+      // Get audio level for pulsating animation
+      const audioLevel = this.audioLevels.get(participantId) || 0;
+      const isSpeaking = audioLevel > 0.05; // Threshold for detecting speech
+
+      // Draw pulsating rings when speaking (audio analyzer handles mute state automatically)
+      if (isSpeaking) {
+        const centerX = x + width / 2;
+        const centerY = y + height / 2;
+        const baseRadius = Math.min(width, height) * 0.25;
+
+        // Create pulsating effect using time-based animation
+        const time = Date.now() / 1000;
+
+        // Draw 3 concentric rings that pulse with audio
+        for (let i = 0; i < 3; i++) {
+          const ringDelay = i * 0.3; // Stagger the rings
+          const ringPulse = Math.sin(time * 4 - ringDelay) * 0.5 + 0.5;
+          const radius = baseRadius + (i * 20) + (ringPulse * audioLevel * 50);
+          const alpha = (1 - i * 0.3) * audioLevel * 0.8;
+
+          this.ctx.strokeStyle = `rgba(66, 153, 225, ${alpha})`; // Blue rings
+          this.ctx.lineWidth = 4 + audioLevel * 8;
+          this.ctx.beginPath();
+          this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+          this.ctx.stroke();
+        }
+      }
 
       // Draw camera off icon
       this.ctx.fillStyle = '#666666';
@@ -768,9 +1329,19 @@ class CompositorService {
       this.ctx.fillText('📵', x + width / 2, y + height / 2);
     }
 
-    // Draw border
-    this.ctx.strokeStyle = '#444444';
-    this.ctx.lineWidth = 2;
+    // Draw border - audio-reactive when speaking (audio analyzer handles mute state automatically)
+    const audioLevel = this.audioLevels.get(participantId) || 0;
+    const isSpeaking = audioLevel > 0.05;
+
+    if (isSpeaking) {
+      // Glowing border when speaking
+      const glowIntensity = Math.min(audioLevel * 2, 1);
+      this.ctx.strokeStyle = `rgba(66, 153, 225, ${0.5 + glowIntensity * 0.5})`; // Blue glow
+      this.ctx.lineWidth = 4 + audioLevel * 8;
+    } else {
+      this.ctx.strokeStyle = '#444444';
+      this.ctx.lineWidth = 2;
+    }
     this.ctx.strokeRect(x, y, width, height);
   }
 
@@ -1013,6 +1584,18 @@ class CompositorService {
       const videoWidth = element instanceof HTMLVideoElement ? element.videoWidth : element.naturalWidth;
       const videoHeight = element instanceof HTMLVideoElement ? element.videoHeight : element.naturalHeight;
 
+      // Debug: log video state periodically
+      if (element instanceof HTMLVideoElement && Math.random() < 0.01) {
+        console.log('[Compositor] Drawing intro video:', {
+          videoWidth,
+          videoHeight,
+          readyState: element.readyState,
+          paused: element.paused,
+          currentTime: element.currentTime,
+          duration: element.duration,
+        });
+      }
+
       if (videoWidth && videoHeight) {
         const aspectRatio = videoWidth / videoHeight;
         const canvasAspectRatio = this.WIDTH / this.HEIGHT;
@@ -1030,11 +1613,55 @@ class CompositorService {
           drawX = (this.WIDTH - drawWidth) / 2;
           drawY = 0;
         }
-      }
 
-      // Draw the media clip
-      this.ctx.drawImage(element, drawX, drawY, drawWidth, drawHeight);
+        // Draw the media clip
+        this.ctx.drawImage(element, drawX, drawY, drawWidth, drawHeight);
+      } else {
+        // Video dimensions not available yet - draw black with loading indicator
+        console.warn('[Compositor] Intro video has no dimensions yet, readyState:', element instanceof HTMLVideoElement ? element.readyState : 'image');
+        this.ctx.fillStyle = '#000000';
+        this.ctx.fillRect(0, 0, this.WIDTH, this.HEIGHT);
+      }
     }
+  }
+
+  /**
+   * Draw countdown timer
+   * Renders large countdown number centered on canvas
+   */
+  private drawCountdown(): void {
+    if (!this.ctx || this.countdownValue === null) return;
+
+    // Semi-transparent black overlay
+    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    this.ctx.fillRect(0, 0, this.WIDTH, this.HEIGHT);
+
+    // Draw countdown number
+    const fontSize = Math.floor(this.HEIGHT / 4); // Large font size (25% of canvas height)
+    this.ctx.font = `bold ${fontSize}px Arial`;
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'middle';
+
+    // White text with black outline for visibility
+    this.ctx.strokeStyle = '#000000';
+    this.ctx.lineWidth = 20;
+    this.ctx.strokeText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
+
+    this.ctx.fillStyle = '#FFFFFF';
+    this.ctx.fillText(this.countdownValue.toString(), this.WIDTH / 2, this.HEIGHT / 2);
+
+    // Draw "Going Live..." text below countdown
+    const subFontSize = Math.floor(this.HEIGHT / 15);
+    this.ctx.font = `${subFontSize}px Arial`;
+
+    const subTextY = this.HEIGHT / 2 + fontSize / 2 + subFontSize + 40;
+
+    this.ctx.strokeStyle = '#000000';
+    this.ctx.lineWidth = 10;
+    this.ctx.strokeText('Going Live...', this.WIDTH / 2, subTextY);
+
+    this.ctx.fillStyle = '#FFFFFF';
+    this.ctx.fillText('Going Live...', this.WIDTH / 2, subTextY);
   }
 }
 

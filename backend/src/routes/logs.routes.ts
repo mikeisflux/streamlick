@@ -381,4 +381,143 @@ router.get('/oauth', authMiddleware, async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/logs/media-server
+ * Get Ant Media Server logs and status
+ */
+router.get('/media-server', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { limit = 500, search } = req.query;
+    const antMediaRestUrl = process.env.ANT_MEDIA_REST_URL || 'https://media.streamlick.com:5443/StreamLick/rest/v2';
+
+    let logs: any[] = [];
+
+    // Try to fetch data from Ant Media REST API
+    try {
+      const [broadcastsRes, activeStreamsRes] = await Promise.all([
+        fetch(`${antMediaRestUrl}/broadcasts/list/0/50`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${antMediaRestUrl}/broadcasts/active-live-stream-count`).then(r => r.ok ? r.json() : null).catch(() => null),
+      ]);
+
+      // Add server status entry
+      if (activeStreamsRes !== null) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          level: 'info',
+          category: 'streaming',
+          component: 'AntMedia',
+          message: `Active live streams: ${activeStreamsRes}`,
+          data: { activeStreams: activeStreamsRes },
+        });
+      }
+
+      // Convert broadcasts to log entries
+      if (Array.isArray(broadcastsRes)) {
+        const broadcastLogs = broadcastsRes.map((b: any) => ({
+          timestamp: new Date(b.date || b.updateTime || Date.now()).toISOString(),
+          level: b.status === 'broadcasting' ? 'info' : b.status === 'finished' ? 'info' : 'warn',
+          category: 'broadcast',
+          component: 'AntMedia',
+          message: `Stream ${b.streamId}: ${b.status || 'unknown'} - ${b.name || 'Unnamed'}`,
+          data: {
+            streamId: b.streamId,
+            status: b.status,
+            rtmpViewerCount: b.rtmpViewerCount || 0,
+            webRTCViewerCount: b.webRTCViewerCount || 0,
+            hlsViewerCount: b.hlsViewerCount || 0,
+            endpointList: b.endPointList?.length || 0,
+          },
+        }));
+        logs.push(...broadcastLogs);
+      }
+
+      // If we got some data, add a success status
+      if (logs.length > 0) {
+        logs.unshift({
+          timestamp: new Date().toISOString(),
+          level: 'info',
+          category: 'system',
+          component: 'AntMedia',
+          message: `Connected to Ant Media Server - ${logs.length - 1} broadcast records`,
+        });
+      }
+
+    } catch (fetchError) {
+      logger.warn('Could not fetch from Ant Media REST API:', fetchError);
+
+      // Fallback: Try to read local Ant Media log files if they exist
+      const antMediaLogPath = '/usr/local/antmedia/log/ant-media-server.log';
+      try {
+        const logExists = await fs.access(antMediaLogPath).then(() => true).catch(() => false);
+        if (logExists) {
+          const logContent = await fs.readFile(antMediaLogPath, 'utf-8');
+          const lines = logContent.split('\n').filter(line => line.trim()).slice(-Number(limit));
+
+          logs = lines.map(line => {
+            // Parse Ant Media log format: 2024-01-01 12:00:00,000 [INFO] - message
+            const match = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})\s*\[(\w+)\]\s*-?\s*(.*)$/);
+            if (match) {
+              return {
+                timestamp: new Date(match[1].replace(',', '.')).toISOString(),
+                level: match[2].toLowerCase(),
+                category: 'antmedia',
+                component: 'AntMedia',
+                message: match[3],
+              };
+            }
+            return {
+              timestamp: new Date().toISOString(),
+              level: 'info',
+              category: 'antmedia',
+              component: 'AntMedia',
+              message: line,
+            };
+          });
+        } else {
+          // No logs available - return a status message
+          logs.push({
+            timestamp: new Date().toISOString(),
+            level: 'warn',
+            category: 'system',
+            component: 'AntMedia',
+            message: 'Could not connect to Ant Media Server. Ensure the server is running and accessible.',
+          });
+        }
+      } catch (fileError) {
+        logger.warn('Could not read local Ant Media logs:', fileError);
+        logs.push({
+          timestamp: new Date().toISOString(),
+          level: 'error',
+          category: 'system',
+          component: 'AntMedia',
+          message: `Failed to fetch media server data: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`,
+        });
+      }
+    }
+
+    // Filter by search if provided
+    if (search) {
+      const query = String(search).toLowerCase();
+      logs = logs.filter(log =>
+        JSON.stringify(log).toLowerCase().includes(query)
+      );
+    }
+
+    // Sort by timestamp descending (most recent first)
+    logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    // Limit results
+    logs = logs.slice(0, Number(limit));
+
+    res.json({
+      logs,
+      total: logs.length,
+      source: 'ant-media',
+    });
+  } catch (error: any) {
+    logger.error('Get media server logs error:', error);
+    res.status(500).json({ error: 'Failed to fetch media server logs' });
+  }
+});
+
 export default router;

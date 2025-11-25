@@ -1,0 +1,78 @@
+package io.antmedia.security;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.red5.server.api.scope.IScope;
+import org.red5.server.api.stream.IStreamPlaybackSecurity;
+import org.red5.server.api.stream.IStreamPublishSecurity;
+
+import io.antmedia.datastore.db.types.Token;
+
+
+public class MockTokenService implements  IStreamPublishSecurity , IStreamPlaybackSecurity, ITokenService{
+
+	Map<String, String> authenticatedMap = new ConcurrentHashMap<>();
+	Map<String, String> subscriberAuthenticatedMap = new ConcurrentHashMap<>();
+
+	public boolean checkToken(String tokenId, String streamId, String sessionId, String type) {
+		return true;
+	}
+
+	@Override
+	public boolean isPublishAllowed(IScope scope, String name, String mode, Map<String, String> queryParams, String metaData, String token, String subscriberId, String subscriberCode) {
+		return true;
+	}
+
+	@Override
+	public Token createToken(String streamId, long exprireDate, String type, String roomId) {
+		return null;
+	}
+	
+	@Override
+	public Token createJwtToken(String streamId, long exprireDate, String type, String roomId) {
+		return null;
+	}
+
+	@Override
+	public Map<String, String> getAuthenticatedMap() {
+		return authenticatedMap;
+	}
+	
+	@Override
+	public Map<String, String> getSubscriberAuthenticatedMap() {
+		return subscriberAuthenticatedMap;
+	}
+	
+	@Override
+	public boolean checkHash(String hash, String streamId, String sessionId, String type) {
+		return true;
+	}
+
+
+	@Override
+	public boolean checkTimeBasedSubscriber(String subscriberId, String streamId, String sessionId,
+			String subscriberCode, String tokenType) {
+		return true;
+	}
+
+	@Override
+	public boolean isJwtTokenValid(String jwtTokenId, String tokenSecret, String streamId, String type) {
+		return true;
+	}
+
+	@Override
+	public boolean checkJwtToken(String jwtTokenId, String streamId, String sessionId, String type) {
+		return true;
+	}
+
+	@Override
+	public boolean isPlaybackAllowed(IScope scope, String name, int start, int length, boolean flushPlaylist) {
+		return true;
+	}
+
+	@Override
+	public boolean isPlayAllowed(IScope scope, String name, String mode, Map<String, String> queryParams, String metaData, String token, String subscriberId, String subscriberCode) {
+		return true;
+	}
+}

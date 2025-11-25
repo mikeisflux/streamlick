@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios';
+import crypto from 'crypto';
 import logger from '../utils/logger';
 import prisma from '../database/prisma';
 import { decrypt } from '../utils/crypto';
@@ -82,6 +83,14 @@ class HetznerService {
   }
 
   /**
+   * CRITICAL FIX: Generate secure random password for database/Redis
+   * Prevents using hardcoded default passwords in production
+   */
+  private generateSecurePassword(length: number = 32): string {
+    return crypto.randomBytes(length).toString('base64').substring(0, length);
+  }
+
+  /**
    * Get API client with auth
    */
   private async getClient() {
@@ -97,12 +106,14 @@ class HetznerService {
       keyPrefix: apiKey.substring(0, 20) + '...',
     });
 
+    // MINOR FIX: Add timeout to prevent hanging on slow Hetzner API responses
     return axios.create({
       baseURL: this.baseURL,
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
+      timeout: 30000, // 30 second timeout
     });
   }
 
@@ -141,7 +152,7 @@ class HetznerService {
     name: string;
     serverType: string; // CCX13, CCX23, CCX33, CPX32, etc.
     location: string; // nbg1, fsn1, hel1, ash
-    role: 'media-server' | 'api-server' | 'frontend-server' | 'load-balancer' | 'database-server' | 'redis-server';
+    role: 'media-server' | 'ant-media-server' | 'api-server' | 'frontend-server' | 'load-balancer' | 'database-server' | 'redis-server';
     sshKeys?: number[];
     // Configuration options
     backendUrl?: string; // For media/frontend servers to connect to API
@@ -202,10 +213,12 @@ class HetznerService {
    * Get cloud-init script for automated setup based on role
    */
   private getCloudInitScript(
-    role: 'media-server' | 'api-server' | 'frontend-server' | 'load-balancer' | 'database-server' | 'redis-server',
+    role: 'media-server' | 'ant-media-server' | 'api-server' | 'frontend-server' | 'load-balancer' | 'database-server' | 'redis-server',
     options: any
   ): string {
     switch (role) {
+      case 'ant-media-server':
+        return this.getAntMediaServerScript({ domain: options.domain });
       case 'media-server':
         return this.getMediaServerScript();
       case 'api-server':
@@ -235,11 +248,112 @@ class HetznerService {
   }
 
   /**
-   * Media Server cloud-init script
+   * Ant Media Server cloud-init script (RECOMMENDED)
+   * Deploys Ant Media Server Community Edition with WebRTC to RTMP support
+   */
+  private getAntMediaServerScript(options: { domain?: string }): string {
+    const domain = options.domain || 'media.yourdomain.com';
+
+    return `#!/bin/bash
+set -e
+
+# Update system
+apt-get update
+apt-get upgrade -y
+
+# Install Java 17 (required for Ant Media)
+apt-get install -y openjdk-17-jdk maven git unzip
+
+# Verify Java version
+java -version
+
+# Get public IP
+PUBLIC_IP=$(curl -s http://169.254.169.254/hetzner/v1/metadata/public-ipv4)
+
+# Clone StreamLick media-server (contains modified Ant Media)
+cd /home
+git clone https://github.com/mikeisflux/streamlick.git
+cd streamlick/media-server
+
+# Build from source
+mvn clean package -DskipTests
+
+# Install base Ant Media Server
+cd /tmp
+wget https://raw.githubusercontent.com/ant-media/Scripts/master/install_ant-media-server.sh
+bash install_ant-media-server.sh
+
+# Wait for installation to complete
+sleep 30
+
+# Deploy custom build
+systemctl stop antmedia
+cp /home/streamlick/media-server/target/ant-media-server.jar /usr/local/antmedia/
+cp -r /home/streamlick/media-server/target/lib/* /usr/local/antmedia/lib/
+
+# Create StreamLick application
+mkdir -p /usr/local/antmedia/webapps/StreamLick
+cp -r /usr/local/antmedia/webapps/LiveApp/* /usr/local/antmedia/webapps/StreamLick/
+
+# Configure server
+cat > /usr/local/antmedia/conf/red5.properties.custom <<EOF
+server.name=${domain}
+EOF
+
+# Configure StreamLick app
+cat >> /usr/local/antmedia/webapps/StreamLick/WEB-INF/red5-web.properties <<EOF
+
+# StreamLick Configuration
+settings.webRTCEnabled=true
+settings.rtmpEnabled=true
+settings.mp4MuxingEnabled=false
+settings.hlsMuxingEnabled=false
+settings.publishTokenControlEnabled=true
+settings.playTokenControlEnabled=false
+settings.webRTCFrameRate=30
+settings.acceptOnlyStreamsInDataStore=false
+settings.remoteAllowedCIDR=0.0.0.0/0
+EOF
+
+# Set permissions
+chown -R antmedia:antmedia /usr/local/antmedia/
+
+# Start Ant Media
+systemctl start antmedia
+systemctl enable antmedia
+
+# Configure UFW firewall
+ufw allow 22/tcp      # SSH
+ufw allow 5080/tcp    # HTTP Dashboard
+ufw allow 5443/tcp    # HTTPS Dashboard/WebRTC Signaling
+ufw allow 1935/tcp    # RTMP
+ufw allow 5000:65000/udp  # WebRTC Media
+ufw --force enable
+
+# Wait for Ant Media to start
+sleep 60
+
+# Setup SSL (optional - requires domain pointing to this IP)
+# /usr/local/antmedia/enable_ssl.sh -d ${domain}
+
+echo "✅ Ant Media Server deployed successfully!"
+echo "   Dashboard: http://$PUBLIC_IP:5080"
+echo "   REST API: http://$PUBLIC_IP:5080/StreamLick/rest/v2"
+echo "   WebSocket: ws://$PUBLIC_IP:5080/StreamLick/websocket"
+echo ""
+echo "⚠️  To enable HTTPS, run:"
+echo "   /usr/local/antmedia/enable_ssl.sh -d ${domain}"
+`;
+  }
+
+  /**
+   * Media Server cloud-init script (DEPRECATED - use ant-media-server instead)
    */
   private getMediaServerScript(): string {
     return `#!/bin/bash
 set -e
+
+# DEPRECATED: This script deploys mediasoup. Consider using ant-media-server role instead.
 
 # Update system
 apt-get update
@@ -304,9 +418,13 @@ echo "✅ Media server deployed successfully"
     redisUrl?: string;
     frontendUrl?: string;
   }): string {
+    // CRITICAL FIX: Generate secure random passwords instead of hardcoded defaults
+    const dbPassword = this.generateSecurePassword(32);
+    const redisPassword = this.generateSecurePassword(32);
+
     // Use provided URLs or default to localhost (will create local DB/Redis)
-    const dbUrl = options.databaseUrl || 'postgresql://streamlick:streamlick_prod_password@localhost:5432/streamlick_prod';
-    const redisUrl = options.redisUrl || 'redis://localhost:6379';
+    const dbUrl = options.databaseUrl || `postgresql://streamlick:${dbPassword}@localhost:5432/streamlick_prod`;
+    const redisUrl = options.redisUrl || `redis://:${redisPassword}@localhost:6379`;
     const frontendUrl = options.frontendUrl || 'https://streamlick.yourdomain.com';
 
     // Determine if we need to install DB/Redis locally
@@ -324,7 +442,8 @@ apt-get update
 apt-get install -y postgresql-16
 
 # Configure PostgreSQL
-sudo -u postgres psql -c "CREATE USER streamlick WITH PASSWORD 'streamlick_prod_password';"
+# CRITICAL FIX: Use generated secure password instead of hardcoded default
+sudo -u postgres psql -c "CREATE USER streamlick WITH PASSWORD '${dbPassword}';"
 sudo -u postgres psql -c "CREATE DATABASE streamlick_prod OWNER streamlick;"
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE streamlick_prod TO streamlick;"
 `;
@@ -443,11 +562,15 @@ cd streamlick
 npm install
 
 # Configure frontend
+# Note: mediaServerUrl should be the Ant Media server HTTPS URL (e.g., https://media.yourdomain.com:5443)
+MEDIA_WS_URL=$(echo "${mediaServerUrl}" | sed 's/https:/wss:/g')
 cat > frontend/.env <<EOF
 VITE_API_URL=${apiUrl}
-VITE_MEDIA_SERVER_URL=${mediaServerUrl}
 VITE_SOCKET_URL=${apiUrl}
 VITE_NODE_ENV=production
+# Ant Media Server Configuration
+VITE_ANT_MEDIA_REST_URL=${mediaServerUrl}/StreamLick/rest/v2
+VITE_ANT_MEDIA_WEBSOCKET_URL=\${MEDIA_WS_URL}/StreamLick/websocket
 EOF
 
 # Build ONLY frontend workspace
@@ -610,8 +733,12 @@ echo "   2. Install SSL certificates with: certbot --nginx -d ${apiDomain} -d ${
 
   /**
    * Database Server cloud-init script
+   * CRITICAL FIX: Accept password parameter instead of using hardcoded default
    */
-  private getDatabaseServerScript(): string {
+  private getDatabaseServerScript(dbPassword?: string): string {
+    // Generate secure password if not provided
+    const password = dbPassword || this.generateSecurePassword(32);
+
     return `#!/bin/bash
 set -e
 
@@ -636,7 +763,8 @@ echo "host    all             all             0.0.0.0/0               md5" >> /e
 systemctl restart postgresql
 
 # Create database and user
-sudo -u postgres psql -c "CREATE USER streamlick WITH PASSWORD 'streamlick_prod_password';"
+# CRITICAL FIX: Use generated secure password instead of hardcoded default
+sudo -u postgres psql -c "CREATE USER streamlick WITH PASSWORD '${password}';"
 sudo -u postgres psql -c "CREATE DATABASE streamlick_prod OWNER streamlick;"
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE streamlick_prod TO streamlick;"
 
@@ -652,8 +780,12 @@ echo "⚠️  Remember to change the default password and restrict IP access!"
 
   /**
    * Redis Server cloud-init script
+   * CRITICAL FIX: Accept password parameter instead of using hardcoded default
    */
-  private getRedisServerScript(): string {
+  private getRedisServerScript(redisPassword?: string): string {
+    // Generate secure password if not provided
+    const password = redisPassword || this.generateSecurePassword(32);
+
     return `#!/bin/bash
 set -e
 
@@ -668,8 +800,9 @@ apt-get install -y redis-server
 sed -i 's/bind 127.0.0.1 ::1/bind 0.0.0.0/' /etc/redis/redis.conf
 sed -i 's/protected-mode yes/protected-mode no/' /etc/redis/redis.conf
 
-# Set password (update this for production!)
-echo "requirepass streamlick_redis_password" >> /etc/redis/redis.conf
+# Set password
+# CRITICAL FIX: Use generated secure password instead of hardcoded default
+echo "requirepass ${password}" >> /etc/redis/redis.conf
 
 # Restart Redis
 systemctl enable redis-server

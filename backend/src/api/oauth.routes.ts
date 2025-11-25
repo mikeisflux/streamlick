@@ -181,9 +181,11 @@ async function cleanupExpiredOAuthStates(): Promise<number> {
 // OAuth URLs
 const YOUTUBE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const YOUTUBE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+// CRITICAL FIX: Use full YouTube scope to create/manage live broadcasts
+// youtube.readonly is READ ONLY - we need youtube or youtube.upload to create broadcasts
 const YOUTUBE_SCOPES = [
-  'https://www.googleapis.com/auth/youtube.readonly',
-  'https://www.googleapis.com/auth/youtube.force-ssl',
+  'https://www.googleapis.com/auth/youtube', // Full YouTube access (create/manage broadcasts)
+  'https://www.googleapis.com/auth/youtube.force-ssl', // Required for live streaming
 ].join(' ');
 
 const FACEBOOK_AUTH_URL = 'https://www.facebook.com/v24.0/dialog/oauth';
@@ -1006,6 +1008,7 @@ router.post('/rumble/setup', authenticate, async (req, res) => {
 
 /**
  * Disconnect OAuth
+ * Revokes tokens on the OAuth provider's side before deleting from database
  */
 router.delete('/disconnect/:destinationId', authenticate, async (req, res) => {
   try {
@@ -1021,7 +1024,54 @@ router.delete('/disconnect/:destinationId', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Destination not found' });
     }
 
-    // Delete destination
+    // Revoke OAuth token on provider's side to ensure fresh re-authorization
+    if (destination.accessToken) {
+      try {
+        const accessToken = decrypt(destination.accessToken);
+
+        // Revoke token based on platform
+        if (destination.platform === 'youtube' || destination.platform === 'google') {
+          // Google/YouTube revocation endpoint
+          await axios.post('https://oauth2.googleapis.com/revoke', null, {
+            params: { token: accessToken },
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+          });
+          logger.info(`YouTube token revoked for destination ${destinationId}`);
+        } else if (destination.platform === 'facebook') {
+          // Facebook revocation endpoint
+          await axios.delete(`https://graph.facebook.com/v24.0/me/permissions`, {
+            params: { access_token: accessToken }
+          });
+          logger.info(`Facebook token revoked for destination ${destinationId}`);
+        } else if (destination.platform === 'twitch') {
+          // Twitch revocation endpoint
+          const credentials = await getOAuthCredentials('twitch');
+          await axios.post('https://id.twitch.tv/oauth2/revoke', null, {
+            params: {
+              client_id: credentials.clientId,
+              token: accessToken
+            }
+          });
+          logger.info(`Twitch token revoked for destination ${destinationId}`);
+        } else if (destination.platform === 'x') {
+          // X/Twitter revocation endpoint
+          const credentials = await getOAuthCredentials('x');
+          await axios.post('https://api.twitter.com/2/oauth2/revoke', {
+            token: accessToken,
+            client_id: credentials.clientId
+          }, {
+            headers: { 'Content-Type': 'application/json' }
+          });
+          logger.info(`X token revoked for destination ${destinationId}`);
+        }
+        // LinkedIn and Rumble don't have standard revocation endpoints
+      } catch (revokeError: any) {
+        // Log but don't fail the disconnect - token might already be invalid
+        logger.warn(`Failed to revoke ${destination.platform} token (continuing anyway):`, revokeError.message);
+      }
+    }
+
+    // Delete destination from database
     await prisma.destination.delete({
       where: { id: destinationId },
     });

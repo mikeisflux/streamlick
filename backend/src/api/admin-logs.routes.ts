@@ -236,4 +236,322 @@ router.get('/download', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Get Ant Media Server logs
+ */
+router.get('/media-server', async (req: Request, res: Response) => {
+  try {
+    const { limit = 500, search } = req.query;
+    const antMediaRestUrl = process.env.ANT_MEDIA_REST_URL || 'https://media.streamlick.com:5443/StreamLick/rest/v2';
+
+    let logs: any[] = [];
+
+    // Try to fetch logs from Ant Media REST API
+    try {
+      // Ant Media provides broadcast list and server info
+      const results = await Promise.all([
+        fetch(`${antMediaRestUrl}/broadcasts/list/0/50`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${antMediaRestUrl}/getServerSettings`).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(`${antMediaRestUrl}/broadcasts/active-live-stream-count`).then(r => r.ok ? r.json() : null).catch(() => null),
+      ]);
+      const broadcastsRes = results[0] as any[];
+      const statsRes = results[1] as any;
+      const activeStreamsRes = results[2] as any;
+
+      // Add server status entry
+      if (activeStreamsRes !== null) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          level: 'info',
+          category: 'streaming',
+          component: 'AntMedia',
+          message: `Active live streams: ${activeStreamsRes}`,
+          data: { activeStreams: activeStreamsRes },
+        });
+      }
+
+      // Convert broadcasts to log entries
+      if (Array.isArray(broadcastsRes)) {
+        const broadcastLogs = broadcastsRes.map((b: any) => ({
+          timestamp: new Date(b.date || b.updateTime || Date.now()).toISOString(),
+          level: b.status === 'broadcasting' ? 'info' : b.status === 'finished' ? 'info' : 'warn',
+          category: 'broadcast',
+          component: 'AntMedia',
+          message: `Stream ${b.streamId}: ${b.status || 'unknown'} - ${b.name || 'Unnamed'}`,
+          data: {
+            streamId: b.streamId,
+            status: b.status,
+            rtmpViewerCount: b.rtmpViewerCount || 0,
+            webRTCViewerCount: b.webRTCViewerCount || 0,
+            hlsViewerCount: b.hlsViewerCount || 0,
+            endpointList: b.endPointList?.length || 0,
+          },
+        }));
+        logs.push(...broadcastLogs);
+      }
+
+      // Add server settings info
+      if (statsRes) {
+        logs.unshift({
+          timestamp: new Date().toISOString(),
+          level: 'info',
+          category: 'system',
+          component: 'AntMedia',
+          message: `Server Settings loaded - RTMP enabled: ${statsRes.rtmpPlaybackEnabled !== false}`,
+          data: statsRes,
+        });
+      }
+
+    } catch (fetchError) {
+      logger.warn('Could not fetch from Ant Media REST API:', fetchError);
+
+      // Fallback: Try to read local Ant Media log files if they exist
+      const antMediaLogPath = '/usr/local/antmedia/log/ant-media-server.log';
+      try {
+        const logExists = await fs.access(antMediaLogPath).then(() => true).catch(() => false);
+        if (logExists) {
+          const logContent = await fs.readFile(antMediaLogPath, 'utf-8');
+          const lines = logContent.split('\n').filter(line => line.trim()).slice(-Number(limit));
+
+          logs = lines.map(line => {
+            // Parse Ant Media log format: 2024-01-01 12:00:00,000 [INFO] - message
+            const match = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})\s*\[(\w+)\]\s*-?\s*(.*)$/);
+            if (match) {
+              return {
+                timestamp: new Date(match[1].replace(',', '.')).toISOString(),
+                level: match[2].toLowerCase(),
+                category: 'antmedia',
+                component: 'AntMedia',
+                message: match[3],
+              };
+            }
+            return {
+              timestamp: new Date().toISOString(),
+              level: 'info',
+              category: 'antmedia',
+              component: 'AntMedia',
+              message: line,
+            };
+          });
+        } else {
+          // No logs available - return a status message
+          logs.push({
+            timestamp: new Date().toISOString(),
+            level: 'warn',
+            category: 'system',
+            component: 'AntMedia',
+            message: 'Could not connect to Ant Media Server. Check if the server is running.',
+          });
+        }
+      } catch (fileError) {
+        logger.warn('Could not read local Ant Media logs:', fileError);
+        logs.push({
+          timestamp: new Date().toISOString(),
+          level: 'error',
+          category: 'system',
+          component: 'AntMedia',
+          message: `Failed to fetch media server logs: ${fileError instanceof Error ? fileError.message : 'Unknown error'}`,
+        });
+      }
+    }
+
+    // Filter by search if provided
+    if (search) {
+      const query = String(search).toLowerCase();
+      logs = logs.filter(log =>
+        JSON.stringify(log).toLowerCase().includes(query)
+      );
+    }
+
+    // Sort by timestamp descending (most recent first)
+    logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    // Limit results
+    logs = logs.slice(0, Number(limit));
+
+    res.json({
+      logs,
+      total: logs.length,
+      source: 'ant-media',
+    });
+  } catch (error) {
+    logger.error('Get media server logs error:', error);
+    res.status(500).json({ error: 'Failed to fetch media server logs' });
+  }
+});
+
+/**
+ * Get comprehensive Ant Media Server dashboard data
+ * Real-time monitoring of streams, endpoints, and server health
+ */
+router.get('/media-server/dashboard', async (req: Request, res: Response) => {
+  try {
+    const antMediaRestUrl = process.env.ANT_MEDIA_REST_URL || 'https://media.streamlick.com:5443/StreamLick/rest/v2';
+    const baseUrl = antMediaRestUrl.replace('/rest/v2', '');
+
+    // Fetch all data in parallel for performance
+    const [
+      broadcastsRes,
+      activeCountRes,
+      serverSettingsRes,
+      cpuInfoRes,
+      memoryInfoRes,
+      jvmMemoryRes,
+    ] = await Promise.allSettled([
+      fetch(`${antMediaRestUrl}/broadcasts/list/0/100`).then(r => r.ok ? r.json() : []),
+      fetch(`${antMediaRestUrl}/broadcasts/active-live-stream-count`).then(r => r.ok ? r.json() : 0),
+      fetch(`${antMediaRestUrl}/getServerSettings`).then(r => r.ok ? r.json() : null),
+      fetch(`${baseUrl}/rest/getCPUInfo`).then(r => r.ok ? r.json() : null),
+      fetch(`${baseUrl}/rest/getSystemMemoryInfo`).then(r => r.ok ? r.json() : null),
+      fetch(`${baseUrl}/rest/getJVMMemoryInfo`).then(r => r.ok ? r.json() : null),
+    ]);
+
+    const broadcasts: any[] = broadcastsRes.status === 'fulfilled' ? (broadcastsRes.value as any[]) : [];
+    const activeCount = activeCountRes.status === 'fulfilled' ? activeCountRes.value : 0;
+    const serverSettings: any = serverSettingsRes.status === 'fulfilled' ? serverSettingsRes.value : null;
+    const cpuInfo: any = cpuInfoRes.status === 'fulfilled' ? cpuInfoRes.value : null;
+    const memoryInfo: any = memoryInfoRes.status === 'fulfilled' ? memoryInfoRes.value : null;
+    const jvmMemory: any = jvmMemoryRes.status === 'fulfilled' ? jvmMemoryRes.value : null;
+
+    // Enrich broadcasts with detailed stats
+    const enrichedBroadcasts = await Promise.all(
+      (broadcasts || []).slice(0, 20).map(async (broadcast: any) => {
+        try {
+          // Fetch broadcast-specific statistics
+          const statsRes = await fetch(`${antMediaRestUrl}/broadcasts/${broadcast.streamId}/broadcast-statistics`)
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null);
+
+          return {
+            streamId: broadcast.streamId,
+            name: broadcast.name || 'Unnamed Stream',
+            status: broadcast.status || 'unknown',
+            type: broadcast.type || 'liveStream',
+            createdAt: broadcast.date || broadcast.creationDate,
+            updatedAt: broadcast.updateTime,
+            duration: broadcast.duration || 0,
+            speed: broadcast.speed || 0,
+            bitrate: broadcast.bitrate || 0,
+            width: broadcast.width || 0,
+            height: broadcast.height || 0,
+            viewers: {
+              rtmp: broadcast.rtmpViewerCount || 0,
+              webrtc: broadcast.webRTCViewerCount || 0,
+              hls: broadcast.hlsViewerCount || 0,
+              total: (broadcast.rtmpViewerCount || 0) + (broadcast.webRTCViewerCount || 0) + (broadcast.hlsViewerCount || 0),
+            },
+            rtmpEndpoints: (broadcast.endPointList || []).map((ep: any) => ({
+              id: ep.endpointServiceId || ep.id,
+              url: ep.rtmpUrl ? `${ep.rtmpUrl.substring(0, 30)}...` : 'unknown',
+              status: ep.status || 'unknown',
+            })),
+            stats: statsRes,
+          };
+        } catch (error) {
+          return {
+            streamId: broadcast.streamId,
+            name: broadcast.name || 'Unnamed Stream',
+            status: broadcast.status || 'unknown',
+            error: 'Failed to fetch detailed stats',
+          };
+        }
+      })
+    );
+
+    // Build server health summary
+    const serverHealth = {
+      status: 'online',
+      activeStreams: activeCount,
+      totalBroadcasts: broadcasts.length,
+      cpu: cpuInfo ? {
+        usage: cpuInfo.cpuUsage || cpuInfo.processCpuLoad,
+        cores: cpuInfo.availableProcessors,
+      } : null,
+      memory: memoryInfo ? {
+        total: memoryInfo.totalPhysicalMemorySize || memoryInfo.totalMemory,
+        free: memoryInfo.freePhysicalMemorySize || memoryInfo.freeMemory,
+        used: (memoryInfo.totalPhysicalMemorySize || memoryInfo.totalMemory) - (memoryInfo.freePhysicalMemorySize || memoryInfo.freeMemory),
+      } : null,
+      jvmMemory: jvmMemory ? {
+        max: jvmMemory.maxMemory,
+        total: jvmMemory.totalMemory,
+        free: jvmMemory.freeMemory,
+        used: jvmMemory.totalMemory - jvmMemory.freeMemory,
+      } : null,
+      settings: serverSettings ? {
+        rtmpEnabled: serverSettings.acceptOnlyStreamsInDataStore !== true,
+        webrtcEnabled: serverSettings.webRTCEnabled !== false,
+        hlsEnabled: serverSettings.hlsMuxingEnabled !== false,
+      } : null,
+    };
+
+    // Recent activity log
+    const recentActivity = enrichedBroadcasts
+      .filter(b => b.status === 'broadcasting' || b.status === 'finished')
+      .slice(0, 10)
+      .map(b => ({
+        timestamp: b.updatedAt || b.createdAt || new Date().toISOString(),
+        type: b.status === 'broadcasting' ? 'stream_started' : 'stream_finished',
+        streamId: b.streamId,
+        message: b.status === 'broadcasting'
+          ? `Stream "${b.name}" is live with ${b.viewers?.total || 0} viewers`
+          : `Stream "${b.name}" ended after ${Math.round((b.duration || 0) / 1000)}s`,
+      }));
+
+    res.json({
+      timestamp: new Date().toISOString(),
+      server: serverHealth,
+      broadcasts: enrichedBroadcasts,
+      recentActivity,
+    });
+  } catch (error) {
+    logger.error('Get media server dashboard error:', error);
+    res.status(500).json({
+      error: 'Failed to fetch media server dashboard',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * Get detailed stats for a specific broadcast stream
+ */
+router.get('/media-server/stream/:streamId', async (req: Request, res: Response) => {
+  try {
+    const { streamId } = req.params;
+    const antMediaRestUrl = process.env.ANT_MEDIA_REST_URL || 'https://media.streamlick.com:5443/StreamLick/rest/v2';
+
+    const [broadcastRes, statsRes, webrtcStatsRes] = await Promise.allSettled([
+      fetch(`${antMediaRestUrl}/broadcasts/${streamId}`).then(r => r.ok ? r.json() : null),
+      fetch(`${antMediaRestUrl}/broadcasts/${streamId}/broadcast-statistics`).then(r => r.ok ? r.json() : null),
+      fetch(`${antMediaRestUrl}/broadcasts/${streamId}/webrtc-client-stats/0/50`).then(r => r.ok ? r.json() : []),
+    ]);
+
+    const broadcast: any = broadcastRes.status === 'fulfilled' ? broadcastRes.value : null;
+    const stats: any = statsRes.status === 'fulfilled' ? statsRes.value : null;
+    const webrtcStats: any[] = webrtcStatsRes.status === 'fulfilled' ? (webrtcStatsRes.value as any[]) : [];
+
+    if (!broadcast) {
+      return res.status(404).json({ error: 'Stream not found' });
+    }
+
+    res.json({
+      stream: {
+        ...broadcast,
+        stats,
+        webrtcClients: webrtcStats,
+        rtmpEndpoints: (broadcast.endPointList || []).map((ep: any) => ({
+          id: ep.endpointServiceId || ep.id,
+          url: ep.rtmpUrl,
+          status: ep.status || 'unknown',
+          type: ep.type,
+        })),
+      },
+    });
+  } catch (error) {
+    logger.error('Get stream details error:', error);
+    res.status(500).json({ error: 'Failed to fetch stream details' });
+  }
+});
+
 export default router;

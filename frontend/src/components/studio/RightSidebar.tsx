@@ -27,6 +27,9 @@ interface RightSidebarProps {
   rightSidebarRef: RefObject<HTMLElement>;
   teleprompterState: ReturnType<typeof import('../../hooks/studio/useTeleprompter').useTeleprompter>;
   onCommentClick?: (comment: Comment) => void;
+  localStream?: MediaStream | null;
+  audioEnabled?: boolean;
+  videoEnabled?: boolean;
 }
 
 export function RightSidebar({
@@ -39,6 +42,9 @@ export function RightSidebar({
   rightSidebarRef,
   teleprompterState,
   onCommentClick,
+  localStream,
+  audioEnabled,
+  videoEnabled,
 }: RightSidebarProps) {
   return (
     <>
@@ -292,6 +298,9 @@ export function RightSidebar({
               {activeRightTab === 'recording' && (
                 <RecordingControls
                   broadcastId={broadcastId}
+                  localStream={localStream}
+                  audioEnabled={audioEnabled}
+                  videoEnabled={videoEnabled}
                 />
               )}
             </div>

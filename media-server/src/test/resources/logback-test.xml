@@ -1,0 +1,33 @@
+<?xml version="1.0" ?>
+<configuration>
+    <appender class="ch.qos.logback.core.ConsoleAppender" name="CONSOLE">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
+        <encoder>
+            <pattern>[%p] %d{ISO8601} [%thread] %logger - %msg%n</pattern>
+        </encoder>
+    </appender>
+    <appender class="ch.qos.logback.core.FileAppender" name="FILE">
+        <file>target/test.log</file>
+        <append>false</append>
+        <encoder>
+            <pattern>%d{ISO8601} [%thread] %-5level %logger{35} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    <root level="TRACE">
+        <appender-ref ref="CONSOLE" />
+    </root>
+ 
+    <logger name="org.red5.server" level="TRACE">
+        <appender-ref ref="FILE"/>
+    </logger>
+    <logger name="org.red5.server.net.rtmp" level="TRACE" />
+    <logger name="org.springframework" level="INFO" />
+    <logger name="org.apache" level="INFO" />
+    <logger name="io.antmedia.muxer" level="DEBUG" />
+	
+    <logger name="org.quartz" level="OFF" />
+    <logger name="io.antmedia.streamsource" level="DEBUG" />
+    
+</configuration>

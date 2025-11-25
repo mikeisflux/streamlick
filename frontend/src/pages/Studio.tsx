@@ -11,7 +11,7 @@ import { LeftSidebar } from '../components/studio/LeftSidebar';
 import { RightSidebar } from '../components/studio/RightSidebar';
 import { BottomControlBar } from '../components/studio/BottomControlBar';
 import { DeviceSelectors } from '../components/studio/DeviceSelectors';
-import { StudioCanvas, LayoutSelector, PreviewArea, CanvasSettingsModal, CountdownOverlay } from '../components/studio/canvas';
+import { StudioCanvas, LayoutSelector, PreviewArea, CanvasSettingsModal, CountdownOverlay, IntroVideoOverlay } from '../components/studio/canvas';
 import { StudioHeader } from '../components/studio/StudioHeader';
 import { StudioDrawers } from '../components/studio/StudioDrawers';
 import { StudioModals } from '../components/studio/StudioModals';
@@ -49,6 +49,9 @@ export function Studio() {
 
   // Countdown state
   const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
+
+  // Intro video state
+  const [introVideoUrl, setIntroVideoUrl] = useState<string | null>(null);
 
   // Refs
   const micButtonRef = useRef<HTMLDivElement>(null);
@@ -152,24 +155,41 @@ export function Studio() {
     }
   }, [destinationSettings, broadcastId]);
 
-  // Countdown socket listeners
+  // Countdown socket listeners + compositor event listeners
   useEffect(() => {
+    // Socket events from backend
     const handleCountdownTick = (data: { secondsRemaining: number }) => {
-      console.log('[Studio] Countdown tick:', data.secondsRemaining);
+      console.log('[Studio] Countdown tick (socket):', data.secondsRemaining);
       setCountdownSeconds(data.secondsRemaining);
     };
 
     const handleCountdownComplete = () => {
-      console.log('[Studio] Countdown complete');
+      console.log('[Studio] Countdown complete (socket)');
       setCountdownSeconds(null);
     };
 
+    // Compositor events (for local countdown during go-live)
+    const handleCompositorCountdown = ((e: CustomEvent) => {
+      console.log('[Studio] Countdown (compositor):', e.detail.seconds);
+      setCountdownSeconds(e.detail.seconds);
+    }) as EventListener;
+
+    // Compositor intro video events
+    const handleCompositorIntroVideo = ((e: CustomEvent) => {
+      console.log('[Studio] Intro video (compositor):', e.detail);
+      setIntroVideoUrl(e.detail.playing ? e.detail.url : null);
+    }) as EventListener;
+
     socketService.on('countdown-tick', handleCountdownTick);
     socketService.on('countdown-complete', handleCountdownComplete);
+    window.addEventListener('compositor-countdown', handleCompositorCountdown);
+    window.addEventListener('compositor-intro-video', handleCompositorIntroVideo);
 
     return () => {
       socketService.off('countdown-tick', handleCountdownTick);
       socketService.off('countdown-complete', handleCountdownComplete);
+      window.removeEventListener('compositor-countdown', handleCompositorCountdown);
+      window.removeEventListener('compositor-intro-video', handleCompositorIntroVideo);
     };
   }, []);
 
@@ -393,6 +413,8 @@ export function Studio() {
             />
             {/* Countdown Overlay */}
             <CountdownOverlay seconds={countdownSeconds} />
+            {/* Intro Video Overlay */}
+            <IntroVideoOverlay videoUrl={introVideoUrl} />
           </div>
 
           {/* Layout Selector - Always visible below canvas */}
@@ -414,6 +436,7 @@ export function Studio() {
           <div style={{ flexShrink: 0, marginBottom: '80px' }}>
             <PreviewArea
               localStream={processedStream || localStream}
+              audioStream={localStream} // Raw stream for audio monitoring (processed stream may not have audio)
               videoEnabled={videoEnabled}
               audioEnabled={audioEnabled}
               isLocalUserOnStage={isLocalUserOnStage}
@@ -476,6 +499,9 @@ export function Studio() {
           rightSidebarRef={rightSidebarRef}
           teleprompterState={teleprompterState}
           onCommentClick={setDisplayedComment}
+          localStream={localStream}
+          audioEnabled={audioEnabled}
+          videoEnabled={videoEnabled}
         />
       </div>
 

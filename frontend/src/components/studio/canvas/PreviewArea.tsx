@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 
 interface RemoteParticipant {
   id: string;
@@ -11,6 +11,7 @@ interface RemoteParticipant {
 
 interface PreviewAreaProps {
   localStream: MediaStream | null;
+  audioStream?: MediaStream | null; // Separate audio stream for monitoring (raw mic input)
   videoEnabled: boolean;
   audioEnabled: boolean;
   isLocalUserOnStage: boolean;
@@ -19,10 +20,12 @@ interface PreviewAreaProps {
   onAddToStage?: (participantId: string) => void;
   onRemoveFromStage?: (participantId: string) => void;
   onInviteGuests?: () => void;
+  onRenameParticipant?: (participantId: string, newName: string) => void;
 }
 
 export function PreviewArea({
   localStream,
+  audioStream,
   videoEnabled,
   audioEnabled,
   isLocalUserOnStage,
@@ -31,9 +34,19 @@ export function PreviewArea({
   onAddToStage,
   onRemoveFromStage,
   onInviteGuests,
+  onRenameParticipant,
 }: PreviewAreaProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
+  const [editingParticipant, setEditingParticipant] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+
+  // Audio monitoring state
+  const [localAudioLevel, setLocalAudioLevel] = useState(0);
+  const [participantAudioLevels, setParticipantAudioLevels] = useState<Map<string, number>>(new Map());
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
   // Load selected avatar from localStorage
   useEffect(() => {
@@ -43,6 +56,90 @@ export function PreviewArea({
     }
   }, []);
 
+  // Set up audio monitoring - prefer audioStream prop, fall back to localStream
+  useEffect(() => {
+    // Use audioStream if provided (raw mic input), otherwise try localStream
+    const streamToMonitor = audioStream || localStream;
+
+    if (!streamToMonitor) {
+      console.log('[PreviewArea] No stream available for audio monitoring');
+      setLocalAudioLevel(0);
+      return;
+    }
+
+    const audioTrack = streamToMonitor.getAudioTracks()[0];
+    if (!audioTrack) {
+      console.log('[PreviewArea] No audio track in stream, tracks:', {
+        audioTracks: streamToMonitor.getAudioTracks().length,
+        videoTracks: streamToMonitor.getVideoTracks().length,
+        usingAudioStream: !!audioStream,
+      });
+      return;
+    }
+
+    console.log('[PreviewArea] Setting up audio monitoring:', {
+      trackId: audioTrack.id,
+      trackLabel: audioTrack.label,
+      trackEnabled: audioTrack.enabled,
+      trackMuted: audioTrack.muted,
+      usingAudioStream: !!audioStream,
+    });
+
+    // Create audio context and analyser
+    const audioContext = new AudioContext();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.3;
+
+    // Resume audio context if needed
+    if (audioContext.state === 'suspended') {
+      audioContext.resume().then(() => {
+        console.log('[PreviewArea] AudioContext resumed');
+      });
+    }
+
+    // Create audio stream source from the track
+    const monitorStream = new MediaStream([audioTrack]);
+    const source = audioContext.createMediaStreamSource(monitorStream);
+    source.connect(analyser);
+
+    audioContextRef.current = audioContext;
+    analyserRef.current = analyser;
+
+    console.log('[PreviewArea] Audio monitoring started');
+
+    // Animation loop to update audio level
+    const updateLevel = () => {
+      if (!analyserRef.current) return;
+
+      const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+      analyserRef.current.getByteFrequencyData(dataArray);
+
+      // Calculate average level
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+      }
+      const average = sum / dataArray.length;
+      const normalizedLevel = average / 255;
+
+      setLocalAudioLevel(normalizedLevel);
+      animationFrameRef.current = requestAnimationFrame(updateLevel);
+    };
+
+    updateLevel();
+
+    return () => {
+      console.log('[PreviewArea] Cleaning up audio monitoring');
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, [audioStream, localStream]);
+
   // Update local video
   useEffect(() => {
     if (localVideoRef.current && localStream) {
@@ -50,15 +147,50 @@ export function PreviewArea({
     }
   }, [localStream]);
 
+  const handleToggleStage = (participantId: string, isOnStage: boolean) => {
+    if (isOnStage && onRemoveFromStage) {
+      onRemoveFromStage(participantId);
+    } else if (!isOnStage && onAddToStage) {
+      onAddToStage(participantId);
+    }
+  };
+
+  const handleStartEdit = (participantId: string, currentName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingParticipant(participantId);
+    setEditName(currentName);
+  };
+
+  const handleSaveEdit = (participantId: string) => {
+    if (onRenameParticipant && editName.trim()) {
+      onRenameParticipant(participantId, editName.trim());
+    }
+    setEditingParticipant(null);
+    setEditName('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingParticipant(null);
+    setEditName('');
+  };
+
   return (
-    <div
-      className="border-t px-4 py-3 overflow-x-auto"
-      style={{
-        backgroundColor: '#1a1a1a',
-        borderColor: '#404040',
-        minHeight: '140px',
-      }}
-    >
+    <>
+      {/* CSS keyframes for pulse animation */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); opacity: 0.6; }
+          50% { transform: scale(1.1); opacity: 0.3; }
+        }
+      `}</style>
+      <div
+        className="border-t px-4 py-3 overflow-x-auto"
+        style={{
+          backgroundColor: '#1a1a1a',
+          borderColor: '#404040',
+          minHeight: '140px',
+        }}
+      >
       <div className="flex items-center gap-3">
         <div className="text-gray-400 text-xs font-semibold uppercase tracking-wide mb-2">
           Preview / Backstage
@@ -67,21 +199,72 @@ export function PreviewArea({
 
       <div className="flex items-center gap-3 pb-2">
         {/* Your Preview */}
-        <div className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
-          <div className={`relative bg-black rounded overflow-hidden h-full border-2 group ${isLocalUserOnStage ? 'border-blue-500' : 'border-yellow-500'}`}>
+        <div className="flex-shrink-0" style={{ width: '160px', height: '90px', overflow: 'visible' }}>
+          <div
+            className={`relative bg-black rounded h-full group cursor-pointer transition-all duration-150`}
+            style={{
+              overflow: 'visible',
+              border: localAudioLevel > 0.05
+                ? `3px solid rgba(59, 130, 246, ${0.5 + localAudioLevel})`
+                : isLocalUserOnStage ? '2px solid #3b82f6' : '2px solid #eab308',
+              boxShadow: localAudioLevel > 0.05
+                ? `0 0 ${10 + localAudioLevel * 20}px rgba(59, 130, 246, ${localAudioLevel * 0.8})`
+                : 'none',
+            }}
+            onClick={() => handleToggleStage('local-user', isLocalUserOnStage)}
+            title={isLocalUserOnStage ? 'Click to go backstage' : 'Click to go on stage'}
+          >
             {localStream && videoEnabled ? (
-              <video
-                ref={localVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-              />
+              <div className="relative w-full h-full">
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+                {/* Audio glow overlay when speaking with video on */}
+                {localAudioLevel > 0.05 && (
+                  <div
+                    className="absolute inset-0 pointer-events-none rounded"
+                    style={{
+                      boxShadow: `inset 0 0 ${10 + localAudioLevel * 15}px rgba(59, 130, 246, ${localAudioLevel * 0.6})`,
+                    }}
+                  />
+                )}
+              </div>
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gray-900">
+              <div className="w-full h-full flex items-center justify-center bg-gray-900 relative overflow-visible">
+                {/* Audio visualization rings - extend beyond the tile */}
+                {localAudioLevel > 0.05 && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ overflow: 'visible' }}>
+                    {[0, 1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className="absolute rounded-full border-2 border-blue-400"
+                        style={{
+                          // Start at 80px (20px beyond ~60px avatar), grow with audio
+                          // Each ring adds 25px, audio adds up to 60px more
+                          width: `${80 + i * 25 + localAudioLevel * 60}px`,
+                          height: `${80 + i * 25 + localAudioLevel * 60}px`,
+                          opacity: Math.max(0.2, (1 - i * 0.25) * (localAudioLevel * 2)),
+                          animation: `pulse ${0.4 + i * 0.15}s ease-in-out infinite`,
+                          borderWidth: `${3 - i * 0.5}px`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
                 {selectedAvatar ? (
-                  <div className="w-full h-full flex items-center justify-center p-4">
-                    <div className="w-3/4 aspect-square rounded-full overflow-hidden">
+                  <div className="w-full h-full flex items-center justify-center p-4 z-10">
+                    <div
+                      className="w-3/4 aspect-square rounded-full overflow-hidden"
+                      style={{
+                        boxShadow: localAudioLevel > 0.05
+                          ? `0 0 ${20 + localAudioLevel * 40}px rgba(59, 130, 246, ${0.5 + localAudioLevel})`
+                          : 'none',
+                      }}
+                    >
                       <img
                         src={selectedAvatar}
                         alt="Your avatar"
@@ -90,7 +273,7 @@ export function PreviewArea({
                     </div>
                   </div>
                 ) : (
-                  <svg className="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-8 h-8 text-gray-600 z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -103,35 +286,16 @@ export function PreviewArea({
               </div>
             )}
 
-            {/* Hover Overlay with Add to Stage Button - only shown when backstage */}
-            {!isLocalUserOnStage && onAddToStage && (
-              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-50 pointer-events-auto">
-                <button
-                  onClick={() => onAddToStage('local-user')}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded shadow-lg pointer-events-auto"
-                  title="Add to Stage"
-                >
-                  Add to Stage
-                </button>
-              </div>
-            )}
+            {/* Hover indicator */}
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+              <span className="text-white text-xs font-medium px-2 py-1 bg-black/60 rounded">
+                {isLocalUserOnStage ? 'Go Backstage' : 'Go Live'}
+              </span>
+            </div>
 
-            {/* Hover Overlay with Remove from Stage Button - only shown when on stage */}
-            {isLocalUserOnStage && onRemoveFromStage && (
-              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-50 pointer-events-auto">
-                <button
-                  onClick={() => onRemoveFromStage('local-user')}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded shadow-lg pointer-events-auto"
-                  title="Remove from Stage"
-                >
-                  Remove from Stage
-                </button>
-              </div>
-            )}
-
-            <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 z-0">
+            <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 z-10">
               <span className="text-white text-xs font-medium">
-                {isLocalUserOnStage ? 'You (Preview)' : 'You (Backstage)'}
+                {isLocalUserOnStage ? 'You (Live)' : 'You (Backstage)'}
               </span>
             </div>
           </div>
@@ -151,7 +315,7 @@ export function PreviewArea({
                 style={{ backgroundColor: '#000' }}
               />
               <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1">
-                <span className="text-white text-xs font-medium">🖥️ Screen Share</span>
+                <span className="text-white text-xs font-medium">Screen Share</span>
               </div>
             </div>
           </div>
@@ -160,7 +324,11 @@ export function PreviewArea({
         {/* Backstage Participants */}
         {backstageParticipants.map((participant) => (
           <div key={participant.id} className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
-            <div className="relative bg-black rounded overflow-hidden h-full border-2 border-yellow-500 group">
+            <div
+              className="relative bg-black rounded overflow-hidden h-full border-2 border-yellow-500 group cursor-pointer"
+              onClick={() => handleToggleStage(participant.id, false)}
+              title="Click to add to stage"
+            >
               {participant.stream && participant.videoEnabled ? (
                 <video
                   autoPlay
@@ -184,21 +352,63 @@ export function PreviewArea({
                 </div>
               )}
 
-              {/* Hover Overlay with Add to Stage Button */}
-              {onAddToStage && (
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-50 pointer-events-auto">
-                  <button
-                    onClick={() => onAddToStage(participant.id)}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded shadow-lg pointer-events-auto"
-                    title="Add to Stage"
-                  >
-                    Add to Stage
-                  </button>
-                </div>
+              {/* Pencil edit icon - top left */}
+              {onRenameParticipant && editingParticipant !== participant.id && (
+                <button
+                  onClick={(e) => handleStartEdit(participant.id, participant.name, e)}
+                  className="absolute top-1 left-1 w-5 h-5 bg-black/70 hover:bg-black/90 rounded flex items-center justify-center z-20"
+                  title="Edit name"
+                >
+                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
               )}
 
-              <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 flex items-center justify-between z-0">
-                <span className="text-white text-xs font-medium truncate flex-1">{participant.name}</span>
+              {/* Hover indicator */}
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                <span className="text-white text-xs font-medium px-2 py-1 bg-black/60 rounded">
+                  Add to Stage
+                </span>
+              </div>
+
+              {/* Name bar */}
+              <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 z-10">
+                {editingParticipant === participant.id ? (
+                  <div className="flex items-center gap-1 w-full" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveEdit(participant.id);
+                        if (e.key === 'Escape') handleCancelEdit();
+                      }}
+                      className="flex-1 bg-gray-700 text-white text-xs px-1 py-0.5 rounded w-full min-w-0"
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => handleSaveEdit(participant.id)}
+                      className="text-green-400 hover:text-green-300 p-0.5"
+                      title="Save"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={handleCancelEdit}
+                      className="text-red-400 hover:text-red-300 p-0.5"
+                      title="Cancel"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-white text-xs font-medium truncate">{participant.name}</span>
+                )}
               </div>
             </div>
           </div>
@@ -228,6 +438,7 @@ export function PreviewArea({
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

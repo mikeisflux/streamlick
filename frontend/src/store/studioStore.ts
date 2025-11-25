@@ -21,7 +21,7 @@ interface StudioState {
   reset: () => void;
 }
 
-export const useStudioStore = create<StudioState>((set) => ({
+export const useStudioStore = create<StudioState>((set, get) => ({
   broadcast: null,
   participants: new Map(),
   mediaStates: new Map(),
@@ -73,7 +73,24 @@ export const useStudioStore = create<StudioState>((set) => ({
   setIsLive: (isLive) => set({ isLive }),
   setIsRecording: (isRecording) => set({ isRecording }),
 
-  reset: () =>
+  // MAJOR FIX: Stop media tracks before resetting to prevent camera/mic LED staying on
+  reset: () => {
+    const state = get();
+
+    // Stop all local stream tracks (camera/mic)
+    if (state.localStream) {
+      state.localStream.getTracks().forEach((track: MediaStreamTrack) => {
+        track.stop();
+      });
+    }
+
+    // Stop all screen share tracks
+    if (state.screenStream) {
+      state.screenStream.getTracks().forEach((track: MediaStreamTrack) => {
+        track.stop();
+      });
+    }
+
     set({
       broadcast: null,
       participants: new Map(),
@@ -82,5 +99,6 @@ export const useStudioStore = create<StudioState>((set) => ({
       screenStream: null,
       isLive: false,
       isRecording: false,
-    }),
+    });
+  },
 }));

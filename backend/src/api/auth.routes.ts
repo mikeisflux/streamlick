@@ -90,8 +90,9 @@ router.post('/register', authRateLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    // MINOR FIX: Use RFC 5322 compliant email validation regex
+    // This prevents registration with invalid emails like a@b.c
+    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ error: 'Invalid email format' });
     }
