@@ -308,52 +308,16 @@ export async function createYouTubeLiveBroadcast(
       streamId
     });
 
-    // Step 4: Wait for stream to become active, then transition
-    // YouTube requires the RTMP stream to be actively sending video before allowing transitions
-    logger.info('[YouTube Step 4/4] Waiting for RTMP stream to become active...');
-    logger.info('[YouTube Step 4/4] ⏳ Stream must receive video input before broadcast can go live');
+    // NOTE: Stream activation polling and transition to live/testing is handled separately
+    // by monitorAndTransitionYouTubeBroadcast() which runs in the background.
+    // This function returns immediately so the RTMP URL can be saved and used by the client.
 
-    // Poll stream status until it's active (max 60 seconds)
-    const streamActive = await waitForStreamActive(streamId, accessToken);
-
-    if (!streamActive) {
-      logger.warn('[YouTube Step 4/4] ⚠️  Stream did not become active within timeout');
-      logger.warn('[YouTube Step 4/4] Broadcast created but NOT transitioned to testing/live');
-      logger.warn('[YouTube Step 4/4] Start sending video via RTMP, then manually transition');
-    } else {
-      logger.info('[YouTube Step 4/4] ✓ Stream is active, transitioning to testing...');
-
-      try {
-        await axios.post(
-          `${YOUTUBE_API_BASE}/liveBroadcasts/transition`,
-          null,
-          {
-            params: {
-              id: broadcastId,
-              broadcastStatus: 'testing',
-              part: 'status',
-            },
-            headers: { Authorization: `Bearer ${accessToken}` },
-          }
-        );
-
-        logger.info(`[YouTube Step 4/4] ✓ Broadcast transitioned to testing`, {
-          broadcastId,
-          status: 'testing'
-        });
-      } catch (transitionError: any) {
-        logger.error('[YouTube Step 4/4] Failed to transition to testing:', transitionError.response?.data);
-        // Don't throw - broadcast is created, just not transitioned
-      }
-    }
-
-    logger.info('✓ YouTube live broadcast created successfully', {
+    logger.info('✓ YouTube live broadcast created successfully (ready for RTMP)', {
       broadcastId,
       streamId,
       rtmpUrl,
       privacyStatus,
-      title,
-      streamActive
+      title
     });
 
     return {
