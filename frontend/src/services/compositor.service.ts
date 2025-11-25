@@ -138,7 +138,8 @@ class CompositorService {
             audioMixerService.addStream(participant.id, audioStream);
           }
           // Always create analyser for voice visualization (even if muted in mix)
-          this.createAudioAnalyser(participant.id, audioStream);
+          // AWAIT to ensure AudioContext is running before continuing
+          await this.createAudioAnalyser(participant.id, audioStream);
         } else {
           console.warn(`[Compositor] No audio track in stream for ${participant.id}! Audio visualization will not work for this participant.`);
         }
@@ -155,8 +156,9 @@ class CompositorService {
 
   /**
    * Create an audio analyser for voice visualization (pulsating rings)
+   * Uses the same approach as PreviewArea for consistency
    */
-  private createAudioAnalyser(participantId: string, audioStream: MediaStream): void {
+  private async createAudioAnalyser(participantId: string, audioStream: MediaStream): Promise<void> {
     try {
       const audioTrack = audioStream.getAudioTracks()[0];
 
@@ -178,24 +180,21 @@ class CompositorService {
       const audioContext = new AudioContext();
       console.log(`[Compositor] AudioContext created for ${participantId}, state: ${audioContext.state}`);
 
-      // Resume audio context if suspended (required after user interaction)
+      // CRITICAL: Wait for AudioContext to be running before connecting
       if (audioContext.state === 'suspended') {
-        console.log(`[Compositor] AudioContext suspended for ${participantId}, attempting resume...`);
-        audioContext.resume().then(() => {
-          console.log(`[Compositor] AudioContext resumed successfully for ${participantId}, new state: ${audioContext.state}`);
-        }).catch(err => {
-          console.error(`[Compositor] Failed to resume AudioContext for ${participantId}:`, err);
-        });
+        console.log(`[Compositor] AudioContext suspended for ${participantId}, waiting for resume...`);
+        await audioContext.resume();
+        console.log(`[Compositor] AudioContext resumed for ${participantId}, new state: ${audioContext.state}`);
       }
 
-      const source = audioContext.createMediaStreamSource(audioStream);
+      // Create analyser with same settings as PreviewArea
       const analyser = audioContext.createAnalyser();
-
-      // Configure analyser for speech detection
       analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.3; // Lower = more responsive
+      analyser.smoothingTimeConstant = 0.3;
 
-      // Connect source to analyser (don't connect to destination - just analyze)
+      // Create a fresh MediaStream from just the audio track (like PreviewArea does)
+      const monitorStream = new MediaStream([audioTrack]);
+      const source = audioContext.createMediaStreamSource(monitorStream);
       source.connect(analyser);
 
       // Store analyser and context
@@ -205,7 +204,7 @@ class CompositorService {
 
       console.log(`[Compositor] ✓ Audio analyser created successfully for ${participantId}. Total analysers: ${this.audioAnalysers.size}`);
 
-      // Test the analyser immediately
+      // Test the analyser after a short delay
       setTimeout(() => {
         const testData = new Uint8Array(analyser.frequencyBinCount);
         analyser.getByteFrequencyData(testData);
@@ -725,6 +724,19 @@ class CompositorService {
       logger.debug(`Cleaned up video element for participant ${participantId}`);
     });
     this.videoElements.clear();
+
+    // CRITICAL FIX: Clean up audio analysers and contexts
+    this.audioContexts.forEach((audioContext, participantId) => {
+      if (audioContext.state !== 'closed') {
+        audioContext.close().catch(err => {
+          logger.error(`Failed to close audio context for ${participantId}:`, err);
+        });
+      }
+    });
+    this.audioContexts.clear();
+    this.audioAnalysers.clear();
+    this.audioLevels.clear();
+    console.log('[Compositor] Audio analysers cleaned up');
 
     // Clean up cached images
     this.backgroundImage = null;
