@@ -100,7 +100,7 @@ router.post('/deploy', async (req, res) => {
     }
 
     // Validate role
-    const validRoles = ['media-server', 'api-server', 'frontend-server', 'load-balancer', 'database-server', 'redis-server'];
+    const validRoles = ['media-server', 'ant-media-server', 'api-server', 'frontend-server', 'load-balancer', 'database-server', 'redis-server'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({
         error: `Invalid role. Must be one of: ${validRoles.join(', ')}`
@@ -137,8 +137,19 @@ router.post('/deploy', async (req, res) => {
       },
     };
 
-    // For media servers, try to auto-add to pool
-    if (role === 'media-server') {
+    // For Ant Media servers
+    if (role === 'ant-media-server') {
+      responseData.server.url = `https://${server.public_net.ipv4.ip}:5443`;
+      responseData.server.restUrl = `https://${server.public_net.ipv4.ip}:5443/StreamLick/rest/v2`;
+      responseData.server.websocketUrl = `wss://${server.public_net.ipv4.ip}:5443/StreamLick/websocket`;
+      responseData.notes = [
+        'Ant Media Server deployed!',
+        'Run SSL setup: sudo /usr/local/antmedia/enable_ssl.sh -d yourdomain.com',
+        'Update frontend VITE_ANT_MEDIA_REST_URL and VITE_ANT_MEDIA_WEBSOCKET_URL',
+        'Dashboard: https://yourdomain.com:5443',
+      ];
+    // Legacy mediasoup servers (deprecated)
+    } else if (role === 'media-server') {
       const mediaServerUrl = `http://${server.public_net.ipv4.ip}:3001`;
       responseData.server.url = mediaServerUrl;
 
@@ -150,6 +161,7 @@ router.post('/deploy', async (req, res) => {
         logger.warn('Server deployed but failed to add to pool:', poolError.message);
         responseData.warning = 'Could not auto-add to pool. Add manually via "Add Server" button.';
       }
+      responseData.notes = ['DEPRECATED: Consider using ant-media-server role instead'];
     } else if (role === 'api-server') {
       responseData.server.url = `http://${server.public_net.ipv4.ip}:3000`;
       responseData.notes = 'Remember to update FRONTEND_URL and CORS_ORIGINS in backend/.env';
@@ -251,7 +263,7 @@ router.post('/servers/:id/labels', async (req, res) => {
     }
 
     // Validate role
-    const validRoles = ['media-server', 'api-server', 'frontend-server', 'load-balancer', 'database-server', 'redis-server'];
+    const validRoles = ['media-server', 'ant-media-server', 'api-server', 'frontend-server', 'load-balancer', 'database-server', 'redis-server'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({
         error: `Invalid role. Must be one of: ${validRoles.join(', ')}`

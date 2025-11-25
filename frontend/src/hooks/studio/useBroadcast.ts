@@ -1,8 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { broadcastService } from '../../services/broadcast.service';
 import { socketService } from '../../services/socket.service';
-import { mediaServerSocketService } from '../../services/media-server-socket.service';
-import { webrtcService } from '../../services/webrtc.service';
+import { antMediaService } from '../../services/antmedia.service';
 import { compositorService } from '../../services/compositor.service';
 import { recordingService } from '../../services/recording.service';
 import { useStudioStore } from '../../store/studioStore';
@@ -146,10 +145,8 @@ export function useBroadcast({
     }
 
     try {
-      // Initialize WebRTC if not already done
-      if (!webrtcService.getDevice()) {
-        await initializeWebRTC();
-      }
+      // Initialize Ant Media service
+      await antMediaService.initialize(broadcastId);
 
       // Initialize compositor with only LIVE participants (exclude backstage)
       const participantStreams = [
@@ -176,25 +173,10 @@ export function useBroadcast({
       await compositorService.initialize(participantStreams);
       compositorService.setLayout({ type: currentLayout });
 
-      // Get composite stream and produce it via WebRTC
+      // Get composite stream
       const compositeStream = compositorService.getOutputStream();
       if (!compositeStream) {
         throw new Error('Failed to get composite stream');
-      }
-
-      // Produce composite video and audio tracks
-      const compositeVideoTrack = compositeStream.getVideoTracks()[0];
-      const compositeAudioTrack = compositeStream.getAudioTracks()[0];
-
-      let compositeVideoProducerId: string | undefined;
-      let compositeAudioProducerId: string | undefined;
-
-      if (compositeVideoTrack) {
-        compositeVideoProducerId = await webrtcService.produceMedia(compositeVideoTrack);
-      }
-
-      if (compositeAudioTrack) {
-        compositeAudioProducerId = await webrtcService.produceMedia(compositeAudioTrack);
       }
 
       // Prepare destination settings for API
@@ -251,25 +233,40 @@ export function useBroadcast({
 
       console.log('[useBroadcast] Fetched broadcast destinations:', broadcastDestinations);
 
-      // Start RTMP streaming with real RTMP URLs and stream keys
-      const destinationsToStream = broadcastDestinations.map((bd: any) => ({
-        id: bd.id,
-        platform: bd.platform,
-        rtmpUrl: bd.rtmpUrl,
-        streamKey: bd.streamKey, // Now contains the actual decrypted stream key
-      }));
+      // Step 4: Create Ant Media broadcast and add RTMP endpoints
+      const antBroadcast = await antMediaService.createBroadcast(`streamlick-${broadcastId}`);
+      console.log('[useBroadcast] Ant Media broadcast created:', antBroadcast.streamId);
 
-      console.log('[useBroadcast] Starting RTMP push to destinations (user stream):',
-        destinationsToStream.map((d: any) => ({ platform: d.platform, rtmpUrl: d.rtmpUrl })));
+      // Add RTMP endpoints for each destination (multi-destination streaming)
+      for (const bd of broadcastDestinations) {
+        const fullRtmpUrl = bd.streamKey
+          ? `${bd.rtmpUrl}/${bd.streamKey}`
+          : bd.rtmpUrl;
 
-      mediaServerSocketService.emit('start-rtmp', {
-        broadcastId,
-        destinations: destinationsToStream,
-        compositeProducers: {
-          videoProducerId: compositeVideoProducerId,
-          audioProducerId: compositeAudioProducerId,
+        console.log('[useBroadcast] Adding RTMP endpoint:', {
+          platform: bd.platform,
+          destinationId: bd.id,
+        });
+
+        await antMediaService.addRtmpEndpoint(antBroadcast.streamId, fullRtmpUrl, bd.id);
+      }
+
+      // Step 5: Start publishing composite stream via WebRTC to Ant Media
+      console.log('[useBroadcast] Starting WebRTC publish to Ant Media...');
+      await antMediaService.startPublishing(
+        compositeStream,
+        antBroadcast.streamId,
+        (info) => {
+          console.log('[useBroadcast] Ant Media status:', info);
+          if (info === 'publish_started') {
+            console.log('[useBroadcast] WebRTC stream is now being forwarded to RTMP destinations');
+          }
         },
-      });
+        (error, message) => {
+          console.error('[useBroadcast] Ant Media error:', error, message);
+          toast.error(`Streaming error: ${error}`);
+        }
+      );
 
       // Start chat polling
       socketService.emit('start-chat', { broadcastId });
@@ -304,10 +301,10 @@ export function useBroadcast({
     destinations,
     currentLayout,
     showChatOnStream,
-    initializeWebRTC,
     setIsLive,
     handleStartRecording,
     destinationSettings,
+    broadcast,
   ]);
 
   const handleEndBroadcast = useCallback(async () => {
@@ -325,8 +322,9 @@ export function useBroadcast({
       // Stop compositor
       compositorService.stop();
 
-      // Stop RTMP streaming
-      mediaServerSocketService.emit('stop-rtmp', { broadcastId });
+      // Stop Ant Media streaming and clean up
+      await antMediaService.close();
+
       await broadcastService.end(broadcastId);
       toast.success('Broadcast ended');
       setIsLive(false);
