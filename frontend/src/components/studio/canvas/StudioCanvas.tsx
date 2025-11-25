@@ -433,6 +433,11 @@ export function StudioCanvas({
     return { cols, rows };
   };
 
+  // ===================================================================================
+  // DO NOT EVER CHANGE THIS CODE - IT WILL BREAK THE SITE
+  // These layout positions define exactly where participants appear on screen for each
+  // of the 8 layout types. The compositor service uses identical positioning logic.
+  // ===================================================================================
   // Layout positioning for each layout type
   // Returns CSS positions as percentages for each participant slot
   const getLayoutPositions = (layoutId: number, participantCount: number) => {
@@ -1006,6 +1011,10 @@ export function StudioCanvas({
           </div>
         )}
 
+        {/* =========================================================================
+            DO NOT EVER CHANGE THIS CODE - IT WILL BREAK THE SITE
+            Video clips from media assets play here on top of the canvas.
+            ========================================================================= */}
         {/* Video Clip Overlay - Plays on top of canvas */}
         {videoClip && (
           <div
