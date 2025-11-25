@@ -145,6 +145,21 @@ class CompositorService {
     try {
       // Create a separate audio context for analysis (not the mixer context)
       const audioContext = new AudioContext();
+
+      console.log(`[Compositor] Creating audio analyser for ${participantId}:`, {
+        audioContextState: audioContext.state,
+        audioTracks: audioStream.getAudioTracks().length,
+        trackEnabled: audioStream.getAudioTracks()[0]?.enabled,
+        trackReadyState: audioStream.getAudioTracks()[0]?.readyState,
+      });
+
+      // Resume audio context if suspended (required after user interaction)
+      if (audioContext.state === 'suspended') {
+        audioContext.resume().then(() => {
+          console.log(`[Compositor] Audio context resumed for ${participantId}`);
+        });
+      }
+
       const source = audioContext.createMediaStreamSource(audioStream);
       const analyser = audioContext.createAnalyser();
 
@@ -160,16 +175,21 @@ class CompositorService {
       this.audioContexts.set(participantId, audioContext);
       this.audioLevels.set(participantId, 0);
 
-      logger.info(`Audio analyser created for participant ${participantId}`);
+      console.log(`[Compositor] Audio analyser created for ${participantId}, total analysers:`, this.audioAnalysers.size);
     } catch (error) {
-      logger.error(`Failed to create audio analyser for ${participantId}:`, error);
+      console.error(`[Compositor] Failed to create audio analyser for ${participantId}:`, error);
     }
   }
+
+  // Frame counter for periodic logging
+  private audioLogCounter = 0;
 
   /**
    * Update audio levels for all participants (called every frame)
    */
   private updateAudioLevels(): void {
+    this.audioLogCounter++;
+
     this.audioAnalysers.forEach((analyser, participantId) => {
       const bufferLength = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
@@ -187,7 +207,20 @@ class CompositorService {
 
       // Store level for drawing
       this.audioLevels.set(participantId, normalizedLevel);
+
+      // Log audio levels periodically (every ~2 seconds at 30fps)
+      if (this.audioLogCounter % 60 === 0 && normalizedLevel > 0.01) {
+        console.log(`[Compositor] Audio level for ${participantId}:`, {
+          normalizedLevel: normalizedLevel.toFixed(3),
+          isSpeaking: normalizedLevel > 0.05,
+        });
+      }
     });
+
+    // Log analyser count occasionally
+    if (this.audioLogCounter % 300 === 0) {
+      console.log('[Compositor] Audio analysers active:', this.audioAnalysers.size, 'participants:', this.participants.size);
+    }
   }
 
   /**
@@ -450,13 +483,17 @@ class CompositorService {
    */
   async playIntroVideo(videoUrl: string = '/backgrounds/videos/StreamLick.mp4', duration?: number): Promise<void> {
     return new Promise((resolve, reject) => {
+      console.log('[Compositor] playIntroVideo called with:', videoUrl);
+
       const videoElement = document.createElement('video');
       videoElement.src = videoUrl;
       videoElement.muted = false; // Enable audio for intro video
       videoElement.autoplay = false;
-      videoElement.preload = 'metadata'; // Load metadata first to get dimensions
+      videoElement.preload = 'auto'; // Load full video, not just metadata
       videoElement.crossOrigin = 'anonymous'; // Allow CORS for local files
+      videoElement.playsInline = true; // Required for iOS
 
+      console.log('[Compositor] Created video element, waiting for events...');
       logger.info(`Loading intro video: ${videoUrl}`);
 
       // Emit event so visible UI can show intro video too
@@ -464,36 +501,62 @@ class CompositorService {
 
       // Wait for metadata (dimensions) to load first
       videoElement.addEventListener('loadedmetadata', () => {
-        logger.info(`Intro video metadata loaded: ${videoUrl}, dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}, duration: ${videoElement.duration}s`);
+        console.log('[Compositor] Intro video metadata loaded:', {
+          url: videoUrl,
+          width: videoElement.videoWidth,
+          height: videoElement.videoHeight,
+          duration: videoElement.duration,
+          readyState: videoElement.readyState,
+        });
 
         // Ensure video has valid dimensions
         if (!videoElement.videoWidth || !videoElement.videoHeight) {
-          logger.error('Intro video has invalid dimensions:', videoElement.videoWidth, videoElement.videoHeight);
+          console.error('[Compositor] Intro video has invalid dimensions:', videoElement.videoWidth, videoElement.videoHeight);
           window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
           reject(new Error('Invalid video dimensions'));
           return;
         }
 
-        // Set as media clip overlay BEFORE playing
-        this.setMediaClipOverlay(videoElement);
-        logger.info('Intro video set as media clip overlay');
+        // Wait for 'playing' event before setting overlay - this ensures frame data is available
+        videoElement.addEventListener('playing', () => {
+          console.log('[Compositor] Intro video is now playing, setting as overlay');
+          this.setMediaClipOverlay(videoElement);
+        }, { once: true });
 
         // Now wait for enough data to play
         const playWhenReady = () => {
-          logger.info('Intro video ready to play, starting playback...');
-          videoElement.play().catch((error) => {
-            logger.error('Failed to play intro video:', error);
-            this.clearMediaClipOverlay();
-            window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
-            reject(error);
-          });
+          console.log('[Compositor] Intro video ready to play, attempting playback... readyState:', videoElement.readyState);
+          videoElement.play()
+            .then(() => {
+              console.log('[Compositor] Intro video play() succeeded');
+            })
+            .catch((error) => {
+              console.error('[Compositor] Failed to play intro video with audio, trying muted:', error.message);
+              // Try playing muted as fallback (autoplay policy)
+              videoElement.muted = true;
+              videoElement.play()
+                .then(() => {
+                  console.log('[Compositor] Intro video playing muted (fallback)');
+                })
+                .catch((mutedError) => {
+                  console.error('[Compositor] Failed to play intro video even muted:', mutedError);
+                  this.clearMediaClipOverlay();
+                  window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
+                  reject(mutedError);
+                });
+            });
         };
 
         if (videoElement.readyState >= 3) {
           // HAVE_FUTURE_DATA or better - can play
+          console.log('[Compositor] Video already has enough data, playing immediately');
           playWhenReady();
         } else {
-          videoElement.addEventListener('canplay', playWhenReady, { once: true });
+          console.log('[Compositor] Waiting for canplay event, current readyState:', videoElement.readyState);
+          videoElement.addEventListener('canplay', () => {
+            console.log('[Compositor] canplay event fired');
+            playWhenReady();
+          }, { once: true });
         }
       });
 
@@ -510,16 +573,29 @@ class CompositorService {
         const errorMsg = videoElement.error
           ? `Code: ${videoElement.error.code}, Message: ${videoElement.error.message}`
           : 'Unknown error';
-        logger.error(`Intro video error: ${errorMsg}`, event);
+        console.error(`[Compositor] Intro video error: ${errorMsg}`, event);
         this.clearMediaClipOverlay();
         window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
         reject(new Error(`Video error: ${errorMsg}`));
       });
 
+      // Timeout if video fails to load metadata within 10 seconds
+      const loadTimeout = setTimeout(() => {
+        console.error('[Compositor] Intro video load timeout - skipping intro');
+        this.clearMediaClipOverlay();
+        window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
+        resolve(); // Resolve instead of reject to continue the flow
+      }, 10000);
+
+      // Clear timeout when metadata loads
+      videoElement.addEventListener('loadedmetadata', () => {
+        clearTimeout(loadTimeout);
+      }, { once: true });
+
       // If duration is specified, stop video after that duration
       if (duration) {
         setTimeout(() => {
-          logger.info(`Intro video duration limit reached (${duration}s), clearing overlay`);
+          console.log(`[Compositor] Intro video duration limit reached (${duration}s), clearing overlay`);
           videoElement.pause();
           this.clearMediaClipOverlay();
           window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
@@ -1436,6 +1512,18 @@ class CompositorService {
       const videoWidth = element instanceof HTMLVideoElement ? element.videoWidth : element.naturalWidth;
       const videoHeight = element instanceof HTMLVideoElement ? element.videoHeight : element.naturalHeight;
 
+      // Debug: log video state periodically
+      if (element instanceof HTMLVideoElement && Math.random() < 0.01) {
+        console.log('[Compositor] Drawing intro video:', {
+          videoWidth,
+          videoHeight,
+          readyState: element.readyState,
+          paused: element.paused,
+          currentTime: element.currentTime,
+          duration: element.duration,
+        });
+      }
+
       if (videoWidth && videoHeight) {
         const aspectRatio = videoWidth / videoHeight;
         const canvasAspectRatio = this.WIDTH / this.HEIGHT;
@@ -1453,10 +1541,15 @@ class CompositorService {
           drawX = (this.WIDTH - drawWidth) / 2;
           drawY = 0;
         }
-      }
 
-      // Draw the media clip
-      this.ctx.drawImage(element, drawX, drawY, drawWidth, drawHeight);
+        // Draw the media clip
+        this.ctx.drawImage(element, drawX, drawY, drawWidth, drawHeight);
+      } else {
+        // Video dimensions not available yet - draw black with loading indicator
+        console.warn('[Compositor] Intro video has no dimensions yet, readyState:', element instanceof HTMLVideoElement ? element.readyState : 'image');
+        this.ctx.fillStyle = '#000000';
+        this.ctx.fillRect(0, 0, this.WIDTH, this.HEIGHT);
+      }
     }
   }
 
