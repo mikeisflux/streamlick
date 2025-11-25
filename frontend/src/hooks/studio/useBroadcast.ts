@@ -46,8 +46,13 @@ export function useBroadcast({
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [currentLayout, setCurrentLayout] = useState<'grid' | 'spotlight' | 'sidebar' | 'pip'>('grid');
   const [selectedLayout, setSelectedLayout] = useState<number>(1);
+  const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
+  const [failoverCount, setFailoverCount] = useState(0);
 
   const { broadcast, setIsLive } = useStudioStore();
+
+  // Refs to store backup stream IDs for cleanup
+  const backupStreamIdsRef = useRef<string[]>([]);
 
   // Use ref to store recording interval ID
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -60,6 +65,26 @@ export function useBroadcast({
         recordingIntervalRef.current = null;
       }
     };
+  }, []);
+
+  // Set up failover callback
+  useEffect(() => {
+    antMediaService.onFailover((fromStream, toStream, reason) => {
+      console.warn(`[useBroadcast] Stream failover: ${fromStream} -> ${toStream} (reason: ${reason})`);
+      setActiveStreamId(toStream);
+      setFailoverCount((prev) => prev + 1);
+
+      // Notify user about failover
+      if (reason.includes('ice_failed') || reason.includes('ice_disconnected')) {
+        toast('Connection unstable - switching to backup stream', { icon: '⚠️' });
+      } else if (reason.includes('low_bitrate')) {
+        toast('Bitrate dropped - switching to backup stream', { icon: '⚠️' });
+      } else if (reason.includes('packet_loss')) {
+        toast('High packet loss - switching to backup stream', { icon: '⚠️' });
+      } else {
+        toast('Stream failover in progress...', { icon: '🔄' });
+      }
+    });
   }, []);
 
   // Recording functions defined first to avoid circular dependency
@@ -241,9 +266,16 @@ export function useBroadcast({
 
       console.log('[useBroadcast] Fetched broadcast destinations:', broadcastDestinations);
 
-      // Step 4: Create Ant Media broadcast and add RTMP endpoints
+      // Step 4: Create Ant Media broadcast with failover support
       const antBroadcast = await antMediaService.createBroadcast(`streamlick-${broadcastId}`);
-      console.log('[useBroadcast] Ant Media broadcast created:', antBroadcast.streamId);
+      console.log('[useBroadcast] Ant Media primary broadcast created:', antBroadcast.streamId);
+      setActiveStreamId(antBroadcast.streamId);
+
+      // Create backup streams for failover (2 redundant connections)
+      console.log('[useBroadcast] Creating backup streams for failover...');
+      const backupStreamIds = await antMediaService.createBackupStreams(`streamlick-${broadcastId}`, 2);
+      backupStreamIdsRef.current = backupStreamIds;
+      console.log('[useBroadcast] Backup streams created:', backupStreamIds);
 
       // Deduplicate broadcast destinations by ID
       const seenDestinations = new Set<string>();
@@ -260,20 +292,26 @@ export function useBroadcast({
 
       // Step 5: Start publishing composite stream via WebRTC to Ant Media FIRST
       // IMPORTANT: RTMP endpoints must be added AFTER stream is active
-      console.log('[useBroadcast] Starting WebRTC publish to Ant Media...');
+      // Uses failover architecture with primary + 2 backup connections
+      console.log('[useBroadcast] Starting WebRTC publish to Ant Media with failover support...');
       await antMediaService.startPublishing(
         compositeStream,
         antBroadcast.streamId,
-        (info) => {
+        (info, obj) => {
           console.log('[useBroadcast] Ant Media status:', info);
           if (info === 'publish_started') {
             console.log('[useBroadcast] WebRTC stream is now active on Ant Media');
+          }
+          if (info === 'failover') {
+            const failoverInfo = obj as { from: string; to: string; reason: string };
+            console.log('[useBroadcast] Failover occurred:', failoverInfo);
           }
         },
         (error, message) => {
           console.error('[useBroadcast] Ant Media error:', error, message);
           toast.error(`Streaming error: ${error}`);
-        }
+        },
+        backupStreamIds // Pass backup stream IDs for failover
       );
 
       // Step 6: Add RTMP endpoints AFTER WebRTC stream is active
@@ -356,8 +394,24 @@ export function useBroadcast({
       // Stop compositor
       studioCanvasOutputService.stop();
 
-      // Stop Ant Media streaming and clean up
+      // Stop Ant Media streaming and clean up (includes all backup streams)
       await antMediaService.close();
+
+      // Clean up backup streams from Ant Media server
+      const backupIds = backupStreamIdsRef.current;
+      for (const backupId of backupIds) {
+        try {
+          await antMediaService.deleteBroadcast(backupId);
+          console.log('[useBroadcast] Backup stream deleted:', backupId);
+        } catch (error) {
+          console.warn('[useBroadcast] Failed to delete backup stream:', backupId, error);
+        }
+      }
+      backupStreamIdsRef.current = [];
+
+      // Reset failover state
+      setActiveStreamId(null);
+      setFailoverCount(0);
 
       await broadcastService.end(broadcastId);
       toast.success('Broadcast ended');
@@ -404,6 +458,11 @@ export function useBroadcast({
     toast.success(`Layout changed to ${layoutNames[layoutId] || 'Unknown'}`);
   }, [setSelectedLayout]);
 
+  // Helper to get current stream health (for UI display)
+  const getStreamHealth = useCallback(() => {
+    return antMediaService.getStreamHealth();
+  }, []);
+
   return {
     isRecording,
     recordingDuration,
@@ -416,5 +475,9 @@ export function useBroadcast({
     handleStartRecording,
     handleStopRecording,
     handleLayoutChange,
+    // Failover status
+    activeStreamId,
+    failoverCount,
+    getStreamHealth,
   };
 }
