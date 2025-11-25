@@ -629,11 +629,24 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
     return (
       <div
         key={asset.id}
-        className={`p-3 bg-white rounded-lg hover:shadow-md transition-shadow cursor-pointer group relative ${
-          isActive ? 'border-2 border-blue-500' : 'border border-gray-200'
+        onClick={() => handleUseAsset(asset)}
+        className={`p-2 bg-white rounded-lg hover:shadow-md transition-shadow cursor-pointer relative ${
+          isActive ? 'ring-2 ring-blue-500' : 'border border-gray-200'
         }`}
       >
-        <div className="aspect-video bg-gray-100 rounded mb-2 overflow-hidden relative">
+        {/* Delete button - small red X in top right */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDeleteAsset(asset.id);
+          }}
+          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold z-10 shadow-sm"
+          title="Delete"
+        >
+          &times;
+        </button>
+
+        <div className="aspect-video bg-gray-100 rounded overflow-hidden relative">
           {asset.thumbnailUrl ? (
             <>
               <img
@@ -644,8 +657,8 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               {/* Video play icon indicator */}
               {(asset.type === 'videoBackground' || asset.type === 'videoClip') && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-12 h-12 bg-black bg-opacity-60 rounded-full flex items-center justify-center">
-                    <div className="w-0 h-0 border-l-[16px] border-l-white border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent ml-1"></div>
+                  <div className="w-10 h-10 bg-black bg-opacity-60 rounded-full flex items-center justify-center">
+                    <div className="w-0 h-0 border-l-[12px] border-l-white border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent ml-1"></div>
                   </div>
                 </div>
               )}
@@ -657,44 +670,15 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
           )}
           {/* Active indicator */}
           {isActive && (
-            <div className="absolute top-2 right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded font-medium">
+            <div className="absolute top-1 left-1 bg-blue-500 text-white text-[10px] px-1.5 py-0.5 rounded font-medium">
               Active
             </div>
           )}
-          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleUseAsset(asset);
-              }}
-              className={`px-3 py-1 rounded text-sm font-medium ${
-                isActive
-                  ? 'bg-red-600 hover:bg-red-700 text-white'
-                  : 'bg-white text-gray-900 hover:bg-gray-100'
-              }`}
-            >
-              {isActive ? 'Remove' : 'Use'}
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeleteAsset(asset.id);
-              }}
-              className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium"
-            >
-              Delete
-            </button>
-          </div>
         </div>
-        <p className="text-xs font-medium text-gray-900 truncate">{asset.name}</p>
+        <p className="text-[10px] font-medium text-gray-900 truncate mt-1">{asset.name}</p>
         {asset.duration && (
-          <p className="text-xs text-gray-500">
+          <p className="text-[10px] text-gray-500">
             {Math.floor(asset.duration / 60)}:{String(Math.floor(asset.duration % 60)).padStart(2, '0')}
-          </p>
-        )}
-        {asset.fileSize && (
-          <p className="text-xs text-gray-500">
-            {(asset.fileSize / 1024 / 1024).toFixed(2)} MB
           </p>
         )}
       </div>
@@ -903,38 +887,31 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               {assets.filter((a) => a.type === 'music').map((asset) => (
                 <div
                   key={asset.id}
-                  className="p-3 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow"
+                  onClick={() => handleUseAsset(asset)}
+                  className="p-3 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow cursor-pointer relative"
                 >
+                  {/* Delete button - small red X */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteAsset(asset.id);
+                    }}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold z-10 shadow-sm"
+                    title="Delete"
+                  >
+                    &times;
+                  </button>
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-purple-100 rounded flex items-center justify-center text-2xl">
+                    <div className="w-10 h-10 bg-purple-100 rounded flex items-center justify-center text-xl">
                       🎵
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{asset.name}</p>
                       {asset.duration && (
                         <p className="text-xs text-gray-500">
-                          {Math.floor(asset.duration / 60)}:{String(asset.duration % 60).padStart(2, '0')}
+                          {Math.floor(asset.duration / 60)}:{String(Math.floor(asset.duration % 60)).padStart(2, '0')}
                         </p>
                       )}
-                      {asset.fileSize && (
-                        <p className="text-xs text-gray-500">
-                          {(asset.fileSize / 1024 / 1024).toFixed(2)} MB
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleUseAsset(asset)}
-                        className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded transition-colors"
-                      >
-                        Use
-                      </button>
-                      <button
-                        onClick={() => handleDeleteAsset(asset.id)}
-                        className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
-                      >
-                        Delete
-                      </button>
                     </div>
                   </div>
                 </div>
