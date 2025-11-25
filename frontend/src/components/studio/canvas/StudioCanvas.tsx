@@ -216,6 +216,12 @@ export function StudioCanvas({
     };
   }, []);
 
+  // ===================================================================================
+  // DO NOT EVER CHANGE THIS CODE - IT WILL BREAK THE SITE
+  // This loads background/logo/overlay from IndexedDB and caches the object URL in
+  // localStorage so assets load INSTANTLY on page refresh without flash/delay.
+  // The useState initializers above read from localStorage synchronously on render.
+  // ===================================================================================
   // Load stream background - check IndexedDB if stored there
   useEffect(() => {
     const loadBackground = async () => {
