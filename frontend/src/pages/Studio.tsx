@@ -499,6 +499,9 @@ export function Studio() {
           rightSidebarRef={rightSidebarRef}
           teleprompterState={teleprompterState}
           onCommentClick={setDisplayedComment}
+          localStream={localStream}
+          audioEnabled={audioEnabled}
+          videoEnabled={videoEnabled}
         />
       </div>
 

@@ -13,6 +13,9 @@ import { compositorService } from '../services/compositor.service';
 
 interface RecordingControlsProps {
   broadcastId?: string;
+  localStream?: MediaStream | null;
+  audioEnabled?: boolean;
+  videoEnabled?: boolean;
 }
 
 interface SavedRecording {
@@ -24,7 +27,7 @@ interface SavedRecording {
   blob: Blob;
 }
 
-export function RecordingControls({ broadcastId }: RecordingControlsProps) {
+export function RecordingControls({ broadcastId, localStream, audioEnabled = true, videoEnabled = true }: RecordingControlsProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -88,9 +91,30 @@ export function RecordingControls({ broadcastId }: RecordingControlsProps) {
   const startRecording = async () => {
     try {
       // Get the composite output stream
-      const stream = compositorService.getOutputStream();
+      let stream = compositorService.getOutputStream();
+
+      // If compositor isn't running but we have a local stream, initialize it
+      if (!stream && localStream) {
+        console.log('[RecordingControls] Compositor not running, initializing for local recording...');
+
+        // Initialize compositor with just the local participant
+        await compositorService.initialize([
+          {
+            id: 'local',
+            name: 'You',
+            stream: localStream,
+            isLocal: true,
+            audioEnabled,
+            videoEnabled,
+          },
+        ]);
+
+        // Now get the output stream
+        stream = compositorService.getOutputStream();
+      }
+
       if (!stream) {
-        toast.error('No active stream to record');
+        toast.error('No camera/mic available - please allow access first');
         return;
       }
 
