@@ -9,7 +9,7 @@ import {
 import { ClockIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { recordingService } from '../services/recording.service';
-import { compositorService } from '../services/compositor.service';
+import { studioCanvasOutputService } from '../services/studioCanvasOutput.service';
 
 interface RecordingControlsProps {
   broadcastId?: string;
@@ -91,14 +91,14 @@ export function RecordingControls({ broadcastId, localStream, audioEnabled = tru
   const startRecording = async () => {
     try {
       // Get the composite output stream
-      let stream = compositorService.getOutputStream();
+      let stream = studioCanvasOutputService.getOutputStream();
 
       // If compositor isn't running but we have a local stream, initialize it
       if (!stream && localStream) {
         console.log('[RecordingControls] Compositor not running, initializing for local recording...');
 
         // Initialize compositor with just the local participant
-        await compositorService.initialize([
+        await studioCanvasOutputService.initialize([
           {
             id: 'local',
             name: 'You',
@@ -110,7 +110,7 @@ export function RecordingControls({ broadcastId, localStream, audioEnabled = tru
         ]);
 
         // Now get the output stream
-        stream = compositorService.getOutputStream();
+        stream = studioCanvasOutputService.getOutputStream();
       }
 
       if (!stream) {

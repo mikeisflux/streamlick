@@ -4,7 +4,7 @@ import { captionService, Caption, POPULAR_LANGUAGES } from '../../services/capti
 import { backgroundRemovalService, BackgroundOptions } from '../../services/background-removal.service';
 import { verticalCompositorService } from '../../services/vertical-compositor.service';
 import { analyticsService, EngagementMetrics, StreamInsight } from '../../services/analytics.service';
-import { compositorService } from '../../services/compositor.service';
+import { studioCanvasOutputService } from '../../services/studioCanvasOutput.service';
 import toast from 'react-hot-toast';
 
 export function useCaptions(enabled: boolean, language: string) {
@@ -220,7 +220,7 @@ export function useVerticalSimulcast(
   const lastStreamIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const sourceStream = processedStream || compositorService.getOutputStream() || localStream;
+    const sourceStream = processedStream || studioCanvasOutputService.getOutputStream() || localStream;
     const currentStreamId = sourceStream?.id || null;
     const streamChanged = currentStreamId !== lastStreamIdRef.current;
     let isMounted = true;

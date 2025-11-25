@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { compositorService } from '../../services/compositor.service';
+import { studioCanvasOutputService } from '../../services/studioCanvasOutput.service';
 import { hotkeyService } from '../../services/hotkey.service';
 import { clipPlayerService } from '../../services/clip-player.service';
 import api from '../../services/api';
@@ -12,17 +12,17 @@ export function useMediaClips() {
 
   const handlePlayClip = async (clip: any) => {
     try {
-      const canvas = compositorService.getCanvas() || undefined;
+      const canvas = studioCanvasOutputService.getCanvas() || undefined;
 
       if (clip.type === 'video') {
-        await clipPlayerService.playVideoClip(clip, canvas, compositorService);
+        await clipPlayerService.playVideoClip(clip, canvas, studioCanvasOutputService);
         toast.success(`Playing video: ${clip.name}`);
       } else if (clip.type === 'audio') {
         await clipPlayerService.playAudioClip(clip);
         toast.success(`Playing audio: ${clip.name}`);
       } else if (clip.type === 'image') {
         const duration = clip.duration || 5000;
-        clipPlayerService.showImageClip(clip, duration, canvas, compositorService);
+        clipPlayerService.showImageClip(clip, duration, canvas, studioCanvasOutputService);
         toast.success(`Showing image: ${clip.name}`);
       }
     } catch (error) {

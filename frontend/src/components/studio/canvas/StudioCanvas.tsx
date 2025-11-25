@@ -1,11 +1,11 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { CaptionOverlay } from './CanvasOverlay';
 import { ParticipantBox } from './ParticipantBox';
 import { TeleprompterOverlay } from './TeleprompterOverlay';
 import { CommentOverlay } from './CommentOverlay';
 import { Caption } from '../../../services/caption.service';
 import { mediaStorageService } from '../../../services/media-storage.service';
-import { compositorService } from '../../../services/compositor.service';
+import { studioCanvasOutputService } from '../../../services/studioCanvasOutput.service';
 
 interface Banner {
   id: string;
@@ -119,6 +119,21 @@ export function StudioCanvas({
 }: StudioCanvasProps) {
   const mainVideoRef = useRef<HTMLVideoElement>(null);
   const screenShareVideoRef = useRef<HTMLVideoElement>(null);
+
+  // Hidden canvas for capturing output stream
+  const captureCanvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const animationFrameRef = useRef<number | null>(null);
+
+  // Video refs for all participants (for canvas capture)
+  const participantVideoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
+
+  // Media clip overlay state (for intro video, media clips)
+  const [mediaClipElement, setMediaClipElement] = useState<HTMLVideoElement | HTMLImageElement | null>(null);
+
+  // Canvas dimensions
+  const CANVAS_WIDTH = 1920;
+  const CANVAS_HEIGHT = 1080;
 
   // Load banners from localStorage
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -417,6 +432,265 @@ export function StudioCanvas({
     };
   }, []);
 
+  // ===================================================================================
+  // CANVAS CAPTURE FOR BROADCAST OUTPUT
+  // This renders the same content as the React preview to a hidden canvas for streaming
+  // ===================================================================================
+
+  // Cached images for canvas drawing (to avoid creating new Image objects every frame)
+  const backgroundImageRef = useRef<HTMLImageElement | null>(null);
+  const logoImageRef = useRef<HTMLImageElement | null>(null);
+  const overlayImageRef = useRef<HTMLImageElement | null>(null);
+
+  // Load cached images when sources change
+  useEffect(() => {
+    if (streamBackground) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        backgroundImageRef.current = img;
+      };
+      img.src = streamBackground;
+    } else {
+      backgroundImageRef.current = null;
+    }
+  }, [streamBackground]);
+
+  useEffect(() => {
+    if (streamLogo) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        logoImageRef.current = img;
+      };
+      img.src = streamLogo;
+    } else {
+      logoImageRef.current = null;
+    }
+  }, [streamLogo]);
+
+  useEffect(() => {
+    if (streamOverlay) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        overlayImageRef.current = img;
+      };
+      img.src = streamOverlay;
+    } else {
+      overlayImageRef.current = null;
+    }
+  }, [streamOverlay]);
+
+  // Listen for media clip overlay events
+  useEffect(() => {
+    const handleMediaClip = ((e: CustomEvent) => {
+      if (e.detail.action === 'set') {
+        setMediaClipElement(e.detail.element);
+      } else {
+        setMediaClipElement(null);
+      }
+    }) as EventListener;
+
+    window.addEventListener('studioCanvasMediaClip', handleMediaClip);
+    return () => window.removeEventListener('studioCanvasMediaClip', handleMediaClip);
+  }, []);
+
+  // Register video ref for a participant (called from ParticipantBox via callback)
+  const registerVideoRef = useCallback((participantId: string, videoElement: HTMLVideoElement | null) => {
+    if (videoElement) {
+      participantVideoRefs.current.set(participantId, videoElement);
+    } else {
+      participantVideoRefs.current.delete(participantId);
+    }
+  }, []);
+
+  // Canvas capture animation loop
+  const drawToCanvas = useCallback(() => {
+    const canvas = captureCanvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) return;
+
+    // Clear canvas with background color
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Draw background image if set
+    if (backgroundImageRef.current) {
+      ctx.drawImage(backgroundImageRef.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    }
+
+    // Get layout positions for all participants
+    const onStage = Array.from(remoteParticipants.values()).filter(
+      (p) => p.role !== 'backstage' && p.id !== 'screen-share'
+    );
+    const participantCount = (isLocalUserOnStage ? 1 : 0) + onStage.length;
+
+    if (participantCount > 0 && !isSharingScreen) {
+      const layoutPositions = getLayoutPositions(selectedLayout, participantCount);
+      let participantIndex = 0;
+
+      // Draw local user video
+      if (isLocalUserOnStage && mainVideoRef.current && layoutPositions[participantIndex]) {
+        const pos = layoutPositions[participantIndex];
+        const x = (pos.x / 100) * CANVAS_WIDTH;
+        const y = (pos.y / 100) * CANVAS_HEIGHT;
+        const w = (pos.width / 100) * CANVAS_WIDTH;
+        const h = (pos.height / 100) * CANVAS_HEIGHT;
+
+        if (videoEnabled && mainVideoRef.current.readyState >= 2) {
+          // Draw video with aspect ratio preservation
+          const video = mainVideoRef.current;
+          const videoAspect = video.videoWidth / video.videoHeight;
+          const targetAspect = w / h;
+
+          let drawW = w, drawH = h, drawX = x, drawY = y;
+          if (videoAspect > targetAspect) {
+            drawH = w / videoAspect;
+            drawY = y + (h - drawH) / 2;
+          } else {
+            drawW = h * videoAspect;
+            drawX = x + (w - drawW) / 2;
+          }
+
+          // Apply mirror if needed
+          if (styleSettings.mirrorVideo) {
+            ctx.save();
+            ctx.translate(drawX + drawW, drawY);
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, 0, 0, drawW, drawH);
+            ctx.restore();
+          } else {
+            ctx.drawImage(video, drawX, drawY, drawW, drawH);
+          }
+        } else {
+          // Draw placeholder
+          ctx.fillStyle = '#1a1a1a';
+          ctx.fillRect(x, y, w, h);
+        }
+        participantIndex++;
+      }
+
+      // Draw remote participants
+      onStage.forEach((participant) => {
+        if (participantIndex >= layoutPositions.length) return;
+        const pos = layoutPositions[participantIndex];
+        const x = (pos.x / 100) * CANVAS_WIDTH;
+        const y = (pos.y / 100) * CANVAS_HEIGHT;
+        const w = (pos.width / 100) * CANVAS_WIDTH;
+        const h = (pos.height / 100) * CANVAS_HEIGHT;
+
+        const videoEl = participantVideoRefs.current.get(participant.id);
+        if (videoEl && participant.videoEnabled && videoEl.readyState >= 2) {
+          const videoAspect = videoEl.videoWidth / videoEl.videoHeight;
+          const targetAspect = w / h;
+
+          let drawW = w, drawH = h, drawX = x, drawY = y;
+          if (videoAspect > targetAspect) {
+            drawH = w / videoAspect;
+            drawY = y + (h - drawH) / 2;
+          } else {
+            drawW = h * videoAspect;
+            drawX = x + (w - drawW) / 2;
+          }
+
+          ctx.drawImage(videoEl, drawX, drawY, drawW, drawH);
+        } else {
+          ctx.fillStyle = '#1a1a1a';
+          ctx.fillRect(x, y, w, h);
+        }
+        participantIndex++;
+      });
+    }
+
+    // Draw screen share if active
+    if (isSharingScreen && screenShareVideoRef.current && screenShareVideoRef.current.readyState >= 2) {
+      // Screen share takes 75% of the width
+      const screenX = CANVAS_WIDTH * 0.25;
+      const screenW = CANVAS_WIDTH * 0.75;
+      ctx.drawImage(screenShareVideoRef.current, screenX, 0, screenW, CANVAS_HEIGHT);
+    }
+
+    // Draw logo if set (top left)
+    if (logoImageRef.current) {
+      const maxLogoSize = 150;
+      const logoW = Math.min(logoImageRef.current.width, maxLogoSize);
+      const logoH = (logoImageRef.current.height / logoImageRef.current.width) * logoW;
+      ctx.drawImage(logoImageRef.current, 20, 20, logoW, logoH);
+    }
+
+    // Draw visible banners
+    banners.filter(b => b.visible).forEach(banner => {
+      const padding = 20;
+      const boxW = 400;
+      const boxH = 80;
+      let bx = padding, by = padding;
+
+      // Position calculation
+      if (banner.position.includes('right')) bx = CANVAS_WIDTH - boxW - padding;
+      else if (banner.position.includes('center')) bx = (CANVAS_WIDTH - boxW) / 2;
+      if (banner.position.includes('bottom')) by = CANVAS_HEIGHT - boxH - padding;
+
+      ctx.fillStyle = banner.backgroundColor;
+      ctx.fillRect(bx, by, boxW, boxH);
+
+      ctx.fillStyle = banner.textColor;
+      ctx.font = 'bold 24px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText(banner.title, bx + 15, by + 35);
+      if (banner.subtitle) {
+        ctx.font = '16px Arial';
+        ctx.fillText(banner.subtitle, bx + 15, by + 60);
+      }
+    });
+
+    // Draw overlay if set (full screen)
+    if (overlayImageRef.current) {
+      ctx.drawImage(overlayImageRef.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    }
+
+    // Draw media clip overlay if active (on top of everything)
+    if (mediaClipElement) {
+      if (mediaClipElement instanceof HTMLVideoElement && mediaClipElement.readyState >= 2) {
+        ctx.drawImage(mediaClipElement, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      } else if (mediaClipElement instanceof HTMLImageElement) {
+        ctx.drawImage(mediaClipElement, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
+    }
+  }, [
+    backgroundColor, isLocalUserOnStage, videoEnabled, remoteParticipants,
+    selectedLayout, isSharingScreen, banners, styleSettings.mirrorVideo, mediaClipElement
+  ]);
+
+  // Start animation loop when canvas is available
+  useEffect(() => {
+    const canvas = captureCanvasRef.current;
+    if (!canvas) return;
+
+    // Register canvas with the output service
+    studioCanvasOutputService.registerCanvas(canvas);
+
+    let isRunning = true;
+
+    const animate = () => {
+      if (!isRunning) return;
+      drawToCanvas();
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    animate();
+
+    return () => {
+      isRunning = false;
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      studioCanvasOutputService.unregisterCanvas();
+    };
+  }, [drawToCanvas]);
+
   // Calculate total participants (local user if on stage + remote on-stage)
   const onStageParticipants = Array.from(remoteParticipants.values()).filter(
     (p) => p.role !== 'backstage' && p.id !== 'screen-share'
@@ -640,6 +914,7 @@ export function StudioCanvas({
 
   return (
     <div
+      ref={containerRef}
       className="relative"
       style={{
         width: '100%',
@@ -650,6 +925,14 @@ export function StudioCanvas({
         boxSizing: 'border-box',
       }}
     >
+      {/* Hidden canvas for capturing output stream - not visible to user */}
+      <canvas
+        ref={captureCanvasRef}
+        width={CANVAS_WIDTH}
+        height={CANVAS_HEIGHT}
+        style={{ display: 'none' }}
+      />
+
       {/* Main Video Preview with Dynamic Layout */}
       <div
         className={`absolute inset-0 overflow-hidden ${

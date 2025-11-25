@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { compositorService } from '../services/compositor.service';
+import { studioCanvasOutputService } from '../services/studioCanvasOutput.service';
 import { broadcastService } from '../services/broadcast.service';
 import { useMedia } from '../hooks/useMedia';
 import { useStudioStore } from '../store/studioStore';
@@ -279,7 +279,7 @@ export function Studio() {
   // Teleprompter
   const teleprompterState = useTeleprompter();
   const { showHotkeyReference } = useStudioHotkeys({ audioEnabled, videoEnabled, isLive, isRecording, isSharingScreen, toggleAudio, toggleVideo, handleGoLive, handleEndBroadcast, handleStartRecording, handleStopRecording, handleToggleScreenShare, handleLayoutChange, setShowChatOnStream });
-  const { handleCreateClip } = useClipRecording(clipRecordingEnabled, localStream, () => compositorService.getOutputStream());
+  const { handleCreateClip } = useClipRecording(clipRecordingEnabled, localStream, () => studioCanvasOutputService.getOutputStream());
 
   // Canvas Settings (persisted to localStorage)
   const canvasSettings = useCanvasSettings();

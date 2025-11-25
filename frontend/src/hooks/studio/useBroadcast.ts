@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { broadcastService } from '../../services/broadcast.service';
 import { socketService } from '../../services/socket.service';
 import { antMediaService } from '../../services/antmedia.service';
-import { compositorService } from '../../services/compositor.service';
+import { studioCanvasOutputService } from '../../services/studioCanvasOutput.service';
 import { recordingService } from '../../services/recording.service';
 import { useStudioStore } from '../../store/studioStore';
 import api from '../../services/api';
@@ -65,7 +65,7 @@ export function useBroadcast({
   // Recording functions defined first to avoid circular dependency
   const handleStartRecording = useCallback(async () => {
     try {
-      const compositeStream = compositorService.getOutputStream();
+      const compositeStream = studioCanvasOutputService.getOutputStream();
       if (!compositeStream) {
         toast.error('No composite stream available');
         return;
@@ -170,11 +170,11 @@ export function useBroadcast({
           })),
       ].filter((p) => p.stream);
 
-      await compositorService.initialize(participantStreams);
-      compositorService.setLayout({ type: currentLayout });
+      await studioCanvasOutputService.initialize(participantStreams);
+      studioCanvasOutputService.setLayout({ type: currentLayout });
 
       // Get composite stream
-      const compositeStream = compositorService.getOutputStream();
+      const compositeStream = studioCanvasOutputService.getOutputStream();
       if (!compositeStream) {
         throw new Error('Failed to get composite stream');
       }
@@ -224,7 +224,7 @@ export function useBroadcast({
       // The intro video (StreamLick.mp4) contains the countdown - no separate countdown overlay needed
       console.log('[useBroadcast] Starting intro video (includes countdown)...');
       try {
-        await compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
+        await studioCanvasOutputService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
         console.log('[useBroadcast] Intro video finished, transitioning to user stream');
       } catch (error) {
         console.error('Intro video failed to play:', error);
@@ -306,7 +306,7 @@ export function useBroadcast({
       socketService.emit('start-chat', { broadcastId });
 
       // Enable chat display on compositor
-      compositorService.setShowChat(showChatOnStream);
+      studioCanvasOutputService.setShowChat(showChatOnStream);
 
       // Automatically start recording
       try {
@@ -354,7 +354,7 @@ export function useBroadcast({
       socketService.emit('stop-chat', { broadcastId });
 
       // Stop compositor
-      compositorService.stop();
+      studioCanvasOutputService.stop();
 
       // Stop Ant Media streaming and clean up
       await antMediaService.close();
@@ -387,7 +387,7 @@ export function useBroadcast({
 
     const layoutType = layoutMap[layoutId] || 'grid';
     // Pass both type and layoutId for precise positioning
-    compositorService.setLayout({ type: layoutType, layoutId });
+    studioCanvasOutputService.setLayout({ type: layoutType, layoutId });
 
     // Get layout name for toast
     const layoutNames: { [key: number]: string } = {

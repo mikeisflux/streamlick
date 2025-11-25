@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { socketService } from '../../services/socket.service';
-import { compositorService } from '../../services/compositor.service';
+import { studioCanvasOutputService } from '../../services/studioCanvasOutput.service';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 
@@ -84,7 +84,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
 
       // Add to compositor if chat display is enabled
       if (showChatOnStream) {
-        compositorService.addChatMessage({
+        studioCanvasOutputService.addChatMessage({
           id: Date.now().toString(),
           platform: 'youtube', // Default platform, can be enhanced later
           author: message.author,

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useMedia } from '../useMedia';
-import { compositorService } from '../../services/compositor.service';
+import { studioCanvasOutputService } from '../../services/studioCanvasOutput.service';
 import { webrtcService } from '../../services/webrtc.service';
 import toast from 'react-hot-toast';
 
@@ -34,7 +34,7 @@ export function useScreenShare({ currentLayout, onLayoutChange }: UseScreenShare
       stopScreenShare();
       setIsSharingScreen(false);
       setScreenShareStream(null);
-      compositorService.removeParticipant('screen-share');
+      studioCanvasOutputService.removeParticipant('screen-share');
 
       // Close WebRTC producer if it exists
       if (producerIdRef.current) {
@@ -66,7 +66,7 @@ export function useScreenShare({ currentLayout, onLayoutChange }: UseScreenShare
         setIsSharingScreen(true);
         setScreenShareStream(stream);
 
-        await compositorService.addParticipant({
+        await studioCanvasOutputService.addParticipant({
           id: 'screen-share',
           name: 'Screen Share',
           stream,
