@@ -1,3 +1,14 @@
+/**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS COMPONENT DISPLAYS ON THE STUDIOCANVAS.
+ * ANY VISUAL CHANGE HERE MUST ALSO BE INTEGRATED INTO THE HIDDEN CANVAS
+ * IN StudioCanvas.tsx (drawToCanvas function) OR YOU WILL CREATE A BREAK IN THE CODE.
+ *
+ * The hidden canvas captures the broadcast output and must be a CARBON COPY of what
+ * is displayed in the React preview. If you modify caption styling, positioning,
+ * or appearance, you MUST update the corresponding drawing code in StudioCanvas.tsx.
+ */
+
 import { memo } from 'react';
 import { Caption } from '../../../services/caption.service';
 

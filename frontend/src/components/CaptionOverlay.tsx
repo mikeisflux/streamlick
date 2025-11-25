@@ -1,3 +1,14 @@
+/**
+ * ⚠️ NOTE ABOUT CANVAS SYNC ⚠️
+ * This component may display captions that appear on the stream.
+ * If this component is used on the StudioCanvas, any visual changes here
+ * MUST ALSO BE INTEGRATED INTO THE HIDDEN CANVAS in StudioCanvas.tsx
+ * (drawToCanvas function) OR YOU WILL CREATE A BREAK IN THE CODE.
+ *
+ * Check if this component is imported by StudioCanvas.tsx. If so, ensure
+ * the hidden canvas drawing code matches this component's appearance.
+ */
+
 import { useState, useEffect, useRef } from 'react';
 import { CaptionSegment } from '../services/captions.service';
 

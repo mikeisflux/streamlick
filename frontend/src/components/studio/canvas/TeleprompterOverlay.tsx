@@ -1,3 +1,15 @@
+/**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS COMPONENT DISPLAYS ON THE STUDIOCANVAS.
+ *
+ * NOTE: The teleprompter is intentionally NOT included in the hidden canvas broadcast
+ * output because it is meant only for the host to read, not for viewers.
+ *
+ * However, if this behavior changes and you want the teleprompter to appear in the
+ * broadcast, you MUST add corresponding drawing code to the hidden canvas in
+ * StudioCanvas.tsx (drawToCanvas function) OR YOU WILL CREATE A BREAK IN THE CODE.
+ */
+
 import { useEffect, useRef, memo } from 'react';
 
 interface TeleprompterOverlayProps {

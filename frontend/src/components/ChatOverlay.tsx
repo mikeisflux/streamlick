@@ -1,3 +1,15 @@
+/**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS COMPONENT DISPLAYS ON THE STUDIOCANVAS.
+ * ANY VISUAL CHANGE HERE MUST ALSO BE INTEGRATED INTO THE HIDDEN CANVAS
+ * IN StudioCanvas.tsx (drawToCanvas function) OR YOU WILL CREATE A BREAK IN THE CODE.
+ *
+ * The hidden canvas captures the broadcast output and must be a CARBON COPY of what
+ * is displayed in the React preview. If you modify chat overlay styling, message rendering,
+ * platform icons, colors, or appearance, you MUST update the corresponding drawing code
+ * in StudioCanvas.tsx.
+ */
+
 import { useState, useEffect, useRef } from 'react';
 
 export interface ChatMessage {

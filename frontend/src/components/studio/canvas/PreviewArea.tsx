@@ -1,3 +1,16 @@
+/**
+ * ⚠️ NOTE ABOUT CANVAS SYNC ⚠️
+ * This component is the PREVIEW/BACKSTAGE area that appears BELOW the main StudioCanvas.
+ * It is NOT part of the broadcast output - it is only visible to the producer.
+ *
+ * Therefore, this component does NOT need to be synced with the hidden canvas.
+ * However, the audio level visualization pattern used here WAS copied to ParticipantBox.tsx
+ * and StudioCanvas.tsx hidden canvas to maintain visual consistency for on-stage participants.
+ *
+ * If you modify the audio visualization here, consider whether the same changes should
+ * be applied to ParticipantBox.tsx and the hidden canvas in StudioCanvas.tsx.
+ */
+
 import { useRef, useEffect, useState, useCallback } from 'react';
 
 interface RemoteParticipant {
