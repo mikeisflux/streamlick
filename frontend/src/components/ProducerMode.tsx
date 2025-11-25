@@ -1,6 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { multiTrackRecordingService, RecordedTrack } from '../services/multitrack-recording.service';
+import { studioCanvasOutputService } from '../services/studioCanvasOutput.service';
 import toast from 'react-hot-toast';
+
+// Audio channel info from mixer
+interface AudioChannelInfo {
+  id: string;
+  isLocal: boolean;
+  volume: number;
+  level: number;
+  hasCompressor: boolean;
+  hasHighpass: boolean;
+  hasLowpass: boolean;
+}
 
 interface RemoteParticipant {
   id: string;
@@ -112,8 +124,15 @@ export function ProducerMode({
   }, [participants, broadcastId, remoteParticipants]);
 
   const [selectedLayout, setSelectedLayout] = useState(1);
-  const [mainAudioVolume, setMainAudioVolume] = useState(100);
+  const [broadcastVolume, setBroadcastVolume] = useState(100);
+  const [monitorVolume, setMonitorVolume] = useState(100);
   const [showOverlay, setShowOverlay] = useState(true);
+
+  // Per-participant audio state
+  const [participantVolumes, setParticipantVolumes] = useState<Map<string, number>>(new Map());
+  const [audioLevels, setAudioLevels] = useState<Map<string, number>>(new Map());
+  const [audioChannelInfo, setAudioChannelInfo] = useState<AudioChannelInfo[]>([]);
+  const [expandedAudioSettings, setExpandedAudioSettings] = useState<string | null>(null);
 
   // Multi-track recording state
   const [isMultiTrackRecording, setIsMultiTrackRecording] = useState(false);
@@ -279,6 +298,66 @@ export function ProducerMode({
     const secs = seconds % 60;
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
+
+  // Poll audio levels for visualization
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const levels = studioCanvasOutputService.getAllAudioLevels();
+      setAudioLevels(levels);
+
+      const channelInfo = studioCanvasOutputService.getAudioChannelInfo();
+      setAudioChannelInfo(channelInfo);
+    }, 100); // 10 FPS for smooth visualization
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Handle broadcast volume change
+  const handleBroadcastVolumeChange = useCallback((value: number) => {
+    setBroadcastVolume(value);
+    studioCanvasOutputService.setBroadcastVolume(value / 100);
+  }, []);
+
+  // Handle monitor volume change
+  const handleMonitorVolumeChange = useCallback((value: number) => {
+    setMonitorVolume(value);
+    studioCanvasOutputService.setMonitorVolume(value / 100);
+  }, []);
+
+  // Handle per-participant volume change
+  const handleParticipantVolumeChange = useCallback((participantId: string, value: number) => {
+    setParticipantVolumes(prev => {
+      const newMap = new Map(prev);
+      newMap.set(participantId, value);
+      return newMap;
+    });
+    studioCanvasOutputService.setParticipantVolume(participantId, value / 100);
+  }, []);
+
+  // Apply voice preset to participant
+  const applyVoicePreset = useCallback((participantId: string) => {
+    studioCanvasOutputService.applyVoicePreset(participantId);
+    toast.success(`Voice preset applied to ${participants.find(p => p.id === participantId)?.name || 'participant'}`);
+  }, [participants]);
+
+  // Apply music preset to participant
+  const applyMusicPreset = useCallback((participantId: string) => {
+    studioCanvasOutputService.applyMusicPreset(participantId);
+    toast.success(`Music preset applied to ${participants.find(p => p.id === participantId)?.name || 'participant'}`);
+  }, [participants]);
+
+  // Apply custom audio effects
+  const applyAudioEffects = useCallback((participantId: string, effects: {
+    gain?: number;
+    highpassFreq?: number;
+    lowpassFreq?: number;
+    compressor?: {
+      threshold?: number;
+      ratio?: number;
+    };
+  }) => {
+    studioCanvasOutputService.setParticipantAudioEffects(participantId, effects);
+  }, []);
 
   // Drag and resize handlers
   const handleDragStart = (e: React.MouseEvent) => {
@@ -574,21 +653,183 @@ export function ProducerMode({
 
               {/* Audio Control */}
               <div className="bg-gray-800 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-white mb-4">Audio Mixer</h3>
+                <h3 className="text-lg font-semibold text-white mb-4">🎚️ Audio Mixer</h3>
                 <div className="space-y-4">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-gray-300">Main Output</span>
-                      <span className="text-sm text-gray-400">{mainAudioVolume}%</span>
+                  {/* Master Controls */}
+                  <div className="border-b border-gray-700 pb-4">
+                    <div className="mb-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-gray-300">Broadcast Volume</span>
+                        <span className="text-sm text-gray-400">{broadcastVolume}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={broadcastVolume}
+                        onChange={(e) => handleBroadcastVolumeChange(parseInt(e.target.value))}
+                        className="w-full accent-purple-500"
+                      />
                     </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={mainAudioVolume}
-                      onChange={(e) => setMainAudioVolume(parseInt(e.target.value))}
-                      className="w-full"
-                    />
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-gray-300">Monitor Volume</span>
+                        <span className="text-sm text-gray-400">{monitorVolume}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={monitorVolume}
+                        onChange={(e) => handleMonitorVolumeChange(parseInt(e.target.value))}
+                        className="w-full accent-green-500"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">What you hear (excludes your mic)</p>
+                    </div>
+                  </div>
+
+                  {/* Per-Participant Audio */}
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-300 mb-3">Participant Channels</h4>
+                    <div className="space-y-3">
+                      {participants
+                        .filter((p) => p.role !== 'backstage')
+                        .map((participant) => {
+                          const level = audioLevels.get(participant.id) || audioLevels.get('local') || 0;
+                          const volume = participantVolumes.get(participant.id) ?? 100;
+                          const channelInfo = audioChannelInfo.find(c =>
+                            c.id === participant.id || (participant.id === '1' && c.isLocal)
+                          );
+
+                          return (
+                            <div
+                              key={participant.id}
+                              className="bg-gray-700 rounded-lg p-3"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-white">{participant.name}</span>
+                                  {channelInfo?.isLocal && (
+                                    <span className="text-xs bg-purple-600 px-1.5 py-0.5 rounded">You</span>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => setExpandedAudioSettings(
+                                    expandedAudioSettings === participant.id ? null : participant.id
+                                  )}
+                                  className="text-gray-400 hover:text-white text-xs"
+                                >
+                                  {expandedAudioSettings === participant.id ? '▼' : '▶'} Effects
+                                </button>
+                              </div>
+
+                              {/* Audio Level Meter */}
+                              <div className="h-2 bg-gray-600 rounded-full mb-2 overflow-hidden">
+                                <div
+                                  className="h-full transition-all duration-75"
+                                  style={{
+                                    width: `${level * 100}%`,
+                                    backgroundColor: level > 0.8 ? '#EF4444' : level > 0.5 ? '#F59E0B' : '#10B981',
+                                  }}
+                                />
+                              </div>
+
+                              {/* Volume Slider */}
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-400 w-8">{volume}%</span>
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="100"
+                                  value={volume}
+                                  onChange={(e) => handleParticipantVolumeChange(participant.id, parseInt(e.target.value))}
+                                  className="flex-1 accent-blue-500"
+                                />
+                              </div>
+
+                              {/* Expanded Effects Panel */}
+                              {expandedAudioSettings === participant.id && (
+                                <div className="mt-3 pt-3 border-t border-gray-600 space-y-3">
+                                  {/* Presets */}
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => applyVoicePreset(participant.id)}
+                                      className="flex-1 px-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
+                                    >
+                                      🎤 Voice Preset
+                                    </button>
+                                    <button
+                                      onClick={() => applyMusicPreset(participant.id)}
+                                      className="flex-1 px-2 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded transition-colors"
+                                    >
+                                      🎵 Music Preset
+                                    </button>
+                                  </div>
+
+                                  {/* Active Effects Indicators */}
+                                  <div className="flex gap-2 text-xs">
+                                    {channelInfo?.hasCompressor && (
+                                      <span className="bg-green-600 px-2 py-0.5 rounded">Compressor</span>
+                                    )}
+                                    {channelInfo?.hasHighpass && (
+                                      <span className="bg-orange-600 px-2 py-0.5 rounded">Highpass</span>
+                                    )}
+                                    {channelInfo?.hasLowpass && (
+                                      <span className="bg-cyan-600 px-2 py-0.5 rounded">Lowpass</span>
+                                    )}
+                                    {!channelInfo?.hasCompressor && !channelInfo?.hasHighpass && !channelInfo?.hasLowpass && (
+                                      <span className="text-gray-500">No effects active</span>
+                                    )}
+                                  </div>
+
+                                  {/* Custom Effects Controls */}
+                                  <div className="space-y-2">
+                                    <div>
+                                      <label className="text-xs text-gray-400">Highpass Filter (Hz)</label>
+                                      <input
+                                        type="range"
+                                        min="0"
+                                        max="500"
+                                        defaultValue="80"
+                                        onChange={(e) => applyAudioEffects(participant.id, {
+                                          highpassFreq: parseInt(e.target.value)
+                                        })}
+                                        className="w-full accent-orange-500"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-400">Lowpass Filter (kHz)</label>
+                                      <input
+                                        type="range"
+                                        min="5000"
+                                        max="20000"
+                                        defaultValue="12000"
+                                        onChange={(e) => applyAudioEffects(participant.id, {
+                                          lowpassFreq: parseInt(e.target.value)
+                                        })}
+                                        className="w-full accent-cyan-500"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-400">Compressor Threshold (dB)</label>
+                                      <input
+                                        type="range"
+                                        min="-60"
+                                        max="0"
+                                        defaultValue="-24"
+                                        onChange={(e) => applyAudioEffects(participant.id, {
+                                          compressor: { threshold: parseInt(e.target.value) }
+                                        })}
+                                        className="w-full accent-green-500"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
                   </div>
                 </div>
               </div>

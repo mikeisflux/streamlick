@@ -666,9 +666,124 @@ export function StudioCanvas({
         ctx.drawImage(mediaClipElement, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       }
     }
+
+    // Draw captions if enabled
+    if (captionsEnabled && currentCaption?.text) {
+      const captionY = CANVAS_HEIGHT - 120;
+      const captionPadding = 20;
+
+      // Measure text
+      ctx.font = 'bold 32px Arial';
+      const textMetrics = ctx.measureText(currentCaption.text);
+      const textWidth = Math.min(textMetrics.width, CANVAS_WIDTH - 100);
+      const boxWidth = textWidth + captionPadding * 2;
+      const boxX = (CANVAS_WIDTH - boxWidth) / 2;
+
+      // Draw caption background
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.beginPath();
+      ctx.roundRect(boxX, captionY, boxWidth, 60, 8);
+      ctx.fill();
+
+      // Draw caption text
+      ctx.fillStyle = currentCaption.isFinal ? '#FFFFFF' : '#E0E0E0';
+      ctx.textAlign = 'center';
+      ctx.fillText(currentCaption.text, CANVAS_WIDTH / 2, captionY + 40, CANVAS_WIDTH - 100);
+    }
+
+    // Draw chat overlay if enabled
+    if (showChatOnStream && chatMessages.length > 0) {
+      const chatX = CANVAS_WIDTH - 320;
+      const chatY = CANVAS_HEIGHT - 300;
+      const chatWidth = 300;
+      const chatHeight = 220;
+
+      // Draw chat background
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+      ctx.beginPath();
+      ctx.roundRect(chatX, chatY, chatWidth, chatHeight, 8);
+      ctx.fill();
+
+      // Draw chat header
+      ctx.fillStyle = 'rgba(50, 50, 50, 0.8)';
+      ctx.fillRect(chatX, chatY, chatWidth, 30);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 14px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText('Live Chat', chatX + 12, chatY + 20);
+
+      // Draw recent chat messages (last 5)
+      ctx.font = '14px Arial';
+      const recentMessages = chatMessages.slice(-5);
+      let messageY = chatY + 50;
+      recentMessages.forEach((msg) => {
+        // Author name
+        ctx.fillStyle = '#60A5FA';
+        ctx.fillText(msg.author + ':', chatX + 12, messageY);
+        // Message text (truncate if too long)
+        ctx.fillStyle = '#FFFFFF';
+        const maxMsgWidth = chatWidth - 24;
+        let msgText = msg.message;
+        if (ctx.measureText(msgText).width > maxMsgWidth) {
+          while (ctx.measureText(msgText + '...').width > maxMsgWidth && msgText.length > 0) {
+            msgText = msgText.slice(0, -1);
+          }
+          msgText += '...';
+        }
+        ctx.fillText(msgText, chatX + 12, messageY + 18);
+        messageY += 40;
+      });
+    }
+
+    // Draw displayed comment overlay if present
+    if (displayedComment) {
+      const commentY = CANVAS_HEIGHT - 200;
+      const commentWidth = 500;
+      const commentX = (CANVAS_WIDTH - commentWidth) / 2;
+
+      // Draw comment background
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.beginPath();
+      ctx.roundRect(commentX, commentY, commentWidth, 100, 12);
+      ctx.fill();
+
+      // Draw platform indicator
+      const platformColors: Record<string, string> = {
+        youtube: '#FF0000',
+        facebook: '#1877F2',
+        twitch: '#9146FF',
+        linkedin: '#0A66C2',
+        x: '#000000',
+        rumble: '#85C742',
+      };
+      ctx.fillStyle = platformColors[displayedComment.platform] || '#6B7280';
+      ctx.beginPath();
+      ctx.roundRect(commentX, commentY, 6, 100, [12, 0, 0, 12]);
+      ctx.fill();
+
+      // Draw author name
+      ctx.fillStyle = '#60A5FA';
+      ctx.font = 'bold 18px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText(displayedComment.authorName, commentX + 20, commentY + 30);
+
+      // Draw comment text
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '16px Arial';
+      let commentText = displayedComment.message;
+      const maxWidth = commentWidth - 40;
+      if (ctx.measureText(commentText).width > maxWidth) {
+        while (ctx.measureText(commentText + '...').width > maxWidth && commentText.length > 0) {
+          commentText = commentText.slice(0, -1);
+        }
+        commentText += '...';
+      }
+      ctx.fillText(commentText, commentX + 20, commentY + 60);
+    }
   }, [
     backgroundColor, isLocalUserOnStage, videoEnabled, remoteParticipants,
-    selectedLayout, isSharingScreen, banners, styleSettings.mirrorVideo, mediaClipElement
+    selectedLayout, isSharingScreen, banners, styleSettings.mirrorVideo, mediaClipElement,
+    captionsEnabled, currentCaption, showChatOnStream, chatMessages, displayedComment
   ]);
 
   // Start animation loop when canvas is available
