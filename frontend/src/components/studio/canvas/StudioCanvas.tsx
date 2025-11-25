@@ -5,6 +5,7 @@ import { TeleprompterOverlay } from './TeleprompterOverlay';
 import { CommentOverlay } from './CommentOverlay';
 import { Caption } from '../../../services/caption.service';
 import { mediaStorageService } from '../../../services/media-storage.service';
+import { compositorService } from '../../../services/compositor.service';
 
 interface Banner {
   id: string;
