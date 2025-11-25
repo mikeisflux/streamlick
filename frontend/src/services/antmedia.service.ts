@@ -1,3 +1,4 @@
+import { WebRTCAdaptor } from '@antmedia/webrtc_adaptor';
 import logger from '../utils/logger';
 
 const ANT_MEDIA_REST_URL = import.meta.env.VITE_ANT_MEDIA_REST_URL || 'https://media.streamlick.com:5443/StreamLick/rest/v2';
@@ -10,16 +11,11 @@ interface BroadcastInfo {
   name?: string;
 }
 
-interface RtmpEndpoint {
-  id?: string;
-  rtmpUrl: string;
-}
-
 type ConnectionCallback = (info: string, obj?: unknown) => void;
 type ErrorCallback = (error: string, message?: string) => void;
 
 class AntMediaService {
-  private webRTCAdaptor: any = null;
+  private webRTCAdaptor: WebRTCAdaptor | null = null;
   private streamId: string | null = null;
   private broadcastId: string | null = null;
   private localStream: MediaStream | null = null;
@@ -102,111 +98,53 @@ class AntMediaService {
     this.errorCallback = onError || null;
 
     return new Promise((resolve, reject) => {
-      // Dynamically load the WebRTCAdaptor from Ant Media
-      const script = document.createElement('script');
-      script.src = 'https://media.streamlick.com:5443/StreamLick/js/webrtc_adaptor.js';
-      script.async = true;
+      try {
+        this.webRTCAdaptor = new WebRTCAdaptor({
+          websocket_url: ANT_MEDIA_WEBSOCKET_URL,
+          mediaConstraints: {
+            video: true,
+            audio: true,
+          },
+          localStream: stream,
+          peerconnection_config: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun1.l.google.com:19302' },
+            ],
+          },
+          sdp_constraints: {
+            OfferToReceiveAudio: false,
+            OfferToReceiveVideo: false,
+          },
+          callback: (info: string, obj: unknown) => {
+            logger.info('Ant Media callback:', info, obj);
 
-      script.onload = () => {
-        try {
-          // @ts-ignore - WebRTCAdaptor is loaded dynamically
-          this.webRTCAdaptor = new WebRTCAdaptor({
-            websocket_url: ANT_MEDIA_WEBSOCKET_URL,
-            mediaConstraints: {
-              video: true,
-              audio: true,
-            },
-            localStream: stream,
-            peerconnection_config: {
-              iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-              ],
-            },
-            sdp_constraints: {
-              OfferToReceiveAudio: false,
-              OfferToReceiveVideo: false,
-            },
-            callback: (info: string, obj: unknown) => {
-              logger.info('Ant Media callback:', info, obj);
+            if (info === 'initialized') {
+              logger.info('WebRTCAdaptor initialized, starting publish');
+              this.webRTCAdaptor?.publish(streamId);
+            } else if (info === 'publish_started') {
+              logger.info('Publish started for stream:', streamId);
+              this.connectionCallback?.('publish_started', obj);
+              resolve();
+            } else if (info === 'publish_finished') {
+              logger.info('Publish finished for stream:', streamId);
+              this.connectionCallback?.('publish_finished', obj);
+            } else if (info === 'ice_connection_state_changed') {
+              logger.debug('ICE connection state:', obj);
+              this.connectionCallback?.(info, obj);
+            }
+          },
+          callbackError: (error: string, message: string) => {
+            logger.error('Ant Media error:', error, message);
+            this.errorCallback?.(error, message);
 
-              if (info === 'initialized') {
-                logger.info('WebRTCAdaptor initialized, starting publish');
-                this.webRTCAdaptor.publish(streamId);
-              } else if (info === 'publish_started') {
-                logger.info('Publish started for stream:', streamId);
-                this.connectionCallback?.('publish_started', obj);
-                resolve();
-              } else if (info === 'publish_finished') {
-                logger.info('Publish finished for stream:', streamId);
-                this.connectionCallback?.('publish_finished', obj);
-              } else if (info === 'ice_connection_state_changed') {
-                logger.debug('ICE connection state:', obj);
-                this.connectionCallback?.(info, obj);
-              }
-            },
-            callbackError: (error: string, message: string) => {
-              logger.error('Ant Media error:', error, message);
-              this.errorCallback?.(error, message);
-
-              if (error === 'no_stream_exist' || error === 'WebSocketNotConnected') {
-                reject(new Error(`Ant Media connection failed: ${error} - ${message}`));
-              }
-            },
-          });
-        } catch (error) {
-          reject(error);
-        }
-      };
-
-      script.onerror = () => {
-        reject(new Error('Failed to load WebRTCAdaptor script'));
-      };
-
-      // Check if script is already loaded
-      const existingScript = document.querySelector(`script[src="${script.src}"]`);
-      if (existingScript) {
-        // Script already loaded, create adaptor directly
-        try {
-          // @ts-ignore
-          this.webRTCAdaptor = new WebRTCAdaptor({
-            websocket_url: ANT_MEDIA_WEBSOCKET_URL,
-            mediaConstraints: { video: true, audio: true },
-            localStream: stream,
-            peerconnection_config: {
-              iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-              ],
-            },
-            sdp_constraints: {
-              OfferToReceiveAudio: false,
-              OfferToReceiveVideo: false,
-            },
-            callback: (info: string, obj: unknown) => {
-              logger.info('Ant Media callback:', info, obj);
-              if (info === 'initialized') {
-                this.webRTCAdaptor.publish(streamId);
-              } else if (info === 'publish_started') {
-                this.connectionCallback?.('publish_started', obj);
-                resolve();
-              } else if (info === 'publish_finished') {
-                this.connectionCallback?.('publish_finished', obj);
-              }
-            },
-            callbackError: (error: string, message: string) => {
-              logger.error('Ant Media error:', error, message);
-              this.errorCallback?.(error, message);
-              if (error === 'no_stream_exist' || error === 'WebSocketNotConnected') {
-                reject(new Error(`Ant Media connection failed: ${error} - ${message}`));
-              }
-            },
-          });
-        } catch (error) {
-          reject(error);
-        }
-      } else {
-        document.head.appendChild(script);
+            if (error === 'no_stream_exist' || error === 'WebSocketNotConnected') {
+              reject(new Error(`Ant Media connection failed: ${error} - ${message}`));
+            }
+          },
+        });
+      } catch (error) {
+        reject(error);
       }
     });
   }
