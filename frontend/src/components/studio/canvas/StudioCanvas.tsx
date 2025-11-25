@@ -1178,6 +1178,7 @@ export function StudioCanvas({
                     stream={localStream}
                     videoEnabled={videoEnabled}
                     audioEnabled={audioEnabled}
+                    showAudioLevel={true}
                     name="You"
                     positionNumber={1}
                     isHost={true}
@@ -1209,6 +1210,7 @@ export function StudioCanvas({
                       stream={participant.stream}
                       videoEnabled={participant.videoEnabled}
                       audioEnabled={participant.audioEnabled}
+                      showAudioLevel={true}
                       name={participant.name}
                       positionNumber={index + 2}
                       size="small"
@@ -1292,6 +1294,7 @@ export function StudioCanvas({
                         stream={localStream}
                         videoEnabled={videoEnabled}
                         audioEnabled={audioEnabled}
+                        showAudioLevel={true}
                         name="You"
                         positionNumber={1}
                         isHost={true}
@@ -1336,6 +1339,7 @@ export function StudioCanvas({
                           stream={participant.stream}
                           videoEnabled={participant.videoEnabled}
                           audioEnabled={participant.audioEnabled}
+                          showAudioLevel={true}
                           name={participant.name}
                           positionNumber={posIndex + 1}
                           isHost={participant.role === 'host'}

@@ -1,9 +1,10 @@
-import { RefObject, useState, useEffect, useRef } from 'react';
+import { RefObject, useState, useEffect, useRef, useCallback } from 'react';
 
 interface ParticipantBoxProps {
   stream: MediaStream | null;
   videoEnabled: boolean;
   audioEnabled?: boolean;
+  showAudioLevel?: boolean; // Enable audio level visualization
   name: string;
   title?: string;
   positionNumber?: number;
@@ -53,6 +54,7 @@ export function ParticipantBox({
   position,
   onPositionChange,
   onVideoRef,
+  showAudioLevel = false,
 }: ParticipantBoxProps) {
   const iconSize = size === 'small' ? 'w-6 h-6' : size === 'medium' ? 'w-10 h-10' : 'w-16 h-16';
   const textSize = size === 'small' ? 'text-xs' : 'text-sm';
@@ -78,6 +80,12 @@ export function ParticipantBox({
 
   // Avatar state
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
+
+  // Audio level monitoring state
+  const [audioLevel, setAudioLevel] = useState(0);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
   // Load selected avatar from localStorage
   useEffect(() => {
@@ -110,6 +118,68 @@ export function ParticipantBox({
       }
     };
   }, [onVideoRef]);
+
+  // Set up audio level monitoring when showAudioLevel is enabled
+  useEffect(() => {
+    if (!showAudioLevel || !stream) {
+      setAudioLevel(0);
+      return;
+    }
+
+    const audioTrack = stream.getAudioTracks()[0];
+    if (!audioTrack) {
+      return;
+    }
+
+    // Create audio context and analyser
+    const audioContext = new AudioContext();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.3;
+
+    // Resume audio context if needed
+    if (audioContext.state === 'suspended') {
+      audioContext.resume();
+    }
+
+    // Create audio stream source from the track
+    const monitorStream = new MediaStream([audioTrack]);
+    const source = audioContext.createMediaStreamSource(monitorStream);
+    source.connect(analyser);
+
+    audioContextRef.current = audioContext;
+    analyserRef.current = analyser;
+
+    // Animation loop to update audio level
+    const updateLevel = () => {
+      if (!analyserRef.current) return;
+
+      const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+      analyserRef.current.getByteFrequencyData(dataArray);
+
+      // Calculate average level
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+      }
+      const average = sum / dataArray.length;
+      const normalizedLevel = average / 255;
+
+      setAudioLevel(normalizedLevel);
+      animationFrameRef.current = requestAnimationFrame(updateLevel);
+    };
+
+    updateLevel();
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, [showAudioLevel, stream]);
 
   // Drag and resize state
   const [isDragging, setIsDragging] = useState(false);
@@ -223,16 +293,33 @@ export function ParticipantBox({
   };
 
   return (
-    <div
-      ref={boxRef}
-      className="relative bg-black rounded overflow-hidden h-full w-full group"
-      style={{
-        cursor: editMode ? (isDragging ? 'grabbing' : 'grab') : 'default',
-        outline: editMode ? '2px dashed #8B5CF6' : 'none',
-        outlineOffset: '2px',
-      }}
-      onMouseDown={editMode ? handleMouseDown : undefined}
-    >
+    <>
+      {/* CSS keyframes for audio pulse animation */}
+      {showAudioLevel && (
+        <style>{`
+          @keyframes audioPulse {
+            0%, 100% { transform: scale(1); opacity: 0.6; }
+            50% { transform: scale(1.1); opacity: 0.3; }
+          }
+        `}</style>
+      )}
+      <div
+        ref={boxRef}
+        className="relative bg-black rounded overflow-hidden h-full w-full group"
+        style={{
+          cursor: editMode ? (isDragging ? 'grabbing' : 'grab') : 'default',
+          outline: editMode ? '2px dashed #8B5CF6' : 'none',
+          outlineOffset: '2px',
+          // Add audio level border glow when speaking
+          border: showAudioLevel && audioLevel > 0.05
+            ? `3px solid rgba(59, 130, 246, ${0.5 + audioLevel})`
+            : undefined,
+          boxShadow: showAudioLevel && audioLevel > 0.05
+            ? `0 0 ${10 + audioLevel * 20}px rgba(59, 130, 246, ${audioLevel * 0.8})`
+            : undefined,
+        }}
+        onMouseDown={editMode ? handleMouseDown : undefined}
+      >
       {/* Hover Overlay with Remove from Stage Button */}
       {onRemoveFromStage && participantId && !isHost && (
         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20">
@@ -285,24 +372,62 @@ export function ParticipantBox({
 
       {/* Video or Camera Off Placeholder */}
       {stream && videoEnabled ? (
-        <video
-          ref={activeVideoRef}
-          autoPlay
-          playsInline
-          muted
-          className="w-full h-full object-cover"
-          style={{
-            willChange: 'auto',
-            border: cameraFrame !== 'none' && borderWidth > 0 ? `${borderWidth}px solid ${borderColor}` : 'none',
-            borderRadius: getBorderRadius(),
-            transform: mirrorVideo ? 'scaleX(-1)' : 'none',
-          }}
-        />
+        <div className="relative w-full h-full">
+          <video
+            ref={activeVideoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover"
+            style={{
+              willChange: 'auto',
+              border: cameraFrame !== 'none' && borderWidth > 0 ? `${borderWidth}px solid ${borderColor}` : 'none',
+              borderRadius: getBorderRadius(),
+              transform: mirrorVideo ? 'scaleX(-1)' : 'none',
+            }}
+          />
+          {/* Audio glow overlay when speaking with video on */}
+          {showAudioLevel && audioLevel > 0.05 && (
+            <div
+              className="absolute inset-0 pointer-events-none rounded"
+              style={{
+                boxShadow: `inset 0 0 ${10 + audioLevel * 15}px rgba(59, 130, 246, ${audioLevel * 0.6})`,
+              }}
+            />
+          )}
+        </div>
       ) : (
-        <div className="w-full h-full flex items-center justify-center bg-gray-900">
+        <div className="w-full h-full flex items-center justify-center bg-gray-900 relative" style={{ overflow: 'visible' }}>
+          {/* Audio visualization rings - extend beyond the tile when speaking */}
+          {showAudioLevel && audioLevel > 0.05 && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ overflow: 'visible' }}>
+              {[0, 1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="absolute rounded-full border-2 border-blue-400"
+                  style={{
+                    // Start at 80px, grow with audio level
+                    // Each ring adds 25px, audio adds up to 60px more
+                    width: `${80 + i * 25 + audioLevel * 60}px`,
+                    height: `${80 + i * 25 + audioLevel * 60}px`,
+                    opacity: Math.max(0.2, (1 - i * 0.25) * (audioLevel * 2)),
+                    animation: `audioPulse ${0.4 + i * 0.15}s ease-in-out infinite`,
+                    borderWidth: `${3 - i * 0.5}px`,
+                  }}
+                />
+              ))}
+            </div>
+          )}
           {selectedAvatar ? (
-            <div className="w-full h-full flex items-center justify-center p-8">
-              <div className="w-1/4 aspect-square rounded-full overflow-hidden">
+            <div className="w-full h-full flex items-center justify-center p-8 z-10">
+              <div
+                className="w-1/4 aspect-square rounded-full overflow-hidden"
+                style={{
+                  boxShadow: showAudioLevel && audioLevel > 0.05
+                    ? `0 0 ${20 + audioLevel * 40}px rgba(59, 130, 246, ${0.5 + audioLevel})`
+                    : 'none',
+                }}
+              >
                 <img
                   src={selectedAvatar}
                   alt={name}
@@ -311,7 +436,7 @@ export function ParticipantBox({
               </div>
             </div>
           ) : (
-            <div className="text-center">
+            <div className="text-center z-10">
               <svg
                 className={`${iconSize} text-gray-600 mx-auto mb-2`}
                 fill="none"
@@ -408,5 +533,6 @@ export function ParticipantBox({
         </>
       )}
     </div>
+    </>
   );
 }
