@@ -74,6 +74,11 @@ class CompositorService {
   private backgroundImage: HTMLImageElement | null = null;
   private overlayImages: Map<string, HTMLImageElement> = new Map();
 
+  // Audio analyzers for voice visualization
+  private audioAnalysers: Map<string, AnalyserNode> = new Map();
+  private audioLevels: Map<string, number> = new Map(); // 0-1 normalized audio level
+  private audioContexts: Map<string, AudioContext> = new Map(); // Track contexts for cleanup
+
   // Canvas dimensions - configurable via environment or defaults to 4K UHD (3840x2160)
   private readonly WIDTH = parseInt(import.meta.env.VITE_CANVAS_WIDTH || '3840');
   private readonly HEIGHT = parseInt(import.meta.env.VITE_CANVAS_HEIGHT || '2160');
@@ -115,18 +120,74 @@ class CompositorService {
     for (const participant of participants) {
       await this.addParticipant(participant);
 
-      // Add participant audio to mixer
-      if (participant.audioEnabled && participant.stream) {
+      // Add participant audio to mixer and create audio analyser for visualization
+      if (participant.stream) {
         const audioTrack = participant.stream.getAudioTracks()[0];
         if (audioTrack) {
           const audioStream = new MediaStream([audioTrack]);
-          audioMixerService.addStream(participant.id, audioStream);
+          if (participant.audioEnabled) {
+            audioMixerService.addStream(participant.id, audioStream);
+          }
+          // Always create analyser for voice visualization (even if muted in mix)
+          this.createAudioAnalyser(participant.id, audioStream);
         }
       }
     }
 
     // Start compositing
     this.start();
+  }
+
+  /**
+   * Create an audio analyser for voice visualization (pulsating rings)
+   */
+  private createAudioAnalyser(participantId: string, audioStream: MediaStream): void {
+    try {
+      // Create a separate audio context for analysis (not the mixer context)
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(audioStream);
+      const analyser = audioContext.createAnalyser();
+
+      // Configure analyser for speech detection
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+
+      // Connect source to analyser (don't connect to destination - just analyze)
+      source.connect(analyser);
+
+      // Store analyser and context
+      this.audioAnalysers.set(participantId, analyser);
+      this.audioContexts.set(participantId, audioContext);
+      this.audioLevels.set(participantId, 0);
+
+      logger.info(`Audio analyser created for participant ${participantId}`);
+    } catch (error) {
+      logger.error(`Failed to create audio analyser for ${participantId}:`, error);
+    }
+  }
+
+  /**
+   * Update audio levels for all participants (called every frame)
+   */
+  private updateAudioLevels(): void {
+    this.audioAnalysers.forEach((analyser, participantId) => {
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      analyser.getByteFrequencyData(dataArray);
+
+      // Calculate average volume
+      let sum = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        sum += dataArray[i];
+      }
+      const average = sum / bufferLength;
+
+      // Normalize to 0-1 range (0-255 → 0-1)
+      const normalizedLevel = average / 255;
+
+      // Store level for drawing
+      this.audioLevels.set(participantId, normalizedLevel);
+    });
   }
 
   /**
@@ -194,6 +255,15 @@ class CompositorService {
       video.srcObject = null;
       this.videoElements.delete(participantId);
     }
+
+    // Clean up audio analyser
+    const audioContext = this.audioContexts.get(participantId);
+    if (audioContext && audioContext.state !== 'closed') {
+      audioContext.close().catch(err => logger.error('Failed to close audio context:', err));
+    }
+    this.audioContexts.delete(participantId);
+    this.audioAnalysers.delete(participantId);
+    this.audioLevels.delete(participantId);
 
     this.participants.delete(participantId);
   }
@@ -618,6 +688,9 @@ class CompositorService {
         this.drawBackground();
       }
 
+      // Update audio levels for voice visualization
+      this.updateAudioLevels();
+
       // Draw participants based on layout
       this.drawParticipants();
 
@@ -743,10 +816,10 @@ class CompositorService {
     const gap = 1; // 1% gap between elements
 
     switch (layoutId) {
-      case 1: // Solo - One person fills entire screen (centered, 70% size)
-        positions.push({ x: 15, y: 10, width: 70, height: 80 });
+      case 1: // Solo - One person centered (35% width, 40% height - 50% smaller than before)
+        positions.push({ x: 32.5, y: 30, width: 35, height: 40 });
         for (let i = 1; i < participantCount; i++) {
-          const thumbWidth = 15;
+          const thumbWidth = 12;
           const thumbX = 5 + (i - 1) * (thumbWidth + gap);
           positions.push({ x: thumbX, y: 85, width: thumbWidth, height: 12 });
         }
@@ -1068,9 +1141,37 @@ class CompositorService {
 
       this.ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
     } else {
-      // Video disabled - show placeholder
+      // Video disabled - show placeholder with audio visualization
       this.ctx.fillStyle = '#333333';
       this.ctx.fillRect(x, y, width, height);
+
+      // Get audio level for pulsating animation
+      const audioLevel = this.audioLevels.get(participantId) || 0;
+      const isSpeaking = audioLevel > 0.05; // Threshold for detecting speech
+
+      // Draw pulsating rings when speaking
+      if (isSpeaking && participant.audioEnabled) {
+        const centerX = x + width / 2;
+        const centerY = y + height / 2;
+        const baseRadius = Math.min(width, height) * 0.25;
+
+        // Create pulsating effect using time-based animation
+        const time = Date.now() / 1000;
+
+        // Draw 3 concentric rings that pulse with audio
+        for (let i = 0; i < 3; i++) {
+          const ringDelay = i * 0.3; // Stagger the rings
+          const ringPulse = Math.sin(time * 4 - ringDelay) * 0.5 + 0.5;
+          const radius = baseRadius + (i * 20) + (ringPulse * audioLevel * 50);
+          const alpha = (1 - i * 0.3) * audioLevel * 0.8;
+
+          this.ctx.strokeStyle = `rgba(66, 153, 225, ${alpha})`; // Blue rings
+          this.ctx.lineWidth = 4 + audioLevel * 8;
+          this.ctx.beginPath();
+          this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+          this.ctx.stroke();
+        }
+      }
 
       // Draw camera off icon
       this.ctx.fillStyle = '#666666';
@@ -1080,9 +1181,19 @@ class CompositorService {
       this.ctx.fillText('📵', x + width / 2, y + height / 2);
     }
 
-    // Draw border
-    this.ctx.strokeStyle = '#444444';
-    this.ctx.lineWidth = 2;
+    // Draw border - audio-reactive when speaking
+    const audioLevel = this.audioLevels.get(participantId) || 0;
+    const isSpeaking = audioLevel > 0.05 && participant.audioEnabled;
+
+    if (isSpeaking) {
+      // Glowing border when speaking
+      const glowIntensity = Math.min(audioLevel * 2, 1);
+      this.ctx.strokeStyle = `rgba(66, 153, 225, ${0.5 + glowIntensity * 0.5})`; // Blue glow
+      this.ctx.lineWidth = 4 + audioLevel * 8;
+    } else {
+      this.ctx.strokeStyle = '#444444';
+      this.ctx.lineWidth = 2;
+    }
     this.ctx.strokeRect(x, y, width, height);
   }
 
