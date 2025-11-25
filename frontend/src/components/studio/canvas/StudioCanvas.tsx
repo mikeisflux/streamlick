@@ -4,6 +4,7 @@ import { ParticipantBox } from './ParticipantBox';
 import { TeleprompterOverlay } from './TeleprompterOverlay';
 import { CommentOverlay } from './CommentOverlay';
 import { Caption } from '../../../services/caption.service';
+import { mediaStorageService } from '../../../services/media-storage.service';
 
 interface Banner {
   id: string;
@@ -215,11 +216,30 @@ export function StudioCanvas({
     };
   }, []);
 
-  // Load stream background
+  // Load stream background - check IndexedDB if stored there
   useEffect(() => {
-    const loadBackground = () => {
+    const loadBackground = async () => {
+      // First check if background is stored in IndexedDB
+      const backgroundAssetId = localStorage.getItem('streamBackgroundAssetId');
+      if (backgroundAssetId) {
+        try {
+          const mediaData = await mediaStorageService.getMedia(backgroundAssetId);
+          if (mediaData) {
+            const objectURL = URL.createObjectURL(mediaData.blob);
+            setStreamBackground(objectURL);
+            console.log('[StudioCanvas] Loaded background from IndexedDB');
+            return;
+          }
+        } catch (error) {
+          console.error('[StudioCanvas] Failed to load background from IndexedDB:', error);
+        }
+      }
+
+      // Fallback to localStorage URL
       const bg = localStorage.getItem('streamBackground');
-      setStreamBackground(bg);
+      if (bg) {
+        setStreamBackground(bg);
+      }
     };
 
     loadBackground();
@@ -307,14 +327,46 @@ export function StudioCanvas({
   }, [customLayoutPositions, editMode]);
 
   useEffect(() => {
-    const loadLogo = () => {
+    const loadLogo = async () => {
+      // First check if logo is stored in IndexedDB
+      const logoAssetId = localStorage.getItem('streamLogoAssetId');
+      if (logoAssetId) {
+        try {
+          const mediaData = await mediaStorageService.getMedia(logoAssetId);
+          if (mediaData) {
+            const objectURL = URL.createObjectURL(mediaData.blob);
+            setStreamLogo(objectURL);
+            console.log('[StudioCanvas] Loaded logo from IndexedDB');
+            return;
+          }
+        } catch (error) {
+          console.error('[StudioCanvas] Failed to load logo from IndexedDB:', error);
+        }
+      }
+      // Fallback to localStorage URL
       const logo = localStorage.getItem('streamLogo');
-      setStreamLogo(logo);
+      if (logo) setStreamLogo(logo);
     };
 
-    const loadOverlay = () => {
+    const loadOverlay = async () => {
+      // First check if overlay is stored in IndexedDB
+      const overlayAssetId = localStorage.getItem('streamOverlayAssetId');
+      if (overlayAssetId) {
+        try {
+          const mediaData = await mediaStorageService.getMedia(overlayAssetId);
+          if (mediaData) {
+            const objectURL = URL.createObjectURL(mediaData.blob);
+            setStreamOverlay(objectURL);
+            console.log('[StudioCanvas] Loaded overlay from IndexedDB');
+            return;
+          }
+        } catch (error) {
+          console.error('[StudioCanvas] Failed to load overlay from IndexedDB:', error);
+        }
+      }
+      // Fallback to localStorage URL
       const overlay = localStorage.getItem('streamOverlay');
-      setStreamOverlay(overlay);
+      if (overlay) setStreamOverlay(overlay);
     };
 
     const loadVideoClip = () => {
