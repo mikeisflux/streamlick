@@ -204,6 +204,19 @@ export function PreviewArea({
                 </div>
               )}
 
+              {/* Pencil edit icon - top left */}
+              {onRenameParticipant && editingParticipant !== participant.id && (
+                <button
+                  onClick={(e) => handleStartEdit(participant.id, participant.name, e)}
+                  className="absolute top-1 left-1 w-5 h-5 bg-black/70 hover:bg-black/90 rounded flex items-center justify-center z-20"
+                  title="Edit name"
+                >
+                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+              )}
+
               {/* Hover indicator */}
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                 <span className="text-white text-xs font-medium px-2 py-1 bg-black/60 rounded">
@@ -211,8 +224,8 @@ export function PreviewArea({
                 </span>
               </div>
 
-              {/* Name bar with edit button */}
-              <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 flex items-center justify-between z-10">
+              {/* Name bar */}
+              <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 z-10">
                 {editingParticipant === participant.id ? (
                   <div className="flex items-center gap-1 w-full" onClick={(e) => e.stopPropagation()}>
                     <input
@@ -246,20 +259,7 @@ export function PreviewArea({
                     </button>
                   </div>
                 ) : (
-                  <>
-                    <span className="text-white text-xs font-medium truncate flex-1">{participant.name}</span>
-                    {onRenameParticipant && (
-                      <button
-                        onClick={(e) => handleStartEdit(participant.id, participant.name, e)}
-                        className="text-gray-400 hover:text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Edit name"
-                      >
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                      </button>
-                    )}
-                  </>
+                  <span className="text-white text-xs font-medium truncate">{participant.name}</span>
                 )}
               </div>
             </div>
