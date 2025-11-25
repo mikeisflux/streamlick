@@ -52,7 +52,7 @@ class AntMediaService {
     const requestUrl = `${ANT_MEDIA_REST_URL}/broadcasts/${streamId}/rtmp-endpoint`;
     const requestBody = { rtmpUrl };
 
-    logger.info('[AntMedia] Adding RTMP endpoint:', {
+    console.log('[AntMedia] Adding RTMP endpoint:', {
       requestUrl,
       streamId,
       destinationId,
@@ -67,7 +67,7 @@ class AntMediaService {
     });
 
     const responseText = await response.text();
-    logger.info('[AntMedia] RTMP endpoint response:', {
+    console.log('[AntMedia] RTMP endpoint response:', {
       status: response.status,
       statusText: response.statusText,
       ok: response.ok,
@@ -75,7 +75,7 @@ class AntMediaService {
     });
 
     if (!response.ok) {
-      logger.error('[AntMedia] Failed to add RTMP endpoint:', responseText);
+      console.error('[AntMedia] Failed to add RTMP endpoint:', responseText);
       throw new Error(`Failed to add RTMP endpoint: ${responseText}`);
     }
 
@@ -83,13 +83,13 @@ class AntMediaService {
     try {
       result = JSON.parse(responseText);
     } catch {
-      logger.warn('[AntMedia] Response is not JSON, using destinationId as endpointId');
+      console.warn('[AntMedia] Response is not JSON, using destinationId as endpointId');
       result = {};
     }
 
     const endpointId = result.dataId || result.id || destinationId;
     this.rtmpEndpoints.set(destinationId, endpointId);
-    logger.info('[AntMedia] RTMP endpoint added successfully:', {
+    console.log('[AntMedia] RTMP endpoint added successfully:', {
       destinationId,
       endpointId,
       resultKeys: Object.keys(result),
@@ -131,26 +131,27 @@ class AntMediaService {
     const videoTracks = stream.getVideoTracks();
     const audioTracks = stream.getAudioTracks();
 
-    logger.info('[AntMedia] Starting publish with stream:', {
+    console.log('[AntMedia] Starting publish with stream:', {
       streamId,
       videoTracks: videoTracks.length,
       audioTracks: audioTracks.length,
       videoTrackEnabled: videoTracks[0]?.enabled,
       videoTrackReadyState: videoTracks[0]?.readyState,
+      videoTrackSettings: videoTracks[0]?.getSettings(),
       audioTrackEnabled: audioTracks[0]?.enabled,
       audioTrackReadyState: audioTracks[0]?.readyState,
     });
 
     if (videoTracks.length === 0) {
-      logger.error('[AntMedia] No video tracks in stream!');
+      console.error('[AntMedia] No video tracks in stream!');
     }
     if (audioTracks.length === 0) {
-      logger.warn('[AntMedia] No audio tracks in stream');
+      console.warn('[AntMedia] No audio tracks in stream');
     }
 
     return new Promise((resolve, reject) => {
       try {
-        logger.info('[AntMedia] Creating WebRTCAdaptor with WebSocket URL:', ANT_MEDIA_WEBSOCKET_URL);
+        console.log('[AntMedia] Creating WebRTCAdaptor with WebSocket URL:', ANT_MEDIA_WEBSOCKET_URL);
 
         this.webRTCAdaptor = new WebRTCAdaptor({
           websocket_url: ANT_MEDIA_WEBSOCKET_URL,
