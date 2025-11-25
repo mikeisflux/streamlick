@@ -131,16 +131,29 @@ class AntMediaService {
     const videoTracks = stream.getVideoTracks();
     const audioTracks = stream.getAudioTracks();
 
+    const videoSettings = videoTracks[0]?.getSettings();
     console.log('[AntMedia] Starting publish with stream:', {
       streamId,
       videoTracks: videoTracks.length,
       audioTracks: audioTracks.length,
       videoTrackEnabled: videoTracks[0]?.enabled,
       videoTrackReadyState: videoTracks[0]?.readyState,
-      videoTrackSettings: videoTracks[0]?.getSettings(),
+      videoTrackLabel: videoTracks[0]?.label,
+      videoWidth: videoSettings?.width,
+      videoHeight: videoSettings?.height,
+      videoFrameRate: videoSettings?.frameRate,
+      isCanvasStream: videoTracks[0]?.label?.includes('canvas') || videoSettings?.width === 3840,
       audioTrackEnabled: audioTracks[0]?.enabled,
       audioTrackReadyState: audioTracks[0]?.readyState,
     });
+
+    // CRITICAL: Verify this is the canvas stream, not camera
+    if (videoSettings?.width !== 3840 && videoSettings?.width !== 1920) {
+      console.error('[AntMedia] WARNING: Video dimensions suggest this may NOT be the canvas stream!', {
+        expected: '3840x2160 or 1920x1080',
+        actual: `${videoSettings?.width}x${videoSettings?.height}`,
+      });
+    }
 
     if (videoTracks.length === 0) {
       console.error('[AntMedia] No video tracks in stream!');
@@ -159,6 +172,7 @@ class AntMediaService {
           websocket_url: ANT_MEDIA_WEBSOCKET_URL,
           mediaConstraints: false, // Use our localStream, don't call getUserMedia
           localStream: stream,
+          localStreamId: streamId, // Associate stream with the stream ID
           peerconnection_config: {
             iceServers: [
               { urls: 'stun:stun.l.google.com:19302' },
@@ -174,9 +188,90 @@ class AntMediaService {
 
             if (info === 'initialized') {
               logger.info('[AntMedia] WebRTCAdaptor initialized, starting publish for:', streamId);
+
+              // CRITICAL: Force our canvas stream onto the adaptor before publishing
+              // The WebRTCAdaptor may ignore the localStream constructor param
+              try {
+                const adaptor = this.webRTCAdaptor as any;
+
+                // Method 1: Set localStream directly on adaptor
+                if (adaptor.localStream !== stream) {
+                  console.log('[AntMedia] FORCING localStream on adaptor - was different!');
+                  adaptor.localStream = stream;
+                }
+
+                // Method 2: Store in localStreams map if available
+                if (adaptor.localStreams) {
+                  adaptor.localStreams[streamId] = stream;
+                  console.log('[AntMedia] Set stream in localStreams map');
+                }
+
+                // Method 3: Use updateLocalStream if available
+                if (typeof adaptor.updateLocalStream === 'function') {
+                  console.log('[AntMedia] Using updateLocalStream()');
+                  adaptor.updateLocalStream(stream, streamId);
+                }
+
+                console.log('[AntMedia] Stream setup complete, now publishing');
+              } catch (err) {
+                console.error('[AntMedia] Error setting stream:', err);
+              }
+
               this.webRTCAdaptor?.publish(streamId);
             } else if (info === 'publish_started') {
               logger.info('[AntMedia] Publish STARTED successfully for stream:', streamId);
+
+              // CRITICAL: After publish started, verify and replace tracks on peer connection
+              try {
+                const adaptor = this.webRTCAdaptor as any;
+                const pc = adaptor.remotePeerConnection?.[streamId] || adaptor.peerConnection;
+
+                if (pc) {
+                  console.log('[AntMedia] Peer connection found, checking senders...');
+                  const senders = pc.getSenders();
+
+                  senders.forEach((sender: RTCRtpSender, index: number) => {
+                    const currentTrack = sender.track;
+                    console.log(`[AntMedia] Sender ${index}:`, {
+                      kind: currentTrack?.kind,
+                      id: currentTrack?.id,
+                      label: currentTrack?.label,
+                      enabled: currentTrack?.enabled,
+                    });
+
+                    // Replace video track with our canvas track
+                    if (sender.track?.kind === 'video') {
+                      const canvasVideoTrack = stream.getVideoTracks()[0];
+                      if (canvasVideoTrack && sender.track.id !== canvasVideoTrack.id) {
+                        console.log('[AntMedia] REPLACING video track with canvas track!');
+                        sender.replaceTrack(canvasVideoTrack).then(() => {
+                          console.log('[AntMedia] Video track replaced successfully!');
+                        }).catch((err: Error) => {
+                          console.error('[AntMedia] Failed to replace video track:', err);
+                        });
+                      }
+                    }
+
+                    // Replace audio track with our mixed audio track
+                    if (sender.track?.kind === 'audio') {
+                      const mixedAudioTrack = stream.getAudioTracks()[0];
+                      if (mixedAudioTrack && sender.track.id !== mixedAudioTrack.id) {
+                        console.log('[AntMedia] REPLACING audio track with mixed audio!');
+                        sender.replaceTrack(mixedAudioTrack).then(() => {
+                          console.log('[AntMedia] Audio track replaced successfully!');
+                        }).catch((err: Error) => {
+                          console.error('[AntMedia] Failed to replace audio track:', err);
+                        });
+                      }
+                    }
+                  });
+                } else {
+                  console.warn('[AntMedia] No peer connection found to verify tracks');
+                }
+              } catch (err) {
+                console.error('[AntMedia] Error verifying/replacing tracks:', err);
+              }
+
               this.connectionCallback?.('publish_started', obj);
               resolve();
             } else if (info === 'publish_finished') {
