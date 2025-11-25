@@ -227,6 +227,8 @@ export function StudioCanvas({
           if (mediaData) {
             const objectURL = URL.createObjectURL(mediaData.blob);
             setStreamBackground(objectURL);
+            // Cache the object URL in localStorage for instant loading on next page load
+            localStorage.setItem('streamBackground', objectURL);
             console.log('[StudioCanvas] Loaded background from IndexedDB');
             return;
           }
@@ -336,6 +338,8 @@ export function StudioCanvas({
           if (mediaData) {
             const objectURL = URL.createObjectURL(mediaData.blob);
             setStreamLogo(objectURL);
+            // Cache the object URL in localStorage for instant loading on next page load
+            localStorage.setItem('streamLogo', objectURL);
             console.log('[StudioCanvas] Loaded logo from IndexedDB');
             return;
           }
@@ -357,6 +361,8 @@ export function StudioCanvas({
           if (mediaData) {
             const objectURL = URL.createObjectURL(mediaData.blob);
             setStreamOverlay(objectURL);
+            // Cache the object URL in localStorage for instant loading on next page load
+            localStorage.setItem('streamOverlay', objectURL);
             console.log('[StudioCanvas] Loaded overlay from IndexedDB');
             return;
           }
