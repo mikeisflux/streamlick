@@ -11,6 +11,7 @@ interface RemoteParticipant {
 
 interface PreviewAreaProps {
   localStream: MediaStream | null;
+  audioStream?: MediaStream | null; // Separate audio stream for monitoring (raw mic input)
   videoEnabled: boolean;
   audioEnabled: boolean;
   isLocalUserOnStage: boolean;
@@ -24,6 +25,7 @@ interface PreviewAreaProps {
 
 export function PreviewArea({
   localStream,
+  audioStream,
   videoEnabled,
   audioEnabled,
   isLocalUserOnStage,
@@ -54,16 +56,24 @@ export function PreviewArea({
     }
   }, []);
 
-  // Set up audio monitoring for local stream
+  // Set up audio monitoring - prefer audioStream prop, fall back to localStream
   useEffect(() => {
-    if (!localStream) {
+    // Use audioStream if provided (raw mic input), otherwise try localStream
+    const streamToMonitor = audioStream || localStream;
+
+    if (!streamToMonitor) {
+      console.log('[PreviewArea] No stream available for audio monitoring');
       setLocalAudioLevel(0);
       return;
     }
 
-    const audioTrack = localStream.getAudioTracks()[0];
+    const audioTrack = streamToMonitor.getAudioTracks()[0];
     if (!audioTrack) {
-      console.log('[PreviewArea] No audio track in local stream');
+      console.log('[PreviewArea] No audio track in stream, tracks:', {
+        audioTracks: streamToMonitor.getAudioTracks().length,
+        videoTracks: streamToMonitor.getVideoTracks().length,
+        usingAudioStream: !!audioStream,
+      });
       return;
     }
 
@@ -71,6 +81,8 @@ export function PreviewArea({
       trackId: audioTrack.id,
       trackLabel: audioTrack.label,
       trackEnabled: audioTrack.enabled,
+      trackMuted: audioTrack.muted,
+      usingAudioStream: !!audioStream,
     });
 
     // Create audio context and analyser
@@ -81,16 +93,20 @@ export function PreviewArea({
 
     // Resume audio context if needed
     if (audioContext.state === 'suspended') {
-      audioContext.resume();
+      audioContext.resume().then(() => {
+        console.log('[PreviewArea] AudioContext resumed');
+      });
     }
 
-    // Create audio stream source
-    const audioStream = new MediaStream([audioTrack]);
-    const source = audioContext.createMediaStreamSource(audioStream);
+    // Create audio stream source from the track
+    const monitorStream = new MediaStream([audioTrack]);
+    const source = audioContext.createMediaStreamSource(monitorStream);
     source.connect(analyser);
 
     audioContextRef.current = audioContext;
     analyserRef.current = analyser;
+
+    console.log('[PreviewArea] Audio monitoring started');
 
     // Animation loop to update audio level
     const updateLevel = () => {
@@ -114,6 +130,7 @@ export function PreviewArea({
     updateLevel();
 
     return () => {
+      console.log('[PreviewArea] Cleaning up audio monitoring');
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
@@ -121,7 +138,7 @@ export function PreviewArea({
         audioContextRef.current.close();
       }
     };
-  }, [localStream]);
+  }, [audioStream, localStream]);
 
   // Update local video
   useEffect(() => {
@@ -182,10 +199,11 @@ export function PreviewArea({
 
       <div className="flex items-center gap-3 pb-2">
         {/* Your Preview */}
-        <div className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
+        <div className="flex-shrink-0" style={{ width: '160px', height: '90px', overflow: 'visible' }}>
           <div
-            className={`relative bg-black rounded overflow-hidden h-full group cursor-pointer transition-all duration-150`}
+            className={`relative bg-black rounded h-full group cursor-pointer transition-all duration-150`}
             style={{
+              overflow: 'visible',
               border: localAudioLevel > 0.05
                 ? `3px solid rgba(59, 130, 246, ${0.5 + localAudioLevel})`
                 : isLocalUserOnStage ? '2px solid #3b82f6' : '2px solid #eab308',
@@ -216,19 +234,22 @@ export function PreviewArea({
                 )}
               </div>
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gray-900 relative">
-                {/* Audio visualization rings */}
+              <div className="w-full h-full flex items-center justify-center bg-gray-900 relative overflow-visible">
+                {/* Audio visualization rings - extend beyond the tile */}
                 {localAudioLevel > 0.05 && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    {[0, 1, 2].map((i) => (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ overflow: 'visible' }}>
+                    {[0, 1, 2, 3].map((i) => (
                       <div
                         key={i}
                         className="absolute rounded-full border-2 border-blue-400"
                         style={{
-                          width: `${40 + i * 15 + localAudioLevel * 30}px`,
-                          height: `${40 + i * 15 + localAudioLevel * 30}px`,
-                          opacity: (1 - i * 0.3) * localAudioLevel,
-                          animation: `pulse ${0.5 + i * 0.2}s ease-in-out infinite`,
+                          // Start at 80px (20px beyond ~60px avatar), grow with audio
+                          // Each ring adds 25px, audio adds up to 60px more
+                          width: `${80 + i * 25 + localAudioLevel * 60}px`,
+                          height: `${80 + i * 25 + localAudioLevel * 60}px`,
+                          opacity: Math.max(0.2, (1 - i * 0.25) * (localAudioLevel * 2)),
+                          animation: `pulse ${0.4 + i * 0.15}s ease-in-out infinite`,
+                          borderWidth: `${3 - i * 0.5}px`,
                         }}
                       />
                     ))}
@@ -240,7 +261,7 @@ export function PreviewArea({
                       className="w-3/4 aspect-square rounded-full overflow-hidden"
                       style={{
                         boxShadow: localAudioLevel > 0.05
-                          ? `0 0 ${15 + localAudioLevel * 25}px rgba(59, 130, 246, ${localAudioLevel})`
+                          ? `0 0 ${20 + localAudioLevel * 40}px rgba(59, 130, 246, ${0.5 + localAudioLevel})`
                           : 'none',
                       }}
                     >

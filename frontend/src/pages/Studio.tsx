@@ -436,6 +436,7 @@ export function Studio() {
           <div style={{ flexShrink: 0, marginBottom: '80px' }}>
             <PreviewArea
               localStream={processedStream || localStream}
+              audioStream={localStream} // Raw stream for audio monitoring (processed stream may not have audio)
               videoEnabled={videoEnabled}
               audioEnabled={audioEnabled}
               isLocalUserOnStage={isLocalUserOnStage}
