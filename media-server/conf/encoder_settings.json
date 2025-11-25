@@ -20,7 +20,7 @@
 
   "audio": {
     "codec": "aac",
-    "bitrate": "128k",
+    "bitrate": "192k",
     "channels": 2,
     "sample_rate": 48000,
     "profile:a": "aac_low"

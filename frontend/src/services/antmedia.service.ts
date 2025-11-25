@@ -4,6 +4,10 @@ import logger from '../utils/logger';
 const ANT_MEDIA_REST_URL = import.meta.env.VITE_ANT_MEDIA_REST_URL || 'https://media.streamlick.com:5443/StreamLick/rest/v2';
 const ANT_MEDIA_WEBSOCKET_URL = import.meta.env.VITE_ANT_MEDIA_WEBSOCKET_URL || 'wss://media.streamlick.com:5443/StreamLick/websocket';
 
+// Bitrate settings for broadcast quality
+const VIDEO_BITRATE_KBPS = 3500; // 3.5 Mbps for 1080p30
+const AUDIO_BITRATE_KBPS = 192;  // 192 kbps stereo audio
+
 interface BroadcastInfo {
   streamId: string;
   status: string;
@@ -221,56 +225,78 @@ class AntMediaService {
             } else if (info === 'publish_started') {
               logger.info('[AntMedia] Publish STARTED successfully for stream:', streamId);
 
-              // CRITICAL: After publish started, verify and replace tracks on peer connection
-              try {
-                const adaptor = this.webRTCAdaptor as any;
-                const pc = adaptor.remotePeerConnection?.[streamId] || adaptor.peerConnection;
+              // CRITICAL: After publish started, verify tracks and set bitrate constraints
+              (async () => {
+                try {
+                  const adaptor = this.webRTCAdaptor as any;
+                  const pc = adaptor.remotePeerConnection?.[streamId] || adaptor.peerConnection;
 
-                if (pc) {
-                  console.log('[AntMedia] Peer connection found, checking senders...');
-                  const senders = pc.getSenders();
+                  if (pc) {
+                    console.log('[AntMedia] Peer connection found, configuring senders...');
+                    const senders = pc.getSenders();
 
-                  senders.forEach((sender: RTCRtpSender, index: number) => {
-                    const currentTrack = sender.track;
-                    console.log(`[AntMedia] Sender ${index}:`, {
-                      kind: currentTrack?.kind,
-                      id: currentTrack?.id,
-                      label: currentTrack?.label,
-                      enabled: currentTrack?.enabled,
-                    });
+                    for (const sender of senders) {
+                      const currentTrack = sender.track;
+                      console.log(`[AntMedia] Sender:`, {
+                        kind: currentTrack?.kind,
+                        id: currentTrack?.id,
+                        label: currentTrack?.label,
+                        enabled: currentTrack?.enabled,
+                      });
 
-                    // Replace video track with our canvas track
-                    if (sender.track?.kind === 'video') {
-                      const canvasVideoTrack = stream.getVideoTracks()[0];
-                      if (canvasVideoTrack && sender.track.id !== canvasVideoTrack.id) {
-                        console.log('[AntMedia] REPLACING video track with canvas track!');
-                        sender.replaceTrack(canvasVideoTrack).then(() => {
+                      // Handle video track
+                      if (sender.track?.kind === 'video') {
+                        const canvasVideoTrack = stream.getVideoTracks()[0];
+                        if (canvasVideoTrack && sender.track.id !== canvasVideoTrack.id) {
+                          console.log('[AntMedia] REPLACING video track with canvas track!');
+                          await sender.replaceTrack(canvasVideoTrack);
                           console.log('[AntMedia] Video track replaced successfully!');
-                        }).catch((err: Error) => {
-                          console.error('[AntMedia] Failed to replace video track:', err);
-                        });
-                      }
-                    }
+                        }
 
-                    // Replace audio track with our mixed audio track
-                    if (sender.track?.kind === 'audio') {
-                      const mixedAudioTrack = stream.getAudioTracks()[0];
-                      if (mixedAudioTrack && sender.track.id !== mixedAudioTrack.id) {
-                        console.log('[AntMedia] REPLACING audio track with mixed audio!');
-                        sender.replaceTrack(mixedAudioTrack).then(() => {
+                        // Set video bitrate constraint
+                        try {
+                          const params = sender.getParameters();
+                          if (!params.encodings || params.encodings.length === 0) {
+                            params.encodings = [{}];
+                          }
+                          params.encodings[0].maxBitrate = VIDEO_BITRATE_KBPS * 1000;
+                          await sender.setParameters(params);
+                          console.log(`[AntMedia] Video bitrate set to ${VIDEO_BITRATE_KBPS} kbps`);
+                        } catch (bitrateErr) {
+                          console.warn('[AntMedia] Could not set video bitrate:', bitrateErr);
+                        }
+                      }
+
+                      // Handle audio track
+                      if (sender.track?.kind === 'audio') {
+                        const mixedAudioTrack = stream.getAudioTracks()[0];
+                        if (mixedAudioTrack && sender.track.id !== mixedAudioTrack.id) {
+                          console.log('[AntMedia] REPLACING audio track with mixed audio!');
+                          await sender.replaceTrack(mixedAudioTrack);
                           console.log('[AntMedia] Audio track replaced successfully!');
-                        }).catch((err: Error) => {
-                          console.error('[AntMedia] Failed to replace audio track:', err);
-                        });
+                        }
+
+                        // Set audio bitrate constraint (192 kbps stereo)
+                        try {
+                          const params = sender.getParameters();
+                          if (!params.encodings || params.encodings.length === 0) {
+                            params.encodings = [{}];
+                          }
+                          params.encodings[0].maxBitrate = AUDIO_BITRATE_KBPS * 1000;
+                          await sender.setParameters(params);
+                          console.log(`[AntMedia] Audio bitrate set to ${AUDIO_BITRATE_KBPS} kbps stereo`);
+                        } catch (bitrateErr) {
+                          console.warn('[AntMedia] Could not set audio bitrate:', bitrateErr);
+                        }
                       }
                     }
-                  });
-                } else {
-                  console.warn('[AntMedia] No peer connection found to verify tracks');
+                  } else {
+                    console.warn('[AntMedia] No peer connection found to verify tracks');
+                  }
+                } catch (err) {
+                  console.error('[AntMedia] Error configuring tracks/bitrates:', err);
                 }
-              } catch (err) {
-                console.error('[AntMedia] Error verifying/replacing tracks:', err);
-              }
+              })();
 
               this.connectionCallback?.('publish_started', obj);
               resolve();
