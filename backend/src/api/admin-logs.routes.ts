@@ -249,7 +249,7 @@ router.get('/media-server', async (req: Request, res: Response) => {
     // Try to fetch logs from Ant Media REST API
     try {
       // Ant Media provides broadcast list and server info
-      const [broadcastsRes, statsRes, activeStreamsRes] = await Promise.all([
+      const [broadcastsRes, statsRes, activeStreamsRes]: [any[], any, any] = await Promise.all([
         fetch(`${antMediaRestUrl}/broadcasts/list/0/50`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${antMediaRestUrl}/getServerSettings`).then(r => r.ok ? r.json() : null).catch(() => null),
         fetch(`${antMediaRestUrl}/broadcasts/active-live-stream-count`).then(r => r.ok ? r.json() : null).catch(() => null),
@@ -403,12 +403,12 @@ router.get('/media-server/dashboard', async (req: Request, res: Response) => {
       fetch(`${baseUrl}/rest/getJVMMemoryInfo`).then(r => r.ok ? r.json() : null),
     ]);
 
-    const broadcasts = broadcastsRes.status === 'fulfilled' ? broadcastsRes.value : [];
+    const broadcasts: any[] = broadcastsRes.status === 'fulfilled' ? (broadcastsRes.value as any[]) : [];
     const activeCount = activeCountRes.status === 'fulfilled' ? activeCountRes.value : 0;
-    const serverSettings = serverSettingsRes.status === 'fulfilled' ? serverSettingsRes.value : null;
-    const cpuInfo = cpuInfoRes.status === 'fulfilled' ? cpuInfoRes.value : null;
-    const memoryInfo = memoryInfoRes.status === 'fulfilled' ? memoryInfoRes.value : null;
-    const jvmMemory = jvmMemoryRes.status === 'fulfilled' ? jvmMemoryRes.value : null;
+    const serverSettings: any = serverSettingsRes.status === 'fulfilled' ? serverSettingsRes.value : null;
+    const cpuInfo: any = cpuInfoRes.status === 'fulfilled' ? cpuInfoRes.value : null;
+    const memoryInfo: any = memoryInfoRes.status === 'fulfilled' ? memoryInfoRes.value : null;
+    const jvmMemory: any = jvmMemoryRes.status === 'fulfilled' ? jvmMemoryRes.value : null;
 
     // Enrich broadcasts with detailed stats
     const enrichedBroadcasts = await Promise.all(
@@ -524,9 +524,9 @@ router.get('/media-server/stream/:streamId', async (req: Request, res: Response)
       fetch(`${antMediaRestUrl}/broadcasts/${streamId}/webrtc-client-stats/0/50`).then(r => r.ok ? r.json() : []),
     ]);
 
-    const broadcast = broadcastRes.status === 'fulfilled' ? broadcastRes.value : null;
-    const stats = statsRes.status === 'fulfilled' ? statsRes.value : null;
-    const webrtcStats = webrtcStatsRes.status === 'fulfilled' ? webrtcStatsRes.value : [];
+    const broadcast: any = broadcastRes.status === 'fulfilled' ? broadcastRes.value : null;
+    const stats: any = statsRes.status === 'fulfilled' ? statsRes.value : null;
+    const webrtcStats: any[] = webrtcStatsRes.status === 'fulfilled' ? (webrtcStatsRes.value as any[]) : [];
 
     if (!broadcast) {
       return res.status(404).json({ error: 'Stream not found' });
