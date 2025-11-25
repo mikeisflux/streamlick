@@ -10,10 +10,88 @@
 
 ## Server Requirements
 
-- Ubuntu 20.04/22.04 LTS
-- Java 11+
+- Ubuntu 20.04/22.04/24.04 LTS
+- **Java 17+** (required - Java 11 will NOT work)
+- Maven 3.6+
 - 4+ CPU cores, 8GB+ RAM
 - Ports: 5080, 5443, 1935, 5000-65000/UDP
+
+---
+
+## 0. Build Prerequisites & Installation
+
+### Step 1: Install Java 17+
+
+```bash
+# Install Java 17
+sudo apt update
+sudo apt install -y openjdk-17-jdk
+
+# Verify version (must be 17+)
+java -version
+
+# If multiple Java versions, select Java 17+
+sudo update-alternatives --config java
+```
+
+### Step 2: Install Maven
+
+```bash
+sudo apt install -y maven
+
+# Verify
+mvn -version
+```
+
+### Step 3: Build from Source
+
+```bash
+# Navigate to media-server directory
+cd /home/streamlick/media-server
+
+# Clean Maven cache (if previous build failed)
+rm -rf ~/.m2/repository
+
+# Build (skip tests for faster build)
+mvn clean package -DskipTests
+
+# Verify build output
+ls -la target/*.war
+```
+
+### Step 4: Install Base Ant Media Server
+
+```bash
+# Download and install base Ant Media Server
+cd /tmp
+wget https://github.com/ant-media/Ant-Media-Server/releases/download/ams-v2.9.1/ant-media-server-2.9.1-community.zip
+unzip ant-media-server-2.9.1-community.zip
+cd ant-media-server
+sudo ./install.sh
+
+# Verify installation
+ls /usr/local/antmedia/
+```
+
+### Step 5: Deploy Custom Build
+
+```bash
+# Stop Ant Media
+sudo systemctl stop antmedia
+
+# Deploy your custom WAR
+sudo cp /home/streamlick/media-server/target/*.war /usr/local/antmedia/webapps/root/ROOT.war
+
+# Create StreamLick application
+sudo mkdir -p /usr/local/antmedia/webapps/StreamLick
+sudo cp -r /usr/local/antmedia/webapps/LiveApp/* /usr/local/antmedia/webapps/StreamLick/
+
+# Set permissions
+sudo chown -R antmedia:antmedia /usr/local/antmedia/
+
+# Start Ant Media
+sudo systemctl start antmedia
+```
 
 ---
 
