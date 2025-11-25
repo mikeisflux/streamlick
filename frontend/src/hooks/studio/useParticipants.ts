@@ -59,6 +59,9 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
     const handleParticipantLeft = ({ participantId }: any) => {
       toast.success('A participant left');
 
+      // Remove from audio mixer
+      studioCanvasOutputService.removeParticipant(participantId);
+
       setRemoteParticipants((prev) => {
         const updated = new Map(prev);
         updated.delete(participantId);
@@ -101,6 +104,18 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
         const participant = updated.get(participantId);
         if (participant) {
           participant.role = role;
+
+          // Add participant to audio mixer if they have a stream and are now live
+          if (participant.stream && (role === 'host' || role === 'guest')) {
+            studioCanvasOutputService.addParticipant({
+              id: participant.id,
+              name: participant.name,
+              stream: participant.stream,
+              isLocal: false,
+              audioEnabled: participant.audioEnabled,
+              videoEnabled: participant.videoEnabled,
+            });
+          }
         }
         return updated;
       });
@@ -108,6 +123,12 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
 
     const handleParticipantDemoted = ({ participantId, role }: any) => {
       toast.success('Participant moved to backstage');
+
+      // Remove participant from audio mixer when demoted to backstage
+      if (role === 'backstage') {
+        studioCanvasOutputService.removeParticipant(participantId);
+      }
+
       setRemoteParticipants((prev) => {
         const updated = new Map(prev);
         const participant = updated.get(participantId);
