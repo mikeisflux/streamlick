@@ -263,7 +263,27 @@ export function useBroadcast({
 
       console.log('[useBroadcast] Unique destinations:', uniqueDestinations.length, 'of', broadcastDestinations.length);
 
-      // Add RTMP endpoints for each destination (multi-destination streaming)
+      // Step 5: Start publishing composite stream via WebRTC to Ant Media FIRST
+      // IMPORTANT: RTMP endpoints must be added AFTER stream is active
+      console.log('[useBroadcast] Starting WebRTC publish to Ant Media...');
+      await antMediaService.startPublishing(
+        compositeStream,
+        antBroadcast.streamId,
+        (info) => {
+          console.log('[useBroadcast] Ant Media status:', info);
+          if (info === 'publish_started') {
+            console.log('[useBroadcast] WebRTC stream is now active on Ant Media');
+          }
+        },
+        (error, message) => {
+          console.error('[useBroadcast] Ant Media error:', error, message);
+          toast.error(`Streaming error: ${error}`);
+        }
+      );
+
+      // Step 6: Add RTMP endpoints AFTER WebRTC stream is active
+      // This ensures Ant Media has an active stream to forward to RTMP destinations
+      console.log('[useBroadcast] Stream active, now adding RTMP endpoints...');
       for (const bd of uniqueDestinations) {
         const fullRtmpUrl = bd.streamKey
           ? `${bd.rtmpUrl}/${bd.streamKey}`
@@ -278,28 +298,14 @@ export function useBroadcast({
 
         try {
           await antMediaService.addRtmpEndpoint(antBroadcast.streamId, fullRtmpUrl, bd.id);
+          console.log('[useBroadcast] RTMP endpoint added successfully for:', bd.platform);
         } catch (error) {
           console.error('[useBroadcast] Failed to add RTMP endpoint:', error);
           // Continue with other destinations
         }
       }
 
-      // Step 5: Start publishing composite stream via WebRTC to Ant Media
-      console.log('[useBroadcast] Starting WebRTC publish to Ant Media...');
-      await antMediaService.startPublishing(
-        compositeStream,
-        antBroadcast.streamId,
-        (info) => {
-          console.log('[useBroadcast] Ant Media status:', info);
-          if (info === 'publish_started') {
-            console.log('[useBroadcast] WebRTC stream is now being forwarded to RTMP destinations');
-          }
-        },
-        (error, message) => {
-          console.error('[useBroadcast] Ant Media error:', error, message);
-          toast.error(`Streaming error: ${error}`);
-        }
-      );
+      console.log('[useBroadcast] All RTMP endpoints configured, stream is being forwarded');
 
       // Start chat polling
       socketService.emit('start-chat', { broadcastId });
