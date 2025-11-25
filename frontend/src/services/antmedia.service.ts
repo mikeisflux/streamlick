@@ -153,12 +153,11 @@ class AntMediaService {
       try {
         console.log('[AntMedia] Creating WebRTCAdaptor with WebSocket URL:', ANT_MEDIA_WEBSOCKET_URL);
 
+        // CRITICAL: Set mediaConstraints to false to use our provided localStream
+        // instead of having WebRTCAdaptor call getUserMedia() which would get camera directly
         this.webRTCAdaptor = new WebRTCAdaptor({
           websocket_url: ANT_MEDIA_WEBSOCKET_URL,
-          mediaConstraints: {
-            video: videoTracks.length > 0,
-            audio: audioTracks.length > 0,
-          },
+          mediaConstraints: false, // Use our localStream, don't call getUserMedia
           localStream: stream,
           peerconnection_config: {
             iceServers: [
@@ -171,7 +170,7 @@ class AntMediaService {
             OfferToReceiveVideo: false,
           },
           callback: (info: string, obj: unknown) => {
-            logger.info('[AntMedia] Callback:', info, obj);
+            console.log('[AntMedia] Callback:', info, obj);
 
             if (info === 'initialized') {
               logger.info('[AntMedia] WebRTCAdaptor initialized, starting publish for:', streamId);
