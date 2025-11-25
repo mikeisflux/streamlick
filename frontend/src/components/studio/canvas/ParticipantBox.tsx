@@ -1,3 +1,21 @@
+/**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * ANY VISUAL CHANGE TO THIS COMPONENT MUST ALSO BE INTEGRATED INTO THE HIDDEN CANVAS
+ * IN StudioCanvas.tsx OR YOU WILL CREATE A BREAK IN THE CODE.
+ *
+ * The hidden canvas captures the broadcast output and must be a CARBON COPY of what
+ * is displayed in the React preview. This includes:
+ * - Audio level visualization (glowing borders, animated rings)
+ * - Camera frames and borders
+ * - Lower thirds
+ * - Position numbers
+ * - Mute indicators
+ * - Avatar display when video is off
+ *
+ * If you add or modify any visual element here, you MUST update the hidden canvas
+ * drawing code in StudioCanvas.tsx to match.
+ */
+
 import { RefObject, useState, useEffect, useRef, useCallback } from 'react';
 
 interface ParticipantBoxProps {

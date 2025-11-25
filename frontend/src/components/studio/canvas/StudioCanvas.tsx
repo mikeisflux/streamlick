@@ -17,6 +17,7 @@
  * Elements that must stay in sync:
  * - Background color and image
  * - Participant video positions and sizes (getLayoutPositions)
+ * - Audio level visualization (glowing borders, animated rings when speaking)
  * - Screen share overlay
  * - Logo overlay
  * - Banner overlays
@@ -25,6 +26,8 @@
  * - Caption overlay
  * - Chat overlay (position, size, and messages)
  * - Comment overlay
+ *
+ * ALSO SEE: ParticipantBox.tsx which has its own warning about hidden canvas sync
  *
  * ===================================================================================
  */
@@ -158,6 +161,15 @@ export function StudioCanvas({
 
   // Video refs for all participants (for canvas capture)
   const participantVideoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
+
+  // Audio level tracking for hidden canvas visualization
+  // CRITICAL: This is used to draw audio visualization on the broadcast canvas
+  const [localAudioLevel, setLocalAudioLevel] = useState(0);
+  const [participantAudioLevels, setParticipantAudioLevels] = useState<Map<string, number>>(new Map());
+  const localAudioContextRef = useRef<AudioContext | null>(null);
+  const localAnalyserRef = useRef<AnalyserNode | null>(null);
+  const localAnimationFrameRef = useRef<number | null>(null);
+  const participantAudioContextsRef = useRef<Map<string, { ctx: AudioContext; analyser: AnalyserNode; animFrame: number }>>(new Map());
 
   // Media clip overlay state (for intro video, media clips)
   const [mediaClipElement, setMediaClipElement] = useState<HTMLVideoElement | HTMLImageElement | null>(null);
@@ -533,6 +545,138 @@ export function StudioCanvas({
     return () => window.removeEventListener('studioCanvasMediaClip', handleMediaClip);
   }, []);
 
+  // Set up audio level monitoring for local stream (for hidden canvas visualization)
+  useEffect(() => {
+    if (!localStream) {
+      setLocalAudioLevel(0);
+      return;
+    }
+
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (!audioTrack) {
+      return;
+    }
+
+    const audioContext = new AudioContext();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.3;
+
+    if (audioContext.state === 'suspended') {
+      audioContext.resume();
+    }
+
+    const monitorStream = new MediaStream([audioTrack]);
+    const source = audioContext.createMediaStreamSource(monitorStream);
+    source.connect(analyser);
+
+    localAudioContextRef.current = audioContext;
+    localAnalyserRef.current = analyser;
+
+    const updateLevel = () => {
+      if (!localAnalyserRef.current) return;
+
+      const dataArray = new Uint8Array(localAnalyserRef.current.frequencyBinCount);
+      localAnalyserRef.current.getByteFrequencyData(dataArray);
+
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+      }
+      const average = sum / dataArray.length;
+      setLocalAudioLevel(average / 255);
+      localAnimationFrameRef.current = requestAnimationFrame(updateLevel);
+    };
+
+    updateLevel();
+
+    return () => {
+      if (localAnimationFrameRef.current) {
+        cancelAnimationFrame(localAnimationFrameRef.current);
+      }
+      if (localAudioContextRef.current) {
+        localAudioContextRef.current.close();
+      }
+    };
+  }, [localStream]);
+
+  // Set up audio level monitoring for remote participants (for hidden canvas visualization)
+  useEffect(() => {
+    const currentParticipants = Array.from(remoteParticipants.values()).filter(
+      (p) => p.role !== 'backstage' && p.id !== 'screen-share' && p.stream
+    );
+
+    // Clean up audio contexts for participants that are no longer on stage
+    participantAudioContextsRef.current.forEach((audioCtx, participantId) => {
+      if (!currentParticipants.find(p => p.id === participantId)) {
+        cancelAnimationFrame(audioCtx.animFrame);
+        audioCtx.ctx.close();
+        participantAudioContextsRef.current.delete(participantId);
+        setParticipantAudioLevels(prev => {
+          const next = new Map(prev);
+          next.delete(participantId);
+          return next;
+        });
+      }
+    });
+
+    // Set up audio contexts for new participants
+    currentParticipants.forEach((participant) => {
+      if (participantAudioContextsRef.current.has(participant.id)) return;
+      if (!participant.stream) return;
+
+      const audioTrack = participant.stream.getAudioTracks()[0];
+      if (!audioTrack) return;
+
+      const audioContext = new AudioContext();
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.3;
+
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+
+      const monitorStream = new MediaStream([audioTrack]);
+      const source = audioContext.createMediaStreamSource(monitorStream);
+      source.connect(analyser);
+
+      const updateLevel = () => {
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(dataArray);
+
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const average = sum / dataArray.length;
+        setParticipantAudioLevels(prev => {
+          const next = new Map(prev);
+          next.set(participant.id, average / 255);
+          return next;
+        });
+
+        const animFrame = requestAnimationFrame(updateLevel);
+        const entry = participantAudioContextsRef.current.get(participant.id);
+        if (entry) {
+          entry.animFrame = animFrame;
+        }
+      };
+
+      const animFrame = requestAnimationFrame(updateLevel);
+      participantAudioContextsRef.current.set(participant.id, { ctx: audioContext, analyser, animFrame });
+    });
+
+    return () => {
+      // Cleanup on unmount
+      participantAudioContextsRef.current.forEach((audioCtx) => {
+        cancelAnimationFrame(audioCtx.animFrame);
+        audioCtx.ctx.close();
+      });
+      participantAudioContextsRef.current.clear();
+    };
+  }, [remoteParticipants]);
+
   // Register video ref for a participant (called from ParticipantBox via callback)
   const registerVideoRef = useCallback((participantId: string, videoElement: HTMLVideoElement | null) => {
     if (videoElement) {
@@ -609,10 +753,57 @@ export function StudioCanvas({
           } else {
             ctx.drawImage(video, drawX, drawY, drawW, drawH);
           }
+
+          // Draw audio level glow overlay when speaking (video on)
+          // CARBON COPY of ParticipantBox audio visualization
+          if (localAudioLevel > 0.05) {
+            ctx.save();
+            ctx.globalAlpha = localAudioLevel * 0.6;
+            ctx.shadowColor = 'rgba(59, 130, 246, 0.8)';
+            ctx.shadowBlur = 10 + localAudioLevel * 15;
+            ctx.strokeStyle = `rgba(59, 130, 246, ${0.5 + localAudioLevel})`;
+            ctx.lineWidth = 3;
+            ctx.strokeRect(x, y, w, h);
+            ctx.restore();
+          }
         } else {
           // Draw placeholder
           ctx.fillStyle = '#1a1a1a';
           ctx.fillRect(x, y, w, h);
+
+          // Draw audio level visualization rings when camera is off
+          // CARBON COPY of ParticipantBox audio visualization (rings around avatar)
+          if (localAudioLevel > 0.05) {
+            const centerX = x + w / 2;
+            const centerY = y + h / 2;
+            const baseRadius = Math.min(w, h) * 0.15;
+
+            ctx.save();
+            for (let i = 0; i < 4; i++) {
+              const ringRadius = baseRadius + i * 15 + localAudioLevel * 30;
+              const opacity = Math.max(0.2, (1 - i * 0.25) * (localAudioLevel * 2));
+              const lineWidth = 3 - i * 0.5;
+
+              ctx.beginPath();
+              ctx.arc(centerX, centerY, ringRadius, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(96, 165, 250, ${opacity})`;
+              ctx.lineWidth = lineWidth;
+              ctx.stroke();
+            }
+            ctx.restore();
+          }
+        }
+
+        // Draw glowing border around participant box when speaking
+        // CARBON COPY of ParticipantBox border glow
+        if (localAudioLevel > 0.05) {
+          ctx.save();
+          ctx.strokeStyle = `rgba(59, 130, 246, ${0.5 + localAudioLevel})`;
+          ctx.lineWidth = 3;
+          ctx.shadowColor = `rgba(59, 130, 246, ${localAudioLevel * 0.8})`;
+          ctx.shadowBlur = 10 + localAudioLevel * 20;
+          ctx.strokeRect(x, y, w, h);
+          ctx.restore();
         }
         participantIndex++;
       }
@@ -625,6 +816,9 @@ export function StudioCanvas({
         const y = (pos.y / 100) * CANVAS_HEIGHT;
         const w = (pos.width / 100) * CANVAS_WIDTH;
         const h = (pos.height / 100) * CANVAS_HEIGHT;
+
+        // Get this participant's audio level for visualization
+        const participantAudioLevel = participantAudioLevels.get(participant.id) || 0;
 
         const videoEl = participantVideoRefs.current.get(participant.id);
         if (videoEl && participant.videoEnabled && videoEl.readyState >= 2) {
@@ -641,9 +835,56 @@ export function StudioCanvas({
           }
 
           ctx.drawImage(videoEl, drawX, drawY, drawW, drawH);
+
+          // Draw audio level glow overlay when speaking (video on)
+          // CARBON COPY of ParticipantBox audio visualization
+          if (participantAudioLevel > 0.05) {
+            ctx.save();
+            ctx.globalAlpha = participantAudioLevel * 0.6;
+            ctx.shadowColor = 'rgba(59, 130, 246, 0.8)';
+            ctx.shadowBlur = 10 + participantAudioLevel * 15;
+            ctx.strokeStyle = `rgba(59, 130, 246, ${0.5 + participantAudioLevel})`;
+            ctx.lineWidth = 3;
+            ctx.strokeRect(x, y, w, h);
+            ctx.restore();
+          }
         } else {
           ctx.fillStyle = '#1a1a1a';
           ctx.fillRect(x, y, w, h);
+
+          // Draw audio level visualization rings when camera is off
+          // CARBON COPY of ParticipantBox audio visualization (rings around avatar)
+          if (participantAudioLevel > 0.05) {
+            const centerX = x + w / 2;
+            const centerY = y + h / 2;
+            const baseRadius = Math.min(w, h) * 0.15;
+
+            ctx.save();
+            for (let i = 0; i < 4; i++) {
+              const ringRadius = baseRadius + i * 15 + participantAudioLevel * 30;
+              const opacity = Math.max(0.2, (1 - i * 0.25) * (participantAudioLevel * 2));
+              const lineWidth = 3 - i * 0.5;
+
+              ctx.beginPath();
+              ctx.arc(centerX, centerY, ringRadius, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(96, 165, 250, ${opacity})`;
+              ctx.lineWidth = lineWidth;
+              ctx.stroke();
+            }
+            ctx.restore();
+          }
+        }
+
+        // Draw glowing border around participant box when speaking
+        // CARBON COPY of ParticipantBox border glow
+        if (participantAudioLevel > 0.05) {
+          ctx.save();
+          ctx.strokeStyle = `rgba(59, 130, 246, ${0.5 + participantAudioLevel})`;
+          ctx.lineWidth = 3;
+          ctx.shadowColor = `rgba(59, 130, 246, ${participantAudioLevel * 0.8})`;
+          ctx.shadowBlur = 10 + participantAudioLevel * 20;
+          ctx.strokeRect(x, y, w, h);
+          ctx.restore();
         }
         participantIndex++;
       });
@@ -864,7 +1105,7 @@ export function StudioCanvas({
     backgroundColor, isLocalUserOnStage, videoEnabled, remoteParticipants,
     selectedLayout, isSharingScreen, banners, styleSettings.mirrorVideo, mediaClipElement,
     captionsEnabled, currentCaption, showChatOnStream, chatMessages, displayedComment,
-    chatOverlayPosition, chatOverlaySize
+    chatOverlayPosition, chatOverlaySize, localAudioLevel, participantAudioLevels
   ]);
 
   // Start animation loop when canvas is available
