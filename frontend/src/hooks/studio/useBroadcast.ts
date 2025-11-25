@@ -220,18 +220,9 @@ export function useBroadcast({
       // This triggers the 10-second countdown on the backend
       await broadcastService.start(broadcastId, deduplicatedDestinations, apiDestinationSettings);
 
-      // FLOW: 10-second countdown → intro video → user stream
-      // Step 1: Display 10-second countdown on canvas
-      console.log('[useBroadcast] Starting 10-second countdown on canvas...');
-      await compositorService.startCountdown(10);
-      console.log('[useBroadcast] Countdown finished!');
-
-      // Wait a bit more for YouTube/Facebook broadcasts to be created
-      console.log('[useBroadcast] Waiting for broadcast destinations to be created...');
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Additional 2 seconds
-
-      // Step 2: Play intro video AFTER countdown finishes
-      console.log('[useBroadcast] Countdown finished! Starting intro video...');
+      // FLOW: Play intro video (which includes countdown) → user stream
+      // The intro video (StreamLick.mp4) contains the countdown - no separate countdown overlay needed
+      console.log('[useBroadcast] Starting intro video (includes countdown)...');
       try {
         await compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
         console.log('[useBroadcast] Intro video finished, transitioning to user stream');
@@ -239,6 +230,10 @@ export function useBroadcast({
         console.error('Intro video failed to play:', error);
         // Continue even if intro video fails
       }
+
+      // Wait for broadcast destinations to be ready
+      console.log('[useBroadcast] Waiting for broadcast destinations to be ready...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Step 3: Fetch broadcast destinations with decrypted RTMP URLs and stream keys
       const broadcastDestinationsResponse = await api.get(`/broadcasts/${broadcastId}/destinations`);
