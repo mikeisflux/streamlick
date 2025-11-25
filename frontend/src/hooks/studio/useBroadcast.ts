@@ -352,7 +352,8 @@ export function useBroadcast({
     };
 
     const layoutType = layoutMap[layoutId] || 'grid';
-    compositorService.setLayout({ type: layoutType });
+    // Pass both type and layoutId for precise positioning
+    compositorService.setLayout({ type: layoutType, layoutId });
 
     // Get layout name for toast
     const layoutNames: { [key: number]: string } = {

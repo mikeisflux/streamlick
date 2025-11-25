@@ -24,6 +24,7 @@ interface ParticipantStream {
 
 interface LayoutConfig {
   type: 'grid' | 'spotlight' | 'sidebar' | 'pip';
+  layoutId?: number; // 1-8 for specific layout styles
   spotlightId?: string; // For spotlight layout
   positions?: Array<{ x: number; y: number; width: number; height: number }>;
 }
@@ -735,11 +736,160 @@ class CompositorService {
   }
 
   /**
+   * Calculate layout positions based on layout ID (1-8)
+   */
+  private getLayoutPositions(layoutId: number, participantCount: number): Array<{ x: number; y: number; width: number; height: number }> {
+    const positions: Array<{ x: number; y: number; width: number; height: number }> = [];
+    const gap = 1; // 1% gap between elements
+
+    switch (layoutId) {
+      case 1: // Solo - One person fills entire screen (centered, 70% size)
+        positions.push({ x: 15, y: 10, width: 70, height: 80 });
+        for (let i = 1; i < participantCount; i++) {
+          const thumbWidth = 15;
+          const thumbX = 5 + (i - 1) * (thumbWidth + gap);
+          positions.push({ x: thumbX, y: 85, width: thumbWidth, height: 12 });
+        }
+        break;
+
+      case 2: // Cropped - 2x2 tight grid
+        const crop2x2 = [
+          { x: 1, y: 1, width: 48.5, height: 48.5 },
+          { x: 50.5, y: 1, width: 48.5, height: 48.5 },
+          { x: 1, y: 50.5, width: 48.5, height: 48.5 },
+          { x: 50.5, y: 50.5, width: 48.5, height: 48.5 },
+        ];
+        for (let i = 0; i < Math.min(participantCount, 4); i++) {
+          positions.push(crop2x2[i]);
+        }
+        break;
+
+      case 3: // Group - Dynamic grid
+        const cols = Math.ceil(Math.sqrt(participantCount));
+        const rows = Math.ceil(participantCount / cols);
+        const cellWidth = (100 - (cols + 1) * gap) / cols;
+        const cellHeight = (100 - (rows + 1) * gap) / rows;
+        for (let i = 0; i < participantCount; i++) {
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          positions.push({
+            x: gap + col * (cellWidth + gap),
+            y: gap + row * (cellHeight + gap),
+            width: cellWidth,
+            height: cellHeight,
+          });
+        }
+        break;
+
+      case 4: // Spotlight - Large main speaker with small boxes above
+        positions.push({ x: 15, y: 25, width: 70, height: 70 });
+        const topBoxWidth = 18;
+        const topBoxHeight = 20;
+        const startX = 10;
+        for (let i = 1; i < Math.min(participantCount, 5); i++) {
+          positions.push({
+            x: startX + (i - 1) * (topBoxWidth + gap),
+            y: 2,
+            width: topBoxWidth,
+            height: topBoxHeight,
+          });
+        }
+        break;
+
+      case 5: // News - Side-by-side (50/50)
+        positions.push({ x: 1, y: 1, width: 48.5, height: 98 });
+        positions.push({ x: 50.5, y: 1, width: 48.5, height: 98 });
+        for (let i = 2; i < participantCount; i++) {
+          const slotHeight = 98 / Math.ceil((participantCount - 1));
+          positions[i] = {
+            x: 50.5,
+            y: 1 + (i - 1) * slotHeight,
+            width: 48.5,
+            height: slotHeight - gap,
+          };
+        }
+        break;
+
+      case 6: // Screen - Tiny participants at top
+        const topParticipants = Math.min(participantCount, 4);
+        const topWidthScreen = (100 - (topParticipants + 1) * gap) / topParticipants;
+        for (let i = 0; i < topParticipants; i++) {
+          positions.push({
+            x: gap + i * (topWidthScreen + gap),
+            y: 1,
+            width: topWidthScreen,
+            height: 18,
+          });
+        }
+        break;
+
+      case 7: // Picture-in-Picture
+        positions.push({ x: 1, y: 1, width: 98, height: 98 });
+        if (participantCount > 1) {
+          positions.push({ x: 72, y: 70, width: 25, height: 27 });
+        }
+        for (let i = 2; i < participantCount; i++) {
+          positions.push({
+            x: 72,
+            y: 70 - (i - 1) * 30,
+            width: 25,
+            height: 27,
+          });
+        }
+        break;
+
+      case 8: // Cinema - Ultra-wide letterbox
+        const letterboxHeight = 56;
+        const letterboxY = (100 - letterboxHeight) / 2;
+        if (participantCount === 1) {
+          positions.push({ x: 15, y: letterboxY + 5, width: 70, height: letterboxHeight - 10 });
+        } else {
+          const boxWidth = (100 - 3 * gap) / Math.min(participantCount, 3);
+          for (let i = 0; i < Math.min(participantCount, 3); i++) {
+            positions.push({
+              x: gap + i * (boxWidth + gap),
+              y: letterboxY,
+              width: boxWidth,
+              height: letterboxHeight,
+            });
+          }
+        }
+        break;
+
+      default:
+        // Fallback to grid
+        const defCols = Math.ceil(Math.sqrt(participantCount));
+        const defRows = Math.ceil(participantCount / defCols);
+        const defCellWidth = (100 - (defCols + 1) * gap) / defCols;
+        const defCellHeight = (100 - (defRows + 1) * gap) / defRows;
+        for (let i = 0; i < participantCount; i++) {
+          const col = i % defCols;
+          const row = Math.floor(i / defCols);
+          positions.push({
+            x: gap + col * (defCellWidth + gap),
+            y: gap + row * (defCellHeight + gap),
+            width: defCellWidth,
+            height: defCellHeight,
+          });
+        }
+    }
+
+    return positions;
+  }
+
+  /**
    * Draw all participants based on current layout
    */
   private drawParticipants(): void {
     const participantArray = Array.from(this.participants.values());
 
+    // If we have a specific layoutId, use the precise positioning
+    if (this.layout.layoutId && this.layout.layoutId >= 1 && this.layout.layoutId <= 8) {
+      this.drawLayoutById(participantArray, this.layout.layoutId);
+      return;
+    }
+
+    // Fallback to legacy layout types
     switch (this.layout.type) {
       case 'grid':
         this.drawGridLayout(participantArray);
@@ -754,6 +904,29 @@ class CompositorService {
         this.drawPipLayout(participantArray);
         break;
     }
+  }
+
+  /**
+   * Draw layout using specific layout ID (1-8)
+   */
+  private drawLayoutById(participants: ParticipantStream[], layoutId: number): void {
+    if (participants.length === 0 || !this.ctx) return;
+
+    const positions = this.getLayoutPositions(layoutId, participants.length);
+
+    participants.forEach((participant, index) => {
+      const pos = positions[index];
+      if (!pos) return;
+
+      // Convert percentage to pixels
+      const x = (pos.x / 100) * this.WIDTH;
+      const y = (pos.y / 100) * this.HEIGHT;
+      const width = (pos.width / 100) * this.WIDTH;
+      const height = (pos.height / 100) * this.HEIGHT;
+
+      this.drawParticipantVideo(participant.id, x, y, width, height);
+      this.drawParticipantName(participant.name, x, y, width, height);
+    });
   }
 
   /**
