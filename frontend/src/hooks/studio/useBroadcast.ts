@@ -179,6 +179,19 @@ export function useBroadcast({
         throw new Error('Failed to get composite stream');
       }
 
+      // Log composite stream details for debugging
+      const videoTracks = compositeStream.getVideoTracks();
+      const audioTracks = compositeStream.getAudioTracks();
+      console.log('[useBroadcast] Composite stream obtained:', {
+        videoTracks: videoTracks.length,
+        audioTracks: audioTracks.length,
+        videoTrackSettings: videoTracks[0]?.getSettings(),
+        videoTrackEnabled: videoTracks[0]?.enabled,
+        videoTrackReadyState: videoTracks[0]?.readyState,
+        audioTrackEnabled: audioTracks[0]?.enabled,
+        audioTrackReadyState: audioTracks[0]?.readyState,
+      });
+
       // Prepare destination settings for API
       const apiDestinationSettings: Record<string, { privacyStatus?: string; scheduledStartTime?: string; title?: string; description?: string }> = {};
       deduplicatedDestinations.forEach((destId) => {

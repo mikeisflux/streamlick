@@ -97,13 +97,36 @@ class AntMediaService {
     this.connectionCallback = onConnect || null;
     this.errorCallback = onError || null;
 
+    // Validate stream before publishing
+    const videoTracks = stream.getVideoTracks();
+    const audioTracks = stream.getAudioTracks();
+
+    logger.info('[AntMedia] Starting publish with stream:', {
+      streamId,
+      videoTracks: videoTracks.length,
+      audioTracks: audioTracks.length,
+      videoTrackEnabled: videoTracks[0]?.enabled,
+      videoTrackReadyState: videoTracks[0]?.readyState,
+      audioTrackEnabled: audioTracks[0]?.enabled,
+      audioTrackReadyState: audioTracks[0]?.readyState,
+    });
+
+    if (videoTracks.length === 0) {
+      logger.error('[AntMedia] No video tracks in stream!');
+    }
+    if (audioTracks.length === 0) {
+      logger.warn('[AntMedia] No audio tracks in stream');
+    }
+
     return new Promise((resolve, reject) => {
       try {
+        logger.info('[AntMedia] Creating WebRTCAdaptor with WebSocket URL:', ANT_MEDIA_WEBSOCKET_URL);
+
         this.webRTCAdaptor = new WebRTCAdaptor({
           websocket_url: ANT_MEDIA_WEBSOCKET_URL,
           mediaConstraints: {
-            video: true,
-            audio: true,
+            video: videoTracks.length > 0,
+            audio: audioTracks.length > 0,
           },
           localStream: stream,
           peerconnection_config: {
@@ -117,33 +140,40 @@ class AntMediaService {
             OfferToReceiveVideo: false,
           },
           callback: (info: string, obj: unknown) => {
-            logger.info('Ant Media callback:', info, obj);
+            logger.info('[AntMedia] Callback:', info, obj);
 
             if (info === 'initialized') {
-              logger.info('WebRTCAdaptor initialized, starting publish');
+              logger.info('[AntMedia] WebRTCAdaptor initialized, starting publish for:', streamId);
               this.webRTCAdaptor?.publish(streamId);
             } else if (info === 'publish_started') {
-              logger.info('Publish started for stream:', streamId);
+              logger.info('[AntMedia] Publish STARTED successfully for stream:', streamId);
               this.connectionCallback?.('publish_started', obj);
               resolve();
             } else if (info === 'publish_finished') {
-              logger.info('Publish finished for stream:', streamId);
+              logger.info('[AntMedia] Publish finished for stream:', streamId);
               this.connectionCallback?.('publish_finished', obj);
             } else if (info === 'ice_connection_state_changed') {
-              logger.debug('ICE connection state:', obj);
+              logger.info('[AntMedia] ICE connection state changed:', obj);
               this.connectionCallback?.(info, obj);
+            } else if (info === 'updated_stats') {
+              logger.debug('[AntMedia] Stats update:', obj);
+            } else if (info === 'bitrateMeasurement') {
+              logger.debug('[AntMedia] Bitrate measurement:', obj);
             }
           },
           callbackError: (error: string, message: string) => {
-            logger.error('Ant Media error:', error, message);
+            logger.error('[AntMedia] ERROR:', error, message);
             this.errorCallback?.(error, message);
 
-            if (error === 'no_stream_exist' || error === 'WebSocketNotConnected') {
+            if (error === 'no_stream_exist' || error === 'WebSocketNotConnected' || error === 'not_initialized') {
               reject(new Error(`Ant Media connection failed: ${error} - ${message}`));
             }
           },
         });
+
+        logger.info('[AntMedia] WebRTCAdaptor created successfully');
       } catch (error) {
+        logger.error('[AntMedia] Failed to create WebRTCAdaptor:', error);
         reject(error);
       }
     });

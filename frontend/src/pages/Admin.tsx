@@ -15,7 +15,8 @@ import {
   Rocket,
   FileEdit,
   HardDrive,
-  Mail
+  Mail,
+  Activity
 } from 'lucide-react';
 
 export function Admin() {
@@ -120,6 +121,13 @@ export function Admin() {
       icon: FileText,
       path: '/admin/logs',
       color: 'bg-green-500/10 text-green-400 border-green-500/20',
+    },
+    {
+      title: 'Media Server',
+      description: 'Real-time monitoring of Ant Media Server streams',
+      icon: Activity,
+      path: '/admin/media-server',
+      color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
     },
     {
       title: 'Testing',

@@ -377,4 +377,178 @@ router.get('/media-server', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Get comprehensive Ant Media Server dashboard data
+ * Real-time monitoring of streams, endpoints, and server health
+ */
+router.get('/media-server/dashboard', async (req: Request, res: Response) => {
+  try {
+    const antMediaRestUrl = process.env.ANT_MEDIA_REST_URL || 'https://media.streamlick.com:5443/StreamLick/rest/v2';
+    const baseUrl = antMediaRestUrl.replace('/rest/v2', '');
+
+    // Fetch all data in parallel for performance
+    const [
+      broadcastsRes,
+      activeCountRes,
+      serverSettingsRes,
+      cpuInfoRes,
+      memoryInfoRes,
+      jvmMemoryRes,
+    ] = await Promise.allSettled([
+      fetch(`${antMediaRestUrl}/broadcasts/list/0/100`).then(r => r.ok ? r.json() : []),
+      fetch(`${antMediaRestUrl}/broadcasts/active-live-stream-count`).then(r => r.ok ? r.json() : 0),
+      fetch(`${antMediaRestUrl}/getServerSettings`).then(r => r.ok ? r.json() : null),
+      fetch(`${baseUrl}/rest/getCPUInfo`).then(r => r.ok ? r.json() : null),
+      fetch(`${baseUrl}/rest/getSystemMemoryInfo`).then(r => r.ok ? r.json() : null),
+      fetch(`${baseUrl}/rest/getJVMMemoryInfo`).then(r => r.ok ? r.json() : null),
+    ]);
+
+    const broadcasts = broadcastsRes.status === 'fulfilled' ? broadcastsRes.value : [];
+    const activeCount = activeCountRes.status === 'fulfilled' ? activeCountRes.value : 0;
+    const serverSettings = serverSettingsRes.status === 'fulfilled' ? serverSettingsRes.value : null;
+    const cpuInfo = cpuInfoRes.status === 'fulfilled' ? cpuInfoRes.value : null;
+    const memoryInfo = memoryInfoRes.status === 'fulfilled' ? memoryInfoRes.value : null;
+    const jvmMemory = jvmMemoryRes.status === 'fulfilled' ? jvmMemoryRes.value : null;
+
+    // Enrich broadcasts with detailed stats
+    const enrichedBroadcasts = await Promise.all(
+      (broadcasts || []).slice(0, 20).map(async (broadcast: any) => {
+        try {
+          // Fetch broadcast-specific statistics
+          const statsRes = await fetch(`${antMediaRestUrl}/broadcasts/${broadcast.streamId}/broadcast-statistics`)
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null);
+
+          return {
+            streamId: broadcast.streamId,
+            name: broadcast.name || 'Unnamed Stream',
+            status: broadcast.status || 'unknown',
+            type: broadcast.type || 'liveStream',
+            createdAt: broadcast.date || broadcast.creationDate,
+            updatedAt: broadcast.updateTime,
+            duration: broadcast.duration || 0,
+            speed: broadcast.speed || 0,
+            bitrate: broadcast.bitrate || 0,
+            width: broadcast.width || 0,
+            height: broadcast.height || 0,
+            viewers: {
+              rtmp: broadcast.rtmpViewerCount || 0,
+              webrtc: broadcast.webRTCViewerCount || 0,
+              hls: broadcast.hlsViewerCount || 0,
+              total: (broadcast.rtmpViewerCount || 0) + (broadcast.webRTCViewerCount || 0) + (broadcast.hlsViewerCount || 0),
+            },
+            rtmpEndpoints: (broadcast.endPointList || []).map((ep: any) => ({
+              id: ep.endpointServiceId || ep.id,
+              url: ep.rtmpUrl ? `${ep.rtmpUrl.substring(0, 30)}...` : 'unknown',
+              status: ep.status || 'unknown',
+            })),
+            stats: statsRes,
+          };
+        } catch (error) {
+          return {
+            streamId: broadcast.streamId,
+            name: broadcast.name || 'Unnamed Stream',
+            status: broadcast.status || 'unknown',
+            error: 'Failed to fetch detailed stats',
+          };
+        }
+      })
+    );
+
+    // Build server health summary
+    const serverHealth = {
+      status: 'online',
+      activeStreams: activeCount,
+      totalBroadcasts: broadcasts.length,
+      cpu: cpuInfo ? {
+        usage: cpuInfo.cpuUsage || cpuInfo.processCpuLoad,
+        cores: cpuInfo.availableProcessors,
+      } : null,
+      memory: memoryInfo ? {
+        total: memoryInfo.totalPhysicalMemorySize || memoryInfo.totalMemory,
+        free: memoryInfo.freePhysicalMemorySize || memoryInfo.freeMemory,
+        used: (memoryInfo.totalPhysicalMemorySize || memoryInfo.totalMemory) - (memoryInfo.freePhysicalMemorySize || memoryInfo.freeMemory),
+      } : null,
+      jvmMemory: jvmMemory ? {
+        max: jvmMemory.maxMemory,
+        total: jvmMemory.totalMemory,
+        free: jvmMemory.freeMemory,
+        used: jvmMemory.totalMemory - jvmMemory.freeMemory,
+      } : null,
+      settings: serverSettings ? {
+        rtmpEnabled: serverSettings.acceptOnlyStreamsInDataStore !== true,
+        webrtcEnabled: serverSettings.webRTCEnabled !== false,
+        hlsEnabled: serverSettings.hlsMuxingEnabled !== false,
+      } : null,
+    };
+
+    // Recent activity log
+    const recentActivity = enrichedBroadcasts
+      .filter(b => b.status === 'broadcasting' || b.status === 'finished')
+      .slice(0, 10)
+      .map(b => ({
+        timestamp: b.updatedAt || b.createdAt || new Date().toISOString(),
+        type: b.status === 'broadcasting' ? 'stream_started' : 'stream_finished',
+        streamId: b.streamId,
+        message: b.status === 'broadcasting'
+          ? `Stream "${b.name}" is live with ${b.viewers?.total || 0} viewers`
+          : `Stream "${b.name}" ended after ${Math.round((b.duration || 0) / 1000)}s`,
+      }));
+
+    res.json({
+      timestamp: new Date().toISOString(),
+      server: serverHealth,
+      broadcasts: enrichedBroadcasts,
+      recentActivity,
+    });
+  } catch (error) {
+    logger.error('Get media server dashboard error:', error);
+    res.status(500).json({
+      error: 'Failed to fetch media server dashboard',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * Get detailed stats for a specific broadcast stream
+ */
+router.get('/media-server/stream/:streamId', async (req: Request, res: Response) => {
+  try {
+    const { streamId } = req.params;
+    const antMediaRestUrl = process.env.ANT_MEDIA_REST_URL || 'https://media.streamlick.com:5443/StreamLick/rest/v2';
+
+    const [broadcastRes, statsRes, webrtcStatsRes] = await Promise.allSettled([
+      fetch(`${antMediaRestUrl}/broadcasts/${streamId}`).then(r => r.ok ? r.json() : null),
+      fetch(`${antMediaRestUrl}/broadcasts/${streamId}/broadcast-statistics`).then(r => r.ok ? r.json() : null),
+      fetch(`${antMediaRestUrl}/broadcasts/${streamId}/webrtc-client-stats/0/50`).then(r => r.ok ? r.json() : []),
+    ]);
+
+    const broadcast = broadcastRes.status === 'fulfilled' ? broadcastRes.value : null;
+    const stats = statsRes.status === 'fulfilled' ? statsRes.value : null;
+    const webrtcStats = webrtcStatsRes.status === 'fulfilled' ? webrtcStatsRes.value : [];
+
+    if (!broadcast) {
+      return res.status(404).json({ error: 'Stream not found' });
+    }
+
+    res.json({
+      stream: {
+        ...broadcast,
+        stats,
+        webrtcClients: webrtcStats,
+        rtmpEndpoints: (broadcast.endPointList || []).map((ep: any) => ({
+          id: ep.endpointServiceId || ep.id,
+          url: ep.rtmpUrl,
+          status: ep.status || 'unknown',
+          type: ep.type,
+        })),
+      },
+    });
+  } catch (error) {
+    logger.error('Get stream details error:', error);
+    res.status(500).json({ error: 'Failed to fetch stream details' });
+  }
+});
+
 export default router;
