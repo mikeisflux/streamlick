@@ -129,8 +129,10 @@ export function StudioCanvas({
     mirrorVideo: false,
   });
 
-  // Load stream background from localStorage
-  const [streamBackground, setStreamBackground] = useState<string | null>(null);
+  // Load stream background from localStorage - initialize immediately to avoid flash
+  const [streamBackground, setStreamBackground] = useState<string | null>(() =>
+    localStorage.getItem('streamBackground')
+  );
 
   useEffect(() => {
     const loadBanners = () => {
@@ -231,14 +233,20 @@ export function StudioCanvas({
     return () => window.removeEventListener('backgroundUpdated', handleBackgroundUpdated);
   }, []);
 
-  // Load stream logo from localStorage
-  const [streamLogo, setStreamLogo] = useState<string | null>(null);
+  // Load stream logo from localStorage - initialize immediately to avoid flash
+  const [streamLogo, setStreamLogo] = useState<string | null>(() =>
+    localStorage.getItem('streamLogo')
+  );
 
-  // Load stream overlay from localStorage
-  const [streamOverlay, setStreamOverlay] = useState<string | null>(null);
+  // Load stream overlay from localStorage - initialize immediately to avoid flash
+  const [streamOverlay, setStreamOverlay] = useState<string | null>(() =>
+    localStorage.getItem('streamOverlay')
+  );
 
-  // Load video clip from localStorage
-  const [videoClip, setVideoClip] = useState<string | null>(null);
+  // Load video clip from localStorage - initialize immediately to avoid flash
+  const [videoClip, setVideoClip] = useState<string | null>(() =>
+    localStorage.getItem('streamVideoClip')
+  );
 
   // Custom layout positions for edit mode
   interface ParticipantPosition {
