@@ -174,7 +174,7 @@ class StudioCanvasOutputService {
    */
   getOutputStream(): MediaStream | null {
     if (!this.outputStream) {
-      logger.warn('[StudioCanvasOutput] No output stream available');
+      // Don't warn - this is expected when not live yet
       return null;
     }
 
