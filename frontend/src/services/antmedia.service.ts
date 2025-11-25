@@ -49,21 +49,51 @@ class AntMediaService {
 
   async addRtmpEndpoint(streamId: string, rtmpUrl: string, destinationId: string): Promise<string> {
     // Ant Media expects the full RTMP URL including stream key
-    const response = await fetch(`${ANT_MEDIA_REST_URL}/broadcasts/${streamId}/rtmp-endpoint`, {
+    const requestUrl = `${ANT_MEDIA_REST_URL}/broadcasts/${streamId}/rtmp-endpoint`;
+    const requestBody = { rtmpUrl };
+
+    logger.info('[AntMedia] Adding RTMP endpoint:', {
+      requestUrl,
+      streamId,
+      destinationId,
+      rtmpUrlPreview: rtmpUrl.substring(0, 60) + '...',
+      rtmpUrlLength: rtmpUrl.length,
+    });
+
+    const response = await fetch(requestUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rtmpUrl }),
+      body: JSON.stringify(requestBody),
+    });
+
+    const responseText = await response.text();
+    logger.info('[AntMedia] RTMP endpoint response:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      responseBody: responseText,
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to add RTMP endpoint: ${errorText}`);
+      logger.error('[AntMedia] Failed to add RTMP endpoint:', responseText);
+      throw new Error(`Failed to add RTMP endpoint: ${responseText}`);
     }
 
-    const result = await response.json();
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      logger.warn('[AntMedia] Response is not JSON, using destinationId as endpointId');
+      result = {};
+    }
+
     const endpointId = result.dataId || result.id || destinationId;
     this.rtmpEndpoints.set(destinationId, endpointId);
-    logger.info('RTMP endpoint added:', { destinationId, endpointId, rtmpUrl: rtmpUrl.substring(0, 50) + '...' });
+    logger.info('[AntMedia] RTMP endpoint added successfully:', {
+      destinationId,
+      endpointId,
+      resultKeys: Object.keys(result),
+    });
     return endpointId;
   }
 

@@ -250,8 +250,21 @@ export function useBroadcast({
       const antBroadcast = await antMediaService.createBroadcast(`streamlick-${broadcastId}`);
       console.log('[useBroadcast] Ant Media broadcast created:', antBroadcast.streamId);
 
+      // Deduplicate broadcast destinations by ID
+      const seenDestinations = new Set<string>();
+      const uniqueDestinations = broadcastDestinations.filter((bd: { id: string }) => {
+        if (seenDestinations.has(bd.id)) {
+          console.warn('[useBroadcast] Skipping duplicate destination:', bd.id);
+          return false;
+        }
+        seenDestinations.add(bd.id);
+        return true;
+      });
+
+      console.log('[useBroadcast] Unique destinations:', uniqueDestinations.length, 'of', broadcastDestinations.length);
+
       // Add RTMP endpoints for each destination (multi-destination streaming)
-      for (const bd of broadcastDestinations) {
+      for (const bd of uniqueDestinations) {
         const fullRtmpUrl = bd.streamKey
           ? `${bd.rtmpUrl}/${bd.streamKey}`
           : bd.rtmpUrl;
@@ -259,9 +272,16 @@ export function useBroadcast({
         console.log('[useBroadcast] Adding RTMP endpoint:', {
           platform: bd.platform,
           destinationId: bd.id,
+          hasStreamKey: !!bd.streamKey,
+          rtmpUrlPreview: bd.rtmpUrl?.substring(0, 40) + '...',
         });
 
-        await antMediaService.addRtmpEndpoint(antBroadcast.streamId, fullRtmpUrl, bd.id);
+        try {
+          await antMediaService.addRtmpEndpoint(antBroadcast.streamId, fullRtmpUrl, bd.id);
+        } catch (error) {
+          console.error('[useBroadcast] Failed to add RTMP endpoint:', error);
+          // Continue with other destinations
+        }
       }
 
       // Step 5: Start publishing composite stream via WebRTC to Ant Media

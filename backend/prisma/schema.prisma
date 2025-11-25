@@ -97,6 +97,7 @@ model BroadcastDestination {
   broadcast   Broadcast   @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
   destination Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
 
+  @@unique([broadcastId, destinationId])
   @@map("broadcast_destinations")
 }
 

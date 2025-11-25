@@ -267,6 +267,14 @@ router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
           }
         }, 1000);
 
+        // Delete any existing broadcast destinations for this broadcast to prevent duplicates
+        const deletedCount = await prisma.broadcastDestination.deleteMany({
+          where: { broadcastId: broadcast.id },
+        });
+        if (deletedCount.count > 0) {
+          logger.info(`[ASYNC IIFE] Deleted ${deletedCount.count} existing broadcast destinations`);
+        }
+
         const broadcastDestinations: any[] = [];
 
         // If destinations are specified, create live videos for each platform
