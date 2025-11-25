@@ -89,6 +89,8 @@ class StudioCanvasOutputService {
     audioMixerService.initialize();
 
     // Add each participant's audio to the mixer
+    // Local participant audio goes to broadcast only (not monitor) to prevent echo
+    // Remote participant audio goes to both broadcast and monitor
     for (const participant of participants) {
       this.participants.set(participant.id, participant);
 
@@ -96,7 +98,8 @@ class StudioCanvasOutputService {
         const audioTrack = participant.stream.getAudioTracks()[0];
         if (audioTrack) {
           const audioStream = new MediaStream([audioTrack]);
-          audioMixerService.addStream(participant.id, audioStream);
+          // Pass isLocal flag so local user doesn't hear their own mic
+          audioMixerService.addStream(participant.id, audioStream, participant.isLocal);
         }
       }
     }
@@ -113,15 +116,16 @@ class StudioCanvasOutputService {
    * Add a participant
    */
   async addParticipant(participant: ParticipantStream): Promise<void> {
-    logger.info('[StudioCanvasOutput] Adding participant:', participant.id);
+    logger.info('[StudioCanvasOutput] Adding participant:', participant.id, participant.isLocal ? '(local)' : '(remote)');
     this.participants.set(participant.id, participant);
 
-    // Add audio to mixer
+    // Add audio to mixer with isLocal flag
+    // Local audio goes to broadcast only, remote audio goes to both broadcast and monitor
     if (participant.stream && participant.audioEnabled) {
       const audioTrack = participant.stream.getAudioTracks()[0];
       if (audioTrack) {
         const audioStream = new MediaStream([audioTrack]);
-        audioMixerService.addStream(participant.id, audioStream);
+        audioMixerService.addStream(participant.id, audioStream, participant.isLocal);
 
         // Try to attach audio to output stream if not already done
         // This handles the case where first participant is added after start()
@@ -409,6 +413,103 @@ class StudioCanvasOutputService {
    */
   isActive(): boolean {
     return this.isCapturing;
+  }
+
+  /**
+   * Get the monitor output stream (remote audio only for local playback)
+   * This allows the host to hear remote participants without hearing themselves
+   */
+  getMonitorStream(): MediaStream | null {
+    return audioMixerService.getMonitorStream();
+  }
+
+  /**
+   * Set volume for a specific participant's audio channel
+   * @param participantId Participant ID
+   * @param volume Volume level 0-1
+   */
+  setParticipantVolume(participantId: string, volume: number): void {
+    audioMixerService.setStreamVolume(participantId, volume);
+  }
+
+  /**
+   * Set master broadcast volume
+   */
+  setBroadcastVolume(volume: number): void {
+    audioMixerService.setBroadcastVolume(volume);
+  }
+
+  /**
+   * Set master monitor volume (what the local user hears)
+   */
+  setMonitorVolume(volume: number): void {
+    audioMixerService.setMonitorVolume(volume);
+  }
+
+  // ============================================
+  // Producer Mode - Advanced Audio Controls
+  // ============================================
+
+  /**
+   * Get audio level for a participant (0-1) for visualization
+   */
+  getParticipantAudioLevel(participantId: string): number {
+    return audioMixerService.getChannelLevel(participantId);
+  }
+
+  /**
+   * Get all audio levels at once (more efficient for UI polling)
+   */
+  getAllAudioLevels(): Map<string, number> {
+    return audioMixerService.getAllChannelLevels();
+  }
+
+  /**
+   * Get detailed channel info for producer mode UI
+   */
+  getAudioChannelInfo(): Array<{
+    id: string;
+    isLocal: boolean;
+    volume: number;
+    level: number;
+    hasCompressor: boolean;
+    hasHighpass: boolean;
+    hasLowpass: boolean;
+  }> {
+    return audioMixerService.getDetailedChannelInfo();
+  }
+
+  /**
+   * Apply audio effects to a participant's channel
+   */
+  setParticipantAudioEffects(participantId: string, effects: {
+    gain?: number;
+    highpassFreq?: number;
+    lowpassFreq?: number;
+    compressor?: {
+      threshold?: number;
+      knee?: number;
+      ratio?: number;
+      attack?: number;
+      release?: number;
+    };
+    muted?: boolean;
+  }): void {
+    audioMixerService.setChannelEffects(participantId, effects);
+  }
+
+  /**
+   * Apply voice preset to a participant (good for spoken content)
+   */
+  applyVoicePreset(participantId: string): void {
+    audioMixerService.applyVoicePreset(participantId);
+  }
+
+  /**
+   * Apply music preset to a participant/channel (good for music playback)
+   */
+  applyMusicPreset(participantId: string): void {
+    audioMixerService.applyMusicPreset(participantId);
   }
 }
 
