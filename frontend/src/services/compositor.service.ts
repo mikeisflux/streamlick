@@ -1225,8 +1225,8 @@ class CompositorService {
       const audioLevel = this.audioLevels.get(participantId) || 0;
       const isSpeaking = audioLevel > 0.05; // Threshold for detecting speech
 
-      // Draw pulsating rings when speaking
-      if (isSpeaking && participant.audioEnabled) {
+      // Draw pulsating rings when speaking (audio analyzer handles mute state automatically)
+      if (isSpeaking) {
         const centerX = x + width / 2;
         const centerY = y + height / 2;
         const baseRadius = Math.min(width, height) * 0.25;
@@ -1257,9 +1257,9 @@ class CompositorService {
       this.ctx.fillText('📵', x + width / 2, y + height / 2);
     }
 
-    // Draw border - audio-reactive when speaking
+    // Draw border - audio-reactive when speaking (audio analyzer handles mute state automatically)
     const audioLevel = this.audioLevels.get(participantId) || 0;
-    const isSpeaking = audioLevel > 0.05 && participant.audioEnabled;
+    const isSpeaking = audioLevel > 0.05;
 
     if (isSpeaking) {
       // Glowing border when speaking
