@@ -735,7 +735,17 @@ class CompositorService {
   }
 
   /**
+   * Get the RAW canvas output stream (video only)
+   * This is the persistent stream from canvas.captureStream()
+   */
+  getRawOutputStream(): MediaStream | null {
+    return this.outputStream;
+  }
+
+  /**
    * Get the composite output stream (video + mixed audio)
+   * IMPORTANT: This adds the audio track directly to the canvas stream
+   * instead of creating a new MediaStream (which WebRTCAdaptor ignores)
    */
   getOutputStream(): MediaStream | null {
     if (!this.outputStream) {
@@ -746,26 +756,35 @@ class CompositorService {
     const mixedAudioStream = audioMixerService.getOutputStream();
 
     if (!mixedAudioStream) {
-      // Return video-only stream if no audio
+      console.log('[Compositor] No mixed audio stream, returning video-only');
       return this.outputStream;
     }
 
-    // Combine video from canvas with mixed audio
-    const compositeStream = new MediaStream();
+    // Add audio track directly to the canvas outputStream
+    // This ensures we use the SAME stream object that canvas.captureStream() created
+    const existingAudioTracks = this.outputStream.getAudioTracks();
+    const mixedAudioTrack = mixedAudioStream.getAudioTracks()[0];
 
-    // Add video track from canvas
-    const videoTrack = this.outputStream.getVideoTracks()[0];
-    if (videoTrack) {
-      compositeStream.addTrack(videoTrack);
+    if (mixedAudioTrack) {
+      // Remove any existing audio tracks first
+      existingAudioTracks.forEach(track => {
+        console.log('[Compositor] Removing existing audio track:', track.id);
+        this.outputStream!.removeTrack(track);
+      });
+
+      // Add the mixed audio track to the canvas stream
+      console.log('[Compositor] Adding mixed audio track to canvas stream:', mixedAudioTrack.id);
+      this.outputStream.addTrack(mixedAudioTrack);
     }
 
-    // Add mixed audio track
-    const audioTrack = mixedAudioStream.getAudioTracks()[0];
-    if (audioTrack) {
-      compositeStream.addTrack(audioTrack);
-    }
+    console.log('[Compositor] getOutputStream returning canvas stream with tracks:', {
+      videoTracks: this.outputStream.getVideoTracks().length,
+      audioTracks: this.outputStream.getAudioTracks().length,
+      videoTrackId: this.outputStream.getVideoTracks()[0]?.id,
+      audioTrackId: this.outputStream.getAudioTracks()[0]?.id,
+    });
 
-    return compositeStream;
+    return this.outputStream;
   }
 
   /**
