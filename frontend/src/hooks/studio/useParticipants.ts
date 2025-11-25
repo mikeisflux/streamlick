@@ -77,6 +77,27 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
           participant.audioEnabled = audio;
           participant.videoEnabled = video;
           updated.set(participantId, participant);
+
+          // Update audio mixer volume based on mute state (only for live participants)
+          if (participant.role === 'host' || participant.role === 'guest') {
+            // Import audioMixerService would create circular dependency,
+            // so we use studioCanvasOutputService which handles this internally
+            // by setting volume to 0 when muted
+            if (!audio) {
+              // Participant muted - remove their audio from mix
+              studioCanvasOutputService.removeParticipant(participantId);
+            } else if (participant.stream) {
+              // Participant unmuted - re-add their audio to mix
+              studioCanvasOutputService.addParticipant({
+                id: participant.id,
+                name: participant.name,
+                stream: participant.stream,
+                isLocal: false,
+                audioEnabled: true,
+                videoEnabled: participant.videoEnabled,
+              });
+            }
+          }
         }
         return updated;
       });
