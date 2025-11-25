@@ -19,6 +19,7 @@ interface PreviewAreaProps {
   onAddToStage?: (participantId: string) => void;
   onRemoveFromStage?: (participantId: string) => void;
   onInviteGuests?: () => void;
+  onRenameParticipant?: (participantId: string, newName: string) => void;
 }
 
 export function PreviewArea({
@@ -31,9 +32,12 @@ export function PreviewArea({
   onAddToStage,
   onRemoveFromStage,
   onInviteGuests,
+  onRenameParticipant,
 }: PreviewAreaProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
+  const [editingParticipant, setEditingParticipant] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
 
   // Load selected avatar from localStorage
   useEffect(() => {
@@ -49,6 +53,33 @@ export function PreviewArea({
       localVideoRef.current.srcObject = localStream;
     }
   }, [localStream]);
+
+  const handleToggleStage = (participantId: string, isOnStage: boolean) => {
+    if (isOnStage && onRemoveFromStage) {
+      onRemoveFromStage(participantId);
+    } else if (!isOnStage && onAddToStage) {
+      onAddToStage(participantId);
+    }
+  };
+
+  const handleStartEdit = (participantId: string, currentName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingParticipant(participantId);
+    setEditName(currentName);
+  };
+
+  const handleSaveEdit = (participantId: string) => {
+    if (onRenameParticipant && editName.trim()) {
+      onRenameParticipant(participantId, editName.trim());
+    }
+    setEditingParticipant(null);
+    setEditName('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingParticipant(null);
+    setEditName('');
+  };
 
   return (
     <div
@@ -68,7 +99,11 @@ export function PreviewArea({
       <div className="flex items-center gap-3 pb-2">
         {/* Your Preview */}
         <div className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
-          <div className={`relative bg-black rounded overflow-hidden h-full border-2 group ${isLocalUserOnStage ? 'border-blue-500' : 'border-yellow-500'}`}>
+          <div
+            className={`relative bg-black rounded overflow-hidden h-full border-2 group cursor-pointer ${isLocalUserOnStage ? 'border-blue-500' : 'border-yellow-500'}`}
+            onClick={() => handleToggleStage('local-user', isLocalUserOnStage)}
+            title={isLocalUserOnStage ? 'Click to go backstage' : 'Click to go on stage'}
+          >
             {localStream && videoEnabled ? (
               <video
                 ref={localVideoRef}
@@ -103,35 +138,16 @@ export function PreviewArea({
               </div>
             )}
 
-            {/* Hover Overlay with Add to Stage Button - only shown when backstage */}
-            {!isLocalUserOnStage && onAddToStage && (
-              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-50 pointer-events-auto">
-                <button
-                  onClick={() => onAddToStage('local-user')}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded shadow-lg pointer-events-auto"
-                  title="Add to Stage"
-                >
-                  Add to Stage
-                </button>
-              </div>
-            )}
+            {/* Hover indicator */}
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+              <span className="text-white text-xs font-medium px-2 py-1 bg-black/60 rounded">
+                {isLocalUserOnStage ? 'Go Backstage' : 'Go Live'}
+              </span>
+            </div>
 
-            {/* Hover Overlay with Remove from Stage Button - only shown when on stage */}
-            {isLocalUserOnStage && onRemoveFromStage && (
-              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-50 pointer-events-auto">
-                <button
-                  onClick={() => onRemoveFromStage('local-user')}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded shadow-lg pointer-events-auto"
-                  title="Remove from Stage"
-                >
-                  Remove from Stage
-                </button>
-              </div>
-            )}
-
-            <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 z-0">
+            <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 z-10">
               <span className="text-white text-xs font-medium">
-                {isLocalUserOnStage ? 'You (Preview)' : 'You (Backstage)'}
+                {isLocalUserOnStage ? 'You (Live)' : 'You (Backstage)'}
               </span>
             </div>
           </div>
@@ -151,7 +167,7 @@ export function PreviewArea({
                 style={{ backgroundColor: '#000' }}
               />
               <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1">
-                <span className="text-white text-xs font-medium">🖥️ Screen Share</span>
+                <span className="text-white text-xs font-medium">Screen Share</span>
               </div>
             </div>
           </div>
@@ -160,7 +176,11 @@ export function PreviewArea({
         {/* Backstage Participants */}
         {backstageParticipants.map((participant) => (
           <div key={participant.id} className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
-            <div className="relative bg-black rounded overflow-hidden h-full border-2 border-yellow-500 group">
+            <div
+              className="relative bg-black rounded overflow-hidden h-full border-2 border-yellow-500 group cursor-pointer"
+              onClick={() => handleToggleStage(participant.id, false)}
+              title="Click to add to stage"
+            >
               {participant.stream && participant.videoEnabled ? (
                 <video
                   autoPlay
@@ -184,21 +204,63 @@ export function PreviewArea({
                 </div>
               )}
 
-              {/* Hover Overlay with Add to Stage Button */}
-              {onAddToStage && (
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-50 pointer-events-auto">
-                  <button
-                    onClick={() => onAddToStage(participant.id)}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded shadow-lg pointer-events-auto"
-                    title="Add to Stage"
-                  >
-                    Add to Stage
-                  </button>
-                </div>
-              )}
+              {/* Hover indicator */}
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                <span className="text-white text-xs font-medium px-2 py-1 bg-black/60 rounded">
+                  Add to Stage
+                </span>
+              </div>
 
-              <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 flex items-center justify-between z-0">
-                <span className="text-white text-xs font-medium truncate flex-1">{participant.name}</span>
+              {/* Name bar with edit button */}
+              <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 flex items-center justify-between z-10">
+                {editingParticipant === participant.id ? (
+                  <div className="flex items-center gap-1 w-full" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveEdit(participant.id);
+                        if (e.key === 'Escape') handleCancelEdit();
+                      }}
+                      className="flex-1 bg-gray-700 text-white text-xs px-1 py-0.5 rounded w-full min-w-0"
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => handleSaveEdit(participant.id)}
+                      className="text-green-400 hover:text-green-300 p-0.5"
+                      title="Save"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={handleCancelEdit}
+                      className="text-red-400 hover:text-red-300 p-0.5"
+                      title="Cancel"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <span className="text-white text-xs font-medium truncate flex-1">{participant.name}</span>
+                    {onRenameParticipant && (
+                      <button
+                        onClick={(e) => handleStartEdit(participant.id, participant.name, e)}
+                        className="text-gray-400 hover:text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Edit name"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </div>
