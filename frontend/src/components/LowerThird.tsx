@@ -1,3 +1,14 @@
+/**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS COMPONENT DISPLAYS LOWER THIRD GRAPHICS ON THE STUDIOCANVAS.
+ * ANY CHANGE TO STYLING, POSITIONING, ANIMATIONS, OR APPEARANCE MUST ALSO BE
+ * INTEGRATED INTO THE HIDDEN CANVAS IN StudioCanvas.tsx (drawToCanvas function)
+ * OR YOU WILL CREATE A BREAK IN THE CODE.
+ *
+ * The hidden canvas captures the broadcast output and must be a CARBON COPY of what
+ * is displayed in the React preview.
+ */
+
 import { useState, useEffect } from 'react';
 
 export interface LowerThirdData {

@@ -1,4 +1,13 @@
 /**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS SERVICE CREATES VERTICAL VIDEO OUTPUT FROM THE STUDIOCANVAS.
+ * ANY CHANGE TO CROPPING, POSITIONING, OR OUTPUT PROCESSING MUST BE VERIFIED
+ * TO WORK CORRECTLY WITH THE HIDDEN CANVAS IN StudioCanvas.tsx (drawToCanvas function)
+ * OR YOU WILL CREATE A BREAK IN THE CODE.
+ *
+ * The output must accurately represent what is displayed in the React preview.
+ *
+ * ---
  * Vertical Video Compositor Service
  *
  * Creates 9:16 vertical video from 16:9 horizontal source.

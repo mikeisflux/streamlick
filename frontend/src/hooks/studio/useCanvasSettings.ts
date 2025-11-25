@@ -1,3 +1,14 @@
+/**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS HOOK MANAGES CANVAS SETTINGS THAT AFFECT THE STUDIOCANVAS VISUAL OUTPUT.
+ * ANY CHANGE TO THESE SETTINGS (resolution, background color, position numbers,
+ * lower thirds, orientation, etc.) MUST ALSO BE INTEGRATED INTO THE HIDDEN CANVAS
+ * IN StudioCanvas.tsx (drawToCanvas function) OR YOU WILL CREATE A BREAK IN THE CODE.
+ *
+ * The hidden canvas captures the broadcast output and must be a CARBON COPY of what
+ * is displayed in the React preview.
+ */
+
 import { useState, useEffect } from 'react';
 
 interface CanvasSettings {

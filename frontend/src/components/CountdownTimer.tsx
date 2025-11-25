@@ -1,3 +1,14 @@
+/**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS COMPONENT MAY DISPLAY A COUNTDOWN ON THE STUDIOCANVAS.
+ * IF THIS COUNTDOWN IS VISIBLE ON THE BROADCAST, ANY CHANGE TO ITS STYLING,
+ * POSITIONING, OR APPEARANCE MUST ALSO BE INTEGRATED INTO THE HIDDEN CANVAS
+ * IN StudioCanvas.tsx (drawToCanvas function) OR YOU WILL CREATE A BREAK IN THE CODE.
+ *
+ * The hidden canvas captures the broadcast output and must be a CARBON COPY of what
+ * is displayed in the React preview.
+ */
+
 import React, { useEffect, useState } from 'react';
 
 interface CountdownTimerProps {

@@ -1,4 +1,13 @@
 /**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS SERVICE MANAGES THE OUTPUT STREAM FROM THE STUDIOCANVAS HIDDEN CANVAS.
+ * ANY CHANGE TO HOW THE STREAM IS CAPTURED OR PROCESSED MUST BE COMPATIBLE WITH
+ * THE HIDDEN CANVAS IN StudioCanvas.tsx (drawToCanvas function) OR YOU WILL CREATE A BREAK.
+ *
+ * The hidden canvas captures the broadcast output and must be a CARBON COPY of what
+ * is displayed in the React preview.
+ *
+ * ---
  * Studio Canvas Output Service
  *
  * Simple service that exposes the captured stream from StudioCanvas.

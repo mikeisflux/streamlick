@@ -1,3 +1,18 @@
+/**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS COMPONENT CONTROLS VISUAL STYLING FOR THE STUDIOCANVAS INCLUDING:
+ * - Camera frame styles (rounded, circle, square, none)
+ * - Border widths and colors
+ * - Primary colors
+ * - Video mirroring
+ *
+ * ANY CHANGE TO THESE STYLE OPTIONS MUST ALSO BE INTEGRATED INTO THE HIDDEN CANVAS
+ * IN StudioCanvas.tsx (drawToCanvas function) OR YOU WILL CREATE A BREAK IN THE CODE.
+ *
+ * The hidden canvas captures the broadcast output and must be a CARBON COPY of what
+ * is displayed in the React preview. Style settings are applied in StudioCanvas.tsx.
+ */
+
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 

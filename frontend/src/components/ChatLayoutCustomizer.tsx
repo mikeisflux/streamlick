@@ -1,3 +1,14 @@
+/**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS COMPONENT CONTROLS CHAT OVERLAY LAYOUT AND POSITIONING ON THE STUDIOCANVAS.
+ * ANY CHANGE TO CHAT POSITIONING, SIZING, OR LAYOUT OPTIONS MUST ALSO BE INTEGRATED
+ * INTO THE HIDDEN CANVAS IN StudioCanvas.tsx (drawToCanvas function)
+ * OR YOU WILL CREATE A BREAK IN THE CODE.
+ *
+ * The hidden canvas captures the broadcast output and must be a CARBON COPY of what
+ * is displayed in the React preview. Chat overlay rendering is done in StudioCanvas.tsx.
+ */
+
 import { useState } from 'react';
 import { toast } from 'react-hot-toast';
 

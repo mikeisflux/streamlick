@@ -1,3 +1,17 @@
+/**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS COMPONENT CONTROLS PARTICIPANT LAYOUT POSITIONING ON THE STUDIOCANVAS.
+ * THE LAYOUT POSITIONS DEFINED HERE (via getLayoutPositions) ARE USED BY BOTH
+ * THE REACT PREVIEW AND THE HIDDEN CANVAS.
+ *
+ * ANY CHANGE TO LAYOUT CALCULATIONS, POSITIONS, OR SIZING MUST BE VERIFIED TO WORK
+ * CORRECTLY IN THE HIDDEN CANVAS IN StudioCanvas.tsx (drawToCanvas function)
+ * OR YOU WILL CREATE A BREAK IN THE CODE.
+ *
+ * The hidden canvas captures the broadcast output and must be a CARBON COPY of what
+ * is displayed in the React preview.
+ */
+
 interface LayoutSelectorProps {
   selectedLayout: number;
   onLayoutChange: (layoutId: number) => void;

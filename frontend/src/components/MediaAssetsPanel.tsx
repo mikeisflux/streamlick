@@ -1,3 +1,15 @@
+/**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS COMPONENT MANAGES LOGOS, BACKGROUNDS, AND OVERLAYS THAT DISPLAY ON THE STUDIOCANVAS.
+ * ANY CHANGE TO HOW THESE ASSETS ARE STORED, SIZED, OR CONFIGURED MUST BE COMPATIBLE WITH
+ * THE HIDDEN CANVAS IN StudioCanvas.tsx (drawToCanvas function) OR YOU WILL CREATE A BREAK.
+ *
+ * The hidden canvas captures the broadcast output and must be a CARBON COPY of what
+ * is displayed in the React preview. Asset rendering is done in StudioCanvas.tsx.
+ *
+ * Affected canvas elements: streamLogo, streamBackground, streamOverlay, mediaClips
+ */
+
 import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { mediaStorageService } from '../services/media-storage.service';

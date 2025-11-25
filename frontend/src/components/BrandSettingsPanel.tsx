@@ -1,3 +1,14 @@
+/**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS COMPONENT CONFIGURES LOGO AND BACKGROUND SETTINGS FOR THE STUDIOCANVAS.
+ * ANY CHANGE TO LOGO POSITIONING, SIZING, OPACITY, OR BACKGROUND SETTINGS MUST ALSO BE
+ * INTEGRATED INTO THE HIDDEN CANVAS IN StudioCanvas.tsx (drawToCanvas function)
+ * OR YOU WILL CREATE A BREAK IN THE CODE.
+ *
+ * The hidden canvas captures the broadcast output and must be a CARBON COPY of what
+ * is displayed in the React preview. Logo/background rendering is done in StudioCanvas.tsx.
+ */
+
 import { useState, useRef } from 'react';
 import {
   PhotoIcon,

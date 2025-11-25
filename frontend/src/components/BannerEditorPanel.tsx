@@ -1,3 +1,14 @@
+/**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS COMPONENT CONFIGURES BANNERS THAT DISPLAY ON THE STUDIOCANVAS.
+ * ANY CHANGE TO BANNER STYLING, POSITIONING, COLORS, OR STRUCTURE MUST ALSO BE
+ * INTEGRATED INTO THE HIDDEN CANVAS IN StudioCanvas.tsx (drawToCanvas function)
+ * OR YOU WILL CREATE A BREAK IN THE CODE.
+ *
+ * The hidden canvas captures the broadcast output and must be a CARBON COPY of what
+ * is displayed in the React preview. Banner rendering is done in StudioCanvas.tsx.
+ */
+
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import {

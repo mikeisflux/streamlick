@@ -1,4 +1,14 @@
 /**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS WORKER HANDLES VIDEO COMPOSITING FOR THE STUDIOCANVAS.
+ * ANY CHANGE TO COMPOSITING LOGIC, LAYOUT RENDERING, OR VISUAL PROCESSING
+ * MUST BE VERIFIED TO MATCH THE HIDDEN CANVAS IN StudioCanvas.tsx (drawToCanvas function)
+ * OR YOU WILL CREATE A BREAK IN THE CODE.
+ *
+ * The hidden canvas captures the broadcast output and must be a CARBON COPY of what
+ * is displayed in the React preview.
+ *
+ * ---
  * Compositor Web Worker
  *
  * Handles video compositing off the main thread using OffscreenCanvas

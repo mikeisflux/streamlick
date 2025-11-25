@@ -1,3 +1,14 @@
+/**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS COMPONENT CONFIGURES CANVAS SETTINGS INCLUDING RESOLUTION, DEVICE SELECTION,
+ * AND VISUAL OPTIONS THAT AFFECT THE STUDIOCANVAS OUTPUT.
+ * ANY CHANGE TO SETTINGS THAT AFFECT VISUAL OUTPUT MUST ALSO BE INTEGRATED INTO
+ * THE HIDDEN CANVAS IN StudioCanvas.tsx (drawToCanvas function) OR YOU WILL CREATE A BREAK.
+ *
+ * The hidden canvas captures the broadcast output and must be a CARBON COPY of what
+ * is displayed in the React preview.
+ */
+
 import { useState, useRef, useEffect } from 'react';
 import { playTestTone } from '../../../utils/audioTest';
 import toast from 'react-hot-toast';

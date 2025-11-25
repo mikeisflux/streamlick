@@ -1,3 +1,16 @@
+/**
+ * ⚠️ CRITICAL WARNING ⚠️
+ * THIS COMPONENT MANAGES SCENES THAT CONFIGURE THE STUDIOCANVAS LAYOUT AND OVERLAYS.
+ * ANY CHANGE TO SCENE STRUCTURE, PARTICIPANT POSITIONING, OR OVERLAY CONFIGURATION
+ * MUST BE COMPATIBLE WITH THE HIDDEN CANVAS IN StudioCanvas.tsx (drawToCanvas function)
+ * OR YOU WILL CREATE A BREAK IN THE CODE.
+ *
+ * The hidden canvas captures the broadcast output and must be a CARBON COPY of what
+ * is displayed in the React preview.
+ *
+ * Scene elements that affect canvas: layouts, participant positions, overlays (logo, banner, lowerThird, etc.)
+ */
+
 import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 
