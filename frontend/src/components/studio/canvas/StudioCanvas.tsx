@@ -465,7 +465,13 @@ export function StudioCanvas({
 
   // ===================================================================================
   // CANVAS CAPTURE FOR BROADCAST OUTPUT
-  // This renders the same content as the React preview to a hidden canvas for streaming
+  // ===================================================================================
+  //
+  // EVERYTHING HERE SHOULD REMAIN A CARBON COPY OF STUDIOCANVAS OR YOU WILL CREATE
+  // A BREAK IN THE CODE.
+  //
+  // This hidden canvas renders the same content as the React preview for streaming.
+  // Any visual element in the JSX above MUST have corresponding drawing code below.
   // ===================================================================================
 
   // Cached images for canvas drawing (to avoid creating new Image objects every frame)
