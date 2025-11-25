@@ -1,3 +1,34 @@
+/**
+ * ===================================================================================
+ * CRITICAL WARNING - DO NOT MODIFY WITHOUT UNDERSTANDING
+ * ===================================================================================
+ *
+ * ANY CHANGE HERE MUST BE DUPLICATED IN THE HIDDEN CANVAS OR YOU WILL CREATE A BREAK
+ * IN THE CODE.
+ *
+ * This component renders TWO outputs:
+ * 1. React JSX Preview - What the user sees in the browser (the visible preview)
+ * 2. Hidden Canvas - What gets captured for the broadcast stream (drawToCanvas function)
+ *
+ * The hidden canvas (captureCanvasRef) MUST render an EXACT COPY of the visible preview.
+ * If you add, remove, or modify any visual element in the JSX, you MUST also update
+ * the corresponding drawing code in the drawToCanvas() callback.
+ *
+ * Elements that must stay in sync:
+ * - Background color and image
+ * - Participant video positions and sizes (getLayoutPositions)
+ * - Screen share overlay
+ * - Logo overlay
+ * - Banner overlays
+ * - Full screen overlay
+ * - Media clip overlay
+ * - Caption overlay
+ * - Chat overlay (position, size, and messages)
+ * - Comment overlay
+ *
+ * ===================================================================================
+ */
+
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { CaptionOverlay } from './CanvasOverlay';
 import { ParticipantBox } from './ParticipantBox';
@@ -667,123 +698,167 @@ export function StudioCanvas({
       }
     }
 
-    // Draw captions if enabled
-    if (captionsEnabled && currentCaption?.text) {
-      const captionY = CANVAS_HEIGHT - 120;
-      const captionPadding = 20;
+    // Calculate scale factor from container to canvas
+    // Container maintains 16:9 aspect ratio, canvas is always 1920x1080
+    const container = containerRef.current;
+    const containerWidth = container?.offsetWidth || 1001; // Default max-width for landscape
+    const containerHeight = container?.offsetHeight || 563;
+    const scaleX = CANVAS_WIDTH / containerWidth;
+    const scaleY = CANVAS_HEIGHT / containerHeight;
 
-      // Measure text
-      ctx.font = 'bold 32px Arial';
+    // Draw captions if enabled
+    // CaptionOverlay in React: positioned at bottom center with backdrop
+    if (captionsEnabled && currentCaption?.text) {
+      // Match CaptionOverlay: bottom-16 (64px from bottom), centered, max-w-4xl (896px)
+      const captionBottomOffset = 64 * scaleY;
+      const captionY = CANVAS_HEIGHT - captionBottomOffset - 80; // Approximate height
+      const captionPadding = 24 * scaleX;
+      const maxCaptionWidth = Math.min(896 * scaleX, CANVAS_WIDTH - 100);
+
+      // Font size scales with canvas (24px base in React, scale up for 1080p)
+      const fontSize = Math.round(24 * scaleY);
+      ctx.font = `bold ${fontSize}px Arial`;
       const textMetrics = ctx.measureText(currentCaption.text);
-      const textWidth = Math.min(textMetrics.width, CANVAS_WIDTH - 100);
+      const textWidth = Math.min(textMetrics.width, maxCaptionWidth);
       const boxWidth = textWidth + captionPadding * 2;
+      const boxHeight = fontSize + captionPadding * 2;
       const boxX = (CANVAS_WIDTH - boxWidth) / 2;
 
-      // Draw caption background
+      // Draw caption background (rounded corners matching React)
       ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
       ctx.beginPath();
-      ctx.roundRect(boxX, captionY, boxWidth, 60, 8);
+      ctx.roundRect(boxX, captionY, boxWidth, boxHeight, 12 * scaleX);
       ctx.fill();
 
       // Draw caption text
       ctx.fillStyle = currentCaption.isFinal ? '#FFFFFF' : '#E0E0E0';
       ctx.textAlign = 'center';
-      ctx.fillText(currentCaption.text, CANVAS_WIDTH / 2, captionY + 40, CANVAS_WIDTH - 100);
+      ctx.fillText(currentCaption.text, CANVAS_WIDTH / 2, captionY + captionPadding + fontSize * 0.8, maxCaptionWidth);
     }
 
-    // Draw chat overlay if enabled
+    // Draw chat overlay if enabled - match exact React position and size
     if (showChatOnStream && chatMessages.length > 0) {
-      const chatX = CANVAS_WIDTH - 320;
-      const chatY = CANVAS_HEIGHT - 300;
-      const chatWidth = 300;
-      const chatHeight = 220;
+      // Scale chat position and size from container coords to canvas coords
+      let chatX: number, chatY: number;
+      const chatWidth = chatOverlaySize.width * scaleX;
+      const chatHeight = chatOverlaySize.height * scaleY;
+
+      if (chatOverlayPosition.x !== 0 || chatOverlayPosition.y !== 0) {
+        // User has dragged the chat - use their position
+        chatX = chatOverlayPosition.x * scaleX;
+        chatY = chatOverlayPosition.y * scaleY;
+      } else {
+        // Default position: right: 16px, bottom: 80px in container space
+        chatX = CANVAS_WIDTH - chatWidth - (16 * scaleX);
+        chatY = CANVAS_HEIGHT - chatHeight - (80 * scaleY);
+      }
 
       // Draw chat background
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
       ctx.beginPath();
-      ctx.roundRect(chatX, chatY, chatWidth, chatHeight, 8);
+      ctx.roundRect(chatX, chatY, chatWidth, chatHeight, 8 * scaleX);
       ctx.fill();
 
-      // Draw chat header
-      ctx.fillStyle = 'rgba(50, 50, 50, 0.8)';
-      ctx.fillRect(chatX, chatY, chatWidth, 30);
+      // Draw chat header (matching React: bg-gray-800/50, border-b)
+      const headerHeight = 36 * scaleY;
+      ctx.fillStyle = 'rgba(31, 41, 55, 0.5)';
+      ctx.fillRect(chatX, chatY, chatWidth, headerHeight);
       ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 14px Arial';
+      const headerFontSize = Math.round(12 * scaleY);
+      ctx.font = `bold ${headerFontSize}px Arial`;
       ctx.textAlign = 'left';
-      ctx.fillText('Live Chat', chatX + 12, chatY + 20);
+      ctx.fillText('Live Chat', chatX + 12 * scaleX, chatY + headerHeight * 0.65);
 
-      // Draw recent chat messages (last 5)
-      ctx.font = '14px Arial';
-      const recentMessages = chatMessages.slice(-5);
-      let messageY = chatY + 50;
+      // Draw recent chat messages (last 10 matching React)
+      const msgFontSize = Math.round(14 * scaleY);
+      ctx.font = `${msgFontSize}px Arial`;
+      const recentMessages = chatMessages.slice(-10);
+      const msgPadding = 12 * scaleX;
+      const lineHeight = 20 * scaleY;
+      let messageY = chatY + headerHeight + msgPadding + msgFontSize;
+
       recentMessages.forEach((msg) => {
-        // Author name
-        ctx.fillStyle = '#60A5FA';
-        ctx.fillText(msg.author + ':', chatX + 12, messageY);
-        // Message text (truncate if too long)
+        if (messageY + lineHeight > chatY + chatHeight - msgPadding) return; // Don't overflow
+
+        // Author name (font-semibold)
         ctx.fillStyle = '#FFFFFF';
-        const maxMsgWidth = chatWidth - 24;
-        let msgText = msg.message;
+        ctx.font = `bold ${msgFontSize}px Arial`;
+        const authorText = msg.author + ':';
+        ctx.fillText(authorText, chatX + msgPadding, messageY);
+
+        // Message text
+        ctx.font = `${msgFontSize}px Arial`;
+        const authorWidth = ctx.measureText(authorText).width + 6 * scaleX;
+        const maxMsgWidth = chatWidth - msgPadding * 2 - authorWidth;
+        let msgText = ' ' + msg.message;
         if (ctx.measureText(msgText).width > maxMsgWidth) {
-          while (ctx.measureText(msgText + '...').width > maxMsgWidth && msgText.length > 0) {
+          while (ctx.measureText(msgText + '...').width > maxMsgWidth && msgText.length > 1) {
             msgText = msgText.slice(0, -1);
           }
           msgText += '...';
         }
-        ctx.fillText(msgText, chatX + 12, messageY + 18);
-        messageY += 40;
+        ctx.fillText(msgText, chatX + msgPadding + authorWidth, messageY);
+        messageY += lineHeight;
       });
     }
 
-    // Draw displayed comment overlay if present
+    // Draw displayed comment overlay if present - match CommentOverlay component
     if (displayedComment) {
-      const commentY = CANVAS_HEIGHT - 200;
-      const commentWidth = 500;
-      const commentX = (CANVAS_WIDTH - commentWidth) / 2;
+      // CommentOverlay: positioned at bottom center, max-w-lg (512px), padding, etc.
+      const commentMaxWidth = 512 * scaleX;
+      const commentPadding = 16 * scaleX;
+      const commentHeight = 100 * scaleY;
+      const commentX = (CANVAS_WIDTH - commentMaxWidth) / 2;
+      const commentBottomOffset = 120 * scaleY; // Match bottom-28 in React (112px)
+      const commentY = CANVAS_HEIGHT - commentBottomOffset - commentHeight;
 
       // Draw comment background
       ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
       ctx.beginPath();
-      ctx.roundRect(commentX, commentY, commentWidth, 100, 12);
+      ctx.roundRect(commentX, commentY, commentMaxWidth, commentHeight, 12 * scaleX);
       ctx.fill();
 
-      // Draw platform indicator
+      // Draw platform indicator (left edge colored bar)
       const platformColors: Record<string, string> = {
         youtube: '#FF0000',
         facebook: '#1877F2',
         twitch: '#9146FF',
         linkedin: '#0A66C2',
-        x: '#000000',
+        x: '#1DA1F2',
         rumble: '#85C742',
       };
+      const platformBarWidth = 6 * scaleX;
       ctx.fillStyle = platformColors[displayedComment.platform] || '#6B7280';
       ctx.beginPath();
-      ctx.roundRect(commentX, commentY, 6, 100, [12, 0, 0, 12]);
+      ctx.roundRect(commentX, commentY, platformBarWidth, commentHeight, [12 * scaleX, 0, 0, 12 * scaleX]);
       ctx.fill();
 
       // Draw author name
+      const authorFontSize = Math.round(16 * scaleY);
       ctx.fillStyle = '#60A5FA';
-      ctx.font = 'bold 18px Arial';
+      ctx.font = `bold ${authorFontSize}px Arial`;
       ctx.textAlign = 'left';
-      ctx.fillText(displayedComment.authorName, commentX + 20, commentY + 30);
+      ctx.fillText(displayedComment.authorName, commentX + commentPadding + platformBarWidth, commentY + commentPadding + authorFontSize);
 
       // Draw comment text
+      const msgFontSize = Math.round(14 * scaleY);
       ctx.fillStyle = '#FFFFFF';
-      ctx.font = '16px Arial';
+      ctx.font = `${msgFontSize}px Arial`;
       let commentText = displayedComment.message;
-      const maxWidth = commentWidth - 40;
-      if (ctx.measureText(commentText).width > maxWidth) {
-        while (ctx.measureText(commentText + '...').width > maxWidth && commentText.length > 0) {
+      const maxTextWidth = commentMaxWidth - commentPadding * 2 - platformBarWidth;
+      if (ctx.measureText(commentText).width > maxTextWidth) {
+        while (ctx.measureText(commentText + '...').width > maxTextWidth && commentText.length > 0) {
           commentText = commentText.slice(0, -1);
         }
         commentText += '...';
       }
-      ctx.fillText(commentText, commentX + 20, commentY + 60);
+      ctx.fillText(commentText, commentX + commentPadding + platformBarWidth, commentY + commentPadding + authorFontSize + msgFontSize + 8 * scaleY);
     }
   }, [
     backgroundColor, isLocalUserOnStage, videoEnabled, remoteParticipants,
     selectedLayout, isSharingScreen, banners, styleSettings.mirrorVideo, mediaClipElement,
-    captionsEnabled, currentCaption, showChatOnStream, chatMessages, displayedComment
+    captionsEnabled, currentCaption, showChatOnStream, chatMessages, displayedComment,
+    chatOverlayPosition, chatOverlaySize
   ]);
 
   // Start animation loop when canvas is available
