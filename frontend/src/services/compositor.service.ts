@@ -118,21 +118,36 @@ class CompositorService {
 
     // Create video elements and add audio for each participant
     for (const participant of participants) {
+      console.log(`[Compositor] Processing participant ${participant.id}:`, {
+        hasStream: !!participant.stream,
+        audioTracks: participant.stream?.getAudioTracks().length || 0,
+        videoTracks: participant.stream?.getVideoTracks().length || 0,
+        audioEnabled: participant.audioEnabled,
+        videoEnabled: participant.videoEnabled,
+      });
+
       await this.addParticipant(participant);
 
       // Add participant audio to mixer and create audio analyser for visualization
       if (participant.stream) {
         const audioTrack = participant.stream.getAudioTracks()[0];
         if (audioTrack) {
+          console.log(`[Compositor] Found audio track for ${participant.id}, creating analyser...`);
           const audioStream = new MediaStream([audioTrack]);
           if (participant.audioEnabled) {
             audioMixerService.addStream(participant.id, audioStream);
           }
           // Always create analyser for voice visualization (even if muted in mix)
           this.createAudioAnalyser(participant.id, audioStream);
+        } else {
+          console.warn(`[Compositor] No audio track in stream for ${participant.id}! Audio visualization will not work for this participant.`);
         }
+      } else {
+        console.warn(`[Compositor] No stream for participant ${participant.id}!`);
       }
     }
+
+    console.log(`[Compositor] Initialization complete. Analysers: ${this.audioAnalysers.size}, Participants: ${this.participants.size}`);
 
     // Start compositing
     this.start();
@@ -143,20 +158,33 @@ class CompositorService {
    */
   private createAudioAnalyser(participantId: string, audioStream: MediaStream): void {
     try {
-      // Create a separate audio context for analysis (not the mixer context)
-      const audioContext = new AudioContext();
+      const audioTrack = audioStream.getAudioTracks()[0];
 
       console.log(`[Compositor] Creating audio analyser for ${participantId}:`, {
-        audioContextState: audioContext.state,
         audioTracks: audioStream.getAudioTracks().length,
-        trackEnabled: audioStream.getAudioTracks()[0]?.enabled,
-        trackReadyState: audioStream.getAudioTracks()[0]?.readyState,
+        trackId: audioTrack?.id,
+        trackLabel: audioTrack?.label,
+        trackEnabled: audioTrack?.enabled,
+        trackReadyState: audioTrack?.readyState,
+        trackMuted: audioTrack?.muted,
       });
+
+      if (!audioTrack) {
+        console.error(`[Compositor] No audio track found for ${participantId}! Cannot create analyser.`);
+        return;
+      }
+
+      // Create a separate audio context for analysis (not the mixer context)
+      const audioContext = new AudioContext();
+      console.log(`[Compositor] AudioContext created for ${participantId}, state: ${audioContext.state}`);
 
       // Resume audio context if suspended (required after user interaction)
       if (audioContext.state === 'suspended') {
+        console.log(`[Compositor] AudioContext suspended for ${participantId}, attempting resume...`);
         audioContext.resume().then(() => {
-          console.log(`[Compositor] Audio context resumed for ${participantId}`);
+          console.log(`[Compositor] AudioContext resumed successfully for ${participantId}, new state: ${audioContext.state}`);
+        }).catch(err => {
+          console.error(`[Compositor] Failed to resume AudioContext for ${participantId}:`, err);
         });
       }
 
@@ -165,7 +193,7 @@ class CompositorService {
 
       // Configure analyser for speech detection
       analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.8;
+      analyser.smoothingTimeConstant = 0.3; // Lower = more responsive
 
       // Connect source to analyser (don't connect to destination - just analyze)
       source.connect(analyser);
@@ -175,7 +203,16 @@ class CompositorService {
       this.audioContexts.set(participantId, audioContext);
       this.audioLevels.set(participantId, 0);
 
-      console.log(`[Compositor] Audio analyser created for ${participantId}, total analysers:`, this.audioAnalysers.size);
+      console.log(`[Compositor] ✓ Audio analyser created successfully for ${participantId}. Total analysers: ${this.audioAnalysers.size}`);
+
+      // Test the analyser immediately
+      setTimeout(() => {
+        const testData = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(testData);
+        const testSum = testData.reduce((a, b) => a + b, 0);
+        console.log(`[Compositor] Audio analyser test for ${participantId}: sum=${testSum}, context.state=${audioContext.state}`);
+      }, 500);
+
     } catch (error) {
       console.error(`[Compositor] Failed to create audio analyser for ${participantId}:`, error);
     }
@@ -190,6 +227,11 @@ class CompositorService {
   private updateAudioLevels(): void {
     this.audioLogCounter++;
 
+    // Log if no analysers exist
+    if (this.audioLogCounter % 300 === 0 && this.audioAnalysers.size === 0) {
+      console.warn('[Compositor] WARNING: No audio analysers exist! Audio visualization will not work.');
+    }
+
     this.audioAnalysers.forEach((analyser, participantId) => {
       const bufferLength = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
@@ -197,8 +239,10 @@ class CompositorService {
 
       // Calculate average volume
       let sum = 0;
+      let max = 0;
       for (let i = 0; i < bufferLength; i++) {
         sum += dataArray[i];
+        if (dataArray[i] > max) max = dataArray[i];
       }
       const average = sum / bufferLength;
 
@@ -208,12 +252,9 @@ class CompositorService {
       // Store level for drawing
       this.audioLevels.set(participantId, normalizedLevel);
 
-      // Log audio levels periodically (every ~2 seconds at 30fps)
-      if (this.audioLogCounter % 60 === 0 && normalizedLevel > 0.01) {
-        console.log(`[Compositor] Audio level for ${participantId}:`, {
-          normalizedLevel: normalizedLevel.toFixed(3),
-          isSpeaking: normalizedLevel > 0.05,
-        });
+      // Log audio levels every second (at 30fps, every 30 frames)
+      if (this.audioLogCounter % 30 === 0) {
+        console.log(`[Compositor] Audio level for ${participantId}: ${normalizedLevel.toFixed(3)} (max: ${max}, avg: ${average.toFixed(1)}) isSpeaking: ${normalizedLevel > 0.05}`);
       }
     });
 

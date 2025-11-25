@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 
 interface RemoteParticipant {
   id: string;
@@ -39,6 +39,13 @@ export function PreviewArea({
   const [editingParticipant, setEditingParticipant] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
 
+  // Audio monitoring state
+  const [localAudioLevel, setLocalAudioLevel] = useState(0);
+  const [participantAudioLevels, setParticipantAudioLevels] = useState<Map<string, number>>(new Map());
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+
   // Load selected avatar from localStorage
   useEffect(() => {
     const storedAvatar = localStorage.getItem('selectedAvatar');
@@ -46,6 +53,75 @@ export function PreviewArea({
       setSelectedAvatar(storedAvatar);
     }
   }, []);
+
+  // Set up audio monitoring for local stream
+  useEffect(() => {
+    if (!localStream) {
+      setLocalAudioLevel(0);
+      return;
+    }
+
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (!audioTrack) {
+      console.log('[PreviewArea] No audio track in local stream');
+      return;
+    }
+
+    console.log('[PreviewArea] Setting up audio monitoring:', {
+      trackId: audioTrack.id,
+      trackLabel: audioTrack.label,
+      trackEnabled: audioTrack.enabled,
+    });
+
+    // Create audio context and analyser
+    const audioContext = new AudioContext();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.3;
+
+    // Resume audio context if needed
+    if (audioContext.state === 'suspended') {
+      audioContext.resume();
+    }
+
+    // Create audio stream source
+    const audioStream = new MediaStream([audioTrack]);
+    const source = audioContext.createMediaStreamSource(audioStream);
+    source.connect(analyser);
+
+    audioContextRef.current = audioContext;
+    analyserRef.current = analyser;
+
+    // Animation loop to update audio level
+    const updateLevel = () => {
+      if (!analyserRef.current) return;
+
+      const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+      analyserRef.current.getByteFrequencyData(dataArray);
+
+      // Calculate average level
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+      }
+      const average = sum / dataArray.length;
+      const normalizedLevel = average / 255;
+
+      setLocalAudioLevel(normalizedLevel);
+      animationFrameRef.current = requestAnimationFrame(updateLevel);
+    };
+
+    updateLevel();
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, [localStream]);
 
   // Update local video
   useEffect(() => {
@@ -82,14 +158,22 @@ export function PreviewArea({
   };
 
   return (
-    <div
-      className="border-t px-4 py-3 overflow-x-auto"
-      style={{
-        backgroundColor: '#1a1a1a',
-        borderColor: '#404040',
-        minHeight: '140px',
-      }}
-    >
+    <>
+      {/* CSS keyframes for pulse animation */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); opacity: 0.6; }
+          50% { transform: scale(1.1); opacity: 0.3; }
+        }
+      `}</style>
+      <div
+        className="border-t px-4 py-3 overflow-x-auto"
+        style={{
+          backgroundColor: '#1a1a1a',
+          borderColor: '#404040',
+          minHeight: '140px',
+        }}
+      >
       <div className="flex items-center gap-3">
         <div className="text-gray-400 text-xs font-semibold uppercase tracking-wide mb-2">
           Preview / Backstage
@@ -100,23 +184,66 @@ export function PreviewArea({
         {/* Your Preview */}
         <div className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
           <div
-            className={`relative bg-black rounded overflow-hidden h-full border-2 group cursor-pointer ${isLocalUserOnStage ? 'border-blue-500' : 'border-yellow-500'}`}
+            className={`relative bg-black rounded overflow-hidden h-full group cursor-pointer transition-all duration-150`}
+            style={{
+              border: localAudioLevel > 0.05
+                ? `3px solid rgba(59, 130, 246, ${0.5 + localAudioLevel})`
+                : isLocalUserOnStage ? '2px solid #3b82f6' : '2px solid #eab308',
+              boxShadow: localAudioLevel > 0.05
+                ? `0 0 ${10 + localAudioLevel * 20}px rgba(59, 130, 246, ${localAudioLevel * 0.8})`
+                : 'none',
+            }}
             onClick={() => handleToggleStage('local-user', isLocalUserOnStage)}
             title={isLocalUserOnStage ? 'Click to go backstage' : 'Click to go on stage'}
           >
             {localStream && videoEnabled ? (
-              <video
-                ref={localVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-              />
+              <div className="relative w-full h-full">
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+                {/* Audio glow overlay when speaking with video on */}
+                {localAudioLevel > 0.05 && (
+                  <div
+                    className="absolute inset-0 pointer-events-none rounded"
+                    style={{
+                      boxShadow: `inset 0 0 ${10 + localAudioLevel * 15}px rgba(59, 130, 246, ${localAudioLevel * 0.6})`,
+                    }}
+                  />
+                )}
+              </div>
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gray-900">
+              <div className="w-full h-full flex items-center justify-center bg-gray-900 relative">
+                {/* Audio visualization rings */}
+                {localAudioLevel > 0.05 && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    {[0, 1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className="absolute rounded-full border-2 border-blue-400"
+                        style={{
+                          width: `${40 + i * 15 + localAudioLevel * 30}px`,
+                          height: `${40 + i * 15 + localAudioLevel * 30}px`,
+                          opacity: (1 - i * 0.3) * localAudioLevel,
+                          animation: `pulse ${0.5 + i * 0.2}s ease-in-out infinite`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
                 {selectedAvatar ? (
-                  <div className="w-full h-full flex items-center justify-center p-4">
-                    <div className="w-3/4 aspect-square rounded-full overflow-hidden">
+                  <div className="w-full h-full flex items-center justify-center p-4 z-10">
+                    <div
+                      className="w-3/4 aspect-square rounded-full overflow-hidden"
+                      style={{
+                        boxShadow: localAudioLevel > 0.05
+                          ? `0 0 ${15 + localAudioLevel * 25}px rgba(59, 130, 246, ${localAudioLevel})`
+                          : 'none',
+                      }}
+                    >
                       <img
                         src={selectedAvatar}
                         alt="Your avatar"
@@ -125,7 +252,7 @@ export function PreviewArea({
                     </div>
                   </div>
                 ) : (
-                  <svg className="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-8 h-8 text-gray-600 z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -290,6 +417,7 @@ export function PreviewArea({
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
