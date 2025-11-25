@@ -1,0 +1,71 @@
+{
+  "description": "StreamLick - Maximum Stability FFmpeg Encoder Settings",
+  "notes": "These settings ensure stable keyframe alignment for YouTube/Facebook/Twitch",
+  "location": "/usr/local/antmedia/conf/encoder_settings.json",
+
+  "video": {
+    "codec": "libx264",
+    "preset": "veryfast",
+    "bitrate": "3500k",
+    "max_rate": "3500k",
+    "bufsize": "4000k",
+    "g": "60",
+    "keyint_min": "60",
+    "pix_fmt": "yuv420p",
+    "profile:v": "high",
+    "level": "4.2",
+    "tune": "zerolatency",
+    "x264opts": "keyint=60:min-keyint=60:no-scenecut"
+  },
+
+  "audio": {
+    "codec": "aac",
+    "bitrate": "128k",
+    "channels": 2,
+    "sample_rate": 48000,
+    "profile:a": "aac_low"
+  },
+
+  "adaptive_bitrate_levels": [
+    {
+      "name": "1080p",
+      "video": {
+        "width": 1920,
+        "height": 1080,
+        "bitrate": "4500k",
+        "max_rate": "4500k",
+        "bufsize": "6000k"
+      }
+    },
+    {
+      "name": "720p",
+      "video": {
+        "width": 1280,
+        "height": 720,
+        "bitrate": "3500k",
+        "max_rate": "3500k",
+        "bufsize": "4000k"
+      }
+    },
+    {
+      "name": "480p",
+      "video": {
+        "width": 854,
+        "height": 480,
+        "bitrate": "1500k",
+        "max_rate": "1500k",
+        "bufsize": "2000k"
+      }
+    },
+    {
+      "name": "360p",
+      "video": {
+        "width": 640,
+        "height": 360,
+        "bitrate": "800k",
+        "max_rate": "800k",
+        "bufsize": "1000k"
+      }
+    }
+  ]
+}

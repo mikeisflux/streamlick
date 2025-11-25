@@ -1,0 +1,95 @@
+# ============================================================================
+# StreamLick Ant Media Server Application Configuration
+# Maximum Stability Settings
+# ============================================================================
+# Location: /usr/local/antmedia/webapps/StreamLick/WEB-INF/red5-web.properties
+# ============================================================================
+
+# ------------- APPLICATION IDENTITY -------------
+webapp.contextPath=/StreamLick
+webapp.virtualHosts=*
+
+# ------------- DATABASE -------------
+db.app.name=StreamLick
+db.name=streamlick
+db.type=mapdb
+db.host=localhost
+
+# ------------- WEBRTC SETTINGS -------------
+settings.webRTCEnabled=true
+settings.webRTCFrameRate=30
+
+# ------------- RTMP SETTINGS -------------
+settings.rtmpEnabled=true
+
+# ------------- STABILITY SETTINGS (CRITICAL) -------------
+
+# Disable resolution adaptiveness - prevents spontaneous resolution switching
+# which causes dropped packets and encoder hiccups
+settings.publishResolutionAdaptiveness=false
+
+# Force aspect ratio to prevent distortion
+settings.forceAspectRatio=true
+
+# Maximum resolution allowed
+settings.maxResolution=1920x1080
+
+# Maximum publisher bitrate (6 Mbps for 1080p stability)
+settings.allowedPublisherBitrate=6000000
+
+# Enable low latency mode
+settings.minLatency=true
+
+# ------------- CODEC SETTINGS -------------
+
+# Disable VP8 - H.264 only for YouTube/Facebook compatibility
+settings.vp8Enabled=false
+settings.h264Enabled=true
+
+# Disable VP9 and AV1 for maximum compatibility
+settings.vp9Enabled=false
+settings.av1Enabled=false
+
+# Prefer H264 over other codecs
+settings.preferH264=true
+
+# ------------- RECORDING SETTINGS -------------
+settings.mp4MuxingEnabled=false
+settings.hlsMuxingEnabled=false
+settings.webMMuxingEnabled=false
+
+# ------------- TOKEN SECURITY -------------
+# Enable in production for security
+settings.publishTokenControlEnabled=true
+settings.playTokenControlEnabled=false
+
+# ------------- STREAM ACCEPTANCE -------------
+settings.acceptOnlyStreamsInDataStore=false
+
+# ------------- ADAPTIVE BITRATE -------------
+# Disable for constant quality streaming
+settings.enableAdaptiveBitrate=false
+
+# ------------- GOP/KEYFRAME SETTINGS -------------
+# 2-second keyframe interval (60 frames at 30fps)
+settings.gopSize=60
+
+# ------------- JITTER BUFFER -------------
+settings.jitterBufferEnabled=true
+
+# ------------- ENDPOINT RECONNECTION -------------
+settings.endpointRepublishLimit=3
+settings.endpointHealthCheckPeriodMs=2000
+
+# ------------- ADVANCED STABILITY -------------
+
+# Prevent bitrate fluctuations
+settings.constantBitrate=true
+
+# Audio settings
+settings.audioSampleRate=48000
+settings.audioChannels=2
+
+# ============================================================================
+# END OF CONFIGURATION
+# ============================================================================

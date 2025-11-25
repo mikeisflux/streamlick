@@ -10,11 +10,19 @@
 
 ## Server Requirements
 
+### Minimum (Development/Testing)
 - Ubuntu 20.04/22.04/24.04 LTS
 - **Java 17+** (required - Java 11 will NOT work)
 - Maven 3.6+
 - 4+ CPU cores, 8GB+ RAM
 - Ports: 5080, 5443, 1935, 5000-65000/UDP
+
+### Recommended (Production - Maximum Stability)
+- **8 vCPU** (for 1080p + RTMP push)
+- **16GB RAM**
+- **NVMe SSD**
+- Dedicated NIC (cloud ENA or Azure Accelerated Networking)
+- NVIDIA T4 GPU (optional, for hardware transcoding)
 
 ---
 
@@ -383,19 +391,259 @@ await fetch(`${ANT_MEDIA_URL}/broadcasts/${streamId}/rtmp-endpoint`, {
 
 ---
 
+## 12. Maximum Stability Configuration
+
+> **IMPORTANT**: For production deployments streaming to YouTube/Facebook/Twitch, apply these stability settings.
+> See `AMS-STABILITY-CHECKLIST.md` for a detailed verification checklist.
+
+### Step 1: Apply Linux Kernel Tuning
+
+```bash
+# Copy sysctl configuration
+sudo cp /home/streamlick/media-server/conf/99-antmedia-streaming.conf /etc/sysctl.d/
+
+# Apply settings
+sudo sysctl -p /etc/sysctl.d/99-antmedia-streaming.conf
+
+# Update file limits
+sudo bash -c 'cat >> /etc/security/limits.conf << EOF
+antmedia soft nofile 65535
+antmedia hard nofile 65535
+antmedia soft nproc 65535
+antmedia hard nproc 65535
+EOF'
+```
+
+### Step 2: Install Stability Configuration Files
+
+```bash
+# Stop Ant Media
+sudo systemctl stop antmedia
+
+# Copy core configuration
+sudo cp /home/streamlick/media-server/conf/antmedia.conf /usr/local/antmedia/conf/
+
+# Copy encoder settings
+sudo cp /home/streamlick/media-server/conf/encoder_settings.json /usr/local/antmedia/conf/
+
+# Copy application properties (update existing)
+sudo cp /home/streamlick/media-server/conf/red5-web.properties.template \
+    /usr/local/antmedia/webapps/StreamLick/WEB-INF/red5-web.properties
+
+# Set permissions
+sudo chown -R antmedia:antmedia /usr/local/antmedia/
+
+# Start Ant Media
+sudo systemctl start antmedia
+```
+
+### Step 3: Configure Firewall for Stability
+
+```bash
+# Standard ports
+sudo ufw allow 5080/tcp   # HTTP Dashboard
+sudo ufw allow 5443/tcp   # HTTPS/WebSocket Signaling
+sudo ufw allow 1935/tcp   # RTMP
+sudo ufw allow 80/tcp     # HTTP (redirect)
+sudo ufw allow 443/tcp    # HTTPS (Nginx)
+
+# WebRTC Media - Use 50000-60000 for better stability
+sudo ufw allow 50000:60000/udp
+
+# TURN server (if configured)
+sudo ufw allow 3478/udp
+sudo ufw allow 3478/tcp
+
+# Verify
+sudo ufw status
+```
+
+### Step 4: Setup Nginx Reverse Proxy (Recommended)
+
+```bash
+# Install Nginx
+sudo apt install -y nginx
+
+# Copy configuration
+sudo cp /home/streamlick/media-server/conf/nginx-antmedia.conf \
+    /etc/nginx/sites-available/antmedia.conf
+
+# Enable site
+sudo ln -sf /etc/nginx/sites-available/antmedia.conf /etc/nginx/sites-enabled/
+
+# Test configuration
+sudo nginx -t
+
+# Get SSL certificate
+sudo certbot certonly --webroot -w /var/www/html -d media.streamlick.com
+
+# Reload Nginx
+sudo systemctl reload nginx
+```
+
+### Step 5: Update Systemd Service for Stability
+
+Update `/etc/systemd/system/antmedia.service`:
+
+```ini
+[Unit]
+Description=Ant Media Server
+After=network.target redis.service
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=/usr/local/antmedia/.env
+WorkingDirectory=/usr/local/antmedia
+ExecStart=/usr/local/antmedia/start.sh
+ExecStop=/usr/local/antmedia/stop.sh
+Restart=on-failure
+RestartSec=10
+
+# Stability settings
+LimitNOFILE=65535
+LimitNPROC=65535
+Environment="JAVA_OPTS=-Xms4g -Xmx8g -XX:+UseG1GC -XX:MaxGCPauseMillis=50"
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Apply:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart antmedia
+```
+
+### Step 6: Configure TURN Server (Optional but Recommended)
+
+If users have NAT issues, configure a TURN server:
+
+```bash
+# Install coturn
+sudo apt install -y coturn
+
+# Edit /etc/turnserver.conf
+realm=media.streamlick.com
+listening-port=3478
+external-ip=YOUR_PUBLIC_IP
+user=streamlick:SECURE_PASSWORD
+lt-cred-mech
+fingerprint
+
+# Enable and start
+sudo systemctl enable coturn
+sudo systemctl start coturn
+```
+
+Update `antmedia.conf`:
+```
+TurnServerUrl=turn:media.streamlick.com:3478
+TurnServerUsername=streamlick
+TurnServerPassword=SECURE_PASSWORD
+```
+
+---
+
+## 13. Stability Configuration Reference
+
+### Configuration Files in `/home/streamlick/media-server/conf/`:
+
+| File | Purpose | Deploy To |
+|------|---------|-----------|
+| `antmedia.conf` | Core server settings | `/usr/local/antmedia/conf/` |
+| `encoder_settings.json` | FFmpeg encoder tuning | `/usr/local/antmedia/conf/` |
+| `red5-web.properties.template` | Application settings | `/usr/local/antmedia/webapps/StreamLick/WEB-INF/` |
+| `99-antmedia-streaming.conf` | Linux kernel tuning | `/etc/sysctl.d/` |
+| `nginx-antmedia.conf` | Nginx reverse proxy | `/etc/nginx/sites-available/` |
+
+### Key Stability Settings:
+
+| Setting | Value | Reason |
+|---------|-------|--------|
+| Frame Rate | 30fps | Lower CPU, more stable than 60fps |
+| Keyframe Interval | 2 seconds | Required by YouTube/FB |
+| Bitrate | 2500-3500 kbps | Sweet spot for 720p-1080p |
+| Buffer Size | 4000k | Prevents rate spikes |
+| Codec | H.264 High | Universal platform support |
+| Preset | veryfast | Balance of speed/quality |
+| Jitter Buffer | Enabled | Prevents drops under CPU load |
+| Resolution Adaptiveness | Disabled | Prevents quality fluctuations |
+
+---
+
 ## Troubleshooting
 
 ### WebRTC not connecting
 - Check `AMS_HOST_ADDRESS` is set correctly
-- Verify UDP ports 5000-65000 are open
+- Verify UDP ports 50000-60000 are open
 - Check SSL certificate is valid
+- Verify TURN server if behind NAT
 
 ### RTMP output failing
 - Verify destination URL is correct
 - Check firewall allows outbound 1935
+- Verify keyframe interval is 2 seconds
 - Look at logs: `tail -f /usr/local/antmedia/log/ant-media-server.log`
 
 ### High latency
-- Reduce GOP size in settings
+- Reduce GOP size to 60 frames (2 sec at 30fps)
 - Check network bandwidth
 - Disable adaptive bitrate for lowest latency
+- Enable jitter buffer
+
+### "Stream is lagging" / Dropped Frames
+- Enable jitter buffer in `antmedia.conf`
+- Check CPU usage (should be < 80%)
+- Verify encoder preset is `veryfast`
+- Apply sysctl network tuning
+
+### YouTube/Facebook "Unstable Stream" Warnings
+- Verify keyframe interval is exactly 2 seconds
+- Check bitrate is constant (use `max_rate` = `bitrate`)
+- Ensure buffer size is set (4000k for 3500k bitrate)
+- Disable resolution adaptiveness
+
+### Packet Loss / JitterBuffer Overflow
+- Enable `JitterBufferEnabled=true`
+- Set `JitterBufferSuccessfulSendThreshold=2`
+- Apply Linux sysctl tuning
+- Increase network buffer sizes
+
+---
+
+## Quick Stability Check Script
+
+Create `/home/streamlick/check-ams-stability.sh`:
+
+```bash
+#!/bin/bash
+echo "=== Ant Media Server Stability Check ==="
+
+# Check service status
+echo -n "AMS Service: "
+systemctl is-active antmedia
+
+# Check sysctl settings
+echo -n "Sysctl rmem_max: "
+sysctl net.core.rmem_max | cut -d= -f2
+
+# Check open ports
+echo "Open UDP ports:"
+sudo netstat -ulnp | grep -E "50000|60000"
+
+# Check recent errors in logs
+echo "Recent errors (last 5):"
+grep -i "error\|exception\|failed" /usr/local/antmedia/log/ant-media-server.log | tail -5
+
+# Check memory usage
+echo "Memory usage:"
+free -h | head -2
+
+echo "=== Check Complete ==="
+```
+
+```bash
+chmod +x /home/streamlick/check-ams-stability.sh
+```
