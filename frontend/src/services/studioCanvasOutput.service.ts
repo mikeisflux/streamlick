@@ -28,6 +28,7 @@ class StudioCanvasOutputService {
   private canvas: HTMLCanvasElement | null = null;
   private outputStream: MediaStream | null = null;
   private isCapturing = false;
+  private audioTrackAdded = false; // Track if audio has been added to output stream
 
   // Layout state (stored for reference by other components)
   private currentLayout: LayoutConfig = { type: 'grid', layoutId: 3 };
@@ -121,6 +122,12 @@ class StudioCanvasOutputService {
       if (audioTrack) {
         const audioStream = new MediaStream([audioTrack]);
         audioMixerService.addStream(participant.id, audioStream);
+
+        // Try to attach audio to output stream if not already done
+        // This handles the case where first participant is added after start()
+        if (this.isCapturing && !this.audioTrackAdded) {
+          this.attachAudioTrack();
+        }
       }
     }
   }
@@ -146,10 +153,36 @@ class StudioCanvasOutputService {
 
     logger.info('[StudioCanvasOutput] Starting capture');
     this.isCapturing = true;
+    this.audioTrackAdded = false;
 
-    // Capture stream from canvas
+    // Capture stream from canvas at target FPS
     this.outputStream = this.canvas.captureStream(this.FPS);
-    logger.info('[StudioCanvasOutput] Captured stream with', this.outputStream.getVideoTracks().length, 'video tracks');
+
+    // Add audio track immediately if mixer is ready
+    this.attachAudioTrack();
+
+    logger.info('[StudioCanvasOutput] Capture started:', {
+      fps: this.FPS,
+      videoTracks: this.outputStream.getVideoTracks().length,
+      audioTracks: this.outputStream.getAudioTracks().length,
+    });
+  }
+
+  /**
+   * Attach mixed audio track to the output stream (called once)
+   */
+  private attachAudioTrack(): void {
+    if (!this.outputStream || this.audioTrackAdded) return;
+
+    const mixedAudioStream = audioMixerService.getOutputStream();
+    if (!mixedAudioStream) return;
+
+    const mixedAudioTrack = mixedAudioStream.getAudioTracks()[0];
+    if (mixedAudioTrack) {
+      this.outputStream.addTrack(mixedAudioTrack);
+      this.audioTrackAdded = true;
+      logger.info('[StudioCanvasOutput] Audio track attached to output stream');
+    }
   }
 
   /**
@@ -158,6 +191,7 @@ class StudioCanvasOutputService {
   stop(): void {
     logger.info('[StudioCanvasOutput] Stopping capture');
     this.isCapturing = false;
+    this.audioTrackAdded = false;
 
     if (this.outputStream) {
       this.outputStream.getTracks().forEach(track => track.stop());
@@ -178,32 +212,11 @@ class StudioCanvasOutputService {
       return null;
     }
 
-    // Get mixed audio stream
-    const mixedAudioStream = audioMixerService.getOutputStream();
-
-    if (!mixedAudioStream) {
-      logger.info('[StudioCanvasOutput] No mixed audio, returning video-only');
-      return this.outputStream;
+    // Try to attach audio if not already attached
+    // This handles the case where audio mixer wasn't ready during start()
+    if (!this.audioTrackAdded) {
+      this.attachAudioTrack();
     }
-
-    // Add audio track to the canvas stream
-    const existingAudioTracks = this.outputStream.getAudioTracks();
-    const mixedAudioTrack = mixedAudioStream.getAudioTracks()[0];
-
-    if (mixedAudioTrack) {
-      // Remove existing audio tracks
-      existingAudioTracks.forEach(track => {
-        this.outputStream!.removeTrack(track);
-      });
-
-      // Add mixed audio track
-      this.outputStream.addTrack(mixedAudioTrack);
-    }
-
-    logger.info('[StudioCanvasOutput] getOutputStream returning stream with',
-      this.outputStream.getVideoTracks().length, 'video,',
-      this.outputStream.getAudioTracks().length, 'audio tracks'
-    );
 
     return this.outputStream;
   }

@@ -505,12 +505,19 @@ export function StudioCanvas({
     }
   }, []);
 
-  // Canvas capture animation loop
+  // Cached canvas context ref for performance
+  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
+
+  // Canvas capture animation loop - optimized to run at 30fps to match captureStream
   const drawToCanvas = useCallback(() => {
     const canvas = captureCanvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d', { alpha: false });
+    // Cache context for performance (avoid getContext on every frame)
+    if (!ctxRef.current) {
+      ctxRef.current = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    }
+    const ctx = ctxRef.current;
     if (!ctx) return;
 
     // Clear canvas with background color
@@ -665,6 +672,7 @@ export function StudioCanvas({
   ]);
 
   // Start animation loop when canvas is available
+  // Optimized: Run at 30fps to match captureStream, not 60fps
   useEffect(() => {
     const canvas = captureCanvasRef.current;
     if (!canvas) return;
@@ -673,20 +681,32 @@ export function StudioCanvas({
     studioCanvasOutputService.registerCanvas(canvas);
 
     let isRunning = true;
+    let lastFrameTime = 0;
+    const targetFPS = 30;
+    const frameInterval = 1000 / targetFPS; // ~33.33ms per frame
 
-    const animate = () => {
+    const animate = (currentTime: number) => {
       if (!isRunning) return;
-      drawToCanvas();
+
+      // Throttle to 30fps - only draw if enough time has passed
+      const elapsed = currentTime - lastFrameTime;
+      if (elapsed >= frameInterval) {
+        lastFrameTime = currentTime - (elapsed % frameInterval); // Adjust for drift
+        drawToCanvas();
+      }
+
       animationFrameRef.current = requestAnimationFrame(animate);
     };
 
-    animate();
+    animationFrameRef.current = requestAnimationFrame(animate);
 
     return () => {
       isRunning = false;
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
+      // Clear cached context on cleanup
+      ctxRef.current = null;
       studioCanvasOutputService.unregisterCanvas();
     };
   }, [drawToCanvas]);
