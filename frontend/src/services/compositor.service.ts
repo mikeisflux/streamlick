@@ -236,7 +236,7 @@ class CompositorService {
       const dataArray = new Uint8Array(bufferLength);
       analyser.getByteFrequencyData(dataArray);
 
-      // Calculate average volume
+      // Calculate volume levels
       let sum = 0;
       let max = 0;
       for (let i = 0; i < bufferLength; i++) {
@@ -245,15 +245,17 @@ class CompositorService {
       }
       const average = sum / bufferLength;
 
-      // Normalize to 0-1 range (0-255 → 0-1)
-      const normalizedLevel = average / 255;
+      // Use MAX value for speech detection (much more responsive than average)
+      // Average is too low because most frequency bins are silent
+      // Max captures the loudest frequency which is what we want for speech
+      const normalizedLevel = max / 255;
 
       // Store level for drawing
       this.audioLevels.set(participantId, normalizedLevel);
 
       // Log audio levels every second (at 30fps, every 30 frames)
       if (this.audioLogCounter % 30 === 0) {
-        console.log(`[Compositor] Audio level for ${participantId}: ${normalizedLevel.toFixed(3)} (max: ${max}, avg: ${average.toFixed(1)}) isSpeaking: ${normalizedLevel > 0.05}`);
+        console.log(`[Compositor] Audio level for ${participantId}: ${normalizedLevel.toFixed(3)} (max: ${max}, avg: ${average.toFixed(1)}) isSpeaking: ${normalizedLevel > 0.1}`);
       }
     });
 
@@ -1295,7 +1297,7 @@ class CompositorService {
 
       // Get audio level for pulsating animation
       const audioLevel = this.audioLevels.get(participantId) || 0;
-      const isSpeaking = audioLevel > 0.05; // Threshold for detecting speech
+      const isSpeaking = audioLevel > 0.1; // Threshold for detecting speech (using max-based level)
 
       // Draw pulsating rings when speaking (audio analyzer handles mute state automatically)
       if (isSpeaking) {
@@ -1331,7 +1333,7 @@ class CompositorService {
 
     // Draw border - audio-reactive when speaking (audio analyzer handles mute state automatically)
     const audioLevel = this.audioLevels.get(participantId) || 0;
-    const isSpeaking = audioLevel > 0.05;
+    const isSpeaking = audioLevel > 0.1; // Using max-based level
 
     if (isSpeaking) {
       // Glowing border when speaking
