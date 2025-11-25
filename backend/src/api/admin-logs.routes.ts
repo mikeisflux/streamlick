@@ -249,11 +249,14 @@ router.get('/media-server', async (req: Request, res: Response) => {
     // Try to fetch logs from Ant Media REST API
     try {
       // Ant Media provides broadcast list and server info
-      const [broadcastsRes, statsRes, activeStreamsRes]: [any[], any, any] = await Promise.all([
+      const results = await Promise.all([
         fetch(`${antMediaRestUrl}/broadcasts/list/0/50`).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch(`${antMediaRestUrl}/getServerSettings`).then(r => r.ok ? r.json() : null).catch(() => null),
         fetch(`${antMediaRestUrl}/broadcasts/active-live-stream-count`).then(r => r.ok ? r.json() : null).catch(() => null),
       ]);
+      const broadcastsRes = results[0] as any[];
+      const statsRes = results[1] as any;
+      const activeStreamsRes = results[2] as any;
 
       // Add server status entry
       if (activeStreamsRes !== null) {
