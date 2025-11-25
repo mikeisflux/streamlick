@@ -1008,6 +1008,7 @@ export function StudioCanvas({
                       editMode={editMode}
                       position={customLayoutPositions.get(participant.id)}
                       onPositionChange={(pos) => handlePositionChange(participant.id, pos)}
+                      onVideoRef={(el) => registerVideoRef(participant.id, el)}
                     />
                   </div>
                 ))}
@@ -1136,6 +1137,7 @@ export function StudioCanvas({
                           editMode={editMode}
                           position={customLayoutPositions.get(participant.id)}
                           onPositionChange={(pos) => handlePositionChange(participant.id, pos)}
+                          onVideoRef={(el) => registerVideoRef(participant.id, el)}
                         />
                       </div>
                     );

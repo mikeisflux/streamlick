@@ -25,6 +25,8 @@ interface ParticipantBoxProps {
   editMode?: boolean;
   position?: { x: number; y: number; width: number; height: number };
   onPositionChange?: (position: { x: number; y: number; width: number; height: number }) => void;
+  // Video element callback for canvas capture
+  onVideoRef?: (videoElement: HTMLVideoElement | null) => void;
 }
 
 export function ParticipantBox({
@@ -50,6 +52,7 @@ export function ParticipantBox({
   editMode = false,
   position,
   onPositionChange,
+  onVideoRef,
 }: ParticipantBoxProps) {
   const iconSize = size === 'small' ? 'w-6 h-6' : size === 'medium' ? 'w-10 h-10' : 'w-16 h-16';
   const textSize = size === 'small' ? 'text-xs' : 'text-sm';
@@ -95,6 +98,18 @@ export function ParticipantBox({
       }
     }
   }, [stream, videoEnabled, activeVideoRef]);
+
+  // Notify parent of video element for canvas capture (for remote participants)
+  useEffect(() => {
+    if (onVideoRef && internalVideoRef.current) {
+      onVideoRef(internalVideoRef.current);
+    }
+    return () => {
+      if (onVideoRef) {
+        onVideoRef(null);
+      }
+    };
+  }, [onVideoRef]);
 
   // Drag and resize state
   const [isDragging, setIsDragging] = useState(false);
