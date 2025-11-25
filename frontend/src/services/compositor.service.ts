@@ -388,6 +388,9 @@ class CompositorService {
 
       logger.info(`Loading intro video: ${videoUrl}`);
 
+      // Emit event so visible UI can show intro video too
+      window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: videoUrl, playing: true } }));
+
       // Wait for metadata (dimensions) to load first
       videoElement.addEventListener('loadedmetadata', () => {
         logger.info(`Intro video metadata loaded: ${videoUrl}, dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}, duration: ${videoElement.duration}s`);
@@ -395,6 +398,7 @@ class CompositorService {
         // Ensure video has valid dimensions
         if (!videoElement.videoWidth || !videoElement.videoHeight) {
           logger.error('Intro video has invalid dimensions:', videoElement.videoWidth, videoElement.videoHeight);
+          window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
           reject(new Error('Invalid video dimensions'));
           return;
         }
@@ -409,6 +413,7 @@ class CompositorService {
           videoElement.play().catch((error) => {
             logger.error('Failed to play intro video:', error);
             this.clearMediaClipOverlay();
+            window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
             reject(error);
           });
         };
@@ -425,6 +430,7 @@ class CompositorService {
       videoElement.addEventListener('ended', () => {
         logger.info('Intro video ended, clearing overlay');
         this.clearMediaClipOverlay();
+        window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
         resolve();
       });
 
@@ -435,6 +441,7 @@ class CompositorService {
           : 'Unknown error';
         logger.error(`Intro video error: ${errorMsg}`, event);
         this.clearMediaClipOverlay();
+        window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
         reject(new Error(`Video error: ${errorMsg}`));
       });
 
@@ -444,6 +451,7 @@ class CompositorService {
           logger.info(`Intro video duration limit reached (${duration}s), clearing overlay`);
           videoElement.pause();
           this.clearMediaClipOverlay();
+          window.dispatchEvent(new CustomEvent('compositor-intro-video', { detail: { url: null, playing: false } }));
           resolve();
         }, duration * 1000);
       }
@@ -460,16 +468,23 @@ class CompositorService {
       logger.info(`Starting ${seconds}-second countdown on canvas`);
       this.countdownValue = seconds;
 
+      // Emit event so visible UI can show countdown too
+      window.dispatchEvent(new CustomEvent('compositor-countdown', { detail: { seconds: this.countdownValue } }));
+
       const intervalId = setInterval(() => {
         if (this.countdownValue === null || this.countdownValue <= 0) {
           clearInterval(intervalId);
           this.countdownValue = null;
+          // Emit countdown complete event
+          window.dispatchEvent(new CustomEvent('compositor-countdown', { detail: { seconds: null } }));
           logger.info('Countdown finished');
           resolve();
           return;
         }
 
         this.countdownValue--;
+        // Emit tick event for visible UI
+        window.dispatchEvent(new CustomEvent('compositor-countdown', { detail: { seconds: this.countdownValue } }));
         logger.debug(`Countdown: ${this.countdownValue}`);
       }, 1000);
     });

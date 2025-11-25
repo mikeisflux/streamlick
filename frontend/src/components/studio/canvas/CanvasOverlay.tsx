@@ -63,3 +63,27 @@ export const CountdownOverlay = memo(({ seconds }: { seconds: number | null }) =
 });
 
 CountdownOverlay.displayName = 'CountdownOverlay';
+
+// Intro Video Overlay Component
+// Note: Video is muted because the compositor already plays audio
+export const IntroVideoOverlay = memo(({ videoUrl }: { videoUrl: string | null }) => {
+  if (!videoUrl) return null;
+
+  return (
+    <div className="absolute inset-0 bg-black z-50">
+      <video
+        src={videoUrl}
+        autoPlay
+        muted
+        playsInline
+        className="w-full h-full object-contain"
+        style={{ backgroundColor: '#000' }}
+      />
+      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white/70 text-sm">
+        Playing intro...
+      </div>
+    </div>
+  );
+});
+
+IntroVideoOverlay.displayName = 'IntroVideoOverlay';

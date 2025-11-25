@@ -1,4 +1,4 @@
-export { CaptionOverlay, CountdownOverlay } from './CanvasOverlay';
+export { CaptionOverlay, CountdownOverlay, IntroVideoOverlay } from './CanvasOverlay';
 export { LayoutSelector } from './LayoutSelector';
 export { StudioCanvas } from './StudioCanvas';
 export { ParticipantBox } from './ParticipantBox';
