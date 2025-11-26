@@ -789,12 +789,14 @@ router.post('/:id/start-rtmp', authenticate, async (req: AuthRequest, res) => {
       },
     });
 
-    // Prepare destinations for Ant Media
-    const destinations = broadcastDestinations.map((bd) => ({
-      platform: bd.destination.platform,
-      rtmpUrl: bd.streamUrl,
-      streamKey: bd.streamKey ? decrypt(bd.streamKey) : '',
-    }));
+    // Prepare destinations for Ant Media (filter out those without RTMP URLs)
+    const destinations = broadcastDestinations
+      .filter((bd) => bd.streamUrl) // Only include destinations with valid RTMP URLs
+      .map((bd) => ({
+        platform: bd.destination.platform,
+        rtmpUrl: bd.streamUrl as string,
+        streamKey: bd.streamKey ? decrypt(bd.streamKey) : '',
+      }));
 
     // Start RTMP streaming via Ant Media
     const streamId = req.params.id;
