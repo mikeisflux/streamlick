@@ -75,6 +75,11 @@ interface CanvasSettingsModalProps {
   onNoiseSuppressionChange?: (enabled: boolean) => void;
   autoAdjustMicrophone?: boolean;
   onAutoAdjustMicrophoneChange?: (adjust: boolean) => void;
+  // Noise gate settings
+  noiseGateEnabled?: boolean;
+  onNoiseGateEnabledChange?: (enabled: boolean) => void;
+  noiseGateThreshold?: number;
+  onNoiseGateThresholdChange?: (threshold: number) => void;
   // Visual effects settings
   backgroundBlur?: boolean;
   onBackgroundBlurChange?: (enabled: boolean) => void;
@@ -685,6 +690,45 @@ function AudioSettings({ props }: { props: CanvasSettingsModalProps }) {
             checked={props.autoAdjustMicrophone ?? false}
             onChange={props.onAutoAdjustMicrophoneChange}
           />
+        </div>
+      </div>
+
+      {/* Noise Gate Section */}
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-3">
+          Noise Gate
+          <span className="ml-2 text-xs text-gray-500">ℹ️ Silences audio below threshold to remove background noise</span>
+        </label>
+        <div className="space-y-4">
+          <ToggleOption
+            label="Enable noise gate"
+            checked={props.noiseGateEnabled ?? true}
+            onChange={props.onNoiseGateEnabledChange}
+          />
+          {(props.noiseGateEnabled ?? true) && (
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">
+                Threshold: {props.noiseGateThreshold ?? -38}dB
+              </label>
+              <input
+                type="range"
+                min="-60"
+                max="-20"
+                value={props.noiseGateThreshold ?? -38}
+                onChange={(e) => props.onNoiseGateThresholdChange?.(Number(e.target.value))}
+                className="w-full"
+                style={{ accentColor: '#0066ff' }}
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>-60dB (Sensitive)</span>
+                <span>-40dB</span>
+                <span>-20dB (Aggressive)</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Lower values = more sensitive (picks up quieter sounds). Higher values = more aggressive (blocks more noise).
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -42,6 +42,7 @@ import {
 } from '../hooks/studio';
 import { useCanvasSettings } from '../hooks/studio/useCanvasSettings';
 import { socketService } from '../services/socket.service';
+import { audioProcessorService } from '../services/audio-processor.service';
 
 export function Studio() {
   const { broadcastId } = useParams<{ broadcastId: string }>();
@@ -283,6 +284,12 @@ export function Studio() {
 
   // Canvas Settings (persisted to localStorage)
   const canvasSettings = useCanvasSettings();
+
+  // Configure noise gate when settings change
+  useEffect(() => {
+    audioProcessorService.setNoiseGateEnabled(canvasSettings.noiseGateEnabled);
+    audioProcessorService.setNoiseGateThreshold(canvasSettings.noiseGateThreshold);
+  }, [canvasSettings.noiseGateEnabled, canvasSettings.noiseGateThreshold]);
 
   // Broadcast title update handler
   const handleTitleChange = async (newTitle: string) => {
@@ -627,6 +634,10 @@ export function Studio() {
         onNoiseSuppressionChange={canvasSettings.setNoiseSuppression}
         autoAdjustMicrophone={canvasSettings.autoAdjustMicrophone}
         onAutoAdjustMicrophoneChange={canvasSettings.setAutoAdjustMicrophone}
+        noiseGateEnabled={canvasSettings.noiseGateEnabled}
+        onNoiseGateEnabledChange={canvasSettings.setNoiseGateEnabled}
+        noiseGateThreshold={canvasSettings.noiseGateThreshold}
+        onNoiseGateThresholdChange={canvasSettings.setNoiseGateThreshold}
         // Visual effects
         selectedBackground={canvasSettings.selectedBackground}
         onBackgroundSelect={canvasSettings.setSelectedBackground}
