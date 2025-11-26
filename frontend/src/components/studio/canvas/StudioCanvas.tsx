@@ -877,26 +877,28 @@ export function StudioCanvas({
 
           const pos = positions[index];
 
-          if (p.type === 'local' && !p.videoEnabled) {
-            // Draw avatar when camera is off
-            if (avatarImageRef.current) {
-              const size = Math.min(pos.width, pos.height) * 0.6;
-              const avatarX = pos.x + (pos.width - size) / 2;
-              const avatarY = pos.y + (pos.height - size) / 2;
-
-              ctx.save();
-              ctx.beginPath();
-              ctx.arc(avatarX + size / 2, avatarY + size / 2, size / 2, 0, Math.PI * 2);
-              ctx.closePath();
-              ctx.clip();
-              ctx.drawImage(avatarImageRef.current, avatarX, avatarY, size, size);
-              ctx.restore();
-            }
-          } else if (p.video && p.video.readyState >= 2) {
-            // Draw video
+          // Draw video only when camera is enabled and video is ready
+          if (p.videoEnabled && p.video && p.video.readyState >= 2) {
+            // Draw video - camera is ON
             ctx.drawImage(p.video, pos.x, pos.y, pos.width, pos.height);
+          } else if (!p.videoEnabled && p.type === 'local' && avatarImageRef.current) {
+            // Draw avatar when camera is OFF (local user only)
+            // First draw dark background
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+            // Then draw circular avatar in center
+            const size = Math.min(pos.width, pos.height) * 0.5;
+            const avatarX = pos.x + (pos.width - size) / 2;
+            const avatarY = pos.y + (pos.height - size) / 2;
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(avatarX + size / 2, avatarY + size / 2, size / 2, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.clip();
+            ctx.drawImage(avatarImageRef.current, avatarX, avatarY, size, size);
+            ctx.restore();
           } else {
-            // Video not ready - draw placeholder
+            // Placeholder - camera off without avatar, or video not ready
             ctx.fillStyle = '#1a1a1a';
             ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
           }
