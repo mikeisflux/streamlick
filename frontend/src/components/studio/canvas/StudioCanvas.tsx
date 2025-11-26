@@ -706,9 +706,9 @@ export function StudioCanvas({
         const positions: ParticipantPosition[] = [];
 
         switch (activeLayout) {
-          case 1: // Solo - single participant centered at 25% of screen, 16:9 aspect ratio
+          case 1: // Solo - single participant centered at 60% of screen, 16:9 aspect ratio
             if (participantCount === 1) {
-              const boxWidth = canvas.width * 0.25;
+              const boxWidth = canvas.width * 0.6;
               const boxHeight = boxWidth * (9 / 16); // 16:9 aspect ratio
               positions.push({
                 x: (canvas.width - boxWidth) / 2,
