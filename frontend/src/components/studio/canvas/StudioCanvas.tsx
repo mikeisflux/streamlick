@@ -706,14 +706,15 @@ export function StudioCanvas({
         const positions: ParticipantPosition[] = [];
 
         switch (activeLayout) {
-          case 1: // Solo - single participant centered at 25% of screen
+          case 1: // Solo - single participant centered at 25% of screen, 16:9 aspect ratio
             if (participantCount === 1) {
-              const size = Math.min(canvas.width, canvas.height) * 0.25;
+              const boxWidth = canvas.width * 0.25;
+              const boxHeight = boxWidth * (9 / 16); // 16:9 aspect ratio
               positions.push({
-                x: (canvas.width - size) / 2,
-                y: (canvas.height - size) / 2,
-                width: size,
-                height: size
+                x: (canvas.width - boxWidth) / 2,
+                y: (canvas.height - boxHeight) / 2,
+                width: boxWidth,
+                height: boxHeight
               });
             } else {
               // Fallback to grid for multiple
