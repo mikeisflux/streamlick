@@ -24,6 +24,7 @@ import { CommentOverlay } from './CommentOverlay';
 import { Caption } from '../../../services/caption.service';
 import { mediaStorageService } from '../../../services/media-storage.service';
 import { canvasStreamService } from '../../../services/canvas-stream.service';
+import { audioMixerService } from '../../../services/audio-mixer.service';
 import { useAudioLevel } from '../../../hooks/studio/useAudioLevel';
 
 interface Banner {
@@ -155,6 +156,10 @@ export function StudioCanvas({
   const logoImageRef = useRef<HTMLImageElement | null>(null);
   const overlayImageRef = useRef<HTMLImageElement | null>(null);
   const avatarImageRef = useRef<HTMLImageElement | null>(null);
+
+  // Video clip for playback on canvas
+  const videoClipRef = useRef<HTMLVideoElement | null>(null);
+  const videoClipUrlRef = useRef<string | null>(null);
 
   // Refs for props (to avoid stale closures in render loop)
   const isLocalUserOnStageRef = useRef(isLocalUserOnStage);
@@ -991,7 +996,12 @@ export function StudioCanvas({
           });
         }
 
-        // Draw overlay image (full-screen, on top of participants)
+        // Draw video clip (full-screen, on top of participants but below overlays)
+        if (videoClipRef.current && videoClipRef.current.readyState >= 2) {
+          ctx.drawImage(videoClipRef.current, 0, 0, canvas.width, canvas.height);
+        }
+
+        // Draw overlay image (full-screen, on top of video clips)
         if (overlayImageRef.current) {
           ctx.drawImage(overlayImageRef.current, 0, 0, canvas.width, canvas.height);
         }
@@ -1414,6 +1424,78 @@ export function StudioCanvas({
     };
     img.src = streamOverlay;
   }, [streamOverlay]);
+
+  // Load and play video clip
+  useEffect(() => {
+    // Clean up previous video clip
+    if (videoClipRef.current) {
+      videoClipRef.current.pause();
+      videoClipRef.current.src = '';
+      audioMixerService.removeStream('video-clip');
+      videoClipRef.current = null;
+    }
+
+    if (!videoClip) {
+      videoClipUrlRef.current = null;
+      return;
+    }
+
+    // Don't reload if same URL
+    if (videoClipUrlRef.current === videoClip) {
+      return;
+    }
+
+    videoClipUrlRef.current = videoClip;
+
+    const video = document.createElement('video');
+    video.crossOrigin = 'anonymous';
+    video.src = videoClip;
+    video.loop = false;
+    video.muted = false; // Keep unmuted for audio capture
+    video.playsInline = true;
+    video.autoplay = true;
+
+    video.onloadedmetadata = () => {
+      console.log('[StudioCanvas] Video clip loaded:', video.videoWidth, 'x', video.videoHeight, 'duration:', video.duration);
+      videoClipRef.current = video;
+
+      // Add video audio to mixer for studio monitoring and broadcast
+      try {
+        audioMixerService.addMediaElement('video-clip', video);
+        audioMixerService.setStreamVolume('video-clip', 1.0); // Full volume
+        console.log('[StudioCanvas] Video clip audio added to mixer');
+      } catch (err) {
+        console.error('[StudioCanvas] Failed to add video clip audio to mixer:', err);
+      }
+
+      // Start playback
+      video.play().catch((err) => {
+        console.error('[StudioCanvas] Failed to play video clip:', err);
+      });
+    };
+
+    video.onended = () => {
+      console.log('[StudioCanvas] Video clip ended');
+      // Clean up when video ends
+      audioMixerService.removeStream('video-clip');
+      videoClipRef.current = null;
+      videoClipUrlRef.current = null;
+      // Dispatch event to clear the active state in MediaAssetsPanel
+      window.dispatchEvent(new CustomEvent('videoClipEnded'));
+    };
+
+    video.onerror = (err) => {
+      console.error('[StudioCanvas] Failed to load video clip:', err);
+      videoClipRef.current = null;
+      videoClipUrlRef.current = null;
+    };
+
+    return () => {
+      video.pause();
+      video.src = '';
+      audioMixerService.removeStream('video-clip');
+    };
+  }, [videoClip]);
 
   // Load avatar image
   useEffect(() => {
