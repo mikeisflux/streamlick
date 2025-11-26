@@ -16,6 +16,7 @@
  */
 
 import { audioMixerService } from './audio-mixer.service';
+import { audioProcessorService } from './audio-processor.service';
 import logger from '../utils/logger';
 
 interface ParticipantStream {
@@ -107,8 +108,23 @@ class StudioCanvasOutputService {
         const audioTrack = participant.stream.getAudioTracks()[0];
         if (audioTrack) {
           const audioStream = new MediaStream([audioTrack]);
-          // Pass isLocal flag so local user doesn't hear their own mic
-          audioMixerService.addStream(participant.id, audioStream, participant.isLocal);
+
+          // For LOCAL microphone: process through noise gate before mixing
+          // For REMOTE participants: add directly to mixer (no processing)
+          if (participant.isLocal) {
+            try {
+              // Process local mic through audio processor (noise gate, filters)
+              const processedStream = await audioProcessorService.initialize(audioStream);
+              audioMixerService.addStream(participant.id, processedStream, true);
+              logger.info(`[StudioCanvasOutput] Local mic ${participant.id} processed through noise gate`);
+            } catch (error) {
+              logger.error('[StudioCanvasOutput] Failed to initialize audio processor, using raw audio:', error);
+              audioMixerService.addStream(participant.id, audioStream, true);
+            }
+          } else {
+            // Remote audio goes directly to mixer
+            audioMixerService.addStream(participant.id, audioStream, false);
+          }
         }
       }
     }
@@ -134,7 +150,23 @@ class StudioCanvasOutputService {
       const audioTrack = participant.stream.getAudioTracks()[0];
       if (audioTrack) {
         const audioStream = new MediaStream([audioTrack]);
-        audioMixerService.addStream(participant.id, audioStream, participant.isLocal);
+
+        // For LOCAL microphone: process through noise gate before mixing
+        // For REMOTE participants: add directly to mixer (no processing)
+        if (participant.isLocal) {
+          try {
+            // Process local mic through audio processor (noise gate, filters)
+            const processedStream = await audioProcessorService.initialize(audioStream);
+            audioMixerService.addStream(participant.id, processedStream, true);
+            logger.info(`[StudioCanvasOutput] Local mic ${participant.id} processed through noise gate`);
+          } catch (error) {
+            logger.error('[StudioCanvasOutput] Failed to initialize audio processor, using raw audio:', error);
+            audioMixerService.addStream(participant.id, audioStream, true);
+          }
+        } else {
+          // Remote audio goes directly to mixer
+          audioMixerService.addStream(participant.id, audioStream, false);
+        }
 
         // Try to attach audio to output stream if not already done
         // This handles the case where first participant is added after start()
@@ -213,6 +245,7 @@ class StudioCanvasOutputService {
 
     this.participants.clear();
     audioMixerService.stop();
+    audioProcessorService.stop();
   }
 
   /**
