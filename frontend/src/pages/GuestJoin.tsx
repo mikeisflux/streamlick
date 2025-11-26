@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useMedia } from '../hooks/useMedia';
 import { socketService } from '../services/socket.service';
 import { webrtcService } from '../services/webrtc.service';
+import { audioProcessorService } from '../services/audio-processor.service';
 import { VideoPreview } from '../components/VideoPreview';
 import { Button } from '../components/Button';
 import api from '../services/api';
@@ -24,6 +25,10 @@ export function GuestJoin() {
   const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>('');
   const [selectedVideoDevice, setSelectedVideoDevice] = useState<string>('');
   const [showDeviceSelectors, setShowDeviceSelectors] = useState(false);
+
+  // Noise gate settings
+  const [noiseGateEnabled, setNoiseGateEnabled] = useState(true);
+  const [noiseGateThreshold, setNoiseGateThreshold] = useState(-38); // dB
 
   const {
     localStream,
@@ -59,6 +64,12 @@ export function GuestJoin() {
 
     loadDevices();
   }, []);
+
+  // Configure noise gate when settings change
+  useEffect(() => {
+    audioProcessorService.setNoiseGateEnabled(noiseGateEnabled);
+    audioProcessorService.setNoiseGateThreshold(noiseGateThreshold);
+  }, [noiseGateEnabled, noiseGateThreshold]);
 
   useEffect(() => {
     const loadInvite = async () => {
@@ -161,7 +172,18 @@ export function GuestJoin() {
 
         if (audioTrack) {
           try {
-            await webrtcService.produceMedia(audioTrack);
+            // Process audio through noise gate before transmitting
+            const audioStream = new MediaStream([audioTrack]);
+            const processedStream = await audioProcessorService.initialize(audioStream);
+            const processedAudioTrack = processedStream.getAudioTracks()[0];
+
+            if (processedAudioTrack) {
+              await webrtcService.produceMedia(processedAudioTrack);
+              console.log('[GuestJoin] Audio processed through noise gate');
+            } else {
+              // Fallback to raw audio if processing failed
+              await webrtcService.produceMedia(audioTrack);
+            }
           } catch (error) {
             console.error('Failed to produce audio:', error);
             toast.error('Failed to send audio - continuing with video only');
@@ -197,6 +219,7 @@ export function GuestJoin() {
         webrtcService.close().catch((error) => {
           console.error('Error cleaning up WebRTC on unmount:', error);
         });
+        audioProcessorService.stop();
       }
     };
   }, [hasJoined]);
@@ -562,8 +585,50 @@ export function GuestJoin() {
               </select>
             </div>
 
+            {/* Noise Gate Settings */}
+            <div className="border-t border-gray-200 pt-4 mt-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Noise Gate
+                  </label>
+                  <p className="text-xs text-gray-500">Reduces background noise when you're not speaking</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={noiseGateEnabled}
+                    onChange={(e) => setNoiseGateEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+
+              {noiseGateEnabled && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-gray-600">Threshold</label>
+                    <span className="text-sm font-medium text-gray-900">{noiseGateThreshold} dB</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="-60"
+                    max="-20"
+                    value={noiseGateThreshold}
+                    onChange={(e) => setNoiseGateThreshold(parseInt(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>More sensitive</span>
+                    <span>Less sensitive</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <p className="text-xs text-gray-500 mt-2">
-              💡 Test your devices before joining to ensure everything works correctly
+              Test your devices before joining to ensure everything works correctly
             </p>
           </div>
         )}
