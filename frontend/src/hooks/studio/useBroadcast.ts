@@ -64,7 +64,7 @@ export function useBroadcast({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [currentLayout, setCurrentLayout] = useState<'grid' | 'spotlight' | 'sidebar' | 'pip'>('grid');
-  const [selectedLayout, setSelectedLayout] = useState<number>(9);
+  const [selectedLayout, setSelectedLayout] = useState<number>(1); // Default to Solo layout
   const [streamingStatuses, setStreamingStatuses] = useState<any[]>([]);
 
   const { broadcast, setIsLive } = useStudioStore();
