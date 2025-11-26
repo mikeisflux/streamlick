@@ -1,8 +1,11 @@
+// Load environment variables FIRST before any other imports
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import cookieParser from 'cookie-parser';
@@ -47,8 +50,6 @@ import { sanitizeInput } from './middleware/sanitize';
 // Affects fileSizeBytes fields in Recording, MediaClip, Asset, and BrandingAsset models
 // @ts-ignore - Adding toJSON to BigInt prototype
 BigInt.prototype.toJSON = function() { return this.toString(); };
-
-dotenv.config();
 
 // Validate critical environment variables at startup
 if (!process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_KEY.length < 32) {
