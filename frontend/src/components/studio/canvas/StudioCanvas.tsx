@@ -706,9 +706,9 @@ export function StudioCanvas({
         const positions: ParticipantPosition[] = [];
 
         switch (activeLayout) {
-          case 1: // Solo - single participant fills screen (centered at 50% size for solo)
+          case 1: // Solo - single participant centered at 25% of screen
             if (participantCount === 1) {
-              const size = Math.min(canvas.width, canvas.height) * 0.5;
+              const size = Math.min(canvas.width, canvas.height) * 0.25;
               positions.push({
                 x: (canvas.width - size) / 2,
                 y: (canvas.height - size) / 2,
