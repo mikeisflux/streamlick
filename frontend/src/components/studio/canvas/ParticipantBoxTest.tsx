@@ -175,20 +175,46 @@ export function ParticipantBoxTest() {
     canvas.height = 360;
 
     let animationId: number;
+    let frameCount = 0;
 
     const render = () => {
-      // Clear canvas
-      ctx.fillStyle = '#1a1a1a';
+      frameCount++;
+
+      // Clear canvas with alternating color to prove rendering works
+      const pulse = Math.sin(frameCount * 0.05) * 0.1 + 0.15;
+      ctx.fillStyle = `rgb(${Math.floor(26 + pulse * 50)}, ${Math.floor(26 + pulse * 20)}, ${Math.floor(26 + pulse * 20)})`;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw test pattern in corner to prove canvas works
+      ctx.fillStyle = `hsl(${frameCount % 360}, 100%, 50%)`;
+      ctx.fillRect(canvas.width - 60, 10, 50, 50);
+      ctx.fillStyle = 'white';
+      ctx.font = '10px monospace';
+      ctx.fillText('TEST', canvas.width - 55, 40);
 
       // Draw video if ready
       if (video.readyState >= 2 && video.videoWidth > 0) {
+        // Try to grab a frame and check if it's black
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // Draw green border to show it's working
-        ctx.strokeStyle = '#00ff00';
+        // Sample some pixels to check if video is actually rendering or just black
+        const imageData = ctx.getImageData(canvas.width / 2, canvas.height / 2, 10, 10);
+        const pixels = imageData.data;
+        let totalBrightness = 0;
+        for (let i = 0; i < pixels.length; i += 4) {
+          totalBrightness += pixels[i] + pixels[i + 1] + pixels[i + 2];
+        }
+        const avgBrightness = totalBrightness / (pixels.length / 4) / 3;
+
+        // Draw border - green if video has content, red if black
+        ctx.strokeStyle = avgBrightness > 5 ? '#00ff00' : '#ff0000';
         ctx.lineWidth = 4;
         ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+
+        // Show brightness
+        ctx.fillStyle = avgBrightness > 5 ? '#00ff00' : '#ff0000';
+        ctx.font = 'bold 14px monospace';
+        ctx.fillText(`Brightness: ${avgBrightness.toFixed(1)} ${avgBrightness > 5 ? '✓' : '(BLACK!)'}`, 10, canvas.height - 10);
       } else {
         // Show waiting message
         ctx.fillStyle = '#666';
@@ -197,6 +223,7 @@ export function ParticipantBoxTest() {
         ctx.fillText('Waiting for video...', canvas.width / 2, canvas.height / 2);
         ctx.font = '14px sans-serif';
         ctx.fillText(`readyState: ${video.readyState}`, canvas.width / 2, canvas.height / 2 + 30);
+        ctx.textAlign = 'left';
       }
 
       // Draw debug info
@@ -206,6 +233,7 @@ export function ParticipantBoxTest() {
       ctx.fillText(`Stream: ${stream ? 'YES' : 'NO'}`, 10, 20);
       ctx.fillText(`ReadyState: ${video.readyState}`, 10, 36);
       ctx.fillText(`Size: ${video.videoWidth}x${video.videoHeight}`, 10, 52);
+      ctx.fillText(`Frame: ${frameCount}`, 10, 68);
 
       animationId = requestAnimationFrame(render);
     };
