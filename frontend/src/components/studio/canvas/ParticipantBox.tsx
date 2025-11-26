@@ -312,12 +312,12 @@ export function ParticipantBox({
 
   return (
     <>
-      {/* CSS keyframes for audio pulse animation - NO SCALE to prevent shaking */}
+      {/* CSS keyframes for audio pulse animation - matches PreviewArea */}
       {showAudioLevel && (
         <style>{`
           @keyframes audioPulse {
-            0%, 100% { opacity: 0.6; }
-            50% { opacity: 0.3; }
+            0%, 100% { transform: scale(1); opacity: 0.6; }
+            50% { transform: scale(1.1); opacity: 0.3; }
           }
         `}</style>
       )}
@@ -330,13 +330,6 @@ export function ParticipantBox({
           outlineOffset: '2px',
           // Allow audio rings to extend beyond tile boundaries
           overflow: 'visible',
-          // Add audio level border glow when speaking
-          border: showAudioLevel && audioLevel > 0.05
-            ? `3px solid rgba(59, 130, 246, ${0.5 + audioLevel})`
-            : undefined,
-          boxShadow: showAudioLevel && audioLevel > 0.05
-            ? `0 0 ${10 + audioLevel * 20}px rgba(59, 130, 246, ${audioLevel * 0.8})`
-            : undefined,
         }}
         onMouseDown={editMode ? handleMouseDown : undefined}
       >
@@ -406,35 +399,24 @@ export function ParticipantBox({
               transform: mirrorVideo ? 'scaleX(-1)' : 'none',
             }}
           />
-          {/* Audio glow overlay when speaking with video on */}
-          {showAudioLevel && audioLevel > 0.05 && (
-            <div
-              className="absolute inset-0 pointer-events-none rounded"
-              style={{
-                boxShadow: `inset 0 0 ${10 + audioLevel * 15}px rgba(59, 130, 246, ${audioLevel * 0.6})`,
-              }}
-            />
-          )}
         </div>
       ) : (
-        <div className="w-full h-full flex items-center justify-center bg-gray-900 relative" style={{ overflow: 'visible' }}>
-          {/* Audio visualization rings - extend beyond the tile when speaking */}
+        <div className="w-full h-full flex items-center justify-center bg-gray-900 relative overflow-visible">
+          {/* Audio visualization rings - extend beyond the tile when speaking - MATCHES PreviewArea */}
           {showAudioLevel && audioLevel > 0.05 && (
-            <div className="absolute flex items-center justify-center pointer-events-none" style={{ overflow: 'visible', zIndex: 50, inset: '-50%', width: '200%', height: '200%' }}>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ overflow: 'visible' }}>
               {[0, 1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="absolute rounded-full border-blue-400"
+                  className="absolute rounded-full border-2 border-blue-400"
                   style={{
-                    // Start at 100%, grow larger with each ring and audio level
-                    // Rings extend well beyond the tile boundaries
-                    width: `calc(100% + ${i * 40 + audioLevel * 100}px)`,
-                    height: `calc(100% + ${i * 40 + audioLevel * 100}px)`,
-                    opacity: Math.max(0.2, (1 - i * 0.2) * (audioLevel * 2.5)),
-                    animation: `audioPulse ${0.5 + i * 0.2}s ease-in-out infinite`,
-                    borderWidth: `${4 - i * 0.8}px`,
-                    borderStyle: 'solid',
-                    borderColor: `rgba(96, 165, 250, ${Math.max(0.3, 1 - i * 0.2)})`,
+                    // Start at 80px, grow with audio level
+                    // Each ring adds 25px, audio adds up to 60px more
+                    width: `${80 + i * 25 + audioLevel * 60}px`,
+                    height: `${80 + i * 25 + audioLevel * 60}px`,
+                    opacity: Math.max(0.2, (1 - i * 0.25) * (audioLevel * 2)),
+                    animation: `audioPulse ${0.4 + i * 0.15}s ease-in-out infinite`,
+                    borderWidth: `${3 - i * 0.5}px`,
                   }}
                 />
               ))}
@@ -444,11 +426,6 @@ export function ParticipantBox({
             <div className="w-full h-full flex items-center justify-center p-8 z-10">
               <div
                 className="w-1/4 aspect-square rounded-full overflow-hidden"
-                style={{
-                  boxShadow: showAudioLevel && audioLevel > 0.05
-                    ? `0 0 ${20 + audioLevel * 40}px rgba(59, 130, 246, ${0.5 + audioLevel})`
-                    : 'none',
-                }}
               >
                 <img
                   src={selectedAvatar}

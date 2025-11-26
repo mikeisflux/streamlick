@@ -796,18 +796,6 @@ export function StudioCanvas({
             ctx.drawImage(video, drawX, drawY, drawW, drawH);
           }
 
-          // Draw audio level glow overlay when speaking (video on)
-          // CARBON COPY of ParticipantBox audio visualization
-          if (localAudioLevel > 0.05) {
-            ctx.save();
-            ctx.globalAlpha = localAudioLevel * 0.6;
-            ctx.shadowColor = 'rgba(59, 130, 246, 0.8)';
-            ctx.shadowBlur = 10 + localAudioLevel * 15;
-            ctx.strokeStyle = `rgba(59, 130, 246, ${0.5 + localAudioLevel})`;
-            ctx.lineWidth = 3;
-            ctx.strokeRect(x, y, w, h);
-            ctx.restore();
-          }
         } else {
           // Draw placeholder background
           ctx.fillStyle = '#1a1a1a';
@@ -820,11 +808,6 @@ export function StudioCanvas({
 
           if (avatarImageRef.current) {
             ctx.save();
-            // Draw circular avatar with optional glow when speaking
-            if (localAudioLevel > 0.05) {
-              ctx.shadowColor = `rgba(59, 130, 246, ${0.5 + localAudioLevel})`;
-              ctx.shadowBlur = 20 + localAudioLevel * 40;
-            }
             ctx.beginPath();
             ctx.arc(centerX, centerY, avatarSize / 2, 0, Math.PI * 2);
             ctx.clip();
@@ -842,38 +825,24 @@ export function StudioCanvas({
           }
 
           // Draw audio level visualization rings when camera is off
-          // CARBON COPY of ParticipantBox audio visualization (rings extend beyond tile)
+          // MATCHES PreviewArea: 80px base, +25px per ring, +60px audio
           if (localAudioLevel > 0.05) {
-            // Rings start at tile size and extend outward significantly
-            const baseSize = Math.min(w, h);
-
             ctx.save();
             for (let i = 0; i < 4; i++) {
-              // Each ring extends further out: base + spacing + audio-driven expansion
-              const ringSize = baseSize + i * 40 + localAudioLevel * 100;
-              const opacity = Math.max(0.2, (1 - i * 0.2) * (localAudioLevel * 2.5));
-              const lineWidth = 4 - i * 0.8;
+              // Scale the ring sizes to canvas resolution (PreviewArea uses 80px for 160px tile)
+              const scaleFactor = Math.min(w, h) / 90; // Scale based on tile size
+              const ringRadius = (80 + i * 25 + localAudioLevel * 60) * scaleFactor / 2;
+              const opacity = Math.max(0.2, (1 - i * 0.25) * (localAudioLevel * 2));
+              const lineWidth = (3 - i * 0.5) * scaleFactor;
 
               ctx.beginPath();
-              ctx.arc(centerX, centerY, ringSize / 2, 0, Math.PI * 2);
-              ctx.strokeStyle = `rgba(96, 165, 250, ${Math.max(0.3, 1 - i * 0.2) * opacity})`;
+              ctx.arc(centerX, centerY, ringRadius, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(96, 165, 250, ${opacity})`;
               ctx.lineWidth = lineWidth;
               ctx.stroke();
             }
             ctx.restore();
           }
-        }
-
-        // Draw glowing border around participant box when speaking
-        // CARBON COPY of ParticipantBox border glow
-        if (localAudioLevel > 0.05) {
-          ctx.save();
-          ctx.strokeStyle = `rgba(59, 130, 246, ${0.5 + localAudioLevel})`;
-          ctx.lineWidth = 3;
-          ctx.shadowColor = `rgba(59, 130, 246, ${localAudioLevel * 0.8})`;
-          ctx.shadowBlur = 10 + localAudioLevel * 20;
-          ctx.strokeRect(x, y, w, h);
-          ctx.restore();
         }
 
         // Draw camera frame border - CARBON COPY of ParticipantBox
@@ -1004,19 +973,6 @@ export function StudioCanvas({
           }
 
           ctx.drawImage(videoEl, drawX, drawY, drawW, drawH);
-
-          // Draw audio level glow overlay when speaking (video on)
-          // CARBON COPY of ParticipantBox audio visualization
-          if (participantAudioLevel > 0.05) {
-            ctx.save();
-            ctx.globalAlpha = participantAudioLevel * 0.6;
-            ctx.shadowColor = 'rgba(59, 130, 246, 0.8)';
-            ctx.shadowBlur = 10 + participantAudioLevel * 15;
-            ctx.strokeStyle = `rgba(59, 130, 246, ${0.5 + participantAudioLevel})`;
-            ctx.lineWidth = 3;
-            ctx.strokeRect(x, y, w, h);
-            ctx.restore();
-          }
         } else {
           // Draw placeholder background
           ctx.fillStyle = '#1a1a1a';
@@ -1037,38 +993,24 @@ export function StudioCanvas({
           ctx.fillText('Camera Off', centerX, centerY + 20);
 
           // Draw audio level visualization rings when camera is off
-          // CARBON COPY of ParticipantBox audio visualization (rings extend beyond tile)
+          // MATCHES PreviewArea: 80px base, +25px per ring, +60px audio
           if (participantAudioLevel > 0.05) {
-            // Rings start at tile size and extend outward significantly
-            const baseSize = Math.min(w, h);
-
             ctx.save();
             for (let i = 0; i < 4; i++) {
-              // Each ring extends further out: base + spacing + audio-driven expansion
-              const ringSize = baseSize + i * 40 + participantAudioLevel * 100;
-              const opacity = Math.max(0.2, (1 - i * 0.2) * (participantAudioLevel * 2.5));
-              const lineWidth = 4 - i * 0.8;
+              // Scale the ring sizes to canvas resolution (PreviewArea uses 80px for 160px tile)
+              const scaleFactor = Math.min(w, h) / 90; // Scale based on tile size
+              const ringRadius = (80 + i * 25 + participantAudioLevel * 60) * scaleFactor / 2;
+              const opacity = Math.max(0.2, (1 - i * 0.25) * (participantAudioLevel * 2));
+              const lineWidth = (3 - i * 0.5) * scaleFactor;
 
               ctx.beginPath();
-              ctx.arc(centerX, centerY, ringSize / 2, 0, Math.PI * 2);
-              ctx.strokeStyle = `rgba(96, 165, 250, ${Math.max(0.3, 1 - i * 0.2) * opacity})`;
+              ctx.arc(centerX, centerY, ringRadius, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(96, 165, 250, ${opacity})`;
               ctx.lineWidth = lineWidth;
               ctx.stroke();
             }
             ctx.restore();
           }
-        }
-
-        // Draw glowing border around participant box when speaking
-        // CARBON COPY of ParticipantBox border glow
-        if (participantAudioLevel > 0.05) {
-          ctx.save();
-          ctx.strokeStyle = `rgba(59, 130, 246, ${0.5 + participantAudioLevel})`;
-          ctx.lineWidth = 3;
-          ctx.shadowColor = `rgba(59, 130, 246, ${participantAudioLevel * 0.8})`;
-          ctx.shadowBlur = 10 + participantAudioLevel * 20;
-          ctx.strokeRect(x, y, w, h);
-          ctx.restore();
         }
 
         // Draw camera frame border - CARBON COPY of ParticipantBox
