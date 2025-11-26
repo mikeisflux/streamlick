@@ -32,10 +32,6 @@ media-server/src/**/*.js
 media-server/src/**/*.js.map
 
 # Config files (local overrides)
-vite.config.*.ts
-vite.config.*.js
-vite.config.local.ts
-vite.config.local.js
 *.config.local.*
 config.local.*
 config/*.local.*
@@ -43,6 +39,16 @@ tsconfig.local.json
 tsconfig.*.json
 !tsconfig.json
 !tsconfig.node.json
+
+# Vite config files (ALL)
+vite.config.ts
+vite.config.js
+vite.config.*.ts
+vite.config.*.js
+**/vite.config.ts
+**/vite.config.js
+**/vite.config.*.ts
+**/vite.config.*.js
 
 # Additional config file variants
 jest.config.local.*
@@ -65,8 +71,6 @@ config.*.json
 # All config files (except examples and main configs)
 *.config.js
 *.config.ts
-!vite.config.ts
-!vitest.config.ts
 !tailwind.config.js
 !tailwind.config.ts
 !postcss.config.js
