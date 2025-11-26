@@ -664,15 +664,16 @@ export function StudioCanvas({
 
         const allParticipants: Array<{ type: 'local' | 'remote', id: string, video?: HTMLVideoElement, participant?: any, videoEnabled: boolean }> = [];
 
+        // COMMENTED OUT FOR DEBUGGING - using ParticipantBoxTest instead
         // Add local participant if on stage
-        if (isLocalUserOnStageRef.current && mainVideoRef.current) {
-          allParticipants.push({
-            type: 'local',
-            id: 'local',
-            video: mainVideoRef.current,
-            videoEnabled: videoEnabledRef.current
-          });
-        }
+        // if (isLocalUserOnStageRef.current && mainVideoRef.current) {
+        //   allParticipants.push({
+        //     type: 'local',
+        //     id: 'local',
+        //     video: mainVideoRef.current,
+        //     videoEnabled: videoEnabledRef.current
+        //   });
+        // }
 
         // Add remote participants
         onStageRemote.forEach((participant) => {
@@ -1675,8 +1676,9 @@ export function StudioCanvas({
         </div>
       </div>
 
+      {/* COMMENTED OUT FOR DEBUGGING - using ParticipantBoxTest instead */}
       {/* Hidden video elements for stream management */}
-      {localStream && isLocalUserOnStage && (
+      {/* {localStream && isLocalUserOnStage && (
         <video
           ref={mainVideoRef}
           autoPlay
@@ -1684,7 +1686,7 @@ export function StudioCanvas({
           muted
           style={{ display: 'none' }}
         />
-      )}
+      )} */}
       {screenShareStream && (
         <video
           ref={screenShareVideoRef}
