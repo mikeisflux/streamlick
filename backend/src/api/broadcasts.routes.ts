@@ -760,4 +760,89 @@ router.get('/:id/destinations', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+// Start RTMP streaming via Ant Media Server
+router.post('/:id/start-rtmp', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const { antMediaService } = await import('../services/antmedia.service');
+
+    const broadcast = await prisma.broadcast.findFirst({
+      where: {
+        id: req.params.id,
+        userId: req.user!.userId,
+      },
+    });
+
+    if (!broadcast) {
+      return res.status(404).json({ error: 'Broadcast not found' });
+    }
+
+    // Get broadcast destinations
+    const broadcastDestinations = await prisma.broadcastDestination.findMany({
+      where: { broadcastId: req.params.id },
+      include: {
+        destination: {
+          select: {
+            id: true,
+            platform: true,
+          },
+        },
+      },
+    });
+
+    // Prepare destinations for Ant Media
+    const destinations = broadcastDestinations.map((bd) => ({
+      platform: bd.destination.platform,
+      rtmpUrl: bd.streamUrl,
+      streamKey: bd.streamKey ? decrypt(bd.streamKey) : '',
+    }));
+
+    // Start RTMP streaming via Ant Media
+    const streamId = req.params.id;
+    await antMediaService.getOrCreateBroadcast(streamId, broadcast.title || 'Live Stream');
+    const success = await antMediaService.startRtmpStreaming(streamId, destinations);
+
+    if (success) {
+      logger.info(`[Ant Media] RTMP streaming started for broadcast ${req.params.id}`);
+      res.json({ success: true, message: 'RTMP streaming started' });
+    } else {
+      res.status(500).json({ error: 'Failed to start RTMP streaming' });
+    }
+  } catch (error) {
+    logger.error('Start RTMP error:', error);
+    res.status(500).json({ error: 'Failed to start RTMP streaming' });
+  }
+});
+
+// Stop RTMP streaming via Ant Media Server
+router.post('/:id/stop-rtmp', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const { antMediaService } = await import('../services/antmedia.service');
+
+    const broadcast = await prisma.broadcast.findFirst({
+      where: {
+        id: req.params.id,
+        userId: req.user!.userId,
+      },
+    });
+
+    if (!broadcast) {
+      return res.status(404).json({ error: 'Broadcast not found' });
+    }
+
+    // Stop RTMP streaming via Ant Media
+    const streamId = req.params.id;
+    const success = await antMediaService.stopRtmpStreaming(streamId);
+
+    if (success) {
+      logger.info(`[Ant Media] RTMP streaming stopped for broadcast ${req.params.id}`);
+      res.json({ success: true, message: 'RTMP streaming stopped' });
+    } else {
+      res.status(500).json({ error: 'Failed to stop RTMP streaming' });
+    }
+  } catch (error) {
+    logger.error('Stop RTMP error:', error);
+    res.status(500).json({ error: 'Failed to stop RTMP streaming' });
+  }
+});
+
 export default router;

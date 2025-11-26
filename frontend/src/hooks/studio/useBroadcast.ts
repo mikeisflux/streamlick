@@ -2,7 +2,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { broadcastService } from '../../services/broadcast.service';
 import { socketService } from '../../services/socket.service';
-import { mediaServerSocketService } from '../../services/media-server-socket.service';
 import { webrtcService } from '../../services/webrtc.service';
 import { compositorService } from '../../services/compositor.service';
 import { canvasStreamService } from '../../services/canvas-stream.service';
@@ -294,23 +293,16 @@ export function useBroadcast({
       }
 
 
-      // Step 3: Start RTMP streaming IMMEDIATELY (before countdown)
+      // Step 3: Start RTMP streaming IMMEDIATELY via Ant Media (before countdown)
       // This connects to YouTube/Facebook and starts sending video in "testing" mode
-      const destinationsToStream = broadcastDestinations.map((bd: any) => ({
-        id: bd.id,
-        platform: bd.platform,
-        rtmpUrl: bd.rtmpUrl,
-        streamKey: bd.streamKey,
-      }));
-
-      mediaServerSocketService.emit('start-rtmp', {
-        broadcastId,
-        destinations: destinationsToStream,
-        compositeProducers: {
-          videoProducerId: compositeVideoProducerId,
-          audioProducerId: compositeAudioProducerId,
-        },
-      });
+      try {
+        await api.post(`/broadcasts/${broadcastId}/start-rtmp`);
+        console.log('[useBroadcast] RTMP streaming started via Ant Media');
+      } catch (rtmpError) {
+        console.error('[useBroadcast] Failed to start RTMP streaming:', rtmpError);
+        toast.error('Failed to connect to streaming platforms');
+        throw rtmpError;
+      }
 
       toast.success('Connected to platforms, starting countdown...');
 
@@ -392,8 +384,14 @@ export function useBroadcast({
       // Stop compositor
       compositorService.stop();
 
-      // Stop RTMP streaming
-      mediaServerSocketService.emit('stop-rtmp', { broadcastId });
+      // Stop RTMP streaming via Ant Media
+      try {
+        await api.post(`/broadcasts/${broadcastId}/stop-rtmp`);
+        console.log('[useBroadcast] RTMP streaming stopped via Ant Media');
+      } catch (rtmpError) {
+        console.error('[useBroadcast] Failed to stop RTMP streaming:', rtmpError);
+        // Continue with ending broadcast even if RTMP stop fails
+      }
       await broadcastService.end(broadcastId);
       toast.success('Broadcast ended');
       setIsLive(false);
