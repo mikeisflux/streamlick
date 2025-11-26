@@ -1,3 +1,4 @@
+// # WEBCAM-ISSUE - WebRTC initialization and cleanup
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { webrtcService } from '../../services/webrtc.service';
 import { audioMixerService } from '../../services/audio-mixer.service';

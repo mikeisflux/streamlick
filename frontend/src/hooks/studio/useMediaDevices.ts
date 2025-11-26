@@ -1,3 +1,4 @@
+// # WEBCAM-ISSUE - device switching doesn't update WebRTC producers
 import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { audioProcessorService } from '../../services/audio-processor.service';

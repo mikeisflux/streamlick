@@ -1,3 +1,4 @@
+// # WEBCAM-ISSUE - handleEndBroadcast doesn't close WebRTC service
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { broadcastService } from '../../services/broadcast.service';
 import { socketService } from '../../services/socket.service';

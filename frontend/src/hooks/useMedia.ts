@@ -1,3 +1,4 @@
+// # WEBCAM-ISSUE - toggleVideo() only disables tracks, doesn't stop them
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { audioProcessorService } from '../services/audio-processor.service';
 import { audioMixerService } from '../services/audio-mixer.service';

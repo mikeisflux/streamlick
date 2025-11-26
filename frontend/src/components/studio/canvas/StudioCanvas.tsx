@@ -1,3 +1,4 @@
+// # WEBCAM-ISSUE - canvas continues streaming disabled video, remote video cleanup
 /**
  * StudioCanvas - Canvas 2D API Rendering System
  *
