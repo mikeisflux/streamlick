@@ -18,6 +18,13 @@
  * - Background color and image
  * - Participant video positions and sizes (getLayoutPositions)
  * - Audio level visualization (glowing borders, animated rings when speaking)
+ * - Camera frame borders (rounded, circle, square styles with primary color)
+ * - Position number badges (blue circles with position numbers)
+ * - Connection quality indicators (colored dots in top-right corner)
+ * - Mute indicators (red circle with X when audio disabled)
+ * - Lower third name bars (participant name and role)
+ * - Avatar display when video is off (circular avatar with glow when speaking)
+ * - Camera off placeholder (camera icon and text when no avatar)
  * - Screen share overlay
  * - Logo overlay
  * - Banner overlays
@@ -490,6 +497,7 @@ export function StudioCanvas({
   const backgroundImageRef = useRef<HTMLImageElement | null>(null);
   const logoImageRef = useRef<HTMLImageElement | null>(null);
   const overlayImageRef = useRef<HTMLImageElement | null>(null);
+  const avatarImageRef = useRef<HTMLImageElement | null>(null);
 
   // Load cached images when sources change
   useEffect(() => {
@@ -530,6 +538,40 @@ export function StudioCanvas({
       overlayImageRef.current = null;
     }
   }, [streamOverlay]);
+
+  // Load avatar from localStorage for hidden canvas drawing
+  useEffect(() => {
+    const storedAvatar = localStorage.getItem('selectedAvatar');
+    if (storedAvatar) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        avatarImageRef.current = img;
+      };
+      img.src = storedAvatar;
+    } else {
+      avatarImageRef.current = null;
+    }
+
+    // Listen for avatar changes
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'selectedAvatar') {
+        if (e.newValue) {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            avatarImageRef.current = img;
+          };
+          img.src = e.newValue;
+        } else {
+          avatarImageRef.current = null;
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   // Listen for media clip overlay events
   useEffect(() => {
@@ -767,16 +809,42 @@ export function StudioCanvas({
             ctx.restore();
           }
         } else {
-          // Draw placeholder
+          // Draw placeholder background
           ctx.fillStyle = '#1a1a1a';
           ctx.fillRect(x, y, w, h);
+
+          // Draw avatar if available - CARBON COPY of ParticipantBox
+          const centerX = x + w / 2;
+          const centerY = y + h / 2;
+          const avatarSize = Math.min(w, h) * 0.25;
+
+          if (avatarImageRef.current) {
+            ctx.save();
+            // Draw circular avatar with optional glow when speaking
+            if (localAudioLevel > 0.05) {
+              ctx.shadowColor = `rgba(59, 130, 246, ${0.5 + localAudioLevel})`;
+              ctx.shadowBlur = 20 + localAudioLevel * 40;
+            }
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, avatarSize / 2, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.drawImage(avatarImageRef.current, centerX - avatarSize / 2, centerY - avatarSize / 2, avatarSize, avatarSize);
+            ctx.restore();
+          } else {
+            // Draw camera off icon when no avatar
+            ctx.fillStyle = '#4B5563';
+            ctx.font = 'bold 24px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('📷', centerX, centerY - 10);
+            ctx.font = '12px Arial';
+            ctx.fillText('Camera Off', centerX, centerY + 20);
+          }
 
           // Draw audio level visualization rings when camera is off
           // CARBON COPY of ParticipantBox audio visualization (rings around avatar)
           if (localAudioLevel > 0.05) {
-            const centerX = x + w / 2;
-            const centerY = y + h / 2;
-            const baseRadius = Math.min(w, h) * 0.15;
+            const baseRadius = avatarSize / 2 + 10;
 
             ctx.save();
             for (let i = 0; i < 4; i++) {
@@ -805,6 +873,105 @@ export function StudioCanvas({
           ctx.strokeRect(x, y, w, h);
           ctx.restore();
         }
+
+        // Draw camera frame border - CARBON COPY of ParticipantBox
+        if (styleSettings.cameraFrame !== 'none' && styleSettings.borderWidth > 0) {
+          ctx.save();
+          ctx.strokeStyle = styleSettings.primaryColor;
+          ctx.lineWidth = styleSettings.borderWidth;
+          // Apply border radius based on cameraFrame type
+          if (styleSettings.cameraFrame === 'circle') {
+            ctx.beginPath();
+            ctx.arc(x + w / 2, y + h / 2, Math.min(w, h) / 2, 0, Math.PI * 2);
+            ctx.stroke();
+          } else if (styleSettings.cameraFrame === 'rounded') {
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, 12);
+            ctx.stroke();
+          } else {
+            ctx.strokeRect(x, y, w, h);
+          }
+          ctx.restore();
+        }
+
+        // Draw position number badge - CARBON COPY of ParticipantBox
+        if (showPositionNumbers) {
+          const badgeSize = 28;
+          const badgeX = x + 8;
+          const badgeY = y + 8;
+          ctx.save();
+          ctx.fillStyle = 'rgba(0, 102, 255, 0.9)';
+          ctx.beginPath();
+          ctx.arc(badgeX + badgeSize / 2, badgeY + badgeSize / 2, badgeSize / 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 14px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('1', badgeX + badgeSize / 2, badgeY + badgeSize / 2);
+          ctx.restore();
+        }
+
+        // Draw connection quality indicator - CARBON COPY of ParticipantBox
+        if (showConnectionQuality) {
+          const indicatorSize = 24;
+          const dotSize = 12;
+          const indicatorX = x + w - indicatorSize - 8;
+          const indicatorY = y + 8;
+          ctx.save();
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          ctx.beginPath();
+          ctx.arc(indicatorX + indicatorSize / 2, indicatorY + indicatorSize / 2, indicatorSize / 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#10b981'; // Green for excellent (local user)
+          ctx.beginPath();
+          ctx.arc(indicatorX + indicatorSize / 2, indicatorY + indicatorSize / 2, dotSize / 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // Draw mute indicator if audio is disabled - CARBON COPY of ParticipantBox
+        if (!audioEnabled) {
+          const muteSize = 32;
+          const muteX = x + w - muteSize - 12;
+          const muteY = y + h - muteSize - 52; // 40px from bottom of lower third
+          ctx.save();
+          ctx.fillStyle = 'rgba(220, 38, 38, 0.9)';
+          ctx.beginPath();
+          ctx.arc(muteX + muteSize / 2, muteY + muteSize / 2, muteSize / 2, 0, Math.PI * 2);
+          ctx.fill();
+          // Draw mute icon (simplified X)
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(muteX + 10, muteY + 10);
+          ctx.lineTo(muteX + muteSize - 10, muteY + muteSize - 10);
+          ctx.moveTo(muteX + muteSize - 10, muteY + 10);
+          ctx.lineTo(muteX + 10, muteY + muteSize - 10);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Draw lower third name bar - CARBON COPY of ParticipantBox
+        if (showLowerThirds) {
+          const lowerThirdHeight = 40;
+          const lowerThirdY = y + h - 40 - lowerThirdHeight;
+          const lowerThirdMargin = 16;
+          const lowerThirdX = x + lowerThirdMargin;
+          const lowerThirdWidth = w - lowerThirdMargin * 2;
+
+          ctx.save();
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+          ctx.beginPath();
+          ctx.roundRect(lowerThirdX, lowerThirdY, lowerThirdWidth, lowerThirdHeight, 20);
+          ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 14px Arial';
+          ctx.textAlign = 'left';
+          ctx.fillText('You (Host)', lowerThirdX + 12, lowerThirdY + 25);
+          ctx.restore();
+        }
+
         participantIndex++;
       }
 
@@ -849,15 +1016,28 @@ export function StudioCanvas({
             ctx.restore();
           }
         } else {
+          // Draw placeholder background
           ctx.fillStyle = '#1a1a1a';
           ctx.fillRect(x, y, w, h);
+
+          // Draw camera off placeholder - CARBON COPY of ParticipantBox
+          const centerX = x + w / 2;
+          const centerY = y + h / 2;
+          const avatarSize = Math.min(w, h) * 0.25;
+
+          // Draw camera off icon (remote participants don't have avatars stored locally)
+          ctx.fillStyle = '#4B5563';
+          ctx.font = 'bold 24px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('📷', centerX, centerY - 10);
+          ctx.font = '12px Arial';
+          ctx.fillText('Camera Off', centerX, centerY + 20);
 
           // Draw audio level visualization rings when camera is off
           // CARBON COPY of ParticipantBox audio visualization (rings around avatar)
           if (participantAudioLevel > 0.05) {
-            const centerX = x + w / 2;
-            const centerY = y + h / 2;
-            const baseRadius = Math.min(w, h) * 0.15;
+            const baseRadius = avatarSize / 2 + 10;
 
             ctx.save();
             for (let i = 0; i < 4; i++) {
@@ -886,6 +1066,105 @@ export function StudioCanvas({
           ctx.strokeRect(x, y, w, h);
           ctx.restore();
         }
+
+        // Draw camera frame border - CARBON COPY of ParticipantBox
+        if (styleSettings.cameraFrame !== 'none' && styleSettings.borderWidth > 0) {
+          ctx.save();
+          ctx.strokeStyle = styleSettings.primaryColor;
+          ctx.lineWidth = styleSettings.borderWidth;
+          if (styleSettings.cameraFrame === 'circle') {
+            ctx.beginPath();
+            ctx.arc(x + w / 2, y + h / 2, Math.min(w, h) / 2, 0, Math.PI * 2);
+            ctx.stroke();
+          } else if (styleSettings.cameraFrame === 'rounded') {
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, 12);
+            ctx.stroke();
+          } else {
+            ctx.strokeRect(x, y, w, h);
+          }
+          ctx.restore();
+        }
+
+        // Draw position number badge - CARBON COPY of ParticipantBox
+        if (showPositionNumbers) {
+          const badgeSize = 28;
+          const badgeX = x + 8;
+          const badgeY = y + 8;
+          const posNum = isLocalUserOnStage ? participantIndex + 1 : participantIndex;
+          ctx.save();
+          ctx.fillStyle = 'rgba(0, 102, 255, 0.9)';
+          ctx.beginPath();
+          ctx.arc(badgeX + badgeSize / 2, badgeY + badgeSize / 2, badgeSize / 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 14px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(posNum), badgeX + badgeSize / 2, badgeY + badgeSize / 2);
+          ctx.restore();
+        }
+
+        // Draw connection quality indicator - CARBON COPY of ParticipantBox
+        if (showConnectionQuality) {
+          const indicatorSize = 24;
+          const dotSize = 12;
+          const indicatorX = x + w - indicatorSize - 8;
+          const indicatorY = y + 8;
+          ctx.save();
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          ctx.beginPath();
+          ctx.arc(indicatorX + indicatorSize / 2, indicatorY + indicatorSize / 2, indicatorSize / 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#10b981'; // Green for excellent
+          ctx.beginPath();
+          ctx.arc(indicatorX + indicatorSize / 2, indicatorY + indicatorSize / 2, dotSize / 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // Draw mute indicator if audio is disabled - CARBON COPY of ParticipantBox
+        if (!participant.audioEnabled) {
+          const muteSize = 32;
+          const muteX = x + w - muteSize - 12;
+          const muteY = y + h - muteSize - 52;
+          ctx.save();
+          ctx.fillStyle = 'rgba(220, 38, 38, 0.9)';
+          ctx.beginPath();
+          ctx.arc(muteX + muteSize / 2, muteY + muteSize / 2, muteSize / 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(muteX + 10, muteY + 10);
+          ctx.lineTo(muteX + muteSize - 10, muteY + muteSize - 10);
+          ctx.moveTo(muteX + muteSize - 10, muteY + 10);
+          ctx.lineTo(muteX + 10, muteY + muteSize - 10);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Draw lower third name bar - CARBON COPY of ParticipantBox
+        if (showLowerThirds) {
+          const lowerThirdHeight = 40;
+          const lowerThirdY = y + h - 40 - lowerThirdHeight;
+          const lowerThirdMargin = 16;
+          const lowerThirdX = x + lowerThirdMargin;
+          const lowerThirdWidth = w - lowerThirdMargin * 2;
+
+          ctx.save();
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+          ctx.beginPath();
+          ctx.roundRect(lowerThirdX, lowerThirdY, lowerThirdWidth, lowerThirdHeight, 20);
+          ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 14px Arial';
+          ctx.textAlign = 'left';
+          const displayName = participant.name + (participant.role === 'host' ? ' (Host)' : '');
+          ctx.fillText(displayName, lowerThirdX + 12, lowerThirdY + 25);
+          ctx.restore();
+        }
+
         participantIndex++;
       });
     }
@@ -1102,10 +1381,11 @@ export function StudioCanvas({
       ctx.fillText(commentText, commentX + commentPadding + platformBarWidth, commentY + commentPadding + authorFontSize + msgFontSize + 8 * scaleY);
     }
   }, [
-    backgroundColor, isLocalUserOnStage, videoEnabled, remoteParticipants,
-    selectedLayout, isSharingScreen, banners, styleSettings.mirrorVideo, mediaClipElement,
+    backgroundColor, isLocalUserOnStage, videoEnabled, audioEnabled, remoteParticipants,
+    selectedLayout, isSharingScreen, banners, styleSettings, mediaClipElement,
     captionsEnabled, currentCaption, showChatOnStream, chatMessages, displayedComment,
-    chatOverlayPosition, chatOverlaySize, localAudioLevel, participantAudioLevels
+    chatOverlayPosition, chatOverlaySize, localAudioLevel, participantAudioLevels,
+    showPositionNumbers, showConnectionQuality, showLowerThirds
   ]);
 
   // Start animation loop when canvas is available
