@@ -19,6 +19,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { CaptionOverlay } from './CanvasOverlay';
 import { ParticipantBox } from './ParticipantBox';
+import { ParticipantBoxTest } from './ParticipantBoxTest';
 import { TeleprompterOverlay } from './TeleprompterOverlay';
 import { CommentOverlay } from './CommentOverlay';
 import { Caption } from '../../../services/caption.service';
@@ -1692,6 +1693,11 @@ export function StudioCanvas({
           style={{ display: 'none' }}
         />
       )}
+
+      {/* DEBUG: Isolated test component - remove after debugging */}
+      <div className="absolute top-0 left-0 z-[100] max-w-md">
+        <ParticipantBoxTest />
+      </div>
     </div>
   );
 }
