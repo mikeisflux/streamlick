@@ -901,10 +901,11 @@ export function StudioCanvas({
             ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
           }
 
-          // Draw pulsating ring when speaking
+          // Draw pulsating ring when speaking AND camera is off (avatar visible)
           const isSpeaking = p.type === 'local' ? isLocalSpeakingRef.current : speakingParticipants.has(p.id);
+          const isCameraOff = !p.videoEnabled;
 
-          if (isSpeaking) {
+          if (isSpeaking && isCameraOff) {
             // Calculate center of participant box
             const centerX = pos.x + pos.width / 2;
             const centerY = pos.y + pos.height / 2;
