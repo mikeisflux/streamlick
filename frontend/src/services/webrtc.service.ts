@@ -435,6 +435,35 @@ class WebRTCService {
   stopStatsMonitoring(): void {
     // No-op
   }
+
+  /**
+   * Close a producer (legacy compatibility)
+   */
+  closeProducer(producerId: string): void {
+    // In SFU mode, we don't have individual producers to close
+    // The track will be removed when we leave the room
+    logger.info('[WebRTC-SFU] closeProducer called (no-op in SFU mode):', producerId);
+  }
+
+  /**
+   * Replace video track (legacy compatibility)
+   */
+  async replaceVideoTrack(newTrack: MediaStreamTrack): Promise<void> {
+    if (!this.peerConnection) {
+      logger.warn('[WebRTC-SFU] No peer connection to replace track');
+      return;
+    }
+
+    const senders = this.peerConnection.getSenders();
+    const videoSender = senders.find(s => s.track?.kind === 'video');
+
+    if (videoSender) {
+      await videoSender.replaceTrack(newTrack);
+      logger.info('[WebRTC-SFU] Video track replaced');
+    } else {
+      logger.warn('[WebRTC-SFU] No video sender found to replace track');
+    }
+  }
 }
 
 export const webrtcService = new WebRTCService();
