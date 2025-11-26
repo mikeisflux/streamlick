@@ -437,9 +437,6 @@ export function StudioCanvas({
   // Load stream overlay from localStorage
   const [streamOverlay, setStreamOverlay] = useState<string | null>(null);
 
-  // Load video clip from localStorage
-  const [videoClip, setVideoClip] = useState<string | null>(null);
-
   // Custom layout positions for edit mode
   interface ParticipantPosition {
     id: string;
@@ -536,23 +533,7 @@ export function StudioCanvas({
         setStreamOverlay(streamOverlayUrl);
       }
 
-      // Load video clip
-      const streamVideoClipAssetId = localStorage.getItem('streamVideoClipAssetId');
-      const streamVideoClipUrl = localStorage.getItem('streamVideoClip');
-
-      if (streamVideoClipAssetId) {
-        try {
-          const mediaData = await mediaStorageService.getMedia(streamVideoClipAssetId);
-          if (mediaData) {
-            const objectURL = URL.createObjectURL(mediaData.blob);
-            setVideoClip(objectURL);
-          }
-        } catch (error) {
-          console.error('[StudioCanvas] Failed to load video clip from IndexedDB:', error);
-        }
-      } else if (streamVideoClipUrl) {
-        setVideoClip(streamVideoClipUrl);
-      }
+      // Video clips are not auto-loaded - they play only when explicitly triggered via playVideoClip event
     };
 
     loadAllMedia();
@@ -567,19 +548,12 @@ export function StudioCanvas({
       setStreamOverlay(e.detail.url);
     }) as EventListener;
 
-    // Listen for custom event for video clip updates
-    const handleVideoClipUpdated = ((e: CustomEvent) => {
-      setVideoClip(e.detail.url);
-    }) as EventListener;
-
     window.addEventListener('logoUpdated', handleLogoUpdated);
     window.addEventListener('overlayUpdated', handleOverlayUpdated);
-    window.addEventListener('videoClipUpdated', handleVideoClipUpdated);
 
     return () => {
       window.removeEventListener('logoUpdated', handleLogoUpdated);
       window.removeEventListener('overlayUpdated', handleOverlayUpdated);
-      window.removeEventListener('videoClipUpdated', handleVideoClipUpdated);
     };
   }, []);
 
@@ -1425,77 +1399,93 @@ export function StudioCanvas({
     img.src = streamOverlay;
   }, [streamOverlay]);
 
-  // Load and play video clip
+  // Listen for explicit video clip play command
   useEffect(() => {
-    // Clean up previous video clip
-    if (videoClipRef.current) {
-      videoClipRef.current.pause();
-      videoClipRef.current.src = '';
-      audioMixerService.removeStream('video-clip');
-      videoClipRef.current = null;
-    }
+    const handlePlayVideoClip = ((e: CustomEvent) => {
+      const { url } = e.detail;
 
-    if (!videoClip) {
-      videoClipUrlRef.current = null;
-      return;
-    }
-
-    // Don't reload if same URL
-    if (videoClipUrlRef.current === videoClip) {
-      return;
-    }
-
-    videoClipUrlRef.current = videoClip;
-
-    const video = document.createElement('video');
-    video.crossOrigin = 'anonymous';
-    video.src = videoClip;
-    video.loop = false;
-    video.muted = false; // Keep unmuted for audio capture
-    video.playsInline = true;
-    video.autoplay = true;
-
-    video.onloadedmetadata = () => {
-      console.log('[StudioCanvas] Video clip loaded:', video.videoWidth, 'x', video.videoHeight, 'duration:', video.duration);
-      videoClipRef.current = video;
-
-      // Add video audio to mixer for studio monitoring and broadcast
-      try {
-        audioMixerService.addMediaElement('video-clip', video);
-        audioMixerService.setStreamVolume('video-clip', 1.0); // Full volume
-        console.log('[StudioCanvas] Video clip audio added to mixer');
-      } catch (err) {
-        console.error('[StudioCanvas] Failed to add video clip audio to mixer:', err);
+      // Clean up previous video clip
+      if (videoClipRef.current) {
+        videoClipRef.current.pause();
+        videoClipRef.current.src = '';
+        audioMixerService.removeStream('video-clip');
+        videoClipRef.current = null;
       }
 
-      // Start playback
-      video.play().catch((err) => {
-        console.error('[StudioCanvas] Failed to play video clip:', err);
-      });
+      if (!url) {
+        videoClipUrlRef.current = null;
+        return;
+      }
+
+      videoClipUrlRef.current = url;
+
+      const video = document.createElement('video');
+      video.crossOrigin = 'anonymous';
+      video.src = url;
+      video.loop = false;
+      video.muted = false; // Keep unmuted for audio capture
+      video.playsInline = true;
+
+      video.onloadedmetadata = () => {
+        console.log('[StudioCanvas] Video clip loaded:', video.videoWidth, 'x', video.videoHeight, 'duration:', video.duration);
+        videoClipRef.current = video;
+
+        // Add video audio to mixer for studio monitoring and broadcast
+        try {
+          audioMixerService.addMediaElement('video-clip', video);
+          audioMixerService.setStreamVolume('video-clip', 1.0); // Full volume
+          console.log('[StudioCanvas] Video clip audio added to mixer');
+        } catch (err) {
+          console.error('[StudioCanvas] Failed to add video clip audio to mixer:', err);
+        }
+
+        // Start playback
+        video.play().catch((err) => {
+          console.error('[StudioCanvas] Failed to play video clip:', err);
+        });
+      };
+
+      video.onended = () => {
+        console.log('[StudioCanvas] Video clip ended');
+        // Clean up when video ends
+        audioMixerService.removeStream('video-clip');
+        videoClipRef.current = null;
+        videoClipUrlRef.current = null;
+        // Dispatch event to clear the active state in MediaAssetsPanel
+        window.dispatchEvent(new CustomEvent('videoClipEnded'));
+      };
+
+      video.onerror = (err) => {
+        console.error('[StudioCanvas] Failed to load video clip:', err);
+        videoClipRef.current = null;
+        videoClipUrlRef.current = null;
+      };
+    }) as EventListener;
+
+    const handleStopVideoClip = () => {
+      if (videoClipRef.current) {
+        videoClipRef.current.pause();
+        videoClipRef.current.src = '';
+        audioMixerService.removeStream('video-clip');
+        videoClipRef.current = null;
+        videoClipUrlRef.current = null;
+      }
     };
 
-    video.onended = () => {
-      console.log('[StudioCanvas] Video clip ended');
-      // Clean up when video ends
-      audioMixerService.removeStream('video-clip');
-      videoClipRef.current = null;
-      videoClipUrlRef.current = null;
-      // Dispatch event to clear the active state in MediaAssetsPanel
-      window.dispatchEvent(new CustomEvent('videoClipEnded'));
-    };
-
-    video.onerror = (err) => {
-      console.error('[StudioCanvas] Failed to load video clip:', err);
-      videoClipRef.current = null;
-      videoClipUrlRef.current = null;
-    };
+    window.addEventListener('playVideoClip', handlePlayVideoClip);
+    window.addEventListener('stopVideoClip', handleStopVideoClip);
 
     return () => {
-      video.pause();
-      video.src = '';
-      audioMixerService.removeStream('video-clip');
+      window.removeEventListener('playVideoClip', handlePlayVideoClip);
+      window.removeEventListener('stopVideoClip', handleStopVideoClip);
+      // Cleanup on unmount
+      if (videoClipRef.current) {
+        videoClipRef.current.pause();
+        videoClipRef.current.src = '';
+        audioMixerService.removeStream('video-clip');
+      }
     };
-  }, [videoClip]);
+  }, []);
 
   // Load avatar image
   useEffect(() => {

@@ -574,7 +574,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
           break;
 
         case 'videoClip':
-          // Play video clip on canvas
+          // Play video clip on canvas - requires explicit play action
           if (asset.storedInIndexedDB) {
             try {
               const mediaData = await mediaStorageService.getMedia(asset.id);
@@ -582,10 +582,8 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
                 const objectURL = URL.createObjectURL(mediaData.blob);
                 objectURLsRef.current.push(objectURL);
 
-                localStorage.setItem('streamVideoClip', objectURL);
-                localStorage.setItem('streamVideoClipAssetId', asset.id);
-                localStorage.setItem('streamVideoClipName', asset.name);
-                window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: objectURL, name: asset.name } }));
+                // Dispatch play event to trigger video playback
+                window.dispatchEvent(new CustomEvent('playVideoClip', { detail: { url: objectURL, name: asset.name } }));
                 toast.success(`Playing: ${asset.name}`);
               }
             } catch (error) {
@@ -593,10 +591,8 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               toast.error('Failed to play video clip');
             }
           } else {
-            localStorage.setItem('streamVideoClip', asset.url);
-            localStorage.setItem('streamVideoClipName', asset.name);
-            localStorage.removeItem('streamVideoClipAssetId');
-            window.dispatchEvent(new CustomEvent('videoClipUpdated', { detail: { url: asset.url, name: asset.name } }));
+            // Dispatch play event to trigger video playback
+            window.dispatchEvent(new CustomEvent('playVideoClip', { detail: { url: asset.url, name: asset.name } }));
             toast.success(`Playing: ${asset.name}`);
           }
           break;
