@@ -825,15 +825,15 @@ export function StudioCanvas({
           }
 
           // Draw audio level visualization rings when camera is off
-          // MATCHES PreviewArea: 80px base, +25px per ring, +60px audio
+          // 8 rings extending further out
           if (localAudioLevel > 0.05) {
             ctx.save();
-            for (let i = 0; i < 4; i++) {
-              // Scale the ring sizes to canvas resolution (PreviewArea uses 80px for 160px tile)
+            for (let i = 0; i < 8; i++) {
+              // Scale the ring sizes to canvas resolution
               const scaleFactor = Math.min(w, h) / 90; // Scale based on tile size
-              const ringRadius = (80 + i * 25 + localAudioLevel * 60) * scaleFactor / 2;
-              const opacity = Math.max(0.2, (1 - i * 0.25) * (localAudioLevel * 2));
-              const lineWidth = (3 - i * 0.5) * scaleFactor;
+              const ringRadius = (60 + i * 35 + localAudioLevel * 120) * scaleFactor / 2;
+              const opacity = Math.max(0.15, (1 - i * 0.12) * (localAudioLevel * 2));
+              const lineWidth = Math.max(0.5, (3 - i * 0.3) * scaleFactor);
 
               ctx.beginPath();
               ctx.arc(centerX, centerY, ringRadius, 0, Math.PI * 2);
@@ -993,15 +993,15 @@ export function StudioCanvas({
           ctx.fillText('Camera Off', centerX, centerY + 20);
 
           // Draw audio level visualization rings when camera is off
-          // MATCHES PreviewArea: 80px base, +25px per ring, +60px audio
+          // 8 rings extending further out
           if (participantAudioLevel > 0.05) {
             ctx.save();
-            for (let i = 0; i < 4; i++) {
-              // Scale the ring sizes to canvas resolution (PreviewArea uses 80px for 160px tile)
+            for (let i = 0; i < 8; i++) {
+              // Scale the ring sizes to canvas resolution
               const scaleFactor = Math.min(w, h) / 90; // Scale based on tile size
-              const ringRadius = (80 + i * 25 + participantAudioLevel * 60) * scaleFactor / 2;
-              const opacity = Math.max(0.2, (1 - i * 0.25) * (participantAudioLevel * 2));
-              const lineWidth = (3 - i * 0.5) * scaleFactor;
+              const ringRadius = (60 + i * 35 + participantAudioLevel * 120) * scaleFactor / 2;
+              const opacity = Math.max(0.15, (1 - i * 0.12) * (participantAudioLevel * 2));
+              const lineWidth = Math.max(0.5, (3 - i * 0.3) * scaleFactor);
 
               ctx.beginPath();
               ctx.arc(centerX, centerY, ringRadius, 0, Math.PI * 2);

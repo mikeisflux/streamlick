@@ -402,21 +402,21 @@ export function ParticipantBox({
         </div>
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-gray-900 relative overflow-visible">
-          {/* Audio visualization rings - extend beyond the tile when speaking - MATCHES PreviewArea */}
+          {/* Audio visualization rings - extend beyond the tile when speaking */}
           {showAudioLevel && audioLevel > 0.05 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ overflow: 'visible' }}>
-              {[0, 1, 2, 3].map((i) => (
+              {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
                 <div
                   key={i}
                   className="absolute rounded-full border-2 border-blue-400"
                   style={{
-                    // Start at 80px, grow with audio level
-                    // Each ring adds 25px, audio adds up to 60px more
-                    width: `${80 + i * 25 + audioLevel * 60}px`,
-                    height: `${80 + i * 25 + audioLevel * 60}px`,
-                    opacity: Math.max(0.2, (1 - i * 0.25) * (audioLevel * 2)),
-                    animation: `audioPulse ${0.4 + i * 0.15}s ease-in-out infinite`,
-                    borderWidth: `${3 - i * 0.5}px`,
+                    // Start at 60px, grow more with each ring for extended reach
+                    // Each ring adds 35px, audio adds up to 120px more
+                    width: `${60 + i * 35 + audioLevel * 120}px`,
+                    height: `${60 + i * 35 + audioLevel * 120}px`,
+                    opacity: Math.max(0.15, (1 - i * 0.12) * (audioLevel * 2)),
+                    animation: `audioPulse ${0.4 + i * 0.1}s ease-in-out infinite`,
+                    borderWidth: `${3 - i * 0.3}px`,
                   }}
                 />
               ))}
