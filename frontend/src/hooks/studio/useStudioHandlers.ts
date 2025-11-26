@@ -20,7 +20,7 @@ export function useStudioHandlers({
   const [editMode, setEditMode] = useState(false);
   const [showCanvasSettings, setShowCanvasSettings] = useState(false);
   const [showResetConfirmation, setShowResetConfirmation] = useState(false);
-  const [isLocalUserOnStage, setIsLocalUserOnStage] = useState(false);
+  const [isLocalUserOnStage, setIsLocalUserOnStage] = useState(true);
   const [displayedComment, setDisplayedComment] = useState<{
     id: string;
     platform: 'youtube' | 'facebook' | 'twitch' | 'linkedin' | 'x' | 'rumble';
