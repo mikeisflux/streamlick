@@ -312,22 +312,24 @@ export function ParticipantBox({
 
   return (
     <>
-      {/* CSS keyframes for audio pulse animation */}
+      {/* CSS keyframes for audio pulse animation - NO SCALE to prevent shaking */}
       {showAudioLevel && (
         <style>{`
           @keyframes audioPulse {
-            0%, 100% { transform: scale(1); opacity: 0.6; }
-            50% { transform: scale(1.1); opacity: 0.3; }
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 0.3; }
           }
         `}</style>
       )}
       <div
         ref={boxRef}
-        className="relative bg-black rounded overflow-hidden h-full w-full group"
+        className="relative bg-black rounded h-full w-full group"
         style={{
           cursor: editMode ? (isDragging ? 'grabbing' : 'grab') : 'default',
           outline: editMode ? '2px dashed #8B5CF6' : 'none',
           outlineOffset: '2px',
+          // Allow audio rings to extend beyond tile boundaries
+          overflow: 'visible',
           // Add audio level border glow when speaking
           border: showAudioLevel && audioLevel > 0.05
             ? `3px solid rgba(59, 130, 246, ${0.5 + audioLevel})`
@@ -390,7 +392,7 @@ export function ParticipantBox({
 
       {/* Video or Camera Off Placeholder */}
       {stream && videoEnabled ? (
-        <div className="relative w-full h-full">
+        <div className="relative w-full h-full overflow-hidden">
           <video
             ref={activeVideoRef}
             autoPlay
@@ -418,19 +420,21 @@ export function ParticipantBox({
         <div className="w-full h-full flex items-center justify-center bg-gray-900 relative" style={{ overflow: 'visible' }}>
           {/* Audio visualization rings - extend beyond the tile when speaking */}
           {showAudioLevel && audioLevel > 0.05 && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ overflow: 'visible' }}>
+            <div className="absolute flex items-center justify-center pointer-events-none" style={{ overflow: 'visible', zIndex: 50, inset: '-50%', width: '200%', height: '200%' }}>
               {[0, 1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="absolute rounded-full border-2 border-blue-400"
+                  className="absolute rounded-full border-blue-400"
                   style={{
-                    // Start at 80px, grow with audio level
-                    // Each ring adds 25px, audio adds up to 60px more
-                    width: `${80 + i * 25 + audioLevel * 60}px`,
-                    height: `${80 + i * 25 + audioLevel * 60}px`,
-                    opacity: Math.max(0.2, (1 - i * 0.25) * (audioLevel * 2)),
-                    animation: `audioPulse ${0.4 + i * 0.15}s ease-in-out infinite`,
-                    borderWidth: `${3 - i * 0.5}px`,
+                    // Start at 100%, grow larger with each ring and audio level
+                    // Rings extend well beyond the tile boundaries
+                    width: `calc(100% + ${i * 40 + audioLevel * 100}px)`,
+                    height: `calc(100% + ${i * 40 + audioLevel * 100}px)`,
+                    opacity: Math.max(0.2, (1 - i * 0.2) * (audioLevel * 2.5)),
+                    animation: `audioPulse ${0.5 + i * 0.2}s ease-in-out infinite`,
+                    borderWidth: `${4 - i * 0.8}px`,
+                    borderStyle: 'solid',
+                    borderColor: `rgba(96, 165, 250, ${Math.max(0.3, 1 - i * 0.2)})`,
                   }}
                 />
               ))}

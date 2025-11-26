@@ -842,19 +842,21 @@ export function StudioCanvas({
           }
 
           // Draw audio level visualization rings when camera is off
-          // CARBON COPY of ParticipantBox audio visualization (rings around avatar)
+          // CARBON COPY of ParticipantBox audio visualization (rings extend beyond tile)
           if (localAudioLevel > 0.05) {
-            const baseRadius = avatarSize / 2 + 10;
+            // Rings start at tile size and extend outward significantly
+            const baseSize = Math.min(w, h);
 
             ctx.save();
             for (let i = 0; i < 4; i++) {
-              const ringRadius = baseRadius + i * 15 + localAudioLevel * 30;
-              const opacity = Math.max(0.2, (1 - i * 0.25) * (localAudioLevel * 2));
-              const lineWidth = 3 - i * 0.5;
+              // Each ring extends further out: base + spacing + audio-driven expansion
+              const ringSize = baseSize + i * 40 + localAudioLevel * 100;
+              const opacity = Math.max(0.2, (1 - i * 0.2) * (localAudioLevel * 2.5));
+              const lineWidth = 4 - i * 0.8;
 
               ctx.beginPath();
-              ctx.arc(centerX, centerY, ringRadius, 0, Math.PI * 2);
-              ctx.strokeStyle = `rgba(96, 165, 250, ${opacity})`;
+              ctx.arc(centerX, centerY, ringSize / 2, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(96, 165, 250, ${Math.max(0.3, 1 - i * 0.2) * opacity})`;
               ctx.lineWidth = lineWidth;
               ctx.stroke();
             }
@@ -1035,19 +1037,21 @@ export function StudioCanvas({
           ctx.fillText('Camera Off', centerX, centerY + 20);
 
           // Draw audio level visualization rings when camera is off
-          // CARBON COPY of ParticipantBox audio visualization (rings around avatar)
+          // CARBON COPY of ParticipantBox audio visualization (rings extend beyond tile)
           if (participantAudioLevel > 0.05) {
-            const baseRadius = avatarSize / 2 + 10;
+            // Rings start at tile size and extend outward significantly
+            const baseSize = Math.min(w, h);
 
             ctx.save();
             for (let i = 0; i < 4; i++) {
-              const ringRadius = baseRadius + i * 15 + participantAudioLevel * 30;
-              const opacity = Math.max(0.2, (1 - i * 0.25) * (participantAudioLevel * 2));
-              const lineWidth = 3 - i * 0.5;
+              // Each ring extends further out: base + spacing + audio-driven expansion
+              const ringSize = baseSize + i * 40 + participantAudioLevel * 100;
+              const opacity = Math.max(0.2, (1 - i * 0.2) * (participantAudioLevel * 2.5));
+              const lineWidth = 4 - i * 0.8;
 
               ctx.beginPath();
-              ctx.arc(centerX, centerY, ringRadius, 0, Math.PI * 2);
-              ctx.strokeStyle = `rgba(96, 165, 250, ${opacity})`;
+              ctx.arc(centerX, centerY, ringSize / 2, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(96, 165, 250, ${Math.max(0.3, 1 - i * 0.2) * opacity})`;
               ctx.lineWidth = lineWidth;
               ctx.stroke();
             }
