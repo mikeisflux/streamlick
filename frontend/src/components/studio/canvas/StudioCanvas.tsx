@@ -926,6 +926,39 @@ export function StudioCanvas({
             }
             ctx.restore();
           }
+
+          // Draw name tag at bottom of participant box (per Structure.md)
+          const participantName = p.type === 'local' ? 'You' : (p.participant?.name || 'Guest');
+          const nameTagHeight = 40;
+          const nameTagPadding = 12;
+          const nameTagY = pos.y + pos.height - nameTagHeight - 8;
+
+          // Measure text width for background
+          ctx.font = '600 20px Inter, system-ui, sans-serif';
+          const textWidth = ctx.measureText(participantName).width;
+          const nameTagWidth = Math.min(textWidth + nameTagPadding * 2, pos.width - 16);
+
+          // Draw rounded rectangle background
+          const nameTagX = pos.x + 8;
+          ctx.fillStyle = isSpeaking ? 'rgba(0, 200, 0, 0.85)' : 'rgba(0, 0, 0, 0.75)';
+          ctx.beginPath();
+          const cornerRadius = 20;
+          ctx.moveTo(nameTagX + cornerRadius, nameTagY);
+          ctx.lineTo(nameTagX + nameTagWidth - cornerRadius, nameTagY);
+          ctx.quadraticCurveTo(nameTagX + nameTagWidth, nameTagY, nameTagX + nameTagWidth, nameTagY + cornerRadius);
+          ctx.lineTo(nameTagX + nameTagWidth, nameTagY + nameTagHeight - cornerRadius);
+          ctx.quadraticCurveTo(nameTagX + nameTagWidth, nameTagY + nameTagHeight, nameTagX + nameTagWidth - cornerRadius, nameTagY + nameTagHeight);
+          ctx.lineTo(nameTagX + cornerRadius, nameTagY + nameTagHeight);
+          ctx.quadraticCurveTo(nameTagX, nameTagY + nameTagHeight, nameTagX, nameTagY + nameTagHeight - cornerRadius);
+          ctx.lineTo(nameTagX, nameTagY + cornerRadius);
+          ctx.quadraticCurveTo(nameTagX, nameTagY, nameTagX + cornerRadius, nameTagY);
+          ctx.closePath();
+          ctx.fill();
+
+          // Draw participant name
+          ctx.fillStyle = 'white';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(participantName, nameTagX + nameTagPadding, nameTagY + nameTagHeight / 2, nameTagWidth - nameTagPadding * 2);
         });
 
         // Draw screen share video (Layout 6 only)

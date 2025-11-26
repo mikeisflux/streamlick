@@ -33,7 +33,7 @@ This is the same architecture used by Riverside.fm “Studio”, Tella Live, mmh
     │               React + TypeScript Frontend (identical in every browser)│
     │  • One master <canvas> (1920×1080 or 1280×720)                     │
     │  • Hidden <video> elements for every local & remote track         │
-    │  • 60 fps requestAnimationFrame compositing loop                  │
+    │  • 30 fps requestAnimationFrame compositing loop                  │
     │  • Full layout engine (grid, spotlight, PiP, side-by-side, custom) │
     │  • Name tags, speaking indicators, virtual backgrounds            │
     │  • Host changes layout → instantly synced to everyone via signaling│
