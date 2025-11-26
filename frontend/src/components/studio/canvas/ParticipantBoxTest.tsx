@@ -11,22 +11,50 @@ export function ParticipantBoxTest() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [requestCount, setRequestCount] = useState(0);
   const [videoState, setVideoState] = useState({
     hasStream: false,
     readyState: 0,
     videoWidth: 0,
     videoHeight: 0,
+    trackEnabled: false,
+    trackMuted: false,
+    trackReadyState: '',
   });
 
-  // Get webcam directly
+  // Force re-request camera
+  const forceNewCamera = async () => {
+    // Stop existing stream
+    if (stream) {
+      stream.getTracks().forEach(t => {
+        console.log('[ParticipantBoxTest] Stopping track:', t.kind, t.label);
+        t.stop();
+      });
+      setStream(null);
+    }
+    setRequestCount(c => c + 1);
+  };
+
+  // Get webcam directly - fresh request each time
   useEffect(() => {
     let mounted = true;
+    let localStream: MediaStream | null = null;
 
     async function getWebcam() {
       try {
-        console.log('[ParticipantBoxTest] Requesting webcam...');
+        console.log('[ParticipantBoxTest] Requesting FRESH webcam (request #' + requestCount + ')...');
+
+        // Enumerate devices first to see what's available
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+        console.log('[ParticipantBoxTest] Available video devices:', videoDevices.map(d => ({ id: d.deviceId, label: d.label })));
+
         const mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 1280, height: 720 },
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: 'user',
+          },
           audio: false,
         });
 
@@ -35,12 +63,25 @@ export function ParticipantBoxTest() {
           return;
         }
 
+        localStream = mediaStream;
+        const track = mediaStream.getVideoTracks()[0];
+
         console.log('[ParticipantBoxTest] Got webcam stream:', {
           id: mediaStream.id,
           videoTracks: mediaStream.getVideoTracks().length,
-          trackEnabled: mediaStream.getVideoTracks()[0]?.enabled,
-          trackReadyState: mediaStream.getVideoTracks()[0]?.readyState,
+          trackEnabled: track?.enabled,
+          trackMuted: track?.muted,
+          trackReadyState: track?.readyState,
+          trackLabel: track?.label,
+          trackSettings: track?.getSettings(),
+          trackConstraints: track?.getConstraints(),
         });
+
+        // Force enable the track
+        if (track && !track.enabled) {
+          console.log('[ParticipantBoxTest] Track was disabled, enabling it...');
+          track.enabled = true;
+        }
 
         setStream(mediaStream);
         setError(null);
@@ -54,11 +95,11 @@ export function ParticipantBoxTest() {
 
     return () => {
       mounted = false;
-      if (stream) {
-        stream.getTracks().forEach(t => t.stop());
+      if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
       }
     };
-  }, []);
+  }, [requestCount]);
 
   // Attach stream to video element
   useEffect(() => {
@@ -69,16 +110,24 @@ export function ParticipantBoxTest() {
     video.srcObject = stream;
 
     const handleLoadedMetadata = () => {
+      const track = stream.getVideoTracks()[0];
       console.log('[ParticipantBoxTest] Video loadedmetadata:', {
         videoWidth: video.videoWidth,
         videoHeight: video.videoHeight,
         readyState: video.readyState,
+        trackEnabled: track?.enabled,
+        trackMuted: track?.muted,
+        trackReadyState: track?.readyState,
+        trackSettings: track?.getSettings(),
       });
       setVideoState({
         hasStream: true,
         readyState: video.readyState,
         videoWidth: video.videoWidth,
         videoHeight: video.videoHeight,
+        trackEnabled: track?.enabled || false,
+        trackMuted: track?.muted || false,
+        trackReadyState: track?.readyState || '',
       });
     };
 
@@ -170,7 +219,15 @@ export function ParticipantBoxTest() {
 
   return (
     <div className="p-4 bg-gray-900 rounded-lg">
-      <h3 className="text-white text-lg font-bold mb-2">ParticipantBoxTest (Isolated)</h3>
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="text-white text-lg font-bold">ParticipantBoxTest (Isolated)</h3>
+        <button
+          onClick={forceNewCamera}
+          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded"
+        >
+          🔄 Refresh Camera
+        </button>
+      </div>
 
       {error && (
         <div className="bg-red-500 text-white p-2 rounded mb-2">
@@ -178,10 +235,17 @@ export function ParticipantBoxTest() {
         </div>
       )}
 
-      <div className="mb-2 text-sm text-gray-400">
+      <div className="mb-2 text-sm text-gray-400 space-y-1">
         <div>Stream: {stream ? '✅ Active' : '❌ None'}</div>
         <div>Video Ready: {videoState.readyState >= 2 ? '✅' : '⏳'} (state: {videoState.readyState})</div>
         <div>Dimensions: {videoState.videoWidth}x{videoState.videoHeight}</div>
+        <div className={videoState.trackEnabled ? '' : 'text-red-400 font-bold'}>
+          Track Enabled: {videoState.trackEnabled ? '✅ Yes' : '❌ NO - DISABLED!'}
+        </div>
+        <div className={videoState.trackMuted ? 'text-yellow-400' : ''}>
+          Track Muted: {videoState.trackMuted ? '⚠️ MUTED' : '✅ Not muted'}
+        </div>
+        <div>Track State: {videoState.trackReadyState || 'unknown'}</div>
       </div>
 
       {/* Hidden video element - source for canvas */}
