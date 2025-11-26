@@ -232,8 +232,8 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
       let maxSizeLabel: string;
 
       if (file.type.startsWith('video/')) {
-        maxSize = 200 * 1024 * 1024; // 200MB for videos
-        maxSizeLabel = '200MB';
+        maxSize = 2 * 1024 * 1024 * 1024; // 2GB for videos
+        maxSizeLabel = '2GB';
       } else if (file.type.startsWith('audio/')) {
         maxSize = 50 * 1024 * 1024; // 50MB for audio
         maxSizeLabel = '50MB';
@@ -629,6 +629,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
     return (
       <div
         key={asset.id}
+        onClick={() => handleUseAsset(asset)}
         className={`p-3 bg-white rounded-lg hover:shadow-md transition-shadow cursor-pointer group relative ${
           isActive ? 'border-2 border-blue-500' : 'border border-gray-200'
         }`}
@@ -641,14 +642,6 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
                 alt={asset.name}
                 className="w-full h-full object-cover"
               />
-              {/* Video play icon indicator */}
-              {(asset.type === 'videoBackground' || asset.type === 'videoClip') && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-12 h-12 bg-black bg-opacity-60 rounded-full flex items-center justify-center">
-                    <div className="w-0 h-0 border-l-[16px] border-l-white border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent ml-1"></div>
-                  </div>
-                </div>
-              )}
             </>
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-400">
@@ -657,34 +650,21 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
           )}
           {/* Active indicator */}
           {isActive && (
-            <div className="absolute top-2 right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded font-medium">
+            <div className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded font-medium">
               Active
             </div>
           )}
-          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleUseAsset(asset);
-              }}
-              className={`px-3 py-1 rounded text-sm font-medium ${
-                isActive
-                  ? 'bg-red-600 hover:bg-red-700 text-white'
-                  : 'bg-white text-gray-900 hover:bg-gray-100'
-              }`}
-            >
-              {isActive ? 'Remove' : 'Use'}
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeleteAsset(asset.id);
-              }}
-              className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium"
-            >
-              Delete
-            </button>
-          </div>
+          {/* Delete button - top right on hover */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteAsset(asset.id);
+            }}
+            className="absolute top-1 right-1 z-10 bg-red-600 text-white w-5 h-5 flex items-center justify-center rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+            title="Delete"
+          >
+            ×
+          </button>
         </div>
         <p className="text-xs font-medium text-gray-900 truncate">{asset.name}</p>
         {asset.duration && (
@@ -817,7 +797,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
             <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
               <h4 className="text-sm font-semibold text-indigo-900 mb-2">🎬 Video Backgrounds</h4>
               <p className="text-xs text-indigo-700 mb-2">
-                Looping video backgrounds (no audio). Recommended size: 1280×720 px. Maximum file size: 200MB.
+                Looping video backgrounds (no audio). Recommended size: 1280×720 px. Maximum file size: 2GB.
                 Videos automatically loop continuously.
               </p>
               <p className="text-xs text-indigo-600 italic">
@@ -830,7 +810,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               <label className="aspect-video bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-colors">
                 <div className="text-3xl mb-2">🎬</div>
                 <div className="text-xs text-gray-600 font-medium">Upload Video BG</div>
-                <div className="text-xs text-gray-500 mt-1">MP4, GIF (&lt;200MB)</div>
+                <div className="text-xs text-gray-500 mt-1">MP4, GIF (&lt;2GB)</div>
                 <input type="file" accept="video/mp4,image/gif" onChange={handleFileUpload} className="hidden" />
               </label>
             </div>
@@ -844,7 +824,7 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               <h4 className="text-sm font-semibold text-orange-900 mb-2">🎥 Video Clips</h4>
               <p className="text-xs text-orange-700 mb-2">
                 Intro/outro videos and pre-recorded segments with audio. Recommended sizes: 1920×1080 px or 1280×720 px (16:9).
-                Maximum file size: 200MB.
+                Maximum file size: 2GB.
               </p>
               <p className="text-xs text-orange-600 italic">
                 Tip: Video clips play once when triggered, perfect for intros, outros, and announcements.
@@ -903,7 +883,8 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
               {assets.filter((a) => a.type === 'music').map((asset) => (
                 <div
                   key={asset.id}
-                  className="p-3 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow"
+                  onClick={() => handleUseAsset(asset)}
+                  className="p-3 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow cursor-pointer group relative"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-purple-100 rounded flex items-center justify-center text-2xl">
@@ -922,21 +903,18 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
                         </p>
                       )}
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleUseAsset(asset)}
-                        className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded transition-colors"
-                      >
-                        Use
-                      </button>
-                      <button
-                        onClick={() => handleDeleteAsset(asset.id)}
-                        className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
-                      >
-                        Delete
-                      </button>
-                    </div>
                   </div>
+                  {/* Delete button - top right on hover */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteAsset(asset.id);
+                    }}
+                    className="absolute top-1 right-1 z-10 bg-red-600 text-white w-5 h-5 flex items-center justify-center rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                    title="Delete"
+                  >
+                    ×
+                  </button>
                 </div>
               ))}
             </div>

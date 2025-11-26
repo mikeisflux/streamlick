@@ -163,7 +163,6 @@ export class YouTubeChatPoller {
       clearTimeout(this.pollingInterval);
       this.pollingInterval = null;
     }
-    logger.info('YouTube chat poller stopped');
   }
 }
 
@@ -353,7 +352,6 @@ export class FacebookChatPoller {
       clearTimeout(this.pollingInterval);
       this.pollingInterval = null;
     }
-    logger.info('Facebook chat poller stopped');
   }
 }
 
@@ -414,7 +412,6 @@ export class TwitchChatPoller {
       // Connect to Twitch IRC via WebSocket
       this.connectToIRC();
 
-      logger.info(`Twitch chat started for channel: ${this.channel}`);
     } catch (error: any) {
       logger.error('Twitch chat poller start error:', error.message);
     }
@@ -429,7 +426,6 @@ export class TwitchChatPoller {
       this.ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
 
       this.ws.on('open', () => {
-        logger.info('Twitch IRC WebSocket connected');
 
         // Authenticate
         // Use oauth: prefix for the token
@@ -453,11 +449,9 @@ export class TwitchChatPoller {
       });
 
       this.ws.on('close', () => {
-        logger.info('Twitch IRC WebSocket closed');
         // Attempt reconnection after 5 seconds
         setTimeout(() => {
           if (this.ws) {
-            logger.info('Attempting to reconnect to Twitch IRC...');
             this.connectToIRC();
           }
         }, 5000);
@@ -535,7 +529,6 @@ export class TwitchChatPoller {
       this.ws.close();
       this.ws = null;
     }
-    logger.info('Twitch chat poller stopped');
   }
 }
 
@@ -654,7 +647,6 @@ export class XChatPoller {
       clearTimeout(this.pollingInterval);
       this.pollingInterval = null;
     }
-    logger.info('X chat poller stopped');
   }
 }
 
@@ -761,7 +753,6 @@ export class RumbleChatPoller {
       clearTimeout(this.pollingInterval);
       this.pollingInterval = null;
     }
-    logger.info('Rumble chat poller stopped');
   }
 }
 
@@ -827,7 +818,6 @@ export class ChatManager {
     await rumblePoller.start();
     this.pollers.set('rumble', rumblePoller);
 
-    logger.info(`Chat manager started for broadcast ${this.broadcastId}`);
   }
 
   stopAll(): void {
@@ -835,6 +825,5 @@ export class ChatManager {
       poller.stop();
     });
     this.pollers.clear();
-    logger.info(`Chat manager stopped for broadcast ${this.broadcastId}`);
   }
 }

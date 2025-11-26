@@ -103,7 +103,6 @@ function createStream(
   command
     .on('start', (commandLine: string) => {
       const startTime = Date.now();
-      logger.info(`FFmpeg started for ${dest.platform} (attempt ${retryCount + 1})`);
 
       // Diagnostic logging
       diagnosticLogger.logFFmpeg(
@@ -168,10 +167,6 @@ function createStream(
         // Calculate exponential backoff delay
         const delay = Math.min(BASE_RETRY_DELAY * Math.pow(2, state.retryCount - 1), 30000);
 
-        logger.info(
-          `Attempting to reconnect ${dest.platform} in ${delay}ms (attempt ${state.retryCount}/${state.maxRetries})`
-        );
-
         // Log reconnection attempt
         diagnosticLogger.logFFmpeg(
           'FFmpegStreamer',
@@ -188,7 +183,6 @@ function createStream(
 
         // Schedule reconnection
         state.reconnectTimer = setTimeout(() => {
-          logger.info(`Reconnecting to ${dest.platform}...`);
           diagnosticLogger.logFFmpeg(
             'FFmpegStreamer',
             `Executing reconnection for ${dest.platform}`,
@@ -220,8 +214,6 @@ function createStream(
       }
     })
     .on('end', () => {
-      logger.info(`FFmpeg ended for ${dest.platform}`);
-
       const state = activeStreamers.get(streamKey);
       const duration = (state as any)?.startTime ? Date.now() - (state as any).startTime : 0;
 
@@ -245,10 +237,6 @@ function createStream(
           state.retryCount++;
 
           const delay = Math.min(BASE_RETRY_DELAY * Math.pow(2, state.retryCount - 1), 30000);
-
-          logger.info(
-            `Stream ended unexpectedly for ${dest.platform}. Reconnecting in ${delay}ms...`
-          );
 
           // Log unexpected end and reconnection
           diagnosticLogger.logFFmpeg(
@@ -314,26 +302,19 @@ export function startRTMPStream(
     audioBitrate: '160k',
   }
 ): void {
-  logger.info(`Starting RTMP stream for broadcast ${broadcastId}`);
-
   // Create stream for each destination
   destinations.forEach((dest) => {
     const streamKey = `${broadcastId}-${dest.id}`;
 
     if (activeStreamers.has(streamKey)) {
-      logger.warn(`Stream already active for ${dest.platform}`);
       return;
     }
 
     createStream(broadcastId, dest, options, 0);
   });
-
-  logger.info(`RTMP streaming started for broadcast ${broadcastId} to ${destinations.length} destinations`);
 }
 
 export function stopRTMPStream(broadcastId: string): void {
-  logger.info(`Stopping RTMP stream for broadcast ${broadcastId}`);
-
   activeStreamers.forEach((state, key) => {
     if (key.startsWith(broadcastId)) {
       try {
@@ -353,8 +334,6 @@ export function stopRTMPStream(broadcastId: string): void {
       }
     }
   });
-
-  logger.info(`RTMP stream stopped for broadcast ${broadcastId}`);
 }
 
 export function isStreamActive(broadcastId: string): boolean {
@@ -428,16 +407,12 @@ export function retryStream(
   const state = activeStreamers.get(streamKey);
 
   if (!state) {
-    logger.warn(`No stream state found for ${streamKey}`);
     return false;
   }
 
   if (state.state === StreamState.RECONNECTING) {
-    logger.warn(`Stream ${streamKey} is already reconnecting`);
     return false;
   }
-
-  logger.info(`Manually retrying stream for ${dest.platform}`);
 
   // Clear any pending reconnection timer
   if (state.reconnectTimer) {

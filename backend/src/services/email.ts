@@ -55,11 +55,8 @@ export async function sendVerificationEmail(email: string, token: string): Promi
   try {
     if (SENDGRID_API_KEY) {
       await sgMail.send(msg);
-      logger.info(`Verification email sent to ${email}`);
     } else {
       // Development mode: log the verification link
-      logger.info(`Verification link (dev mode): ${verificationLink}`);
-      console.log('\n📧 Email Verification Link:', verificationLink, '\n');
     }
   } catch (error) {
     logger.error('Error sending verification email:', error);

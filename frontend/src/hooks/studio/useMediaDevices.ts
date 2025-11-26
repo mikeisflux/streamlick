@@ -1,5 +1,7 @@
 import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
+import { audioProcessorService } from '../../services/audio-processor.service';
+import { audioMixerService } from '../../services/audio-mixer.service';
 
 export function useMediaDevices() {
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
@@ -44,11 +46,6 @@ export function useMediaDevices() {
     try {
       setSelectedAudioDevice(deviceId);
 
-      // Stop current audio track
-      if (localStream) {
-        localStream.getAudioTracks().forEach(track => track.stop());
-      }
-
       // Get new audio stream with selected device and high-quality constraints
       const newAudioStream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -64,23 +61,31 @@ export function useMediaDevices() {
         },
       });
 
-      // Replace audio track in local stream
       const newAudioTrack = newAudioStream.getAudioTracks()[0];
+
+      // CRITICAL: Process new audio through audio processor (noise gate, etc.)
+      // The localStream is already a processed stream, so we need to reinitialize
+      // the audio processor with the new raw audio track
+      const processedAudioStream = await audioProcessorService.initialize(new MediaStream([newAudioTrack]));
+      const processedAudioTrack = processedAudioStream.getAudioTracks()[0];
+
+      // Replace audio track in local stream with the PROCESSED track
       if (localStream) {
         const oldAudioTrack = localStream.getAudioTracks()[0];
         if (oldAudioTrack) {
+          oldAudioTrack.stop(); // Stop the old processed track
           localStream.removeTrack(oldAudioTrack);
         }
-        localStream.addTrack(newAudioTrack);
+        localStream.addTrack(processedAudioTrack);
       }
 
-      // Clean up the temporary stream by stopping any remaining tracks
-      // (after we've transferred the track to localStream, the stream itself is no longer needed)
-      newAudioStream.getTracks().forEach(track => {
-        if (track !== newAudioTrack) {
-          track.stop();
-        }
-      });
+      // CRITICAL: Update audio mixer with new microphone for monitor mode
+      // Remove old microphone and add new one so WebRTC sends updated audio
+      audioMixerService.removeStream('local-microphone');
+      audioMixerService.addStream('local-microphone', new MediaStream([processedAudioTrack]));
+
+      // Clean up: stop the raw audio track since we're using the processed one
+      newAudioTrack.stop();
 
       toast.success('Microphone changed successfully');
     } catch (error) {
@@ -160,6 +165,8 @@ export function useMediaDevices() {
       const newMuted = !prev;
       const audioElements = document.querySelectorAll('audio, video');
       audioElements.forEach((element: any) => {
+        // Skip preview elements that should control their own mute state
+        if (element.dataset.excludeGlobalMute === 'true') return;
         element.muted = newMuted;
       });
       return newMuted;

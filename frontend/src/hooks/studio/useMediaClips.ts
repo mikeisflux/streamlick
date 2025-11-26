@@ -7,7 +7,6 @@ import toast from 'react-hot-toast';
 
 export function useMediaClips() {
   const [mediaClips, setMediaClips] = useState<any[]>([]);
-  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const registeredHotkeysRef = useRef<string[]>([]);
 
   const handlePlayClip = async (clip: any) => {
@@ -80,8 +79,6 @@ export function useMediaClips() {
 
   return {
     mediaClips,
-    showMediaLibrary,
-    setShowMediaLibrary,
     handlePlayClip,
   };
 }

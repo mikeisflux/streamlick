@@ -21,21 +21,38 @@ export function useCaptions(enabled: boolean, language: string) {
         }
 
         try {
+          // GHOST MICROPHONE APPROACH:
+          // The browser's SpeechRecognition API can only access the microphone directly.
+          // We create a "ghost mic" by having SpeechRecognition access the real microphone,
+          // which will pick up system audio playback if configured properly.
+          //
+          // Better solution (TODO):
+          // - Get compositor's mixed output: compositorService.getOutputStream()
+          // - Use Web Audio API to create virtual audio device from mixed stream
+          // - Feed that to a transcription service that accepts streams
+          //
+          // For now: SpeechRecognition accesses mic directly (may pick up speaker output)
+
           // Request microphone permission explicitly
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
           // Stop the test stream immediately - we just needed to check permissions
           stream.getTracks().forEach(track => track.stop());
 
+
           // Set up caption callbacks
           captionService.onCaption((caption: Caption) => {
             setCurrentCaption(caption);
+
+            // CRITICAL: Also send caption to compositor service for output stream rendering
+            compositorService.setCaption(caption);
 
             // Clear interim captions after 3 seconds
             if (!caption.isFinal) {
               const timer = setTimeout(() => {
                 setCurrentCaption((prev) => {
                   if (prev && !prev.isFinal && prev.text === caption.text) {
+                    compositorService.setCaption(null); // Clear from output stream too
                     return null;
                   }
                   return prev;
@@ -47,6 +64,7 @@ export function useCaptions(enabled: boolean, language: string) {
               const timer = setTimeout(() => {
                 setCurrentCaption((prev) => {
                   if (prev && prev.isFinal && prev.text === caption.text) {
+                    compositorService.setCaption(null); // Clear from output stream too
                     return null;
                   }
                   return prev;
@@ -96,6 +114,7 @@ export function useCaptions(enabled: boolean, language: string) {
     } else if (!enabled && captionService.active()) {
       captionService.stop();
       setCurrentCaption(null);
+      compositorService.setCaption(null); // Clear from output stream too
       toast.success('AI Captions stopped');
     }
 
@@ -107,6 +126,9 @@ export function useCaptions(enabled: boolean, language: string) {
       if (captionService.active()) {
         captionService.stop();
       }
+
+      // Clear captions from compositor
+      compositorService.setCaption(null);
     };
   }, [enabled, language]);
 
@@ -136,7 +158,6 @@ export function useBackgroundRemoval(
         try {
           // Stop existing background removal if stream changed
           if (streamChanged && backgroundRemovalService.isActive()) {
-            console.log('[Background Removal] Stream changed, restarting with new stream');
             backgroundRemovalService.stop();
           }
 
@@ -157,7 +178,6 @@ export function useBackgroundRemoval(
           }
 
           // Start background removal
-          console.log('[Background Removal] Starting with stream:', localStream.id);
           const outputStream = await backgroundRemovalService.start(localStream, options);
           if (!isMounted) return;
           setProcessedStream(outputStream);
@@ -174,7 +194,6 @@ export function useBackgroundRemoval(
     } else if (!enabled) {
       // Always stop and clear processed stream when disabled
       if (backgroundRemovalService.isActive()) {
-        console.log('[Background Removal] Stopping and restoring original stream');
         backgroundRemovalService.stop();
       }
       setProcessedStream(null);
@@ -182,11 +201,6 @@ export function useBackgroundRemoval(
       // Verify localStream is still valid
       if (localStream) {
         const videoTracks = localStream.getVideoTracks();
-        console.log('[Background Removal] Original stream status:', {
-          id: localStream.id,
-          videoTracks: videoTracks.length,
-          active: videoTracks[0]?.readyState
-        });
       }
 
       if (backgroundRemovalService.isActive()) {
@@ -234,11 +248,9 @@ export function useVerticalSimulcast(
         try {
           // Stop existing vertical simulcast if stream changed
           if (streamChanged && verticalCompositorService.active()) {
-            console.log('[Vertical Simulcast] Stream changed, restarting with new stream');
             verticalCompositorService.stop();
           }
 
-          console.log('[Vertical Simulcast] Starting with stream:', sourceStream.id);
 
           // Start vertical compositor
           const outputStream = await verticalCompositorService.start(sourceStream, {
@@ -262,7 +274,6 @@ export function useVerticalSimulcast(
       startVerticalSimulcast();
     } else if (!enabled) {
       if (verticalCompositorService.active()) {
-        console.log('[Vertical Simulcast] Stopping');
         verticalCompositorService.stop();
         toast.success('Vertical simulcast stopped');
       }

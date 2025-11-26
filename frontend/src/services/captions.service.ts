@@ -120,7 +120,6 @@ class CaptionsService {
       this.websocket = new WebSocket(wsUrl, ['token', this.provider.apiKey]);
 
       this.websocket.onopen = () => {
-        console.log('Deepgram connection established');
         this.streamAudioToWebSocket(stream);
       };
 
@@ -181,7 +180,6 @@ class CaptionsService {
       this.websocket = new WebSocket(wsUrl);
 
       this.websocket.onopen = () => {
-        console.log('AssemblyAI connection established');
         this.streamAudioToWebSocket(stream);
       };
 
@@ -269,7 +267,6 @@ class CaptionsService {
     };
 
     this.recognition.start();
-    console.log('Web Speech API started');
   }
 
   /**
@@ -319,7 +316,6 @@ class CaptionsService {
     if (wasRunning && callback) {
       // Need to get the stream from somewhere - this is a limitation
       // In practice, the caller should handle restart with new language
-      console.log('Language changed to:', language);
     }
   }
 

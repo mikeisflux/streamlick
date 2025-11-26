@@ -20,6 +20,24 @@ export default {
           900: '#1f2865',
         },
       },
+      keyframes: {
+        'ring-burst': {
+          '0%': {
+            transform: 'scale(1)',
+            opacity: '0.8',
+          },
+          '50%': {
+            opacity: '0.5',
+          },
+          '100%': {
+            transform: 'scale(1.5)',
+            opacity: '0',
+          },
+        },
+      },
+      animation: {
+        'ring-burst': 'ring-burst 1.5s ease-out infinite',
+      },
     },
   },
   plugins: [],

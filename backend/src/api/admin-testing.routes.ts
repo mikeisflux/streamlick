@@ -82,7 +82,6 @@ router.post('/run/:suite', async (req, res) => {
 
     const testConfig = TEST_SUITES[suite as keyof typeof TEST_SUITES];
 
-    logger.info(`Running test suite: ${suite}`);
 
     // Run tests with timeout
     const { stdout, stderr } = await execAsync(testConfig.command, {
@@ -99,7 +98,6 @@ router.post('/run/:suite', async (req, res) => {
     // Parse test results
     const results = parseJestOutput(output);
 
-    logger.info(`Test suite ${suite} completed: ${results.passed} passed, ${results.failed} failed`);
 
     res.json({
       suite,
@@ -129,7 +127,6 @@ router.post('/run/:suite', async (req, res) => {
 // Run all tests
 router.post('/run-all', async (req, res) => {
   try {
-    logger.info('Running complete test suite');
 
     const { stdout, stderr } = await execAsync('npm run test:coverage', {
       cwd: path.join(__dirname, '../../'),

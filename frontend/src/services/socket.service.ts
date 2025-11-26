@@ -37,12 +37,10 @@ class SocketService {
     this.socket = io(API_URL, options);
 
     this.socket.on('connect', () => {
-      console.log('Socket connected');
       this.reconnectAttempts = 0; // Reset on successful connection
     });
 
     this.socket.on('disconnect', (reason: string) => {
-      console.log('Socket disconnected:', reason);
     });
 
     this.socket.on('reconnect_attempt', (attempt: number) => {
@@ -51,7 +49,6 @@ class SocketService {
         this.baseReconnectDelay * Math.pow(2, attempt - 1),
         this.maxReconnectDelay
       );
-      console.log(`Reconnection attempt ${attempt}/${this.maxReconnectAttempts} (delay: ${delay}ms)`);
     });
 
     this.socket.on('reconnect_failed', () => {
@@ -60,7 +57,6 @@ class SocketService {
     });
 
     this.socket.on('reconnect', (attempt: number) => {
-      console.log(`Socket reconnected after ${attempt} attempts`);
       this.reconnectAttempts = 0;
     });
 

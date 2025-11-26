@@ -55,13 +55,14 @@ export function validateCsrfToken(req: Request, res: Response, next: NextFunctio
   // Exempt auth endpoints (login, register) - they occur before CSRF token can be obtained
   // Also exempt webhook endpoints (they use signature validation instead)
   // Exempt broadcast endpoints (they require authentication via JWT)
+  // Exempt OAuth endpoints (they use JWT authentication, not CSRF)
   const exemptPathPrefixes = [
     '/auth/login',
     '/auth/register',
     '/auth/refresh',
     '/auth/csrf-token',
     '/webhooks/',
-    '/oauth/callback',
+    '/oauth/',  // Exempt ALL OAuth routes (callback, disconnect, setup)
     '/broadcasts',  // Exempt ALL broadcast routes
   ];
 
@@ -80,17 +81,11 @@ export function validateCsrfToken(req: Request, res: Response, next: NextFunctio
 
   // Debug logging - always log non-safe method requests
   if (!safeMethods.includes(req.method)) {
-    logger.info(`[CSRF] ${req.method} ${fullPath}`, {
-      pathToCheck,
-      isExempt,
-      hasToken: !!req.cookies[COOKIE_NAMES.CSRF_TOKEN],
-      hasHeader: !!req.headers['x-csrf-token']
-    });
+    // CSRF check for non-safe methods
   }
 
   // Exempt matching requests
   if (isExempt) {
-    logger.info(`[CSRF] ✓ Exemption applied for ${req.method} ${fullPath}`);
     return next();
   }
 

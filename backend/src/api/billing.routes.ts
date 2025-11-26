@@ -169,7 +169,6 @@ router.post('/webhook', async (req, res) => {
             data: { planType: 'pro' },
           });
 
-          logger.info(`Subscription created for user ${userId}`);
         }
         break;
       }
@@ -206,7 +205,6 @@ router.post('/webhook', async (req, res) => {
             data: { planType: 'free' },
           });
 
-          logger.info(`Subscription expired for user ${dbSub.userId}`);
         }
         break;
       }

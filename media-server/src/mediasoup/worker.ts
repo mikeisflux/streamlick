@@ -60,7 +60,6 @@ async function createSingleWorker(): Promise<Worker> {
     const index = workers.indexOf(worker);
     if (index > -1) {
       workers.splice(index, 1);
-      logger.info(`Removed dead worker from pool. Remaining workers: ${workers.length}`);
     }
 
     // Clean up routers that were on this worker
@@ -73,7 +72,6 @@ async function createSingleWorker(): Promise<Worker> {
             router.close();
           }
           routersToRemove.push(broadcastId);
-          logger.info(`Router closed for broadcast ${broadcastId} (worker died)`);
         } catch (error) {
           logger.error(`Error closing router for ${broadcastId}:`, error);
         }
@@ -87,10 +85,8 @@ async function createSingleWorker(): Promise<Worker> {
 
     // Recreate the worker to maintain pool size
     try {
-      logger.info(`Attempting to recreate worker to maintain pool size of ${desiredWorkerCount}...`);
       const newWorker = await createSingleWorker();
       workers.push(newWorker);
-      logger.info(`New mediasoup worker created [pid:${newWorker.pid}]. Pool restored to ${workers.length} worker(s)`);
     } catch (error) {
       logger.error('Failed to recreate worker:', error);
 
@@ -119,13 +115,13 @@ async function createSingleWorker(): Promise<Worker> {
 export async function createWorkers(numWorkers: number = 2): Promise<void> {
   // Ensure at least 2 workers for redundancy
   desiredWorkerCount = Math.max(numWorkers, 2);
-  logger.info(`Creating ${desiredWorkerCount} mediasoup workers...`);
+
 
   for (let i = 0; i < desiredWorkerCount; i++) {
     const worker = await createSingleWorker();
     workers.push(worker);
-    logger.info(`Mediasoup worker created [pid:${worker.pid}]`);
   }
+
 }
 
 /**
@@ -164,14 +160,12 @@ export async function createRouter(broadcastId: string): Promise<Router> {
   // Check if router already exists
   const existingRouter = routers.get(broadcastId);
   if (existingRouter) {
-    logger.debug(`Router already exists for broadcast ${broadcastId}`);
     return existingRouter;
   }
 
   // Check if router is currently being created
   const pendingCreation = routerCreationPromises.get(broadcastId);
   if (pendingCreation) {
-    logger.debug(`Waiting for pending router creation for broadcast ${broadcastId}`);
     return pendingCreation;
   }
 
@@ -185,7 +179,6 @@ export async function createRouter(broadcastId: string): Promise<Router> {
       });
 
       routers.set(broadcastId, router);
-      logger.info(`Router created for broadcast ${broadcastId}`);
 
       return router;
     } catch (error) {
@@ -236,7 +229,6 @@ export function deleteRouter(broadcastId: string): void {
   if (router) {
     router.close();
     routers.delete(broadcastId);
-    logger.info(`Router deleted for broadcast ${broadcastId}`);
   }
 }
 

@@ -31,7 +31,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB max file size
+    fileSize: 2 * 1024 * 1024 * 1024, // 2GB max file size
   },
   fileFilter: (req, file, cb) => {
     // Accept video, audio, and image files
@@ -155,7 +155,6 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req: Reques
       data: {
         userId,
         name: name || file.originalname,
-        description: description || null,
         type: clipType,
         fileUrl: fileUrl,
         thumbnailUrl: null,
@@ -168,7 +167,6 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req: Reques
       },
     });
 
-    logger.info(`Media clip uploaded: ${clip.name} (${clip.type}) by user ${userId}`);
 
     return res.status(201).json({ clip });
   } catch (error: any) {
@@ -247,7 +245,6 @@ router.post('/link', authMiddleware, async (req: Request, res: Response) => {
       data: {
         userId,
         name,
-        description: description || null,
         type,
         fileUrl: url,
         thumbnailUrl: null,
@@ -260,7 +257,6 @@ router.post('/link', authMiddleware, async (req: Request, res: Response) => {
       },
     });
 
-    logger.info(`Media clip linked: ${clip.name} (${clip.type}) by user ${userId}`);
 
     return res.status(201).json({ clip });
   } catch (error: any) {
@@ -277,7 +273,7 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
     const { id } = req.params;
-    const { name, description, hotkey, volume, isActive } = req.body;
+    const { name, hotkey, volume, isActive } = req.body;
 
     // CRITICAL FIX: Verify ownership before update (IDOR protection)
     const clip = await prisma.mediaClip.findUnique({
@@ -305,14 +301,12 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
       where: { id },
       data: {
         ...(name !== undefined && { name }),
-        ...(description !== undefined && { description }),
         ...(hotkey !== undefined && { hotkey }),
         ...(volume !== undefined && { volume: parseInt(volume) }),
         ...(isActive !== undefined && { isActive }),
       },
     });
 
-    logger.info(`Media clip updated: ${id} by user ${userId}`);
 
     return res.json({ clip: updated });
   } catch (error: any) {
@@ -359,7 +353,6 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
     // Delete from database
     await prisma.mediaClip.delete({ where: { id } });
 
-    logger.info(`Media clip deleted: ${id} by user ${userId}`);
 
     return res.json({ success: true });
   } catch (error: any) {

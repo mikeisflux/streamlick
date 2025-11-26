@@ -24,6 +24,8 @@ interface CanvasSettings {
   echoCancellation: boolean;
   noiseSuppression: boolean;
   autoAdjustMicrophone: boolean;
+  noiseGateEnabled: boolean;
+  noiseGateThreshold: number;
   // Visual Effects
   selectedBackground: string;
   backgroundBlur: boolean;
@@ -78,6 +80,8 @@ const DEFAULT_SETTINGS: CanvasSettings = {
   echoCancellation: true,
   noiseSuppression: true,
   autoAdjustMicrophone: false,
+  noiseGateEnabled: true,
+  noiseGateThreshold: -38,
   // Visual Effects
   selectedBackground: 'none',
   backgroundBlur: false,
@@ -299,6 +303,10 @@ export function useCanvasSettings() {
     setNoiseSuppression: (value: boolean) => updateSetting('noiseSuppression', value),
     autoAdjustMicrophone: settings.autoAdjustMicrophone,
     setAutoAdjustMicrophone: (value: boolean) => updateSetting('autoAdjustMicrophone', value),
+    noiseGateEnabled: settings.noiseGateEnabled,
+    setNoiseGateEnabled: (value: boolean) => updateSetting('noiseGateEnabled', value),
+    noiseGateThreshold: settings.noiseGateThreshold,
+    setNoiseGateThreshold: (value: number) => updateSetting('noiseGateThreshold', value),
     // Visual Effects
     selectedBackground: settings.selectedBackground,
     setSelectedBackground: (value: string) => updateSetting('selectedBackground', value),

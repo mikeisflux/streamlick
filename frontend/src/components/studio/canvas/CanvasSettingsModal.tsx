@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { playTestTone } from '../../../utils/audioTest';
+import { audioProcessorService } from '../../../services/audio-processor.service';
 import toast from 'react-hot-toast';
 
 interface MediaDevice {
@@ -64,6 +65,10 @@ interface CanvasSettingsModalProps {
   onNoiseSuppressionChange?: (enabled: boolean) => void;
   autoAdjustMicrophone?: boolean;
   onAutoAdjustMicrophoneChange?: (adjust: boolean) => void;
+  noiseGateEnabled?: boolean;
+  onNoiseGateEnabledChange?: (enabled: boolean) => void;
+  noiseGateThreshold?: number;
+  onNoiseGateThresholdChange?: (threshold: number) => void;
   // Visual effects settings
   backgroundBlur?: boolean;
   onBackgroundBlurChange?: (enabled: boolean) => void;
@@ -675,6 +680,65 @@ function AudioSettings({ props }: { props: CanvasSettingsModalProps }) {
             onChange={props.onAutoAdjustMicrophoneChange}
           />
         </div>
+
+        {/* Noise Gate Settings */}
+        <div className="mt-4 bg-gray-700/50 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h4 className="text-sm font-medium text-white">Background Noise Removal</h4>
+              <p className="text-xs text-gray-400 mt-1">
+                Professional noise gate for clean audio (always active, even when not live)
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={props.noiseGateEnabled ?? true}
+                onChange={(e) => {
+                  props.onNoiseGateEnabledChange?.(e.target.checked);
+                  audioProcessorService.setNoiseGateEnabled(e.target.checked);
+                }}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+
+          {(props.noiseGateEnabled ?? true) && (
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-300">
+                    Noise Gate Threshold
+                  </label>
+                  <span className="text-sm text-gray-400">{props.noiseGateThreshold ?? -38} dB</span>
+                </div>
+                <input
+                  type="range"
+                  min="-60"
+                  max="-20"
+                  value={props.noiseGateThreshold ?? -38}
+                  className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
+                  onChange={(e) => {
+                    const dB = parseInt(e.target.value);
+                    props.onNoiseGateThresholdChange?.(dB);
+                    audioProcessorService.setNoiseGateThreshold(dB);
+                  }}
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>-60dB (Less sensitive)</span>
+                  <span>-20dB (More sensitive)</span>
+                </div>
+              </div>
+
+              <div className="text-xs text-gray-400 space-y-1">
+                <p>💡 Recommended: -38dB for most environments</p>
+                <p>💡 Lower values reduce more noise but may cut off quiet speech</p>
+                <p>💡 Features: 15ms attack, 100ms release, 50ms hold time, 80Hz high-pass filter</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1036,7 +1100,7 @@ function LayoutsSettings({ props }: { props: CanvasSettingsModalProps }) {
           <option value="3">Group - All participants equal-sized grid (Shift+3)</option>
           <option value="4">Spotlight - One large speaker with small boxes above (Shift+4)</option>
           <option value="5">News - Person on left, content on right (Shift+5)</option>
-          <option value="6">Screen - Large content with tiny participants (Shift+6)</option>
+          <option value="6">Screen - Participants on top (1/4), screen share below (3/4) (Shift+6)</option>
           <option value="7">Picture-in-Picture - Full screen content with person overlay (Shift+7)</option>
           <option value="8">Cinema - Ultra-wide format (Shift+8)</option>
         </select>

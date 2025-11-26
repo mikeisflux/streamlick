@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { webrtcService } from '../../services/webrtc.service';
+import { audioMixerService } from '../../services/audio-mixer.service';
 import toast from 'react-hot-toast';
 
 export function useWebRTC(broadcastId: string | undefined, localStream: MediaStream | null) {
@@ -17,16 +18,35 @@ export function useWebRTC(broadcastId: string | undefined, localStream: MediaStr
       // Create send transport
       await webrtcService.createSendTransport();
 
-      // Produce video and audio tracks
+      // Produce video track from local stream (camera)
       const videoTrack = localStream.getVideoTracks()[0];
-      const audioTrack = localStream.getAudioTracks()[0];
 
       if (videoTrack) {
         await webrtcService.produceMedia(videoTrack);
       }
 
-      if (audioTrack) {
-        await webrtcService.produceMedia(audioTrack);
+      // CRITICAL: For monitor mode, use audio mixer output instead of raw microphone
+      // This ensures ALL participants hear ALL audio sources:
+      // - Microphone (already in mixer)
+      // - Video audio from MediaLibrary (already in mixer)
+      // - Music and other audio sources (already in mixer)
+      const audioMixerOutputStream = audioMixerService.getOutputStream();
+
+      if (audioMixerOutputStream) {
+        const audioTrack = audioMixerOutputStream.getAudioTracks()[0];
+        if (audioTrack) {
+          await webrtcService.produceMedia(audioTrack);
+          console.log('[useWebRTC] Sending audio mixer output to WebRTC (monitor mode enabled)');
+        } else {
+          console.warn('[useWebRTC] No audio track in mixer output stream');
+        }
+      } else {
+        console.warn('[useWebRTC] Audio mixer not initialized, falling back to local stream audio');
+        // Fallback to raw microphone if mixer not initialized
+        const audioTrack = localStream.getAudioTracks()[0];
+        if (audioTrack) {
+          await webrtcService.produceMedia(audioTrack);
+        }
       }
 
       isInitializedRef.current = true;

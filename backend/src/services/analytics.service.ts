@@ -116,7 +116,6 @@ export class AnalyticsService extends EventEmitter {
 
       this.metricsCollectionIntervals.set(broadcastId, interval);
 
-      logger.info(`Started metrics collection for broadcast ${broadcastId}`);
     } catch (error) {
       logger.error('Start metrics collection error:', error);
       throw error;
@@ -162,7 +161,6 @@ export class AnalyticsService extends EventEmitter {
 
       this.broadcastStartTimes.delete(broadcastId);
 
-      logger.info(`Stopped metrics collection for broadcast ${broadcastId}`);
     } catch (error) {
       logger.error('Stop metrics collection error:', error);
       throw error;
@@ -282,7 +280,6 @@ export class AnalyticsService extends EventEmitter {
         },
       });
 
-      logger.info(`Aggregated metrics for broadcast ${broadcastId}`);
     } catch (error) {
       logger.error('Aggregate broadcast metrics error:', error);
     }
@@ -357,7 +354,6 @@ export class AnalyticsService extends EventEmitter {
         },
       });
 
-      logger.info(`Updated user analytics for user ${userId}`);
     } catch (error) {
       logger.error('Update user analytics error:', error);
     }
@@ -421,7 +417,6 @@ export class AnalyticsService extends EventEmitter {
         }
       }
 
-      logger.info(`Updated platform analytics for broadcast ${broadcastId}`);
     } catch (error) {
       logger.error('Update platform analytics error:', error);
     }

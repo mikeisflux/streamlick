@@ -90,8 +90,9 @@ router.post('/register', authRateLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    // MINOR FIX: Use RFC 5322 compliant email validation regex
+    // This prevents registration with invalid emails like a@b.c
+    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ error: 'Invalid email format' });
     }
@@ -148,7 +149,6 @@ router.post('/register', authRateLimiter, async (req, res) => {
       try {
         await sendVerificationEmail(email, verificationToken);
         emailSent = true;
-        logger.info(`Verification email sent successfully to ${email}`);
         break;
       } catch (emailError) {
         logger.warn(`Failed to send verification email (attempt ${attempt}/${maxEmailRetries}):`, emailError);
@@ -262,7 +262,6 @@ router.post('/logout', authenticate, async (req: AuthRequest, res) => {
     const refreshToken = req.cookies[COOKIE_NAMES.REFRESH_TOKEN];
     if (refreshToken) {
       await revokeRefreshToken(refreshToken);
-      logger.info(`Refresh token revoked for user ${req.user!.userId}`);
     }
 
     // Clear auth cookies
@@ -397,7 +396,6 @@ router.post('/change-password', authenticate, async (req: AuthRequest, res) => {
     // CRITICAL FIX: Revoke all refresh tokens for security
     // Forces re-authentication on all devices after password change
     await revokeAllUserTokens(userId);
-    logger.info(`All refresh tokens revoked for user ${userId} after password change`);
 
     // Clear current session cookies
     clearAuthCookies(res);

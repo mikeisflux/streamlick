@@ -116,7 +116,6 @@ router.post('/users', async (req: AuthRequest, res: Response) => {
       },
     });
 
-    logger.info(`New user created by admin: ${user.email}`);
 
     res.status(201).json({
       ...user,
@@ -135,7 +134,8 @@ router.patch('/users/:id', async (req: AuthRequest, res: Response) => {
     const { isAdmin, planType } = req.body;
 
     // Prevent user from removing their own admin status
-    const currentUserId = (req as any).user.userId;
+    // CRITICAL FIX: Use proper type instead of 'as any' bypass
+    const currentUserId = req.user!.userId;
     if (id === currentUserId && isAdmin === false) {
       return res.status(400).json({ error: 'Cannot remove your own admin status' });
     }
@@ -184,7 +184,8 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     // Prevent user from deleting themselves
-    const currentUserId = (req as any).user.userId;
+    // CRITICAL FIX: Use proper type instead of 'as any' bypass
+    const currentUserId = req.user!.userId;
     if (id === currentUserId) {
       return res.status(400).json({ error: 'Cannot delete your own account' });
     }
@@ -193,7 +194,6 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
       where: { id },
     });
 
-    logger.info(`User deleted by admin: ${id}`);
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
     logger.error('Delete user error:', error);
@@ -261,7 +261,8 @@ router.get('/templates', async (req: AuthRequest, res: Response) => {
 router.post('/templates', async (req: AuthRequest, res: Response) => {
   try {
     const { name, config } = req.body;
-    const userId = (req as any).user.userId;
+    // CRITICAL FIX: Use proper type instead of 'as any' bypass
+    const userId = req.user!.userId;
 
     if (!name) {
       return res.status(400).json({ error: 'Template name is required' });
@@ -276,7 +277,6 @@ router.post('/templates', async (req: AuthRequest, res: Response) => {
       },
     });
 
-    logger.info(`Template created: ${template.id}`);
     res.json(template);
   } catch (error) {
     logger.error('Create template error:', error);
@@ -293,7 +293,6 @@ router.delete('/templates/:id', async (req: AuthRequest, res: Response) => {
       where: { id },
     });
 
-    logger.info(`Template deleted: ${id}`);
     res.json({ message: 'Template deleted successfully' });
   } catch (error) {
     logger.error('Delete template error:', error);

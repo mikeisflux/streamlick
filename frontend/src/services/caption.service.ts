@@ -198,7 +198,6 @@ class CaptionService {
     try {
       this.recognition.start();
       this.isActive = true;
-      console.log(`✅ AI Captions started (${this.config.language})`);
     } catch (error) {
       console.error('Failed to start speech recognition:', error);
       if (this.onErrorCallback) {
@@ -221,7 +220,6 @@ class CaptionService {
     this.currentTranscript = '';
     this.lastFinalTranscript = '';
 
-    console.log('⏹️ AI Captions stopped');
   }
 
   /**

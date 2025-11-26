@@ -131,13 +131,6 @@ router.post(
       const files = req.files as any;
       const config = req.body.config ? JSON.parse(req.body.config) : {};
 
-      logger.info('Saving branding settings:', {
-        logo: files?.logo?.[0]?.filename,
-        favicon: files?.favicon?.[0]?.filename,
-        hero: files?.hero?.[0]?.filename,
-        config,
-      });
-
       // Delete old files, excluding the newly uploaded ones
       const existingFiles = fs.existsSync(uploadDir) ? fs.readdirSync(uploadDir) : [];
 
@@ -147,7 +140,6 @@ router.post(
         existingFiles.filter(f => f.startsWith('logo-') && f !== newLogoFilename).forEach(f => {
           try {
             fs.unlinkSync(path.join(uploadDir, f));
-            logger.info('Deleted old logo:', f);
           } catch (err) {
             logger.error('Failed to delete old logo:', err);
           }
@@ -161,7 +153,6 @@ router.post(
         existingFiles.filter(f => f.startsWith('favicon-') && f !== newFaviconFilename).forEach(f => {
           try {
             fs.unlinkSync(path.join(uploadDir, f));
-            logger.info('Deleted old favicon:', f);
           } catch (err) {
             logger.error('Failed to delete old favicon:', err);
           }
@@ -175,7 +166,6 @@ router.post(
         existingFiles.filter(f => f.startsWith('hero-') && f !== newHeroFilename).forEach(f => {
           try {
             fs.unlinkSync(path.join(uploadDir, f));
-            logger.info('Deleted old hero:', f);
           } catch (err) {
             logger.error('Failed to delete old hero:', err);
           }
@@ -305,7 +295,6 @@ router.delete('/:type', authenticateToken, requireAdmin, async (req, res) => {
     const filePath = path.join(uploadDir, fileToDelete);
     fs.unlinkSync(filePath);
 
-    logger.info(`Deleted ${type} image:`, fileToDelete);
 
     res.json({
       success: true,

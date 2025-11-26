@@ -4,8 +4,10 @@ import { socketService } from '../../services/socket.service';
 import { mediaServerSocketService } from '../../services/media-server-socket.service';
 import { webrtcService } from '../../services/webrtc.service';
 import { compositorService } from '../../services/compositor.service';
+import { canvasStreamService } from '../../services/canvas-stream.service';
 import { recordingService } from '../../services/recording.service';
 import { useStudioStore } from '../../store/studioStore';
+import api from '../../services/api';
 import toast from 'react-hot-toast';
 
 interface RemoteParticipant {
@@ -65,9 +67,10 @@ export function useBroadcast({
   // Recording functions defined first to avoid circular dependency
   const handleStartRecording = useCallback(async () => {
     try {
-      const compositeStream = compositorService.getOutputStream();
+      // Get canvas stream from StudioCanvas via canvasStreamService
+      const compositeStream = canvasStreamService.getOutputStream();
       if (!compositeStream) {
-        toast.error('No composite stream available');
+        toast.error('No canvas stream available - please ensure you are on stage');
         return;
       }
 
@@ -94,8 +97,11 @@ export function useBroadcast({
   }, []);
 
   const handleStopRecording = useCallback(async () => {
+    console.error('🎙️ STOPPING RECORDING - Starting process...');
     try {
+      console.error('🎙️ Calling recordingService.stopRecording()...');
       const blob = await recordingService.stopRecording();
+      console.error('🎙️ Recording stopped, blob size:', blob.size, 'bytes');
       const duration = recordingDuration;
 
       setIsRecording(false);
@@ -112,15 +118,17 @@ export function useBroadcast({
       const title = broadcast?.title || 'Untitled Broadcast';
       const filename = `${title}-${timestamp}.webm`;
 
+      console.error('🎙️ Calling downloadRecording() with filename:', filename);
       await recordingService.downloadRecording(blob, filename, {
         title,
         broadcastId,
         duration,
       });
+      console.error('🎙️ Download completed successfully');
 
       toast.success(`Recording saved to Downloads: ${filename}`);
     } catch (error) {
-      console.error('Recording stop error:', error);
+      console.error('🎙️ Recording stop error:', error);
       toast.error('Failed to stop recording');
     }
   }, [broadcast, broadcastId, recordingDuration]);
@@ -128,15 +136,48 @@ export function useBroadcast({
   const handleGoLive = useCallback(async () => {
     if (!broadcastId) return false;
 
-    if (selectedDestinations.length === 0) {
-      toast.error('Please select at least one destination');
+    // CRITICAL: Deduplicate selected destinations before processing
+    const deduplicatedDestinations = Array.from(new Set(selectedDestinations));
+
+    if (deduplicatedDestinations.length !== selectedDestinations.length) {
+      console.warn('[useBroadcast] Found duplicate destination IDs before going live:', {
+        original: selectedDestinations,
+        deduplicated: deduplicatedDestinations,
+        duplicateCount: selectedDestinations.length - deduplicatedDestinations.length,
+      });
+    }
+
+    // CRITICAL: Filter out any destination IDs that don't correspond to actually connected destinations
+    // This prevents sending unchecked or stale destination IDs from localStorage
+    // Note: destinations array already contains only connected destinations from the API
+    const connectedDestinationIds = destinations.map(dest => dest.id);
+
+    const validDestinations = deduplicatedDestinations.filter(destId =>
+      connectedDestinationIds.includes(destId)
+    );
+
+    if (validDestinations.length !== deduplicatedDestinations.length) {
+      console.warn('[useBroadcast] Filtered out invalid/disconnected destination IDs:', {
+        selected: deduplicatedDestinations,
+        connected: connectedDestinationIds,
+        valid: validDestinations,
+        removed: deduplicatedDestinations.filter(id => !connectedDestinationIds.includes(id)),
+      });
+    }
+
+    if (validDestinations.length === 0) {
+      toast.error('Please select at least one connected destination');
       return false;
     }
 
     try {
-      // Initialize WebRTC if not already done
+      // Initialize WebRTC device and transport WITHOUT producing individual tracks
+      // (compositor will handle all video/audio)
       if (!webrtcService.getDevice()) {
-        await initializeWebRTC();
+        console.error('🌐 Initializing WebRTC for compositor (no individual tracks)...');
+        await webrtcService.initialize(broadcastId);
+        await webrtcService.createSendTransport();
+        console.error('🌐 WebRTC initialized - ready for compositor tracks');
       }
 
       // Initialize compositor with only LIVE participants (exclude backstage)
@@ -148,6 +189,7 @@ export function useBroadcast({
           isLocal: true,
           audioEnabled,
           videoEnabled,
+          avatarUrl: localStorage.getItem('selectedAvatar') || undefined, // Pass avatar URL for live stream
         },
         ...Array.from(remoteParticipants.values())
           .filter((p) => p.role === 'host' || p.role === 'guest') // Only live participants
@@ -158,16 +200,30 @@ export function useBroadcast({
             isLocal: false,
             audioEnabled: p.audioEnabled,
             videoEnabled: p.videoEnabled,
+            avatarUrl: undefined, // Remote participants don't have avatars yet
           })),
       ].filter((p) => p.stream);
 
-      await compositorService.initialize(participantStreams);
-      compositorService.setLayout({ type: currentLayout });
+      // DEBUG: Log participant video state
+      console.error('🎥 GO LIVE - Compositor Initialization:', {
+        localVideoEnabled: videoEnabled,
+        localAudioEnabled: audioEnabled,
+        localStreamHasVideo: localStream?.getVideoTracks().length,
+        localStreamHasAudio: localStream?.getAudioTracks().length,
+        videoTrackEnabled: localStream?.getVideoTracks()[0]?.enabled,
+        videoTrackReadyState: localStream?.getVideoTracks()[0]?.readyState,
+        audioTrackEnabled: localStream?.getAudioTracks()[0]?.enabled,
+        participantCount: participantStreams.length,
+      });
 
-      // Get composite stream and produce it via WebRTC
-      const compositeStream = compositorService.getOutputStream();
+      // REMOVED: compositor initialization - now using StudioCanvas for all rendering
+      // await compositorService.initialize(participantStreams);
+      // compositorService.setLayout({ type: currentLayout });
+
+      // Get canvas stream from StudioCanvas and produce it via WebRTC
+      const compositeStream = canvasStreamService.getOutputStream();
       if (!compositeStream) {
-        throw new Error('Failed to get composite stream');
+        throw new Error('Failed to get canvas stream - StudioCanvas may not be initialized');
       }
 
       // Produce composite video and audio tracks
@@ -185,39 +241,66 @@ export function useBroadcast({
         compositeAudioProducerId = await webrtcService.produceMedia(compositeAudioTrack);
       }
 
-      // Prepare destination settings for API
+      // Prepare destination settings for API (using only valid, connected destinations)
       const apiDestinationSettings: Record<string, { privacyStatus?: string; scheduledStartTime?: string; title?: string; description?: string }> = {};
-      selectedDestinations.forEach((destId) => {
-        const title = destinationSettings.title[destId];
-        const description = destinationSettings.description[destId];
+      validDestinations.forEach((destId) => {
+        const destTitle = destinationSettings.title[destId];
+        const destDescription = destinationSettings.description[destId];
+
+        // Use destination-specific title/description if set, otherwise fall back to broadcast's title/description
+        const title = (destTitle && destTitle !== 'Loading') ? destTitle : broadcast?.title;
+        const description = (destDescription && destDescription !== 'Loading') ? destDescription : broadcast?.description;
 
         apiDestinationSettings[destId] = {
           privacyStatus: destinationSettings.privacy[destId] || 'public',
           scheduledStartTime: destinationSettings.schedule[destId] || undefined,
-          // Only include title/description if they're set and not placeholder values
-          title: (title && title !== 'Loading') ? title : undefined,
-          description: (description && description !== 'Loading') ? description : undefined,
+          title,
+          description,
         };
       });
 
-      console.log('[useBroadcast] Starting broadcast with:', {
-        selectedDestinations,
-        destinationCount: selectedDestinations.length,
-        apiDestinationSettings
-      });
+      // Start broadcast with destination settings (using only valid, connected destinations)
+      // This triggers the 30-second countdown on the backend and creates YouTube/Facebook broadcasts
+      await broadcastService.start(broadcastId, validDestinations, apiDestinationSettings);
 
-      // Start broadcast with destination settings
-      await broadcastService.start(broadcastId, selectedDestinations, apiDestinationSettings);
+      // CRITICAL: Set isLive=true NOW so countdown is visible!
+      setIsLive(true);
+      toast.success('Preparing broadcast...');
 
-      // Start RTMP streaming with composite producers
-      const destinationsToStream = destinations
-        .filter((d) => selectedDestinations.includes(d.id))
-        .map((d) => ({
-          id: d.id,
-          platform: d.platform,
-          rtmpUrl: d.rtmpUrl,
-          streamKey: 'encrypted-key', // In production, decrypt on backend
-        }));
+      // NEW FLOW: Fetch destinations → Start RTMP → 30s countdown → Transition YouTube → Intro video
+
+      // Step 1: Wait for YouTube/Facebook broadcasts to be created (happens async on backend)
+      // Then poll until destinations are ready (with timeout)
+
+      let broadcastDestinations: any[] = [];
+      let attempts = 0;
+      const maxAttempts = 10; // 10 attempts x 1 second = 10 seconds max wait
+
+      while (attempts < maxAttempts && broadcastDestinations.length === 0) {
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second between attempts
+        attempts++;
+
+        const response = await api.get(`/broadcasts/${broadcastId}/destinations`);
+        broadcastDestinations = response.data;
+
+        if (broadcastDestinations.length > 0) {
+          break;
+        }
+      }
+
+      if (broadcastDestinations.length === 0) {
+        throw new Error('No broadcast destinations were created. Please try again.');
+      }
+
+
+      // Step 3: Start RTMP streaming IMMEDIATELY (before countdown)
+      // This connects to YouTube/Facebook and starts sending video in "testing" mode
+      const destinationsToStream = broadcastDestinations.map((bd: any) => ({
+        id: bd.id,
+        platform: bd.platform,
+        rtmpUrl: bd.rtmpUrl,
+        streamKey: bd.streamKey,
+      }));
 
       mediaServerSocketService.emit('start-rtmp', {
         broadcastId,
@@ -228,8 +311,36 @@ export function useBroadcast({
         },
       });
 
+      toast.success('Connected to platforms, starting countdown...');
+
+      // Step 4: Display 30-second countdown on canvas (stream is already flowing to YouTube)
+      console.error('🎬 ABOUT TO START COUNTDOWN - Compositor state:', {
+        isCompositing: (compositorService as any).isCompositing,
+        frameCount: (compositorService as any).frameCount,
+        outputStream: !!(compositorService as any).outputStream,
+      });
+      await compositorService.startCountdown(30);
+
+      // Step 5: Transition YouTube broadcasts from "testing" to "live"
+      try {
+        await api.post(`/broadcasts/${broadcastId}/transition-youtube-to-live`);
+        toast.success('You are now live!');
+      } catch (error) {
+        console.error('[useBroadcast] Failed to transition YouTube to live:', error);
+        toast.error('Warning: YouTube transition may have failed');
+        // Continue anyway - stream is already connected
+      }
+
+      // Step 6: Play intro video as FIRST thing viewers see on the live stream
+      try {
+        await compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
+      } catch (error) {
+        console.error('Intro video failed to play:', error);
+        // Continue even if intro video fails - user stream will show immediately
+      }
+
       // Start chat polling
-      socketService.emit('start-chat', { broadcastId });
+      socketService.emit('start-chat', { broadcastId});
 
       // Enable chat display on compositor
       compositorService.setShowChat(showChatOnStream);
@@ -237,14 +348,12 @@ export function useBroadcast({
       // Automatically start recording
       try {
         await handleStartRecording();
-        console.log('Auto-recording started');
       } catch (error) {
         console.error('Failed to auto-start recording:', error);
         // Don't fail the broadcast if recording fails
       }
 
-      toast.success('You are now live!');
-      setIsLive(true);
+      // isLive already set to true above (before intro video)
       return true;
     } catch (error) {
       console.error('Go live error:', error);

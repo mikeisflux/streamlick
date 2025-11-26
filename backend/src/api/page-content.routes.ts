@@ -91,7 +91,6 @@ router.put('/:page', authenticate, requireAdmin, async (req: AuthRequest, res) =
       },
     });
 
-    logger.info(`Page content updated: ${page} by user ${req.user!.userId}`);
     res.json({ message: 'Page content updated successfully', page: updated });
   } catch (error) {
     logger.error('Update page content error:', error);
@@ -113,7 +112,6 @@ router.delete('/:page', authenticate, requireAdmin, async (req: AuthRequest, res
       },
     });
 
-    logger.info(`Page content deleted: ${page} by user ${req.user!.userId}`);
     res.json({ message: 'Page content deleted successfully' });
   } catch (error) {
     logger.error('Delete page content error:', error);

@@ -34,11 +34,19 @@ import tokenWarningsRoutes from './api/token-warnings.routes';
 import pageContentRoutes from './api/page-content.routes';
 import emailsRoutes from './api/emails.routes';
 import commentsRoutes from './api/comments.routes';
+import dailyRoutes, { initializeDailyService } from './api/daily.routes';
 
 import initializeSocket from './socket';
 import logger from './utils/logger';
 import { validateCsrfToken } from './auth/csrf';
 import { sanitizeInput } from './middleware/sanitize';
+
+// MINOR FIX: Add BigInt JSON serialization support
+// Converts BigInt values to strings when serializing to JSON
+// Prevents "TypeError: Do not know how to serialize a BigInt" errors
+// Affects fileSizeBytes fields in Recording, MediaClip, Asset, and BrandingAsset models
+// @ts-ignore - Adding toJSON to BigInt prototype
+BigInt.prototype.toJSON = function() { return this.toString(); };
 
 dotenv.config();
 
@@ -76,7 +84,8 @@ app.use(helmet({
     },
   },
   crossOriginEmbedderPolicy: true,
-  crossOriginOpenerPolicy: { policy: "same-origin" },
+  // Allow popups to maintain window.opener for OAuth flows
+  crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
   crossOriginResourcePolicy: { policy: "same-site" }, // Changed from cross-origin
   dnsPrefetchControl: { allow: false },
   frameguard: { action: "deny" },
@@ -113,18 +122,9 @@ app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 
 // Debug middleware to log body after parsing
 app.use('/api/broadcasts/:id/start', (req, res, next) => {
-  logger.info('[DEBUG MIDDLEWARE] ========== REQUEST DETAILS ==========');
-  logger.info(`[DEBUG MIDDLEWARE] Content-Type: ${req.headers['content-type']}`);
-  logger.info(`[DEBUG MIDDLEWARE] Content-Length: ${req.headers['content-length']}`);
-  logger.info(`[DEBUG MIDDLEWARE] Body defined: ${!!req.body}`);
-  logger.info(`[DEBUG MIDDLEWARE] Body type: ${typeof req.body}`);
-  logger.info(`[DEBUG MIDDLEWARE] Body keys: ${req.body ? Object.keys(req.body).join(', ') : 'NONE'}`);
   if (req.body) {
-    logger.info(`[DEBUG MIDDLEWARE] Body JSON: ${JSON.stringify(req.body)}`);
   } else {
-    logger.info('[DEBUG MIDDLEWARE] Body is UNDEFINED or NULL!');
   }
-  logger.info('[DEBUG MIDDLEWARE] ========================================');
   next();
 });
 
@@ -198,6 +198,7 @@ app.use('/api/infrastructure', infrastructureRoutes);
 app.use('/api/branding', publicBrandingRouter); // Public branding endpoint
 app.use('/api/token-warnings', tokenWarningsRoutes);
 app.use('/api/page-content', pageContentRoutes); // Public endpoint for getting page content
+app.use('/api/daily', dailyRoutes); // Daily.co integration routes
 app.use('/api/emails', emailsRoutes); // Email management routes
 app.use('/api/comments', commentsRoutes); // Comment posting routes
 
@@ -221,16 +222,19 @@ app.use((req, res) => {
 });
 
 // Start server
-server.listen(PORT, () => {
-  logger.info(`🚀 Streamlick API server running on port ${PORT}`);
-  logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+server.listen(PORT, async () => {
+
+  // Initialize Daily.co service
+  try {
+    await initializeDailyService();
+  } catch (error) {
+    logger.warn('Daily.co service initialization failed - streaming via Daily will not be available:', error);
+  }
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
   server.close(() => {
-    logger.info('Server closed');
     process.exit(0);
   });
 });

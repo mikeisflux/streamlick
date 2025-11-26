@@ -91,7 +91,7 @@ router.get('/ssh-keys', async (req, res) => {
  */
 router.post('/deploy', async (req, res) => {
   try {
-    const { name, serverType, location, role, sshKeys, backendUrl, upstreamServers } = req.body;
+    const { name, serverType, location, role, sshKeys, backendUrl, upstreamServers, streamingMethod, backendApiUrl } = req.body;
 
     if (!name || !serverType || !location || !role) {
       return res.status(400).json({
@@ -99,15 +99,23 @@ router.post('/deploy', async (req, res) => {
       });
     }
 
+    // Validate media server specific config
+    if (role === 'media-server') {
+      if (!backendApiUrl) {
+        return res.status(400).json({
+          error: 'Media servers require backendApiUrl for Daily.co integration'
+        });
+      }
+    }
+
     // Validate role
-    const validRoles = ['media-server', 'api-server', 'frontend-server', 'load-balancer', 'database-server', 'redis-server'];
+    const validRoles = ['media-server', 'api-server', 'frontend-server', 'load-balancer', 'database-server', 'redis-server', 'turn-server'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({
         error: `Invalid role. Must be one of: ${validRoles.join(', ')}`
       });
     }
 
-    logger.info(`Starting automated deployment: ${name} (${role}) on ${serverType} in ${location}`);
 
     // Deploy server via Hetzner API
     const server = await hetznerService.deployServer({
@@ -116,12 +124,12 @@ router.post('/deploy', async (req, res) => {
       location,
       role,
       sshKeys: sshKeys || [],
-      backendUrl,
+      backendUrl: backendApiUrl || backendUrl, // Media servers use this to connect to backend
       upstreamServers,
+      // Note: streamingMethod is always 'daily' - configured via environment in cloud-init
     });
 
     // Wait for server to be ready (max 2 minutes)
-    logger.info('Waiting for server to initialize...');
     await new Promise(resolve => setTimeout(resolve, 120000));
 
     // Construct response based on role
@@ -141,10 +149,18 @@ router.post('/deploy', async (req, res) => {
     if (role === 'media-server') {
       const mediaServerUrl = `http://${server.public_net.ipv4.ip}:3001`;
       responseData.server.url = mediaServerUrl;
+      responseData.server.streamingMethod = 'daily';
+
+      responseData.notes = [
+        '✓ Media server configured with Daily.co streaming',
+        `• Backend API: ${backendApiUrl}`,
+        '• Ensure Daily API key is set in /admin/settings',
+        '• Cost: ~$1-2/hour per active broadcast',
+        '• Zero CPU usage for RTMP - all handled by Daily',
+      ];
 
       try {
         const serverId = mediaServerPool.addServer(mediaServerUrl);
-        logger.info(`Added media server to pool: ${serverId}`);
         responseData.server.poolId = serverId;
       } catch (poolError: any) {
         logger.warn('Server deployed but failed to add to pool:', poolError.message);
@@ -165,7 +181,6 @@ router.post('/deploy', async (req, res) => {
       const dbPassword = generateToken(32); // 64-char hex password
 
       // Store password securely (in production, use secrets manager)
-      logger.info(`Database server deployed. Password generated (not logged for security).`);
 
       responseData.server.host = server.public_net.ipv4.ip;
       responseData.server.port = 5432;
@@ -184,7 +199,6 @@ router.post('/deploy', async (req, res) => {
       // CRITICAL FIX: Generate secure random password instead of hardcoded weak password
       const redisPassword = generateToken(32); // 64-char hex password
 
-      logger.info(`Redis server deployed. Password generated (not logged for security).`);
 
       responseData.server.host = server.public_net.ipv4.ip;
       responseData.server.port = 6379;
@@ -196,6 +210,47 @@ router.post('/deploy', async (req, res) => {
         'Add this connection string to your backend .env as REDIS_URL',
         'Restrict Redis access via firewall rules (only allow backend servers)',
         'Enable Redis TLS in production'
+      ];
+    } else if (role === 'turn-server') {
+      // Generate secure credentials for TURN server
+      const turnUsername = generateToken(16); // 32-char hex username
+      const turnPassword = generateToken(32); // 64-char hex password
+      const turnSecret = generateToken(32); // 64-char hex secret for long-term auth
+
+
+      responseData.server.host = server.public_net.ipv4.ip;
+      responseData.server.ports = {
+        turn: 3478,
+        turnTls: 5349,
+        udpRange: '49152-65535'
+      };
+      responseData.server.username = turnUsername;
+      responseData.server.password = turnPassword;
+      responseData.server.secret = turnSecret;
+      responseData.server.urls = [
+        `turn:${server.public_net.ipv4.ip}:3478`,
+        `turns:${server.public_net.ipv4.ip}:5349`
+      ];
+      responseData.server.webrtcConfig = {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          {
+            urls: [
+              `turn:${server.public_net.ipv4.ip}:3478`,
+              `turns:${server.public_net.ipv4.ip}:5349`
+            ],
+            username: turnUsername,
+            credential: turnPassword
+          }
+        ]
+      };
+      responseData.notes = [
+        'CRITICAL: Save credentials immediately - they will not be shown again!',
+        'Add these to your frontend WebRTC configuration',
+        'Firewall configured: UDP/TCP 3478, TCP 5349, UDP 49152-65535',
+        'TURN server uses Coturn with secure authentication',
+        'For TLS (turns://), install SSL certificate for this domain',
+        'Monitor logs: journalctl -u coturn -f'
       ];
     }
 
@@ -251,7 +306,7 @@ router.post('/servers/:id/labels', async (req, res) => {
     }
 
     // Validate role
-    const validRoles = ['media-server', 'api-server', 'frontend-server', 'load-balancer', 'database-server', 'redis-server'];
+    const validRoles = ['media-server', 'api-server', 'frontend-server', 'load-balancer', 'database-server', 'redis-server', 'turn-server'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({
         error: `Invalid role. Must be one of: ${validRoles.join(', ')}`
@@ -260,7 +315,6 @@ router.post('/servers/:id/labels', async (req, res) => {
 
     await hetznerService.updateServerLabels(serverId, { role });
 
-    logger.info(`Updated server ${serverId} labels: role=${role}`);
 
     res.json({
       success: true,

@@ -14,7 +14,6 @@ class MediaServerSocketService {
   connect(): void {
     if (this.socket?.connected) return;
 
-    console.log('Connecting to media server:', MEDIA_SERVER_URL);
 
     this.socket = io(MEDIA_SERVER_URL, {
       transports: ['websocket'],
@@ -27,12 +26,10 @@ class MediaServerSocketService {
     });
 
     this.socket.on('connect', () => {
-      console.log('Media server socket connected');
       this.reconnectAttempts = 0;
     });
 
     this.socket.on('disconnect', (reason: string) => {
-      console.log('Media server socket disconnected:', reason);
     });
 
     this.socket.on('reconnect_attempt', (attempt: number) => {
@@ -41,7 +38,6 @@ class MediaServerSocketService {
         this.baseReconnectDelay * Math.pow(2, attempt - 1),
         this.maxReconnectDelay
       );
-      console.log(`Media server reconnection attempt ${attempt}/${this.maxReconnectAttempts} (delay: ${delay}ms)`);
     });
 
     this.socket.on('reconnect_failed', () => {
@@ -50,7 +46,6 @@ class MediaServerSocketService {
     });
 
     this.socket.on('reconnect', (attempt: number) => {
-      console.log(`Media server socket reconnected after ${attempt} attempts`);
       this.reconnectAttempts = 0;
     });
 

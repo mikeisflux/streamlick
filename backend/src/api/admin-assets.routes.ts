@@ -143,7 +143,6 @@ router.post('/:type/upload', authMiddleware, adminMiddleware, (req: Request, res
         },
       });
 
-      logger.info(`Default asset uploaded: ${asset.id} (${type})`);
 
       res.json({ asset });
     } catch (error: any) {
@@ -180,7 +179,6 @@ router.patch('/:type/:id', authMiddleware, adminMiddleware, async (req: Request,
       },
     });
 
-    logger.info(`Asset updated: ${id}`);
 
     res.json({ asset: updated });
   } catch (error: any) {
@@ -216,7 +214,6 @@ router.delete('/:type/:id', authMiddleware, adminMiddleware, async (req: Request
       where: { id },
     });
 
-    logger.info(`Asset deleted: ${id}`);
 
     res.json({ success: true });
   } catch (error: any) {

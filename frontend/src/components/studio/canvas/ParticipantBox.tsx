@@ -4,6 +4,7 @@ interface ParticipantBoxProps {
   stream: MediaStream | null;
   videoEnabled: boolean;
   audioEnabled?: boolean;
+  isSpeaking?: boolean; // Audio level detection - true when actively speaking
   name: string;
   title?: string;
   positionNumber?: number;
@@ -31,6 +32,7 @@ export function ParticipantBox({
   stream,
   videoEnabled,
   audioEnabled = true,
+  isSpeaking = false,
   name,
   title,
   positionNumber,
@@ -284,10 +286,17 @@ export function ParticipantBox({
           }}
         />
       ) : (
-        <div className="w-full h-full flex items-center justify-center bg-gray-900">
+        <div className="w-full h-full flex items-center justify-center bg-gray-900 relative">
           {selectedAvatar ? (
-            <div className="w-full h-full flex items-center justify-center p-8">
-              <div className="w-1/4 aspect-square rounded-full overflow-hidden">
+            <div className="w-full h-full flex items-center justify-center p-8 relative">
+              {/* Avatar maintains original 25% size with minimum threshold */}
+              <div
+                className="relative rounded-full overflow-hidden flex items-center justify-center"
+                style={{
+                  width: 'max(25%, 200px)',
+                  aspectRatio: '1/1',
+                }}
+              >
                 <img
                   src={selectedAvatar}
                   alt={name}
@@ -317,6 +326,25 @@ export function ParticipantBox({
         </div>
       )}
 
+      {/* Voice animation rings - overlays entire tile when camera off and speaking */}
+      {!videoEnabled && isSpeaking && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
+          {/* Progressive outward burst rings - start at avatar edge and expand ~20px */}
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="absolute rounded-full border-white animate-ring-burst"
+              style={{
+                width: '40%', // Start at avatar edge
+                aspectRatio: '1/1',
+                borderWidth: '2px',
+                animationDelay: `${i * 0.3}s`, // Stagger each ring by 300ms
+              }}
+            />
+          ))}
+        </div>
+      )}
+
       {/* Mute Indicator - Bottom Right (40px from bottom) */}
       {!audioEnabled && (
         <div
@@ -343,18 +371,18 @@ export function ParticipantBox({
       {/* Lower Third Name Display - 40px from bottom */}
       {showLowerThird && (
         <div
-          className="absolute left-0 right-0 flex items-center px-3"
+          className="absolute flex items-center px-3"
           style={{
             bottom: '40px',
+            left: '16px',
             height: '40px',
             backgroundColor: 'rgba(0, 0, 0, 0.75)',
             borderRadius: '20px',
-            marginLeft: '16px',
-            marginRight: '16px',
+            maxWidth: 'calc(100% - 32px)',
           }}
         >
-          <div className="text-white flex-1">
-            <div className={`font-semibold truncate ${textSize}`}>
+          <div className="text-white">
+            <div className={`font-semibold whitespace-nowrap ${textSize}`}>
               {name}
               {isHost && <span className="ml-1 text-blue-400">(Host)</span>}
             </div>

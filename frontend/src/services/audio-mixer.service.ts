@@ -9,16 +9,18 @@ class AudioMixerService {
   private destination: MediaStreamAudioDestinationNode | null = null;
   private sources: Map<string, MediaStreamAudioSourceNode> = new Map();
   private gainNodes: Map<string, GainNode> = new Map();
+  private connectedElements: Map<HTMLMediaElement, string> = new Map();
+  private currentMasterVolume: number = 1.0;
 
   /**
-   * Initialize the audio mixer
+   * Initialize the audio mixer with high-quality 192kbps equivalent settings
    */
   initialize(): void {
     if (this.audioContext) {
       return; // Already initialized
     }
 
-    // Create audio context
+    // Create audio context with high sample rate for better quality
     this.audioContext = new AudioContext({
       latencyHint: 'interactive',
       sampleRate: 48000,
@@ -26,8 +28,6 @@ class AudioMixerService {
 
     // Create destination node
     this.destination = this.audioContext.createMediaStreamDestination();
-
-    console.log('Audio mixer initialized');
   }
 
   /**
@@ -46,7 +46,7 @@ class AudioMixerService {
 
     // Create gain node for volume control
     const gainNode = this.audioContext.createGain();
-    gainNode.gain.value = 1.0; // Full volume
+    gainNode.gain.value = this.currentMasterVolume;
 
     // Connect: source -> gain -> destination
     source.connect(gainNode);
@@ -55,8 +55,56 @@ class AudioMixerService {
     // Store source and gain node
     this.sources.set(id, source);
     this.gainNodes.set(id, gainNode);
+  }
 
-    console.log(`Audio stream added: ${id}`);
+  /**
+   * Add an HTML media element (video/audio) to the mix
+   * Uses MediaElementSource for direct element audio capture
+   */
+  addMediaElement(id: string, element: HTMLVideoElement | HTMLAudioElement): void {
+    if (!this.audioContext || !this.destination) {
+      throw new Error('[Audio Mixer] Not initialized');
+    }
+
+    // Check if this element is already connected to a source
+    const existingId = this.connectedElements.get(element);
+    if (existingId) {
+      // If the ID is different, update tracking
+      if (existingId !== id) {
+        const existingSource = this.sources.get(existingId);
+        const existingGain = this.gainNodes.get(existingId);
+        if (existingSource && existingGain) {
+          this.sources.delete(existingId);
+          this.gainNodes.delete(existingId);
+          this.sources.set(id, existingSource);
+          this.gainNodes.set(id, existingGain);
+          this.connectedElements.set(element, id);
+        }
+      }
+      return;
+    }
+
+    // Remove existing source if any
+    this.removeStream(id);
+
+    // Create source from media element
+    const source = this.audioContext.createMediaElementSource(element);
+
+    // Track this element
+    this.connectedElements.set(element, id);
+
+    // Create gain node with optimal volume
+    const gainNode = this.audioContext.createGain();
+    gainNode.gain.value = this.currentMasterVolume * 1.5;
+
+    // Connect to BOTH destinations for dual output
+    source.connect(gainNode);
+    gainNode.connect(this.destination);
+    gainNode.connect(this.audioContext.destination);
+
+    // Store source and gain node
+    this.sources.set(id, source as any);
+    this.gainNodes.set(id, gainNode);
   }
 
   /**
@@ -76,24 +124,31 @@ class AudioMixerService {
       this.gainNodes.delete(id);
     }
 
-    if (source || gainNode) {
-      console.log(`Audio stream removed: ${id}`);
+    // Clean up element tracking
+    for (const [element, elementId] of this.connectedElements.entries()) {
+      if (elementId === id) {
+        this.connectedElements.delete(element);
+        break;
+      }
     }
+  }
+
+  /**
+   * Remove a media element from the mix
+   */
+  removeMediaElement(id: string): void {
+    this.removeStream(id);
   }
 
   /**
    * Set volume for a specific stream
    */
   setStreamVolume(id: string, volume: number): void {
-    // Volume should be 0-1
     const clampedVolume = Math.max(0, Math.min(1, volume));
 
     const gainNode = this.gainNodes.get(id);
     if (gainNode) {
       gainNode.gain.value = clampedVolume;
-      console.log(`Volume set for ${id}: ${clampedVolume}`);
-    } else {
-      console.warn(`Cannot set volume for ${id}: stream not found`);
     }
   }
 
@@ -112,8 +167,6 @@ class AudioMixerService {
    * Stop and cleanup the audio mixer
    */
   stop(): void {
-    console.log('Stopping audio mixer');
-
     // Disconnect all sources and gain nodes
     this.sources.forEach((source) => {
       source.disconnect();
@@ -139,6 +192,28 @@ class AudioMixerService {
    */
   getStreamCount(): number {
     return this.sources.size;
+  }
+
+  /**
+   * Set master volume for all streams
+   */
+  setMasterVolume(volume: number): void {
+    const clampedVolume = Math.max(0, Math.min(1, volume));
+
+    // Store for future streams
+    this.currentMasterVolume = clampedVolume;
+
+    // Apply to all existing streams
+    this.gainNodes.forEach((gainNode, id) => {
+      gainNode.gain.value = clampedVolume;
+    });
+  }
+
+  /**
+   * Get all stream IDs currently in the mixer
+   */
+  getStreamIds(): string[] {
+    return Array.from(this.sources.keys());
   }
 }
 

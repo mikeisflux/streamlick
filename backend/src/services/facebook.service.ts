@@ -47,7 +47,6 @@ export async function createFacebookLiveVideo(
   secureStreamUrl: string;
 }> {
   try {
-    logger.info(`Creating Facebook live video for page ${pageId}`);
 
     // Create the live video
     const response = await axios.post(
@@ -83,7 +82,6 @@ export async function createFacebookLiveVideo(
       streamKey = '';
     }
 
-    logger.info(`Facebook live video created: ${liveVideoId}`);
 
     return {
       liveVideoId,
@@ -107,7 +105,6 @@ export async function endFacebookLiveVideo(
   accessToken: string
 ): Promise<void> {
   try {
-    logger.info(`Ending Facebook live video: ${liveVideoId}`);
 
     await axios.post(
       `${FACEBOOK_GRAPH_URL}/${liveVideoId}`,
@@ -117,7 +114,6 @@ export async function endFacebookLiveVideo(
       }
     );
 
-    logger.info(`Facebook live video ended: ${liveVideoId}`);
   } catch (error: any) {
     logger.error('Error ending Facebook live video:', error.response?.data || error.message);
     throw new Error(`Failed to end Facebook live video: ${error.response?.data?.error?.message || error.message}`);
@@ -134,13 +130,11 @@ export async function deleteFacebookLiveVideo(
   accessToken: string
 ): Promise<void> {
   try {
-    logger.info(`Deleting Facebook live video: ${liveVideoId}`);
 
     await axios.delete(`${FACEBOOK_GRAPH_URL}/${liveVideoId}`, {
       params: { access_token: accessToken },
     });
 
-    logger.info(`Facebook live video deleted: ${liveVideoId}`);
   } catch (error: any) {
     logger.error('Error deleting Facebook live video:', error.response?.data || error.message);
     // Don't throw - deletion is optional

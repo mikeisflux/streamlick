@@ -142,13 +142,25 @@ export function DestinationsPanel({
       const newSelection = isCurrentlySelected
         ? selectedDestinations.filter(destId => destId !== id)
         : [...selectedDestinations, id];
+
+      // CRITICAL: Deduplicate to ensure no duplicates are ever added
+      const deduplicatedSelection = Array.from(new Set(newSelection));
+
+      if (deduplicatedSelection.length !== newSelection.length) {
+        console.warn('[DestinationsPanel] Prevented duplicate destination IDs:', {
+          original: newSelection,
+          deduplicated: deduplicatedSelection,
+          duplicateCount: newSelection.length - deduplicatedSelection.length,
+        });
+      }
+
       console.log('[DestinationsPanel] Selection changed:', {
         destination: destination.name,
         id,
         isCurrentlySelected,
-        newSelection
+        newSelection: deduplicatedSelection
       });
-      onSelectionChange(newSelection);
+      onSelectionChange(deduplicatedSelection);
     } else {
       // Fallback to local state if no callback provided
       setDestinations((prev) =>
@@ -199,6 +211,22 @@ export function DestinationsPanel({
     } catch (error) {
       console.error('Failed to remove destination:', error);
       alert('Failed to remove destination');
+    }
+  };
+
+  const disconnectOAuthDestination = async (id: string, platform: string) => {
+    if (!confirm(`Are you sure you want to disconnect this ${platform} destination? You'll need to reconnect it to use it again.`)) {
+      return;
+    }
+
+    try {
+      await api.delete(`/oauth/disconnect/${id}`);
+      // Reload destinations to update UI
+      loadDestinations();
+      alert('Destination disconnected successfully');
+    } catch (error) {
+      console.error('Failed to disconnect destination:', error);
+      alert('Failed to disconnect destination');
     }
   };
 
@@ -393,12 +421,26 @@ export function DestinationsPanel({
                     Connect
                   </button>
                 )}
-                {dest.connected ? (
+                {dest.connected && dest.platform !== 'custom' && (
+                  <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-1">
+                      <CheckCircleIcon className="w-5 h-5 text-green-600" />
+                      <span className="text-xs text-green-600">Connected</span>
+                    </div>
+                    <button
+                      onClick={() => disconnectOAuthDestination(dest.id, dest.name)}
+                      className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                )}
+                {dest.connected && dest.platform === 'custom' && (
                   <div className="flex items-center space-x-1">
                     <CheckCircleIcon className="w-5 h-5 text-green-600" />
                     <span className="text-xs text-green-600">Connected</span>
                   </div>
-                ) : null}
+                )}
               </div>
             </div>
 

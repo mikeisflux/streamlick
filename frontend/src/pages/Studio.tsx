@@ -1,9 +1,12 @@
 import { useRef, useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { compositorService } from '../services/compositor.service';
+import { audioProcessorService } from '../services/audio-processor.service';
+import { audioMixerService } from '../services/audio-mixer.service';
 import { broadcastService } from '../services/broadcast.service';
+import { canvasStreamService } from '../services/canvas-stream.service';
 import { useMedia } from '../hooks/useMedia';
 import { useStudioStore } from '../store/studioStore';
+import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { HotkeyReference } from '../components/HotkeyReference';
 import { HotkeyFeedback, useHotkeyFeedback } from '../components/HotkeyFeedback';
@@ -38,6 +41,7 @@ import {
   useSidebarVideoSync,
   useFeatureToggles,
   useTeleprompter,
+  useAutoMuteDuringVideos,
   useStudioHandlers,
 } from '../hooks/studio';
 import { useCanvasSettings } from '../hooks/studio/useCanvasSettings';
@@ -45,10 +49,14 @@ import { socketService } from '../services/socket.service';
 
 export function Studio() {
   const { broadcastId } = useParams<{ broadcastId: string }>();
+  const { user } = useAuthStore();
   const { messages: hotkeyMessages } = useHotkeyFeedback();
 
   // Countdown state
   const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
+
+  // Background Effects state
+  const [backgroundEffect, setBackgroundEffect] = useState<{type: 'none' | 'blur' | 'greenscreen' | 'virtual'}>({ type: 'none' });
 
   // Refs
   const micButtonRef = useRef<HTMLDivElement>(null);
@@ -56,7 +64,10 @@ export function Studio() {
   const speakerButtonRef = useRef<HTMLDivElement>(null);
 
   const { broadcast, isLive, setBroadcast } = useStudioStore();
-  const { localStream, audioEnabled, videoEnabled, startCamera, stopCamera, toggleAudio, toggleVideo } = useMedia();
+  const { localStream, rawStream, audioEnabled, videoEnabled, startCamera, stopCamera, toggleAudio, toggleVideo } = useMedia();
+
+  // Auto-mute during video playback
+  useAutoMuteDuringVideos(localStream, audioEnabled);
 
   // Feature toggles
   const {
@@ -123,7 +134,31 @@ export function Studio() {
     if (!broadcastId) return { privacy: {}, schedule: {}, title: {}, description: {} };
     try {
       const saved = localStorage.getItem(`destinationSettings_${broadcastId}`);
-      return saved ? JSON.parse(saved) : { privacy: {}, schedule: {}, title: {}, description: {} };
+      if (!saved) return { privacy: {}, schedule: {}, title: {}, description: {} };
+
+      const parsed = JSON.parse(saved);
+
+      // CRITICAL FIX: Sanitize loaded settings to remove corrupted/placeholder data
+      // Remove any "Loading" placeholders or corrupted values from malware
+      const sanitize = (obj: Record<string, string>) => {
+        const clean: Record<string, string> = {};
+        for (const [key, value] of Object.entries(obj)) {
+          // Skip "Loading" placeholders and obviously corrupted data
+          if (value === 'Loading' || typeof value !== 'string' || value.length > 500) {
+            console.warn(`[Studio] Removed corrupted destination setting: ${key}=${value}`);
+            continue;
+          }
+          clean[key] = value;
+        }
+        return clean;
+      };
+
+      return {
+        privacy: sanitize(parsed.privacy || {}),
+        schedule: sanitize(parsed.schedule || {}),
+        title: sanitize(parsed.title || {}),
+        description: sanitize(parsed.description || {}),
+      };
     } catch (error) {
       console.error('Failed to load destination settings from localStorage:', error);
       return { privacy: {}, schedule: {}, title: {}, description: {} };
@@ -140,13 +175,11 @@ export function Studio() {
       Object.values(destinationSettings.description).some(v => v === 'Loading');
 
     if (hasLoadingPlaceholder) {
-      console.log('[Studio] Skipping save - settings contain Loading placeholders');
       return;
     }
 
     try {
       localStorage.setItem(`destinationSettings_${broadcastId}`, JSON.stringify(destinationSettings));
-      console.log('[Studio] Saved destination settings:', destinationSettings);
     } catch (error) {
       console.error('Failed to save destination settings to localStorage:', error);
     }
@@ -155,12 +188,10 @@ export function Studio() {
   // Countdown socket listeners
   useEffect(() => {
     const handleCountdownTick = (data: { secondsRemaining: number }) => {
-      console.log('[Studio] Countdown tick:', data.secondsRemaining);
       setCountdownSeconds(data.secondsRemaining);
     };
 
     const handleCountdownComplete = () => {
-      console.log('[Studio] Countdown complete');
       setCountdownSeconds(null);
     };
 
@@ -250,19 +281,30 @@ export function Studio() {
   const { isSharingScreen, screenShareStream, handleToggleScreenShare } = useScreenShare({
     currentLayout: selectedLayout,
     onLayoutChange: handleLayoutChange,
+    isLive,
   });
-  const { mediaClips, showMediaLibrary, setShowMediaLibrary, handlePlayClip } = useMediaClips();
+  const { mediaClips, handlePlayClip } = useMediaClips();
   const { showAnalyticsDashboard, setShowAnalyticsDashboard, analyticsDashboardPosition, analyticsDashboardSize, handleAnalyticsDashboardDragStart, handleAnalyticsDashboardResizeStart } = useAnalyticsDashboard();
   const { showDestinationsDrawer, setShowDestinationsDrawer, showInviteDrawer, setShowInviteDrawer, showBannerDrawer, setShowBannerDrawer, showBrandDrawer, setShowBrandDrawer, showRecordingDrawer, setShowRecordingDrawer } = useDrawers();
-  const { showClipManager, setShowClipManager, showProducerMode, setShowProducerMode, showClipDurationSelector, setShowClipDurationSelector, showLanguageSelector, setShowLanguageSelector, showBackgroundSettings, setShowBackgroundSettings, showSceneManager, setShowSceneManager } = useModals();
+  const { showClipManager, setShowClipManager, showProducerMode, setShowProducerMode, showClipDurationSelector, setShowClipDurationSelector, showLanguageSelector, setShowLanguageSelector, showBackgroundSettings, setShowBackgroundSettings, showSceneManager, setShowSceneManager, showChatLayoutCustomizer, setShowChatLayoutCustomizer, chatLayoutConfig, setChatLayoutConfig, showScreenShareManager, setShowScreenShareManager, showBackgroundEffects, setShowBackgroundEffects } = useModals();
 
   // Teleprompter
   const teleprompterState = useTeleprompter();
   const { showHotkeyReference } = useStudioHotkeys({ audioEnabled, videoEnabled, isLive, isRecording, isSharingScreen, toggleAudio, toggleVideo, handleGoLive, handleEndBroadcast, handleStartRecording, handleStopRecording, handleToggleScreenShare, handleLayoutChange, setShowChatOnStream });
-  const { handleCreateClip } = useClipRecording(clipRecordingEnabled, localStream, () => compositorService.getOutputStream());
+  const { handleCreateClip } = useClipRecording(clipRecordingEnabled, localStream, () => canvasStreamService.getOutputStream());
 
   // Canvas Settings (persisted to localStorage)
   const canvasSettings = useCanvasSettings();
+
+  // Apply input volume to audio mixer when it changes
+  useEffect(() => {
+    // Convert from 0-100 to 0-1 range
+    const normalizedVolume = Math.max(0, Math.min(100, canvasSettings.inputVolume)) / 100;
+    audioMixerService.setMasterVolume(normalizedVolume);
+  }, [canvasSettings.inputVolume]);
+
+  // Canvas rendering is handled directly by StudioCanvas component
+  // No separate compositor initialization needed - StudioCanvas manages all rendering
 
   // Broadcast title update handler
   const handleTitleChange = async (newTitle: string) => {
@@ -354,8 +396,11 @@ export function Studio() {
         <main className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#F5F5F5' }}>
           {/* Canvas Container - constrained to leave room for Layout Selector and Preview Area */}
           <div className="flex items-center justify-center px-6 pb-20 relative" style={{ minHeight: 0, maxHeight: 'calc(100% - 350px)', flexShrink: 1, paddingTop: '144px' }}>
+            {/* StudioCanvas renders using Canvas 2D API and provides output stream via canvas.captureStream() */}
+            {/* Single rendering system - what user sees IS what gets streamed to media server */}
             <StudioCanvas
               localStream={processedStream || localStream}
+              rawStream={rawStream}
               videoEnabled={videoEnabled}
               audioEnabled={audioEnabled}
               isLocalUserOnStage={isLocalUserOnStage}
@@ -414,6 +459,7 @@ export function Studio() {
           <div style={{ flexShrink: 0, marginBottom: '80px' }}>
             <PreviewArea
               localStream={processedStream || localStream}
+              rawStream={rawStream}
               videoEnabled={videoEnabled}
               audioEnabled={audioEnabled}
               isLocalUserOnStage={isLocalUserOnStage}
@@ -438,6 +484,7 @@ export function Studio() {
             setBackgroundRemovalEnabled={setBackgroundRemovalEnabled}
             showBackgroundSettings={showBackgroundSettings}
             setShowBackgroundSettings={setShowBackgroundSettings}
+            setShowBackgroundEffects={setShowBackgroundEffects}
             verticalSimulcastEnabled={verticalSimulcastEnabled}
             setVerticalSimulcastEnabled={setVerticalSimulcastEnabled}
             analyticsEnabled={analyticsEnabled}
@@ -452,6 +499,7 @@ export function Studio() {
             isSharingScreen={isSharingScreen}
             startScreenShare={handleToggleScreenShare}
             stopScreenShare={handleToggleScreenShare}
+            setShowScreenShareManager={setShowScreenShareManager}
             speakerMuted={speakerMuted}
             toggleSpeaker={toggleSpeaker}
             showMicSelector={showMicSelector}
@@ -472,6 +520,7 @@ export function Studio() {
           onTabToggle={handleRightSidebarToggle}
           broadcastId={broadcastId}
           currentUserId={broadcast?.userId}
+          isLive={isLive}
           onShowBannerDrawer={() => setShowBannerDrawer(true)}
           rightSidebarRef={rightSidebarRef}
           teleprompterState={teleprompterState}
@@ -506,9 +555,6 @@ export function Studio() {
 
       {/* Modals */}
       <StudioModals
-        showMediaLibrary={showMediaLibrary}
-        setShowMediaLibrary={setShowMediaLibrary}
-        onPlayClip={handlePlayClip}
         showClipManager={showClipManager}
         setShowClipManager={setShowClipManager}
         broadcastId={broadcastId}
@@ -545,6 +591,19 @@ export function Studio() {
         captionLanguage={captionLanguage}
         setCaptionLanguage={setCaptionLanguage}
         captionsEnabled={captionsEnabled}
+        showChatLayoutCustomizer={showChatLayoutCustomizer}
+        setShowChatLayoutCustomizer={setShowChatLayoutCustomizer}
+        chatLayoutConfig={chatLayoutConfig}
+        setChatLayoutConfig={setChatLayoutConfig}
+        showScreenShareManager={showScreenShareManager}
+        setShowScreenShareManager={setShowScreenShareManager}
+        isHost={user?.id === broadcast?.userId}
+        participantId={user?.id || ''}
+        participantName={user?.name || 'User'}
+        showBackgroundEffects={showBackgroundEffects}
+        setShowBackgroundEffects={setShowBackgroundEffects}
+        backgroundEffect={backgroundEffect}
+        setBackgroundEffect={setBackgroundEffect}
       />
 
       {/* Canvas Settings Modal */}
@@ -601,6 +660,10 @@ export function Studio() {
         onNoiseSuppressionChange={canvasSettings.setNoiseSuppression}
         autoAdjustMicrophone={canvasSettings.autoAdjustMicrophone}
         onAutoAdjustMicrophoneChange={canvasSettings.setAutoAdjustMicrophone}
+        noiseGateEnabled={canvasSettings.noiseGateEnabled}
+        onNoiseGateEnabledChange={canvasSettings.setNoiseGateEnabled}
+        noiseGateThreshold={canvasSettings.noiseGateThreshold}
+        onNoiseGateThresholdChange={canvasSettings.setNoiseGateThreshold}
         // Visual effects
         selectedBackground={canvasSettings.selectedBackground}
         onBackgroundSelect={canvasSettings.setSelectedBackground}

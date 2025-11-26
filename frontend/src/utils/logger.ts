@@ -2,53 +2,33 @@
  * Frontend logger service
  *
  * Provides structured logging for the frontend with different log levels.
- * In production, errors are sent to the console but debug/info logs are suppressed.
+ * ALL logs are output regardless of environment for full debugging visibility.
  */
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 class Logger {
-  private isDevelopment = import.meta.env.DEV;
-
-  private shouldLog(level: LogLevel): boolean {
-    if (this.isDevelopment) {
-      return true; // Log everything in development
-    }
-    // In production, only log warnings and errors
-    return level === 'warn' || level === 'error';
-  }
-
   debug(message: string, ...args: any[]): void {
-    if (this.shouldLog('debug')) {
-      console.log(`[DEBUG] ${message}`, ...args);
-    }
+    console.debug(`[DEBUG] ${message}`, ...args);
   }
 
   info(message: string, ...args: any[]): void {
-    if (this.shouldLog('info')) {
-      console.log(`[INFO] ${message}`, ...args);
-    }
+    console.info(`[INFO] ${message}`, ...args);
   }
 
   warn(message: string, ...args: any[]): void {
-    if (this.shouldLog('warn')) {
-      console.warn(`[WARN] ${message}`, ...args);
-    }
+    console.warn(`[WARN] ${message}`, ...args);
   }
 
   error(message: string, ...args: any[]): void {
-    if (this.shouldLog('error')) {
-      console.error(`[ERROR] ${message}`, ...args);
-    }
+    console.error(`[ERROR] ${message}`, ...args);
   }
 
   /**
    * Log performance metrics
    */
   performance(message: string, metrics: Record<string, any>): void {
-    if (this.shouldLog('info')) {
-      console.log(`[PERF] ${message}`, metrics);
-    }
+    console.info(`[PERF] ${message}`, metrics);
   }
 }
 
