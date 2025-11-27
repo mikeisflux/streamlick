@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 export function OAuthSuccess() {
@@ -6,10 +6,23 @@ export function OAuthSuccess() {
   const success = searchParams.get('success');
   const error = searchParams.get('error');
   const platform = success || error;
+  const [countdown, setCountdown] = useState(3);
+  const [canClose, setCanClose] = useState(true);
 
   useEffect(() => {
+    // Countdown timer
+    const countdownInterval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(countdownInterval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    // Try to notify parent window if opened as popup
     if (success && window.opener) {
-      // Send message to parent window
       window.opener.postMessage(
         {
           type: 'oauth-success',
@@ -17,19 +30,28 @@ export function OAuthSuccess() {
         },
         window.location.origin
       );
-
-      // Close popup after short delay
-      setTimeout(() => {
-        window.close();
-      }, 500);
-    } else if (error) {
-      // On error, just show message and let user close manually
-      setTimeout(() => {
-        if (window.opener) {
-          window.close();
-        }
-      }, 3000);
     }
+
+    // Auto-close after 3 seconds
+    const closeTimer = setTimeout(() => {
+      try {
+        window.close();
+        // If window.close() didn't work (not a popup), redirect to dashboard
+        setTimeout(() => {
+          // If we're still here after trying to close, redirect instead
+          setCanClose(false);
+          window.location.href = '/dashboard';
+        }, 500);
+      } catch (e) {
+        // Can't close, redirect instead
+        window.location.href = '/dashboard';
+      }
+    }, 3000);
+
+    return () => {
+      clearInterval(countdownInterval);
+      clearTimeout(closeTimer);
+    };
   }, [success, error]);
 
   return (
@@ -59,7 +81,9 @@ export function OAuthSuccess() {
               {platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'The platform'} has been connected to your account.
             </p>
             <p className="text-sm text-gray-500">
-              This window will close automatically...
+              {canClose
+                ? `This window will close in ${countdown} seconds...`
+                : 'Redirecting to dashboard...'}
             </p>
           </>
         ) : error ? (
@@ -86,7 +110,9 @@ export function OAuthSuccess() {
               Failed to connect {platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'the platform'}.
             </p>
             <p className="text-sm text-gray-500">
-              This window will close in 3 seconds...
+              {canClose
+                ? `This window will close in ${countdown} seconds...`
+                : 'Redirecting to dashboard...'}
             </p>
           </>
         ) : (

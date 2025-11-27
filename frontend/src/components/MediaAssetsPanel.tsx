@@ -83,6 +83,24 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
     return localStorage.getItem('streamLogo');
   });
 
+  // Track active video clip
+  const [activeVideoClipId, setActiveVideoClipId] = useState<string | null>(null);
+
+  // Listen for video clip stop events
+  useEffect(() => {
+    const handleVideoClipStopped = () => {
+      setActiveVideoClipId(null);
+    };
+
+    window.addEventListener('videoClipStopped', handleVideoClipStopped);
+    window.addEventListener('videoClipEnded', handleVideoClipStopped);
+
+    return () => {
+      window.removeEventListener('videoClipStopped', handleVideoClipStopped);
+      window.removeEventListener('videoClipEnded', handleVideoClipStopped);
+    };
+  }, []);
+
   // Load assets from localStorage metadata only
   const [assets, setAssets] = useState<Asset[]>([]);
 
@@ -574,26 +592,36 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
           break;
 
         case 'videoClip':
-          // Play video clip on canvas - requires explicit play action
-          if (asset.storedInIndexedDB) {
-            try {
-              const mediaData = await mediaStorageService.getMedia(asset.id);
-              if (mediaData) {
-                const objectURL = URL.createObjectURL(mediaData.blob);
-                objectURLsRef.current.push(objectURL);
-
-                // Dispatch play event to trigger video playback
-                window.dispatchEvent(new CustomEvent('playVideoClip', { detail: { url: objectURL, name: asset.name } }));
-                toast.success(`Playing: ${asset.name}`);
-              }
-            } catch (error) {
-              console.error('Failed to load video clip from IndexedDB:', error);
-              toast.error('Failed to play video clip');
-            }
+          // Toggle video clip - if already playing, stop it
+          if (activeVideoClipId === asset.id) {
+            // Stop the currently playing video clip
+            window.dispatchEvent(new CustomEvent('stopVideoClip'));
+            setActiveVideoClipId(null);
+            toast.success(`Stopped: ${asset.name}`);
           } else {
-            // Dispatch play event to trigger video playback
-            window.dispatchEvent(new CustomEvent('playVideoClip', { detail: { url: asset.url, name: asset.name } }));
-            toast.success(`Playing: ${asset.name}`);
+            // Play video clip on canvas
+            if (asset.storedInIndexedDB) {
+              try {
+                const mediaData = await mediaStorageService.getMedia(asset.id);
+                if (mediaData) {
+                  const objectURL = URL.createObjectURL(mediaData.blob);
+                  objectURLsRef.current.push(objectURL);
+
+                  // Dispatch play event to trigger video playback
+                  window.dispatchEvent(new CustomEvent('playVideoClip', { detail: { url: objectURL, name: asset.name } }));
+                  setActiveVideoClipId(asset.id);
+                  toast.success(`Playing: ${asset.name}`);
+                }
+              } catch (error) {
+                console.error('Failed to load video clip from IndexedDB:', error);
+                toast.error('Failed to play video clip');
+              }
+            } else {
+              // Dispatch play event to trigger video playback
+              window.dispatchEvent(new CustomEvent('playVideoClip', { detail: { url: asset.url, name: asset.name } }));
+              setActiveVideoClipId(asset.id);
+              toast.success(`Playing: ${asset.name}`);
+            }
           }
           break;
 
@@ -620,7 +648,8 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
 
     const isActive = (asset.type === 'logo' && (activeLogoUrl === asset.url || logoAssetId === asset.id)) ||
                      (asset.type === 'overlay' && (activeOverlayUrl === asset.url || overlayAssetId === asset.id)) ||
-                     ((asset.type === 'background' || asset.type === 'videoBackground') && (activeBackgroundUrl === asset.url || backgroundAssetId === asset.id));
+                     ((asset.type === 'background' || asset.type === 'videoBackground') && (activeBackgroundUrl === asset.url || backgroundAssetId === asset.id)) ||
+                     (asset.type === 'videoClip' && activeVideoClipId === asset.id);
 
     return (
       <div
@@ -646,8 +675,10 @@ export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
           )}
           {/* Active indicator */}
           {isActive && (
-            <div className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded font-medium">
-              Active
+            <div className={`absolute top-2 left-2 text-white text-xs px-2 py-1 rounded font-medium ${
+              asset.type === 'videoClip' ? 'bg-red-500' : 'bg-blue-500'
+            }`}>
+              {asset.type === 'videoClip' ? 'Playing' : 'Active'}
             </div>
           )}
           {/* Delete button - top right on hover */}
