@@ -106,14 +106,23 @@ export function usePreviewStream(broadcastId: string | undefined) {
 
     if (canvasStream) {
       // Canvas stream is ready, create peer connection immediately
+      console.log('[PreviewStream] Canvas stream ready, creating peer connection for guest:', guestSocketId);
       await createPeerConnectionForGuest(guestId, guestSocketId, canvasStream);
     } else {
-      // Canvas stream not ready yet - queue the request
+      // Canvas stream not ready yet - check if already in pending requests
+      const alreadyPending = pendingRequestsRef.current.some(r => r.guestSocketId === guestSocketId);
+      if (alreadyPending) {
+        console.log('[PreviewStream] Request already pending for guest:', guestSocketId);
+        return;
+      }
+
+      // Queue the request
       console.log('[PreviewStream] Canvas stream not ready, queuing request for guest:', guestSocketId);
       pendingRequestsRef.current.push({ guestId, guestSocketId });
 
       // Subscribe to be notified when canvas becomes ready (if not already subscribed)
       if (!unsubscribeRef.current) {
+        console.log('[PreviewStream] Subscribing to canvas stream ready callback');
         unsubscribeRef.current = canvasStreamService.onStreamReady(async (stream) => {
           console.log('[PreviewStream] Canvas stream now ready, processing', pendingRequestsRef.current.length, 'pending requests');
 

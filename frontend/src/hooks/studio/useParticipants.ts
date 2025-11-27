@@ -128,6 +128,17 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
       });
     };
 
+    // Handle participant disconnected (socket disconnect, page close, etc.)
+    const handleParticipantDisconnected = ({ participantId }: any) => {
+      console.log('[useParticipants] Participant disconnected:', participantId);
+
+      setRemoteParticipants((prev) => {
+        const updated = new Map(prev);
+        updated.delete(participantId);
+        return updated;
+      });
+    };
+
     const handleMediaStateChanged = ({ participantId, audio, video }: any) => {
       setRemoteParticipants((prev) => {
         const updated = new Map(prev);
@@ -195,6 +206,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
     socketService.on('participants-sync', handleParticipantsSync);
     socketService.on('participant-joined', handleParticipantJoined);
     socketService.on('participant-left', handleParticipantLeft);
+    socketService.on('participant-disconnected', handleParticipantDisconnected);
     socketService.on('media-state-changed', handleMediaStateChanged);
     socketService.on('chat-message', handleChatMessage);
     socketService.on('participant-promoted', handleParticipantPromoted);
@@ -208,6 +220,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
       socketService.off('participants-sync', handleParticipantsSync);
       socketService.off('participant-joined', handleParticipantJoined);
       socketService.off('participant-left', handleParticipantLeft);
+      socketService.off('participant-disconnected', handleParticipantDisconnected);
       socketService.off('media-state-changed', handleMediaStateChanged);
       socketService.off('chat-message', handleChatMessage);
       socketService.off('participant-promoted', handleParticipantPromoted);

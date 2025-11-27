@@ -138,14 +138,36 @@ export function GuestJoin() {
     { urls: 'stun:stun1.l.google.com:19302' },
   ];
 
+  // Track if we've received an offer
+  const offerReceivedRef = useRef(false);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const retryCountRef = useRef(0);
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY = 3000; // 3 seconds
+
   // Request and receive preview stream via WebRTC
   useEffect(() => {
     if (!hasJoined || !broadcastInfo?.id) return;
 
+    offerReceivedRef.current = false;
+    retryCountRef.current = 0;
+
     // Handle WebRTC offer from host
     const handlePreviewOffer = async ({ offer, hostSocketId }: { offer: RTCSessionDescriptionInit; hostSocketId: string }) => {
       console.log('[PreviewStream] Received offer from host');
+      offerReceivedRef.current = true;
       hostSocketIdRef.current = hostSocketId;
+
+      // Clear any retry timeout
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+
+      // Close existing peer connection if any
+      if (previewPcRef.current) {
+        previewPcRef.current.close();
+      }
 
       // Create peer connection
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
@@ -174,10 +196,12 @@ export function GuestJoin() {
         console.log('[PreviewStream] Connection state:', pc.connectionState);
         if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
           setBroadcastStream(null);
+          offerReceivedRef.current = false;
           // Try to reconnect after a delay
           setTimeout(() => {
             if (hasJoined && broadcastInfo?.id) {
               console.log('[PreviewStream] Reconnecting...');
+              retryCountRef.current = 0; // Reset retry count for reconnection
               socketService.emit('request-preview-stream', { broadcastId: broadcastInfo.id });
             }
           }, 2000);
@@ -209,16 +233,40 @@ export function GuestJoin() {
       }
     };
 
+    // Function to request preview stream with retry logic
+    const requestPreviewWithRetry = () => {
+      if (!hasJoined || !broadcastInfo?.id) return;
+
+      console.log(`[PreviewStream] Requesting preview stream (attempt ${retryCountRef.current + 1}/${MAX_RETRIES + 1})...`);
+      socketService.emit('request-preview-stream', { broadcastId: broadcastInfo.id });
+
+      // Set up retry if no offer received
+      retryTimeoutRef.current = setTimeout(() => {
+        if (!offerReceivedRef.current && retryCountRef.current < MAX_RETRIES) {
+          retryCountRef.current++;
+          console.log('[PreviewStream] No offer received, retrying...');
+          requestPreviewWithRetry();
+        } else if (!offerReceivedRef.current) {
+          console.warn('[PreviewStream] Max retries reached, preview stream unavailable');
+        }
+      }, RETRY_DELAY);
+    };
+
     socketService.on('preview-offer', handlePreviewOffer);
     socketService.on('preview-ice-candidate', handlePreviewIceCandidate);
 
-    // Request preview stream from host
-    console.log('[PreviewStream] Requesting preview stream...');
-    socketService.emit('request-preview-stream', { broadcastId: broadcastInfo.id });
+    // Request preview stream from host with retry logic
+    requestPreviewWithRetry();
 
     return () => {
       socketService.off('preview-offer', handlePreviewOffer);
       socketService.off('preview-ice-candidate', handlePreviewIceCandidate);
+
+      // Clear retry timeout
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
 
       // Close peer connection
       if (previewPcRef.current) {

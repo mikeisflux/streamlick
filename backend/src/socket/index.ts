@@ -575,27 +575,28 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         // Join greenroom-specific room
         await socket.join(`greenroom:${broadcastId}`);
 
-        // Get participant info
+        // Get participant info and update their status to 'joined'
         const { participantId } = socket.data;
         let participantName = 'Guest';
 
         if (participantId && isValidUUID(participantId)) {
-          const participant = await prisma.participant.findUnique({
+          // Update participant status to 'joined' and set joinedAt timestamp
+          const participant = await prisma.participant.update({
             where: { id: participantId },
+            data: {
+              status: 'joined',
+              joinedAt: new Date(),
+            },
           });
           if (participant && participant.name) {
             participantName = participant.name;
           }
         }
 
-        // Notify others in greenroom AND broadcast room (so host always receives)
+        // Notify greenroom room only (host joins greenroom when joining studio, so they'll receive this)
+        // NOTE: Previously emitted to both greenroom AND broadcast rooms, causing host to receive TWICE
+        // and create ghost/duplicate participant entries
         socket.to(`greenroom:${broadcastId}`).emit('greenroom-participant-joined', {
-          participantId,
-          name: participantName,
-          socketId: socket.id,
-        });
-        // Also emit to broadcast room so host receives notification even if not in greenroom room
-        socket.to(`broadcast:${broadcastId}`).emit('greenroom-participant-joined', {
           participantId,
           name: participantName,
           socketId: socket.id,
@@ -609,14 +610,26 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     });
 
     // Leave greenroom
-    socket.on('leave-greenroom', () => {
+    socket.on('leave-greenroom', async () => {
       const { broadcastId, participantId } = socket.data;
       if (broadcastId && participantId) {
+        // Update participant status in database
+        if (isValidUUID(participantId)) {
+          try {
+            await prisma.participant.update({
+              where: { id: participantId },
+              data: {
+                status: 'disconnected',
+                leftAt: new Date(),
+              },
+            });
+          } catch (error) {
+            logger.error('Error updating participant status on leave-greenroom:', error);
+          }
+        }
+
+        // Only emit to greenroom room (host is in greenroom room, so they'll receive this)
         socket.to(`greenroom:${broadcastId}`).emit('greenroom-participant-left', {
-          participantId,
-        });
-        // Also emit to broadcast room so host always receives
-        socket.to(`broadcast:${broadcastId}`).emit('greenroom-participant-left', {
           participantId,
         });
         socket.leave(`greenroom:${broadcastId}`);
@@ -1118,11 +1131,27 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     });
 
     // Disconnect
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
       const { broadcastId, participantId } = socket.data;
 
       // CRITICAL FIX: Clean up resources on disconnect
       if (broadcastId) {
+        // Update participant status to 'disconnected' in database
+        if (participantId && isValidUUID(participantId)) {
+          try {
+            await prisma.participant.update({
+              where: { id: participantId },
+              data: {
+                status: 'disconnected',
+                leftAt: new Date(),
+              },
+            });
+            logger.info(`[Disconnect] Participant ${participantId} marked as disconnected`);
+          } catch (error) {
+            logger.error('Error updating participant status on disconnect:', error);
+          }
+        }
+
         // Stop health monitoring for this broadcast
         try {
           streamHealthMonitor.stopMonitoring(broadcastId);
@@ -1147,6 +1176,10 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         // Notify others in the room about disconnection
         if (participantId) {
           socket.to(`broadcast:${broadcastId}`).emit('participant-disconnected', {
+            participantId,
+          });
+          // Also notify greenroom
+          socket.to(`greenroom:${broadcastId}`).emit('greenroom-participant-left', {
             participantId,
           });
         }
