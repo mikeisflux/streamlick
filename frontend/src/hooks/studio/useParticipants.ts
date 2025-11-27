@@ -26,6 +26,8 @@ interface UseParticipantsProps {
 
 // Polling interval in milliseconds (3 seconds)
 const POLL_INTERVAL = 3000;
+// Stream request interval - how often to request streams from participants without video
+const STREAM_REQUEST_INTERVAL = 5000;
 
 export function useParticipants({ broadcastId, showChatOnStream }: UseParticipantsProps) {
   const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map());
@@ -42,6 +44,8 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
 
   // Track known participant IDs to detect new joins
   const knownParticipantIdsRef = useRef<Set<string>>(new Set());
+  // Track last time we requested guest streams
+  const lastStreamRequestRef = useRef<number>(0);
 
   // HTTP polling for greenroom participants - this is the PRIMARY mechanism
   // Socket events are supplementary for real-time updates
@@ -71,16 +75,24 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
         knownParticipantIdsRef.current = currentIds;
 
         // Update state - merge with existing to preserve streams
+        // Track if we need to request streams (outside the setter)
+        let shouldRequestStreams = false;
+
         setRemoteParticipants((prev) => {
           const updated = new Map<string, RemoteParticipant>();
 
           // Add all participants from the poll
           for (const p of participants) {
             const existing = prev.get(p.id);
+            const hasStream = existing?.stream || null;
+            // Check if this participant needs a stream
+            if (!hasStream && p.videoEnabled) {
+              shouldRequestStreams = true;
+            }
             updated.set(p.id, {
               id: p.id,
               name: p.name,
-              stream: existing?.stream || null, // Preserve existing stream
+              stream: hasStream, // Preserve existing stream
               audioEnabled: p.audioEnabled,
               videoEnabled: p.videoEnabled,
               role: p.role as 'host' | 'guest' | 'backstage',
@@ -89,6 +101,14 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
 
           return updated;
         });
+
+        // If any participant is missing a stream and enough time has passed, request streams
+        const now = Date.now();
+        if (shouldRequestStreams && (now - lastStreamRequestRef.current) >= STREAM_REQUEST_INTERVAL) {
+          console.log('[useParticipants] Detected participants without streams, requesting guest streams...');
+          lastStreamRequestRef.current = now;
+          socketService.emit('request-guest-streams');
+        }
       } catch (error) {
         // Don't log 401/403 errors as they're expected when not authenticated
         if ((error as any)?.response?.status !== 401 && (error as any)?.response?.status !== 403) {
