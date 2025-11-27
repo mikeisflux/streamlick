@@ -8,6 +8,7 @@ interface RemoteParticipant {
   audioEnabled: boolean;
   videoEnabled: boolean;
   role: 'host' | 'guest' | 'backstage';
+  status?: 'greenroom' | 'backstage' | 'live';
 }
 
 interface PreviewAreaProps {
@@ -17,10 +18,15 @@ interface PreviewAreaProps {
   audioEnabled: boolean;
   isLocalUserOnStage: boolean;
   backstageParticipants: RemoteParticipant[];
+  greenroomParticipants?: RemoteParticipant[];
   screenShareStream: MediaStream | null;
   onAddToStage?: (participantId: string) => void;
   onRemoveFromStage?: (participantId: string) => void;
   onInviteGuests?: () => void;
+  onKickParticipant?: (participantId: string, participantName: string) => void;
+  onBanParticipant?: (participantId: string, participantName: string) => void;
+  onEnterGreenRoom?: () => void;
+  isInGreenRoom?: boolean;
 }
 
 export function PreviewArea({
@@ -30,13 +36,19 @@ export function PreviewArea({
   audioEnabled,
   isLocalUserOnStage,
   backstageParticipants,
+  greenroomParticipants = [],
   screenShareStream,
   onAddToStage,
   onRemoveFromStage,
   onInviteGuests,
+  onKickParticipant,
+  onBanParticipant,
+  onEnterGreenRoom,
+  isInGreenRoom = false,
 }: PreviewAreaProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
+  const [kickBanMenuOpen, setKickBanMenuOpen] = useState<string | null>(null);
 
   // Detect if local user is speaking (for voice animations) - use RAW audio before noise gate
   const isLocalSpeaking = useAudioLevel(rawStream || localStream, audioEnabled);
@@ -72,6 +84,32 @@ export function PreviewArea({
       </div>
 
       <div className="flex items-center gap-3 pb-2">
+        {/* Enter Green Room Button - only visible when host is NOT on stage */}
+        {!isLocalUserOnStage && onEnterGreenRoom && (
+          <div className="flex-shrink-0" style={{ width: '120px', height: '90px' }}>
+            <button
+              onClick={onEnterGreenRoom}
+              className={`w-full h-full rounded-lg border-2 flex flex-col items-center justify-center transition-all ${
+                isInGreenRoom
+                  ? 'bg-green-600 border-green-500 text-white'
+                  : 'bg-gray-800 border-green-500 hover:bg-green-600/20 text-green-400'
+              }`}
+            >
+              <svg className="w-8 h-8 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                />
+              </svg>
+              <span className="text-xs font-medium">
+                {isInGreenRoom ? 'In Green Room' : 'Enter Green Room'}
+              </span>
+            </button>
+          </div>
+        )}
+
         {/* Your Preview */}
         <div className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
           <div className={`relative bg-black rounded overflow-hidden h-full border-2 group ${isLocalUserOnStage ? 'border-blue-500' : 'border-yellow-500'}`}>
@@ -213,9 +251,61 @@ export function PreviewArea({
                 </div>
               )}
 
+              {/* Red X Button for Kick/Ban */}
+              {(onKickParticipant || onBanParticipant) && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setKickBanMenuOpen(kickBanMenuOpen === participant.id ? null : participant.id);
+                  }}
+                  className="absolute top-1 right-1 w-5 h-5 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center z-50 transition-colors"
+                  title="Remove participant"
+                >
+                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+
+              {/* Kick/Ban Popup Menu */}
+              {kickBanMenuOpen === participant.id && (
+                <div className="absolute top-7 right-1 bg-gray-800 rounded-lg shadow-xl border border-gray-700 z-[100] overflow-hidden">
+                  {onKickParticipant && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onKickParticipant(participant.id, participant.name);
+                        setKickBanMenuOpen(null);
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-700 flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                      Kick User
+                    </button>
+                  )}
+                  {onBanParticipant && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onBanParticipant(participant.id, participant.name);
+                        setKickBanMenuOpen(null);
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-700 flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                      </svg>
+                      Ban User
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* Hover Overlay with Add to Stage Button */}
               {onAddToStage && (
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-50 pointer-events-auto">
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-40 pointer-events-auto">
                   <button
                     onClick={() => onAddToStage(participant.id)}
                     className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded shadow-lg pointer-events-auto"
@@ -233,8 +323,108 @@ export function PreviewArea({
           </div>
         ))}
 
-        {/* Invite Tile - shows when no backstage participants */}
-        {backstageParticipants.length === 0 && !screenShareStream && onInviteGuests && (
+        {/* Greenroom Participants */}
+        {greenroomParticipants.map((participant) => (
+          <div key={participant.id} className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
+            <div className="relative bg-black rounded overflow-hidden h-full border-2 border-green-500 group">
+              {participant.stream && participant.videoEnabled ? (
+                <video
+                  autoPlay
+                  playsInline
+                  muted
+                  ref={(el) => {
+                    if (el && participant.stream) el.srcObject = participant.stream;
+                  }}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gray-900">
+                  <svg className="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                    />
+                  </svg>
+                </div>
+              )}
+
+              {/* Red X Button for Kick/Ban */}
+              {(onKickParticipant || onBanParticipant) && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setKickBanMenuOpen(kickBanMenuOpen === participant.id ? null : participant.id);
+                  }}
+                  className="absolute top-1 right-1 w-5 h-5 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center z-50 transition-colors"
+                  title="Remove participant"
+                >
+                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+
+              {/* Kick/Ban Popup Menu */}
+              {kickBanMenuOpen === participant.id && (
+                <div className="absolute top-7 right-1 bg-gray-800 rounded-lg shadow-xl border border-gray-700 z-[100] overflow-hidden">
+                  {onKickParticipant && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onKickParticipant(participant.id, participant.name);
+                        setKickBanMenuOpen(null);
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-700 flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                      Kick User
+                    </button>
+                  )}
+                  {onBanParticipant && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onBanParticipant(participant.id, participant.name);
+                        setKickBanMenuOpen(null);
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-700 flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                      </svg>
+                      Ban User
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Hover Overlay with Add to Stage Button */}
+              {onAddToStage && (
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-40 pointer-events-auto">
+                  <button
+                    onClick={() => onAddToStage(participant.id)}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded shadow-lg pointer-events-auto"
+                    title="Add to Stage"
+                  >
+                    Add to Stage
+                  </button>
+                </div>
+              )}
+
+              <div className="absolute bottom-0 left-0 right-0 bg-black/80 px-2 py-1 flex items-center justify-between z-0">
+                <span className="text-white text-xs font-medium truncate flex-1">{participant.name}</span>
+                <span className="text-green-400 text-xs ml-1">Greenroom</span>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {/* Invite Tile - shows when no backstage or greenroom participants */}
+        {backstageParticipants.length === 0 && greenroomParticipants.length === 0 && !screenShareStream && onInviteGuests && (
           <div className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
             <button
               onClick={onInviteGuests}

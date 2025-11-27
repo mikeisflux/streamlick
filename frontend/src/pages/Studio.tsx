@@ -58,6 +58,9 @@ export function Studio() {
   // Background Effects state
   const [backgroundEffect, setBackgroundEffect] = useState<{type: 'none' | 'blur' | 'greenscreen' | 'virtual'}>({ type: 'none' });
 
+  // Green Room state - host can enter green room when not on stage
+  const [isInGreenRoom, setIsInGreenRoom] = useState(false);
+
   // Refs
   const micButtonRef = useRef<HTMLDivElement>(null);
   const cameraButtonRef = useRef<HTMLDivElement>(null);
@@ -464,10 +467,23 @@ export function Studio() {
               audioEnabled={audioEnabled}
               isLocalUserOnStage={isLocalUserOnStage}
               backstageParticipants={Array.from(remoteParticipants.values()).filter((p) => p.role === 'backstage')}
+              greenroomParticipants={Array.from(remoteParticipants.values()).filter((p) => p.role === 'guest')}
               screenShareStream={screenShareStream}
               onAddToStage={handleAddToStage}
               onRemoveFromStage={handleRemoveFromStage}
               onInviteGuests={() => setShowInviteDrawer(true)}
+              onKickParticipant={handleKickParticipant}
+              onBanParticipant={handleBanParticipant}
+              onEnterGreenRoom={() => {
+                const newState = !isInGreenRoom;
+                setIsInGreenRoom(newState);
+                if (newState) {
+                  socketService.emit('host-enter-greenroom', { broadcastId });
+                } else {
+                  socketService.emit('host-leave-greenroom', {});
+                }
+              }}
+              isInGreenRoom={isInGreenRoom}
             />
           </div>
 

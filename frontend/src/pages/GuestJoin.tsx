@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMedia } from '../hooks/useMedia';
 import { socketService } from '../services/socket.service';
@@ -17,6 +17,20 @@ export function GuestJoin() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasJoined, setHasJoined] = useState(false);
   const [guestStatus, setGuestStatus] = useState<'greenroom' | 'backstage' | 'live'>('greenroom');
+
+  // Broadcast stream preview state
+  const [broadcastStream, setBroadcastStream] = useState<MediaStream | null>(null);
+  const [streamVolume, setStreamVolume] = useState(0.3); // Default 30%
+  const broadcastVideoRef = useRef<HTMLVideoElement>(null);
+
+  // Other greenroom participants for video chat
+  const [greenroomParticipants, setGreenroomParticipants] = useState<Map<string, { id: string; name: string; stream: MediaStream | null; audioEnabled: boolean; videoEnabled: boolean; }>>(new Map());
+
+  // Chat state
+  const [privateChatMessages, setPrivateChatMessages] = useState<Array<{ author: string; message: string; timestamp: number; }>>([]);
+  const [publicChatMessages, setPublicChatMessages] = useState<Array<{ author: string; message: string; timestamp: number; }>>([]);
+  const [chatMessage, setChatMessage] = useState('');
+  const [activeChatTab, setActiveChatTab] = useState<'private' | 'public'>('private');
 
   // Device state
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
@@ -114,6 +128,102 @@ export function GuestJoin() {
     };
   }, [hasJoined]);
 
+  // Listen for broadcast stream preview
+  useEffect(() => {
+    if (!hasJoined) return;
+
+    const handleBroadcastStream = (stream: MediaStream) => {
+      setBroadcastStream(stream);
+    };
+
+    // Listen for greenroom participants
+    const handleGreenroomParticipantJoined = ({ participantId, name }: { participantId: string; name: string }) => {
+      setGreenroomParticipants((prev) => {
+        const updated = new Map(prev);
+        updated.set(participantId, {
+          id: participantId,
+          name: name || `Guest`,
+          stream: null,
+          audioEnabled: true,
+          videoEnabled: true,
+        });
+        return updated;
+      });
+    };
+
+    const handleGreenroomParticipantLeft = ({ participantId }: { participantId: string }) => {
+      setGreenroomParticipants((prev) => {
+        const updated = new Map(prev);
+        updated.delete(participantId);
+        return updated;
+      });
+    };
+
+    const handleGreenroomStream = ({ participantId, stream }: { participantId: string; stream: MediaStream }) => {
+      setGreenroomParticipants((prev) => {
+        const updated = new Map(prev);
+        const participant = updated.get(participantId);
+        if (participant) {
+          participant.stream = stream;
+          updated.set(participantId, participant);
+        }
+        return updated;
+      });
+    };
+
+    // Chat message handlers
+    const handlePrivateChatMessage = (message: { author: string; message: string; timestamp: number }) => {
+      setPrivateChatMessages((prev) => [...prev, message]);
+    };
+
+    const handlePublicChatMessage = (message: { author: string; message: string; timestamp: number }) => {
+      setPublicChatMessages((prev) => [...prev, message]);
+    };
+
+    socketService.on('broadcast-stream', handleBroadcastStream);
+    socketService.on('greenroom-participant-joined', handleGreenroomParticipantJoined);
+    socketService.on('greenroom-participant-left', handleGreenroomParticipantLeft);
+    socketService.on('greenroom-stream', handleGreenroomStream);
+    socketService.on('private-chat-message', handlePrivateChatMessage);
+    socketService.on('public-chat-message', handlePublicChatMessage);
+
+    return () => {
+      socketService.off('broadcast-stream', handleBroadcastStream);
+      socketService.off('greenroom-participant-joined', handleGreenroomParticipantJoined);
+      socketService.off('greenroom-participant-left', handleGreenroomParticipantLeft);
+      socketService.off('greenroom-stream', handleGreenroomStream);
+      socketService.off('private-chat-message', handlePrivateChatMessage);
+      socketService.off('public-chat-message', handlePublicChatMessage);
+    };
+  }, [hasJoined]);
+
+  // Update broadcast video volume when it changes
+  useEffect(() => {
+    if (broadcastVideoRef.current) {
+      broadcastVideoRef.current.volume = streamVolume;
+    }
+  }, [streamVolume, broadcastStream]);
+
+  // Set broadcast stream to video element
+  useEffect(() => {
+    if (broadcastVideoRef.current && broadcastStream) {
+      broadcastVideoRef.current.srcObject = broadcastStream;
+    }
+  }, [broadcastStream]);
+
+  // Send private chat message
+  const handleSendPrivateChat = () => {
+    if (!chatMessage.trim()) return;
+    socketService.emit('send-private-chat', {
+      broadcastId: broadcastInfo?.id,
+      message: chatMessage,
+      author: guestName,
+    });
+    // Add to local messages
+    setPrivateChatMessages((prev) => [...prev, { author: guestName, message: chatMessage, timestamp: Date.now() }]);
+    setChatMessage('');
+  };
+
   const handleJoin = async () => {
     if (!guestName.trim()) {
       toast.error('Please enter your name');
@@ -173,6 +283,9 @@ export function GuestJoin() {
           }
         }
       }
+
+      // Join the greenroom for private chat with other guests
+      socketService.emit('join-greenroom', { broadcastId: broadcastInfo.id });
 
       setHasJoined(true);
       toast.success('Joined successfully! Waiting for host...');
@@ -297,7 +410,54 @@ export function GuestJoin() {
           </div>
         </header>
 
-        <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        <main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+          {/* Broadcast Stream Preview - 25% width in top right corner (only in greenroom) */}
+          {guestStatus === 'greenroom' && (
+            <div className="absolute top-4 right-4 z-50" style={{ width: '25%', minWidth: '200px', maxWidth: '400px' }}>
+              <div className="bg-black rounded-lg overflow-hidden shadow-2xl border border-gray-700">
+                <div className="relative aspect-video">
+                  {broadcastStream ? (
+                    <video
+                      ref={broadcastVideoRef}
+                      autoPlay
+                      playsInline
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gray-900">
+                      <div className="text-center">
+                        <svg className="w-8 h-8 text-gray-600 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <p className="text-gray-500 text-xs">Live Stream Preview</p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="absolute top-2 left-2 bg-red-600 px-2 py-0.5 rounded text-xs text-white font-medium flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></div>
+                    LIVE
+                  </div>
+                </div>
+                {/* Volume Slider */}
+                <div className="bg-gray-800 px-3 py-2 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  </svg>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={streamVolume}
+                    onChange={(e) => setStreamVolume(parseFloat(e.target.value))}
+                    className="flex-1 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                  />
+                  <span className="text-xs text-gray-400 w-8">{Math.round(streamVolume * 100)}%</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Main Video Area */}
           <div className="flex-1 flex flex-col items-center justify-center p-6">
             <div className="w-full max-w-3xl">
@@ -415,12 +575,13 @@ export function GuestJoin() {
             </div>
           </div>
 
-          {/* Right Sidebar - Guest List & Info */}
+          {/* Right Sidebar - Participants & Chat */}
           <div className="w-full lg:w-80 bg-gray-800 border-l border-gray-700 flex flex-col">
+            {/* Participants Section */}
             <div className="p-4 border-b border-gray-700">
               <h3 className="font-semibold text-white">Participants</h3>
             </div>
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="p-4 border-b border-gray-700 max-h-48 overflow-y-auto">
               {/* Current user */}
               <div className="bg-gray-700 rounded-lg p-3 mb-2">
                 <div className="flex items-center gap-2">
@@ -430,15 +591,117 @@ export function GuestJoin() {
                 <p className="text-xs text-gray-400 mt-1">In Greenroom</p>
               </div>
 
+              {/* Other greenroom participants */}
+              {Array.from(greenroomParticipants.values()).map((participant) => (
+                <div key={participant.id} className="bg-gray-700 rounded-lg p-3 mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                    <span className="text-white font-medium">{participant.name}</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">In Greenroom</p>
+                </div>
+              ))}
+
               {/* Info message */}
-              <div className="mt-4 p-3 bg-blue-900 bg-opacity-30 rounded-lg">
-                <p className="text-xs text-blue-200">
-                  Other guests in the greenroom will appear here. You can chat with them while waiting.
-                </p>
-              </div>
+              {greenroomParticipants.size === 0 && (
+                <div className="mt-2 p-3 bg-blue-900 bg-opacity-30 rounded-lg">
+                  <p className="text-xs text-blue-200">
+                    Other guests in the greenroom will appear here. You can chat with them while waiting.
+                  </p>
+                </div>
+              )}
             </div>
 
-            {/* Browser info */}
+            {/* Chat Section */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Chat Tabs */}
+              <div className="flex border-b border-gray-700">
+                <button
+                  onClick={() => setActiveChatTab('private')}
+                  className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                    activeChatTab === 'private'
+                      ? 'text-white bg-gray-700 border-b-2 border-blue-500'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                  }`}
+                >
+                  Private Chat
+                </button>
+                <button
+                  onClick={() => setActiveChatTab('public')}
+                  className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                    activeChatTab === 'public'
+                      ? 'text-white bg-gray-700 border-b-2 border-blue-500'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                  }`}
+                >
+                  Public Chat
+                </button>
+              </div>
+
+              {/* Chat Messages */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                {activeChatTab === 'private' ? (
+                  privateChatMessages.length === 0 ? (
+                    <p className="text-gray-500 text-sm text-center">
+                      No messages yet. Start chatting with other guests!
+                    </p>
+                  ) : (
+                    privateChatMessages.map((msg, i) => (
+                      <div key={i} className={`p-2 rounded ${msg.author === guestName ? 'bg-blue-600 ml-4' : 'bg-gray-700 mr-4'}`}>
+                        <p className="text-xs text-gray-300 font-medium">{msg.author}</p>
+                        <p className="text-sm text-white">{msg.message}</p>
+                      </div>
+                    ))
+                  )
+                ) : (
+                  publicChatMessages.length === 0 ? (
+                    <p className="text-gray-500 text-sm text-center">
+                      No public chat messages yet.
+                    </p>
+                  ) : (
+                    publicChatMessages.map((msg, i) => (
+                      <div key={i} className="p-2 rounded bg-gray-700">
+                        <p className="text-xs text-gray-300 font-medium">{msg.author}</p>
+                        <p className="text-sm text-white">{msg.message}</p>
+                      </div>
+                    ))
+                  )
+                )}
+              </div>
+
+              {/* Chat Input - only for private chat */}
+              {activeChatTab === 'private' && (
+                <div className="p-4 border-t border-gray-700">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={chatMessage}
+                      onChange={(e) => setChatMessage(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleSendPrivateChat()}
+                      placeholder="Type a message..."
+                      className="flex-1 px-3 py-2 bg-gray-700 text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      onClick={handleSendPrivateChat}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
+                    >
+                      Send
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Read-only notice for public chat */}
+              {activeChatTab === 'public' && (
+                <div className="p-4 border-t border-gray-700 bg-gray-900">
+                  <p className="text-xs text-gray-500 text-center">
+                    Public chat is read-only while in the greenroom
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* System Check */}
             <div className="p-4 border-t border-gray-700 bg-gray-850">
               <div className="text-xs text-gray-400 space-y-1">
                 <p className="font-medium text-gray-300">System Check:</p>

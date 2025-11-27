@@ -508,6 +508,122 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
       }
     });
 
+    // Greenroom private chat - broadcast to all greenroom participants
+    socket.on('send-private-chat', ({ broadcastId: chatBroadcastId, message, author }) => {
+      try {
+        const { broadcastId } = socket.data;
+        const targetBroadcastId = chatBroadcastId || broadcastId;
+
+        if (!targetBroadcastId) {
+          return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // Emit to all participants in the greenroom (broadcast room)
+        socket.to(`broadcast:${targetBroadcastId}`).emit('private-chat-message', {
+          author,
+          message,
+          timestamp: Date.now(),
+        });
+      } catch (error) {
+        logger.error('Send private chat error:', error);
+        socket.emit('error', { message: 'Failed to send message' });
+      }
+    });
+
+    // Join greenroom - allows guests to communicate with each other
+    socket.on('join-greenroom', async ({ broadcastId: targetBroadcastId }) => {
+      try {
+        const broadcastId = targetBroadcastId || socket.data.broadcastId;
+
+        if (!broadcastId) {
+          return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // Join greenroom-specific room
+        await socket.join(`greenroom:${broadcastId}`);
+
+        // Get participant info
+        const { participantId } = socket.data;
+        let participantName = 'Guest';
+
+        if (participantId && isValidUUID(participantId)) {
+          const participant = await prisma.participant.findUnique({
+            where: { id: participantId },
+          });
+          if (participant) {
+            participantName = participant.name;
+          }
+        }
+
+        // Notify others in greenroom
+        socket.to(`greenroom:${broadcastId}`).emit('greenroom-participant-joined', {
+          participantId,
+          name: participantName,
+          socketId: socket.id,
+        });
+
+        socket.emit('greenroom-joined', { broadcastId });
+      } catch (error) {
+        logger.error('Join greenroom error:', error);
+        socket.emit('error', { message: 'Failed to join greenroom' });
+      }
+    });
+
+    // Leave greenroom
+    socket.on('leave-greenroom', () => {
+      const { broadcastId, participantId } = socket.data;
+      if (broadcastId && participantId) {
+        socket.to(`greenroom:${broadcastId}`).emit('greenroom-participant-left', {
+          participantId,
+        });
+        socket.leave(`greenroom:${broadcastId}`);
+      }
+    });
+
+    // Host enters greenroom to chat with guests
+    socket.on('host-enter-greenroom', async ({ broadcastId: targetBroadcastId }) => {
+      try {
+        const userId = socket.data.userId;
+        const broadcastId = targetBroadcastId || socket.data.broadcastId;
+
+        if (!broadcastId) {
+          return socket.emit('error', { message: 'No broadcast ID' });
+        }
+
+        // Verify host owns the broadcast
+        const hasAccess = await verifyBroadcastAccess(userId, broadcastId);
+        if (!hasAccess) {
+          return socket.emit('error', { message: 'Not authorized' });
+        }
+
+        // Join greenroom
+        await socket.join(`greenroom:${broadcastId}`);
+
+        // Notify guests that host has entered
+        socket.to(`greenroom:${broadcastId}`).emit('host-entered-greenroom', {
+          hostId: userId,
+        });
+
+        socket.emit('greenroom-joined', { broadcastId, isHost: true });
+      } catch (error) {
+        logger.error('Host enter greenroom error:', error);
+        socket.emit('error', { message: 'Failed to enter greenroom' });
+      }
+    });
+
+    // Host leaves greenroom
+    socket.on('host-leave-greenroom', () => {
+      const { broadcastId } = socket.data;
+      const userId = socket.data.userId;
+
+      if (broadcastId) {
+        socket.to(`greenroom:${broadcastId}`).emit('host-left-greenroom', {
+          hostId: userId,
+        });
+        socket.leave(`greenroom:${broadcastId}`);
+      }
+    });
+
     // Broadcast status changed
     socket.on('broadcast-status-changed', ({ status }) => {
       const { broadcastId } = socket.data;
