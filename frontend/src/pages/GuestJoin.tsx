@@ -63,8 +63,13 @@ export function GuestJoin() {
   useEffect(() => {
     const loadInvite = async () => {
       try {
-        const response = await api.post(`/participants/join/${token}`, {});
+        // Use GET to validate without marking as joined
+        const response = await api.get(`/participants/join/${token}`);
         setBroadcastInfo(response.data.broadcast);
+        // Pre-fill name if one was set when invite was created
+        if (response.data.participantName) {
+          setGuestName(response.data.participantName);
+        }
         setIsLoading(false);
       } catch (error) {
         toast.error('Invalid or expired invite link');

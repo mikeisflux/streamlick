@@ -52,7 +52,37 @@ router.post('/invite', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
-// Join via invite link
+// Validate invite link (GET - doesn't change status)
+router.get('/join/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const participant = await prisma.participant.findUnique({
+      where: { joinLinkToken: token },
+      include: { broadcast: true },
+    });
+
+    if (!participant) {
+      return res.status(404).json({ error: 'Invalid invite link' });
+    }
+
+    // Check if invite link has expired
+    if (participant.joinLinkExpiry && participant.joinLinkExpiry < new Date()) {
+      return res.status(410).json({ error: 'Invite link has expired' });
+    }
+
+    // Return broadcast info for validation (don't mark as joined yet)
+    res.json({
+      broadcast: participant.broadcast,
+      participantName: participant.name,
+    });
+  } catch (error) {
+    logger.error('Validate invite error:', error);
+    res.status(500).json({ error: 'Failed to validate invite' });
+  }
+});
+
+// Join via invite link (POST - actually joins)
 router.post('/join/:token', optionalAuth, async (req: AuthRequest, res) => {
   try {
     const { token } = req.params;
@@ -72,8 +102,20 @@ router.post('/join/:token', optionalAuth, async (req: AuthRequest, res) => {
       return res.status(410).json({ error: 'Invite link has expired' });
     }
 
+    // If already joined, allow re-joining (e.g., page refresh)
+    // Just update the name if provided and return current data
     if (participant.status === 'joined') {
-      return res.status(400).json({ error: 'Invite link already used' });
+      const updated = name
+        ? await prisma.participant.update({
+            where: { id: participant.id },
+            data: { name },
+          })
+        : participant;
+
+      return res.json({
+        participant: updated,
+        broadcast: participant.broadcast,
+      });
     }
 
     // Validate invite is for intended user if userId was specified
