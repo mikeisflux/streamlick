@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   LinkIcon,
   ClipboardDocumentIcon,
@@ -6,9 +6,11 @@ import {
   QrCodeIcon,
   UserPlusIcon,
   EnvelopeIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import QRCode from 'qrcode';
 import toast from 'react-hot-toast';
+import api from '../services/api';
 
 interface InviteGuestsPanelProps {
   broadcastId: string;
@@ -21,29 +23,46 @@ export function InviteGuestsPanel({ broadcastId }: InviteGuestsPanelProps) {
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+
+  // Generate invite link via backend API
+  const generateInviteLink = useCallback(async () => {
+    setIsGeneratingLink(true);
+    try {
+      const response = await api.post('/participants/invite', {
+        broadcastId,
+        name: 'Guest', // Default name, guest can change when joining
+        role: 'guest',
+      });
+
+      const link = response.data.inviteLink;
+      setInviteLink(link);
+
+      // Generate QR code for the link
+      const qrUrl = await QRCode.toDataURL(link, {
+        width: 256,
+        margin: 2,
+        color: {
+          dark: '#1a1a1a',
+          light: '#ffffff',
+        },
+      });
+      setQrCodeUrl(qrUrl);
+    } catch (error) {
+      console.error('Failed to generate invite link:', error);
+      toast.error('Failed to generate invite link');
+      // Fallback to simple link if API fails
+      const baseUrl = window.location.origin;
+      const fallbackLink = `${baseUrl}/join/${broadcastId}`;
+      setInviteLink(fallbackLink);
+    } finally {
+      setIsGeneratingLink(false);
+    }
+  }, [broadcastId]);
 
   useEffect(() => {
-    // Generate invite link
-    const baseUrl = window.location.origin;
-    const link = `${baseUrl}/join/${broadcastId}`;
-    setInviteLink(link);
-
-    // Generate QR code
-    QRCode.toDataURL(link, {
-      width: 256,
-      margin: 2,
-      color: {
-        dark: '#1a1a1a',
-        light: '#ffffff',
-      },
-    })
-      .then((url) => {
-        setQrCodeUrl(url);
-      })
-      .catch((err) => {
-        console.error('QR code generation failed:', err);
-      });
-  }, [broadcastId]);
+    generateInviteLink();
+  }, [generateInviteLink]);
 
   const copyToClipboard = async () => {
     try {
@@ -107,17 +126,18 @@ export function InviteGuestsPanel({ broadcastId }: InviteGuestsPanelProps) {
             <LinkIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              value={inviteLink}
+              value={isGeneratingLink ? 'Generating...' : inviteLink}
               readOnly
               className="w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 font-mono text-sm"
             />
           </div>
           <button
             onClick={copyToClipboard}
+            disabled={isGeneratingLink || !inviteLink}
             className={`px-4 py-3 rounded-lg font-medium transition-all flex items-center space-x-2 ${
               copied
                 ? 'bg-green-600 text-white'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed'
             }`}
           >
             {copied ? (
@@ -132,7 +152,18 @@ export function InviteGuestsPanel({ broadcastId }: InviteGuestsPanelProps) {
               </>
             )}
           </button>
+          <button
+            onClick={generateInviteLink}
+            disabled={isGeneratingLink}
+            className="p-3 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
+            title="Generate new invite link"
+          >
+            <ArrowPathIcon className={`w-5 h-5 ${isGeneratingLink ? 'animate-spin' : ''}`} />
+          </button>
         </div>
+        <p className="text-xs text-gray-500">
+          Each link is unique. Generate a new link for different guests.
+        </p>
       </div>
 
       {/* QR Code Section */}

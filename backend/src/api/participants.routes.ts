@@ -38,7 +38,9 @@ router.post('/invite', authenticate, async (req: AuthRequest, res) => {
       },
     });
 
-    const inviteLink = `${process.env.FRONTEND_URL || 'http://localhost:3002'}/join/${joinLinkToken}`;
+    // Use FRONTEND_URL env var, or derive from request origin
+    const frontendUrl = process.env.FRONTEND_URL || req.get('origin') || 'http://localhost:3002';
+    const inviteLink = `${frontendUrl}/join/${joinLinkToken}`;
 
     res.json({
       participant,
