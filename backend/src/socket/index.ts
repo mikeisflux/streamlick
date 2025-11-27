@@ -214,6 +214,39 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           participantId: participant.id,
         });
 
+        // If host, send current participant state and join greenroom
+        if (isOwner) {
+          // Join greenroom room so host receives greenroom events
+          await socket.join(`greenroom:${broadcastId}`);
+
+          // Fetch all current participants for this broadcast
+          const participants = await prisma.participant.findMany({
+            where: {
+              broadcastId,
+              status: 'joined',
+              role: { not: 'host' }, // Exclude host from the list
+            },
+            select: {
+              id: true,
+              name: true,
+              role: true,
+            },
+          });
+
+          logger.info(`[State Sync] Sending ${participants.length} participants to host for broadcast ${broadcastId}`);
+
+          // Send current participant state to host
+          socket.emit('participants-sync', {
+            participants: participants.map(p => ({
+              id: p.id,
+              name: p.name || 'Guest',
+              role: p.role,
+              audioEnabled: true,
+              videoEnabled: true,
+            })),
+          });
+        }
+
       } catch (error) {
         logger.error('Join studio error:', error);
         socket.emit('error', { message: 'Failed to join studio' });
@@ -555,8 +588,14 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           }
         }
 
-        // Notify others in greenroom
+        // Notify others in greenroom AND broadcast room (so host always receives)
         socket.to(`greenroom:${broadcastId}`).emit('greenroom-participant-joined', {
+          participantId,
+          name: participantName,
+          socketId: socket.id,
+        });
+        // Also emit to broadcast room so host receives notification even if not in greenroom room
+        socket.to(`broadcast:${broadcastId}`).emit('greenroom-participant-joined', {
           participantId,
           name: participantName,
           socketId: socket.id,
@@ -574,6 +613,10 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
       const { broadcastId, participantId } = socket.data;
       if (broadcastId && participantId) {
         socket.to(`greenroom:${broadcastId}`).emit('greenroom-participant-left', {
+          participantId,
+        });
+        // Also emit to broadcast room so host always receives
+        socket.to(`broadcast:${broadcastId}`).emit('greenroom-participant-left', {
           participantId,
         });
         socket.leave(`greenroom:${broadcastId}`);

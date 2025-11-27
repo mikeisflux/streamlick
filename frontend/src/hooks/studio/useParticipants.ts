@@ -39,6 +39,30 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
 
   // Socket event handlers
   useEffect(() => {
+    // Handle initial state sync from server when host joins
+    const handleParticipantsSync = ({ participants }: { participants: Array<{ id: string; name: string; role: string; audioEnabled: boolean; videoEnabled: boolean }> }) => {
+      console.log('[useParticipants] Received participants-sync with', participants.length, 'participants');
+
+      if (participants.length > 0) {
+        toast.success(`${participants.length} guest(s) already in greenroom`);
+      }
+
+      setRemoteParticipants((prev) => {
+        const updated = new Map(prev);
+        for (const p of participants) {
+          updated.set(p.id, {
+            id: p.id,
+            name: p.name,
+            stream: null,
+            audioEnabled: p.audioEnabled,
+            videoEnabled: p.videoEnabled,
+            role: p.role as 'host' | 'guest' | 'backstage',
+          });
+        }
+        return updated;
+      });
+    };
+
     const handleParticipantJoined = async ({ participantId }: any) => {
       toast.success('A participant joined');
 
@@ -168,6 +192,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
       });
     };
 
+    socketService.on('participants-sync', handleParticipantsSync);
     socketService.on('participant-joined', handleParticipantJoined);
     socketService.on('participant-left', handleParticipantLeft);
     socketService.on('media-state-changed', handleMediaStateChanged);
@@ -180,6 +205,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
     socketService.on('greenroom-participant-left', handleGreenroomParticipantLeft);
 
     return () => {
+      socketService.off('participants-sync', handleParticipantsSync);
       socketService.off('participant-joined', handleParticipantJoined);
       socketService.off('participant-left', handleParticipantLeft);
       socketService.off('media-state-changed', handleMediaStateChanged);
