@@ -298,11 +298,50 @@ export function GuestJoin() {
     }
   }, [streamVolume, broadcastStream]);
 
-  // Set broadcast stream to video element
+  // Set broadcast stream to video element and play it
   useEffect(() => {
-    if (broadcastVideoRef.current && broadcastStream) {
-      broadcastVideoRef.current.srcObject = broadcastStream;
-    }
+    const video = broadcastVideoRef.current;
+    if (!video || !broadcastStream) return;
+
+    console.log('[GuestJoin] Setting broadcast stream to video element:', {
+      streamId: broadcastStream.id,
+      videoTracks: broadcastStream.getVideoTracks().length,
+      audioTracks: broadcastStream.getAudioTracks().length,
+      active: broadcastStream.active,
+    });
+
+    video.srcObject = broadcastStream;
+
+    // Track video loading progress
+    const handleLoadedMetadata = () => {
+      console.log('[GuestJoin] Broadcast video metadata loaded:', {
+        readyState: video.readyState,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+      });
+    };
+
+    const handleCanPlay = () => {
+      console.log('[GuestJoin] Broadcast video can play');
+      // Try to play again when video is ready
+      video.play().catch((err) => {
+        console.warn('[GuestJoin] Play on canplay failed:', err);
+      });
+    };
+
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('canplay', handleCanPlay);
+
+    // Explicitly call play() - autoPlay attribute is often blocked by browsers
+    video.play().catch((err) => {
+      console.warn('[GuestJoin] Failed to auto-play broadcast video:', err);
+      // This is expected if user hasn't interacted with the page yet
+    });
+
+    return () => {
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('canplay', handleCanPlay);
+    };
   }, [broadcastStream]);
 
   // Send private chat message
