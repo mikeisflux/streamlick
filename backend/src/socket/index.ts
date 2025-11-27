@@ -214,12 +214,49 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           participantId: participant.id,
         });
 
-        // If host, send current participant state and join greenroom
+        // If host, clean up stale participants and send current state
         if (isOwner) {
           // Join greenroom room so host receives greenroom events
           await socket.join(`greenroom:${broadcastId}`);
 
-          // Fetch all current participants for this broadcast
+          // CLEANUP: Find active socket participant IDs in the broadcast room
+          const broadcastRoom = io.sockets.adapter.rooms.get(`broadcast:${broadcastId}`);
+          const activeParticipantIds = new Set<string>();
+
+          if (broadcastRoom) {
+            for (const socketId of broadcastRoom) {
+              const connectedSocket = io.sockets.sockets.get(socketId);
+              if (connectedSocket?.data?.participantId && connectedSocket.data.participantId !== participant.id) {
+                activeParticipantIds.add(connectedSocket.data.participantId);
+              }
+            }
+          }
+
+          // Mark any 'joined' participants without active sockets as disconnected
+          const staleParticipants = await prisma.participant.findMany({
+            where: {
+              broadcastId,
+              status: 'joined',
+              role: { not: 'host' },
+              id: { notIn: Array.from(activeParticipantIds) },
+            },
+            select: { id: true },
+          });
+
+          if (staleParticipants.length > 0) {
+            await prisma.participant.updateMany({
+              where: {
+                id: { in: staleParticipants.map(p => p.id) },
+              },
+              data: {
+                status: 'disconnected',
+                leftAt: new Date(),
+              },
+            });
+            logger.info(`[Cleanup] Marked ${staleParticipants.length} stale participants as disconnected for broadcast ${broadcastId}`);
+          }
+
+          // Fetch all current ACTIVE participants for this broadcast
           const participants = await prisma.participant.findMany({
             where: {
               broadcastId,
@@ -493,7 +530,22 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           return socket.emit('error', { message: 'Not authorized' });
         }
 
+        // Update participant status in database to 'kicked'
+        await prisma.participant.update({
+          where: { id: participantId },
+          data: {
+            status: 'kicked',
+            leftAt: new Date(),
+          },
+        });
+        logger.info(`[Kick] Participant ${participantId} marked as kicked`);
+
         io.to(`broadcast:${broadcastId}`).emit('participant-kicked', {
+          participantId,
+        });
+
+        // Also emit to greenroom
+        io.to(`greenroom:${broadcastId}`).emit('greenroom-participant-left', {
           participantId,
         });
       } catch (error) {
@@ -524,7 +576,22 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           return socket.emit('error', { message: 'Not authorized' });
         }
 
+        // Update participant status in database to 'banned'
+        await prisma.participant.update({
+          where: { id: participantId },
+          data: {
+            status: 'banned',
+            leftAt: new Date(),
+          },
+        });
+        logger.info(`[Ban] Participant ${participantId} marked as banned`);
+
         io.to(`broadcast:${broadcastId}`).emit('participant-banned', {
+          participantId,
+        });
+
+        // Also emit to greenroom
+        io.to(`greenroom:${broadcastId}`).emit('greenroom-participant-left', {
           participantId,
         });
       } catch (error) {
