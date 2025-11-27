@@ -79,8 +79,36 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
   });
 
   // Authentication middleware
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     try {
+      // Check for guest authentication via participant token first
+      const participantToken = socket.handshake.auth.participantToken;
+      if (participantToken) {
+        // Validate participant token against database
+        const participant = await prisma.participant.findUnique({
+          where: { joinLinkToken: participantToken },
+          select: { id: true, broadcastId: true, status: true, joinLinkExpiry: true },
+        });
+
+        if (!participant) {
+          logger.warn(`Socket connection rejected: Invalid participant token (${socket.id})`);
+          return next(new Error('Invalid participant token'));
+        }
+
+        // Check if invite link has expired
+        if (participant.joinLinkExpiry && participant.joinLinkExpiry < new Date()) {
+          logger.warn(`Socket connection rejected: Expired participant token (${socket.id})`);
+          return next(new Error('Participant token expired'));
+        }
+
+        // Guest authentication successful - set participant data
+        socket.data.participantId = participant.id;
+        socket.data.broadcastId = participant.broadcastId;
+        socket.data.isGuest = true;
+        logger.info(`[Socket] Guest connected with participant token: ${participant.id}`);
+        return next();
+      }
+
       // Try to get token from auth object first (backward compatibility)
       let token = socket.handshake.auth.token;
 
@@ -126,6 +154,7 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     socket.on('join-studio', async ({ broadcastId, participantId }) => {
       try {
         const userId = socket.data.userId;
+        const isGuestAuth = socket.data.isGuest === true;
 
         // CRITICAL FIX: Validate UUID formats first to prevent DoS
         if (!isValidUUID(broadcastId)) {
@@ -189,10 +218,14 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
             return socket.emit('error', { message: 'Participant not in this broadcast' });
           }
 
-          // Verify user owns this participant OR owns the broadcast
+          // Check if this is a guest authenticated via participant token
+          // Guests have socket.data.isGuest=true and socket.data.participantId set by middleware
+          const isGuestWithValidToken = isGuestAuth && socket.data.participantId === participantId;
+
+          // Verify user owns this participant OR owns the broadcast OR is authenticated guest
           const isParticipant = participant.userId === userId;
 
-          if (!isOwner && !isParticipant) {
+          if (!isOwner && !isParticipant && !isGuestWithValidToken) {
             logger.warn(`Join studio rejected: User ${userId} not authorized for participant ${participantId}`);
             return socket.emit('error', { message: 'Not authorized' });
           }

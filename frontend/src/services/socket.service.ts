@@ -16,7 +16,7 @@ class SocketService {
   // CRITICAL FIX: Queue listeners registered before socket connects
   private pendingListeners = new Map<string, Set<(...args: any[]) => void>>();
 
-  connect(token?: string): void {
+  connect(token?: string, participantToken?: string): void {
     if (this.socket?.connected) return;
 
     const options: any = {
@@ -30,9 +30,13 @@ class SocketService {
       withCredentials: true, // Send cookies with socket connection
     };
 
-    // Only include auth token if explicitly provided (backward compatibility)
+    // Guest authentication via participant token (for greenroom guests)
+    if (participantToken) {
+      options.auth = { participantToken };
+    }
+    // User authentication via access token (backward compatibility)
     // Otherwise, authentication will use httpOnly cookies
-    if (token) {
+    else if (token) {
       options.auth = { token };
     }
 

@@ -694,8 +694,8 @@ export function GuestJoin() {
 
       const participant = response.data.participant;
 
-      // Connect to studio
-      socketService.connect('');
+      // Connect to studio with participant token for guest authentication
+      socketService.connect(undefined, token);
       socketService.joinStudio(broadcastInfo.id, participant.id);
 
       // Initialize WebRTC with proper error handling
