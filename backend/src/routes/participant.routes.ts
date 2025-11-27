@@ -139,4 +139,59 @@ router.get('/:broadcastId/ban-check/:participantId', async (req: Request, res: R
   }
 });
 
+/**
+ * Get greenroom participants for a broadcast (for polling)
+ * GET /api/broadcasts/:broadcastId/greenroom-participants
+ */
+router.get('/:broadcastId/greenroom-participants', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { broadcastId } = req.params;
+    const userId = (req as any).user.userId;
+
+    // Verify user owns the broadcast
+    const broadcast = await prisma.broadcast.findUnique({
+      where: { id: broadcastId },
+    });
+
+    if (!broadcast) {
+      return res.status(404).json({ error: 'Broadcast not found' });
+    }
+
+    if (broadcast.userId !== userId) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    // Get all active participants in the greenroom (status = 'joined', role != 'host')
+    const participants = await prisma.participant.findMany({
+      where: {
+        broadcastId,
+        status: 'joined',
+        role: { not: 'host' },
+      },
+      select: {
+        id: true,
+        name: true,
+        role: true,
+        joinedAt: true,
+      },
+      orderBy: {
+        joinedAt: 'asc',
+      },
+    });
+
+    res.json({
+      participants: participants.map(p => ({
+        id: p.id,
+        name: p.name || 'Guest',
+        role: p.role,
+        audioEnabled: true,
+        videoEnabled: true,
+      })),
+    });
+  } catch (error: any) {
+    logger.error('Get greenroom participants error:', error);
+    res.status(500).json({ error: 'Failed to get greenroom participants' });
+  }
+});
+
 export default router;

@@ -290,6 +290,55 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
       }
     });
 
+    // Request participants sync - called by frontend after listeners are registered
+    // This ensures the sync happens AFTER the frontend is ready to receive it
+    socket.on('request-participants-sync', async () => {
+      try {
+        const { broadcastId, userId } = socket.data;
+
+        if (!broadcastId) {
+          return;
+        }
+
+        // Verify user owns this broadcast (only hosts should request sync)
+        const broadcast = await prisma.broadcast.findUnique({
+          where: { id: broadcastId },
+        });
+
+        if (!broadcast || broadcast.userId !== userId) {
+          return;
+        }
+
+        // Fetch all current ACTIVE participants for this broadcast
+        const participants = await prisma.participant.findMany({
+          where: {
+            broadcastId,
+            status: 'joined',
+            role: { not: 'host' },
+          },
+          select: {
+            id: true,
+            name: true,
+            role: true,
+          },
+        });
+
+        logger.info(`[State Sync] Request-sync: Sending ${participants.length} participants to host for broadcast ${broadcastId}`);
+
+        socket.emit('participants-sync', {
+          participants: participants.map(p => ({
+            id: p.id,
+            name: p.name || 'Guest',
+            role: p.role,
+            audioEnabled: true,
+            videoEnabled: true,
+          })),
+        });
+      } catch (error) {
+        logger.error('Request participants sync error:', error);
+      }
+    });
+
     // Leave studio room
     socket.on('leave-studio', () => {
       const { broadcastId, participantId } = socket.data;

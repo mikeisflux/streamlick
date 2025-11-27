@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { socketService } from '../../services/socket.service';
 import { compositorService } from '../../services/compositor.service';
 import toast from 'react-hot-toast';
@@ -24,6 +24,9 @@ interface UseParticipantsProps {
   showChatOnStream: boolean;
 }
 
+// Polling interval in milliseconds (3 seconds)
+const POLL_INTERVAL = 3000;
+
 export function useParticipants({ broadcastId, showChatOnStream }: UseParticipantsProps) {
   const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map());
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -37,23 +40,97 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
     linkedin: 0,
   });
 
-  // Socket event handlers
+  // Track known participant IDs to detect new joins
+  const knownParticipantIdsRef = useRef<Set<string>>(new Set());
+
+  // HTTP polling for greenroom participants - this is the PRIMARY mechanism
+  // Socket events are supplementary for real-time updates
+  useEffect(() => {
+    if (!broadcastId) return;
+
+    let isMounted = true;
+
+    const pollParticipants = async () => {
+      try {
+        const response = await api.get(`/broadcasts/${broadcastId}/greenroom-participants`);
+        if (!isMounted) return;
+
+        const { participants } = response.data as { participants: Array<{ id: string; name: string; role: string; audioEnabled: boolean; videoEnabled: boolean }> };
+
+        // Detect new participants that we haven't seen before
+        const currentIds = new Set(participants.map(p => p.id));
+        const newParticipants = participants.filter(p => !knownParticipantIdsRef.current.has(p.id));
+
+        // Show toast for new participants
+        for (const p of newParticipants) {
+          console.log('[useParticipants] Poll detected new participant:', p.name);
+          toast.success(`${p.name || 'A guest'} joined the greenroom`);
+        }
+
+        // Update known IDs
+        knownParticipantIdsRef.current = currentIds;
+
+        // Update state - merge with existing to preserve streams
+        setRemoteParticipants((prev) => {
+          const updated = new Map<string, RemoteParticipant>();
+
+          // Add all participants from the poll
+          for (const p of participants) {
+            const existing = prev.get(p.id);
+            updated.set(p.id, {
+              id: p.id,
+              name: p.name,
+              stream: existing?.stream || null, // Preserve existing stream
+              audioEnabled: p.audioEnabled,
+              videoEnabled: p.videoEnabled,
+              role: p.role as 'host' | 'guest' | 'backstage',
+            });
+          }
+
+          return updated;
+        });
+      } catch (error) {
+        // Don't log 401/403 errors as they're expected when not authenticated
+        if ((error as any)?.response?.status !== 401 && (error as any)?.response?.status !== 403) {
+          console.error('[useParticipants] Poll error:', error);
+        }
+      }
+    };
+
+    // Initial poll immediately
+    pollParticipants();
+
+    // Set up polling interval
+    const pollInterval = setInterval(pollParticipants, POLL_INTERVAL);
+
+    return () => {
+      isMounted = false;
+      clearInterval(pollInterval);
+    };
+  }, [broadcastId]);
+
+  // Socket event handlers (supplementary to polling for real-time updates)
+  // Polling is the PRIMARY mechanism, socket events provide faster updates when they work
   useEffect(() => {
     // Handle initial state sync from server when host joins
+    // Note: Polling will also pick these up, but socket sync is faster on initial load
     const handleParticipantsSync = ({ participants }: { participants: Array<{ id: string; name: string; role: string; audioEnabled: boolean; videoEnabled: boolean }> }) => {
       console.log('[useParticipants] Received participants-sync with', participants.length, 'participants');
 
-      if (participants.length > 0) {
-        toast.success(`${participants.length} guest(s) already in greenroom`);
+      // Update knownParticipantIdsRef to prevent duplicate toasts from polling
+      for (const p of participants) {
+        knownParticipantIdsRef.current.add(p.id);
       }
 
+      // Don't show toast here - polling will handle notifications
       setRemoteParticipants((prev) => {
         const updated = new Map(prev);
         for (const p of participants) {
+          const existing = prev.get(p.id);
           updated.set(p.id, {
             id: p.id,
             name: p.name,
-            stream: null,
+            stream: existing?.stream || null, // Preserve existing stream
             audioEnabled: p.audioEnabled,
             videoEnabled: p.videoEnabled,
             role: p.role as 'host' | 'guest' | 'backstage',
@@ -64,14 +141,19 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
     };
 
     const handleParticipantJoined = async ({ participantId }: any) => {
-      toast.success('A participant joined');
+      // Only show toast if we haven't seen this participant yet (from polling)
+      if (!knownParticipantIdsRef.current.has(participantId)) {
+        toast.success('A participant joined');
+        knownParticipantIdsRef.current.add(participantId);
+      }
 
       setRemoteParticipants((prev) => {
         const updated = new Map(prev);
+        const existing = prev.get(participantId);
         updated.set(participantId, {
           id: participantId,
-          name: `Guest ${updated.size + 1}`,
-          stream: null,
+          name: existing?.name || `Guest ${updated.size + 1}`,
+          stream: existing?.stream || null,
           audioEnabled: true,
           videoEnabled: true,
           role: 'backstage', // New participants start in backstage by default
@@ -82,7 +164,12 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
 
     // Handle greenroom participant joined - update role to 'guest' for greenroom display
     const handleGreenroomParticipantJoined = ({ participantId, name }: any) => {
-      toast.success(`${name || 'A guest'} joined the greenroom`);
+      // Only show toast if we haven't seen this participant yet (from polling)
+      if (!knownParticipantIdsRef.current.has(participantId)) {
+        console.log('[useParticipants] Socket: new greenroom participant', name);
+        toast.success(`${name || 'A guest'} joined the greenroom`);
+        knownParticipantIdsRef.current.add(participantId);
+      }
 
       setRemoteParticipants((prev) => {
         const updated = new Map(prev);
@@ -109,6 +196,8 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
 
     // Handle greenroom participant left
     const handleGreenroomParticipantLeft = ({ participantId }: any) => {
+      // Remove from known IDs so we can detect if they rejoin
+      knownParticipantIdsRef.current.delete(participantId);
       toast.success('A guest left the greenroom');
 
       setRemoteParticipants((prev) => {
@@ -119,6 +208,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
     };
 
     const handleParticipantLeft = ({ participantId }: any) => {
+      knownParticipantIdsRef.current.delete(participantId);
       toast.success('A participant left');
 
       setRemoteParticipants((prev) => {
@@ -131,6 +221,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
     // Handle participant disconnected (socket disconnect, page close, etc.)
     const handleParticipantDisconnected = ({ participantId }: any) => {
       console.log('[useParticipants] Participant disconnected:', participantId);
+      knownParticipantIdsRef.current.delete(participantId);
 
       setRemoteParticipants((prev) => {
         const updated = new Map(prev);
