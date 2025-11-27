@@ -660,10 +660,8 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           }
         }
 
-        // Notify greenroom room only (host joins greenroom when joining studio, so they'll receive this)
-        // NOTE: Previously emitted to both greenroom AND broadcast rooms, causing host to receive TWICE
-        // and create ghost/duplicate participant entries
-        socket.to(`greenroom:${broadcastId}`).emit('greenroom-participant-joined', {
+        // Notify the broadcast room where the host studio is listening
+        socket.to(`broadcast:${broadcastId}`).emit('greenroom-participant-joined', {
           participantId,
           name: participantName,
           socketId: socket.id,
@@ -695,8 +693,8 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           }
         }
 
-        // Only emit to greenroom room (host is in greenroom room, so they'll receive this)
-        socket.to(`greenroom:${broadcastId}`).emit('greenroom-participant-left', {
+        // Emit to broadcast room where host studio is listening
+        socket.to(`broadcast:${broadcastId}`).emit('greenroom-participant-left', {
           participantId,
         });
         socket.leave(`greenroom:${broadcastId}`);

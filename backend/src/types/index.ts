@@ -1,8 +1,10 @@
 export interface JwtPayload {
   userId: string;
   email: string;
-  role?: 'user' | 'admin';
+  role?: 'user' | 'admin' | 'guest';
   id?: string; // Alias for userId for compatibility
+  participantId?: string; // For guest tokens
+  broadcastId?: string; // For guest tokens
 }
 
 export interface BroadcastStatus {

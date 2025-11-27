@@ -16,6 +16,22 @@ export function generateAccessToken(payload: JwtPayload): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRATION } as SignOptions);
 }
 
+/**
+ * Generate a guest access token for participants joining via invite link
+ * Guest tokens are valid for 24 hours (duration of invite link)
+ */
+export function generateGuestToken(participantId: string, broadcastId: string, name: string): string {
+  const payload: JwtPayload = {
+    userId: `guest-${participantId}`, // Pseudo user ID for guests
+    email: '', // Guests don't have email
+    role: 'guest',
+    participantId,
+    broadcastId,
+  };
+  // Guest tokens last 24 hours (same as invite links)
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' } as SignOptions);
+}
+
 export function generateRefreshToken(payload: JwtPayload): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRATION } as SignOptions);
 }
