@@ -815,6 +815,60 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
       });
     });
 
+    // ============================================
+    // Guest Stream WebRTC Signaling (P2P)
+    // Allows host to receive guest camera/mic streams
+    // ============================================
+
+    // Guest sends WebRTC offer to host (guest is sending their camera)
+    socket.on('guest-stream-offer', ({ offer }) => {
+      const { broadcastId, participantId } = socket.data;
+
+      if (!broadcastId || !participantId) {
+        return socket.emit('error', { message: 'Missing broadcast or participant ID' });
+      }
+
+      logger.info(`[GuestStream] Guest ${participantId} sending stream offer for broadcast ${broadcastId}`);
+
+      // Send offer to all hosts in the broadcast room
+      socket.to(`broadcast:${broadcastId}`).emit('guest-stream-offer', {
+        participantId,
+        guestSocketId: socket.id,
+        offer,
+      });
+    });
+
+    // Host sends WebRTC answer back to guest
+    socket.on('guest-stream-answer', ({ guestSocketId, participantId, answer }) => {
+      if (!guestSocketId) {
+        return socket.emit('error', { message: 'Missing guest socket ID' });
+      }
+
+      logger.info(`[GuestStream] Host sending answer to guest ${participantId}`);
+
+      // Send answer directly to the guest
+      io.to(guestSocketId).emit('guest-stream-answer', {
+        answer,
+        hostSocketId: socket.id,
+      });
+    });
+
+    // Exchange ICE candidates for guest stream
+    socket.on('guest-stream-ice-candidate', ({ targetSocketId, candidate }) => {
+      if (!targetSocketId || !candidate) {
+        return;
+      }
+
+      const { participantId } = socket.data;
+
+      // Relay ICE candidate to the target
+      io.to(targetSocketId).emit('guest-stream-ice-candidate', {
+        participantId,
+        candidate,
+        fromSocketId: socket.id,
+      });
+    });
+
     // Broadcast status changed
     socket.on('broadcast-status-changed', ({ status }) => {
       const { broadcastId } = socket.data;

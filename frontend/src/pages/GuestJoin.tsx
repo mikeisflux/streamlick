@@ -276,6 +276,106 @@ export function GuestJoin() {
     };
   }, [hasJoined, broadcastInfo?.id]);
 
+  // P2P Stream to Host - send our camera/mic directly to the host
+  const guestStreamPcRef = useRef<RTCPeerConnection | null>(null);
+  const hostStreamSocketIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!hasJoined || !broadcastInfo?.id || !localStream) return;
+
+    console.log('[GuestStream] Setting up P2P stream to host');
+
+    // Handle answer from host
+    const handleGuestStreamAnswer = async ({ answer, hostSocketId }: { answer: RTCSessionDescriptionInit; hostSocketId: string }) => {
+      console.log('[GuestStream] Received answer from host');
+      hostStreamSocketIdRef.current = hostSocketId;
+
+      if (!guestStreamPcRef.current) {
+        console.warn('[GuestStream] No peer connection for answer');
+        return;
+      }
+
+      try {
+        await guestStreamPcRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log('[GuestStream] Remote description set successfully');
+      } catch (error) {
+        console.error('[GuestStream] Error setting remote description:', error);
+      }
+    };
+
+    // Handle ICE candidate from host
+    const handleGuestStreamIceCandidate = async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
+      if (!guestStreamPcRef.current) return;
+
+      try {
+        await guestStreamPcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (error) {
+        console.error('[GuestStream] Error adding ICE candidate:', error);
+      }
+    };
+
+    // Create peer connection and send offer
+    const setupGuestStream = async () => {
+      console.log('[GuestStream] Creating peer connection to send stream to host');
+
+      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      guestStreamPcRef.current = pc;
+
+      // Add local tracks
+      localStream.getTracks().forEach(track => {
+        pc.addTrack(track, localStream);
+        console.log('[GuestStream] Added track:', track.kind);
+      });
+
+      // Handle ICE candidates
+      pc.onicecandidate = (event) => {
+        if (event.candidate && hostStreamSocketIdRef.current) {
+          socketService.emit('guest-stream-ice-candidate', {
+            targetSocketId: hostStreamSocketIdRef.current,
+            candidate: event.candidate.toJSON(),
+          });
+        }
+      };
+
+      // Handle connection state
+      pc.onconnectionstatechange = () => {
+        console.log('[GuestStream] Connection state:', pc.connectionState);
+      };
+
+      // Create and send offer
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        console.log('[GuestStream] Sending offer to host');
+        socketService.emit('guest-stream-offer', {
+          offer: pc.localDescription?.toJSON(),
+        });
+      } catch (error) {
+        console.error('[GuestStream] Error creating offer:', error);
+      }
+    };
+
+    socketService.on('guest-stream-answer', handleGuestStreamAnswer);
+    socketService.on('guest-stream-ice-candidate', handleGuestStreamIceCandidate);
+
+    // Small delay to ensure socket is connected and joined
+    const timeout = setTimeout(() => {
+      setupGuestStream();
+    }, 500);
+
+    return () => {
+      clearTimeout(timeout);
+      socketService.off('guest-stream-answer', handleGuestStreamAnswer);
+      socketService.off('guest-stream-ice-candidate', handleGuestStreamIceCandidate);
+
+      if (guestStreamPcRef.current) {
+        guestStreamPcRef.current.close();
+        guestStreamPcRef.current = null;
+      }
+    };
+  }, [hasJoined, broadcastInfo?.id, localStream]);
+
   // Listen for greenroom participants and chat
   useEffect(() => {
     if (!hasJoined) return;

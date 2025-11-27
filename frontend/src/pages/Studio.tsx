@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { audioProcessorService } from '../services/audio-processor.service';
 import { audioMixerService } from '../services/audio-mixer.service';
@@ -44,6 +44,7 @@ import {
   useAutoMuteDuringVideos,
   useStudioHandlers,
   usePreviewStream,
+  useGuestStreams,
 } from '../hooks/studio';
 import { useCanvasSettings } from '../hooks/studio/useCanvasSettings';
 import { socketService } from '../services/socket.service';
@@ -252,7 +253,37 @@ export function Studio() {
     handleKickParticipant,
     handleBanParticipant,
     handleVolumeChange,
+    setRemoteParticipants,
   } = useParticipants({ broadcastId, showChatOnStream });
+
+  // P2P Guest Streams - receive video from guests directly
+  useGuestStreams(
+    broadcastId,
+    // onStreamReceived - update participant's stream
+    useCallback((participantId: string, stream: MediaStream) => {
+      console.log('[Studio] Received stream from guest:', participantId);
+      setRemoteParticipants((prev: Map<string, any>) => {
+        const updated = new Map(prev);
+        const participant = updated.get(participantId);
+        if (participant) {
+          updated.set(participantId, { ...participant, stream });
+        }
+        return updated;
+      });
+    }, [setRemoteParticipants]),
+    // onStreamRemoved - clear participant's stream
+    useCallback((participantId: string) => {
+      console.log('[Studio] Stream removed from guest:', participantId);
+      setRemoteParticipants((prev: Map<string, any>) => {
+        const updated = new Map(prev);
+        const participant = updated.get(participantId);
+        if (participant) {
+          updated.set(participantId, { ...participant, stream: null });
+        }
+        return updated;
+      });
+    }, [setRemoteParticipants])
+  );
 
   // Broadcast
   const {
