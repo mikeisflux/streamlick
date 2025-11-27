@@ -869,6 +869,21 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
       });
     });
 
+    // Host requests all guests to resend their stream offers
+    // This is used when host joins/reconnects and needs to get streams from existing guests
+    socket.on('request-guest-streams', () => {
+      const { broadcastId } = socket.data;
+
+      if (!broadcastId) {
+        return socket.emit('error', { message: 'Missing broadcast ID' });
+      }
+
+      logger.info(`[GuestStream] Host requesting all guests to resend stream offers for broadcast ${broadcastId}`);
+
+      // Notify all guests in the broadcast room to resend their stream offers
+      socket.to(`broadcast:${broadcastId}`).emit('resend-stream-offer');
+    });
+
     // Broadcast status changed
     socket.on('broadcast-status-changed', ({ status }) => {
       const { broadcastId } = socket.data;

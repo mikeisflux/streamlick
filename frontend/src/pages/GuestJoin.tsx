@@ -280,15 +280,31 @@ export function GuestJoin() {
   const guestStreamPcRef = useRef<RTCPeerConnection | null>(null);
   const hostStreamSocketIdRef = useRef<string | null>(null);
 
+  // Retry logic for guest stream offers
+  const guestStreamAnswerReceivedRef = useRef(false);
+  const guestStreamRetryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const guestStreamRetryCountRef = useRef(0);
+  const GUEST_STREAM_MAX_RETRIES = 10; // More retries since host might refresh
+  const GUEST_STREAM_RETRY_DELAY = 3000; // 3 seconds
+
   useEffect(() => {
     if (!hasJoined || !broadcastInfo?.id || !localStream) return;
 
     console.log('[GuestStream] Setting up P2P stream to host');
+    guestStreamAnswerReceivedRef.current = false;
+    guestStreamRetryCountRef.current = 0;
 
     // Handle answer from host
     const handleGuestStreamAnswer = async ({ answer, hostSocketId }: { answer: RTCSessionDescriptionInit; hostSocketId: string }) => {
       console.log('[GuestStream] Received answer from host');
+      guestStreamAnswerReceivedRef.current = true;
       hostStreamSocketIdRef.current = hostSocketId;
+
+      // Clear retry timeout since we got an answer
+      if (guestStreamRetryTimeoutRef.current) {
+        clearTimeout(guestStreamRetryTimeoutRef.current);
+        guestStreamRetryTimeoutRef.current = null;
+      }
 
       if (!guestStreamPcRef.current) {
         console.warn('[GuestStream] No peer connection for answer');
@@ -318,6 +334,11 @@ export function GuestJoin() {
     const setupGuestStream = async () => {
       console.log('[GuestStream] Creating peer connection to send stream to host');
 
+      // Close existing connection if any (for retries)
+      if (guestStreamPcRef.current) {
+        guestStreamPcRef.current.close();
+      }
+
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
       guestStreamPcRef.current = pc;
 
@@ -340,6 +361,17 @@ export function GuestJoin() {
       // Handle connection state
       pc.onconnectionstatechange = () => {
         console.log('[GuestStream] Connection state:', pc.connectionState);
+
+        // If connection failed or disconnected, try to reconnect
+        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+          console.log('[GuestStream] Connection lost, will retry...');
+          guestStreamAnswerReceivedRef.current = false;
+          guestStreamRetryCountRef.current = 0;
+          // Start retry after a short delay
+          guestStreamRetryTimeoutRef.current = setTimeout(() => {
+            sendOfferWithRetry();
+          }, 2000);
+        }
       };
 
       // Create and send offer
@@ -356,18 +388,63 @@ export function GuestJoin() {
       }
     };
 
+    // Function to send offer with retry logic
+    const sendOfferWithRetry = () => {
+      if (!hasJoined || !broadcastInfo?.id || !localStream) return;
+
+      console.log(`[GuestStream] Sending offer (attempt ${guestStreamRetryCountRef.current + 1}/${GUEST_STREAM_MAX_RETRIES + 1})...`);
+      setupGuestStream();
+
+      // Set up retry if no answer received
+      guestStreamRetryTimeoutRef.current = setTimeout(() => {
+        if (!guestStreamAnswerReceivedRef.current && guestStreamRetryCountRef.current < GUEST_STREAM_MAX_RETRIES) {
+          guestStreamRetryCountRef.current++;
+          console.log('[GuestStream] No answer received, retrying...');
+          sendOfferWithRetry();
+        } else if (!guestStreamAnswerReceivedRef.current) {
+          console.warn('[GuestStream] Max retries reached, host may not be available');
+        }
+      }, GUEST_STREAM_RETRY_DELAY);
+    };
+
+    // Handle request from host to resend stream offer (when host reconnects)
+    const handleResendStreamOffer = () => {
+      console.log('[GuestStream] Host requested stream offer resend');
+      guestStreamAnswerReceivedRef.current = false;
+      guestStreamRetryCountRef.current = 0;
+      // Clear any existing retry timeout
+      if (guestStreamRetryTimeoutRef.current) {
+        clearTimeout(guestStreamRetryTimeoutRef.current);
+        guestStreamRetryTimeoutRef.current = null;
+      }
+      // Send offer immediately
+      sendOfferWithRetry();
+
+      // Also re-emit join-greenroom to ensure host gets the notification
+      if (broadcastInfo?.id) {
+        console.log('[GuestStream] Re-emitting join-greenroom for host');
+        socketService.emit('join-greenroom', { broadcastId: broadcastInfo.id });
+      }
+    };
+
     socketService.on('guest-stream-answer', handleGuestStreamAnswer);
     socketService.on('guest-stream-ice-candidate', handleGuestStreamIceCandidate);
+    socketService.on('resend-stream-offer', handleResendStreamOffer);
 
-    // Small delay to ensure socket is connected and joined
+    // Small delay to ensure socket is connected and joined, then start with retry logic
     const timeout = setTimeout(() => {
-      setupGuestStream();
+      sendOfferWithRetry();
     }, 500);
 
     return () => {
       clearTimeout(timeout);
+      if (guestStreamRetryTimeoutRef.current) {
+        clearTimeout(guestStreamRetryTimeoutRef.current);
+        guestStreamRetryTimeoutRef.current = null;
+      }
       socketService.off('guest-stream-answer', handleGuestStreamAnswer);
       socketService.off('guest-stream-ice-candidate', handleGuestStreamIceCandidate);
+      socketService.off('resend-stream-offer', handleResendStreamOffer);
 
       if (guestStreamPcRef.current) {
         guestStreamPcRef.current.close();

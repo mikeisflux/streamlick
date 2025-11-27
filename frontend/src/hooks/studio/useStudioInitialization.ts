@@ -136,6 +136,13 @@ export function useStudioInitialization({
         // Also join greenroom room to receive greenroom participant events
         socketService.emit('host-enter-greenroom', { broadcastId });
 
+        // Request existing guests to resend their stream offers
+        // This handles the case where guests joined before the host connected
+        setTimeout(() => {
+          console.log('[Studio Init] Requesting existing guests to resend stream offers');
+          socketService.emit('request-guest-streams');
+        }, 1000);
+
         // Set initialized flag BEFORE setting loading to false (atomic state update)
         isInitializedRef.current = true;
         setIsInitialized(true);
