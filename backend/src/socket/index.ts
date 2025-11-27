@@ -550,7 +550,7 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           const participant = await prisma.participant.findUnique({
             where: { id: participantId },
           });
-          if (participant) {
+          if (participant && participant.name) {
             participantName = participant.name;
           }
         }
