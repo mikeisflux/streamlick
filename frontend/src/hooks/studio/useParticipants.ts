@@ -56,6 +56,44 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
       });
     };
 
+    // Handle greenroom participant joined - update role to 'guest' for greenroom display
+    const handleGreenroomParticipantJoined = ({ participantId, name }: any) => {
+      toast.success(`${name || 'A guest'} joined the greenroom`);
+
+      setRemoteParticipants((prev) => {
+        const updated = new Map(prev);
+        const existing = updated.get(participantId);
+        if (existing) {
+          // Update existing participant's role to guest (greenroom)
+          existing.role = 'guest';
+          existing.name = name || existing.name;
+          updated.set(participantId, existing);
+        } else {
+          // Add new participant with guest role
+          updated.set(participantId, {
+            id: participantId,
+            name: name || `Guest ${updated.size + 1}`,
+            stream: null,
+            audioEnabled: true,
+            videoEnabled: true,
+            role: 'guest', // Greenroom participants have role 'guest'
+          });
+        }
+        return updated;
+      });
+    };
+
+    // Handle greenroom participant left
+    const handleGreenroomParticipantLeft = ({ participantId }: any) => {
+      toast.success('A guest left the greenroom');
+
+      setRemoteParticipants((prev) => {
+        const updated = new Map(prev);
+        updated.delete(participantId);
+        return updated;
+      });
+    };
+
     const handleParticipantLeft = ({ participantId }: any) => {
       toast.success('A participant left');
 
@@ -137,6 +175,9 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
     socketService.on('participant-promoted', handleParticipantPromoted);
     socketService.on('participant-demoted', handleParticipantDemoted);
     socketService.on('viewer-count-update', handleViewerCountUpdate);
+    // Greenroom events - so host can see guests waiting in greenroom
+    socketService.on('greenroom-participant-joined', handleGreenroomParticipantJoined);
+    socketService.on('greenroom-participant-left', handleGreenroomParticipantLeft);
 
     return () => {
       socketService.off('participant-joined', handleParticipantJoined);
@@ -146,6 +187,8 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
       socketService.off('participant-promoted', handleParticipantPromoted);
       socketService.off('participant-demoted', handleParticipantDemoted);
       socketService.off('viewer-count-update', handleViewerCountUpdate);
+      socketService.off('greenroom-participant-joined', handleGreenroomParticipantJoined);
+      socketService.off('greenroom-participant-left', handleGreenroomParticipantLeft);
     };
   }, [showChatOnStream]);
 

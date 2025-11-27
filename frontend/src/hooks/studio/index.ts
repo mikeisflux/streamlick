@@ -19,3 +19,4 @@ export { useFeatureToggles } from './useFeatureToggles';
 export { useTeleprompter } from './useTeleprompter';
 export { useStudioHandlers } from './useStudioHandlers';
 export { useAutoMuteDuringVideos } from './useAutoMuteDuringVideos';
+export { usePreviewStream } from './usePreviewStream';

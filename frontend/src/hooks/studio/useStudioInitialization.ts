@@ -133,6 +133,8 @@ export function useStudioInitialization({
         // Connect socket (uses httpOnly cookies for authentication)
         socketService.connect();
         socketService.joinStudio(broadcastId, 'host-id');
+        // Also join greenroom room to receive greenroom participant events
+        socketService.emit('host-enter-greenroom', { broadcastId });
 
         // Set initialized flag BEFORE setting loading to false (atomic state update)
         isInitializedRef.current = true;

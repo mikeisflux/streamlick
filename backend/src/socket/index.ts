@@ -624,6 +624,74 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
       }
     });
 
+    // ============================================
+    // Preview Stream WebRTC Signaling
+    // Allows guests to see the host's canvas output
+    // ============================================
+
+    // Guest requests preview stream from host
+    socket.on('request-preview-stream', ({ broadcastId: targetBroadcastId }) => {
+      const { participantId } = socket.data;
+      const broadcastId = targetBroadcastId || socket.data.broadcastId;
+
+      if (!broadcastId || !participantId) {
+        return socket.emit('error', { message: 'Missing broadcast or participant ID' });
+      }
+
+      logger.info(`[Preview] Guest ${participantId} requesting preview stream for broadcast ${broadcastId}`);
+
+      // Notify the host that a guest wants the preview stream
+      socket.to(`broadcast:${broadcastId}`).emit('preview-stream-requested', {
+        guestId: participantId,
+        guestSocketId: socket.id,
+      });
+    });
+
+    // Host sends WebRTC offer for preview stream
+    socket.on('preview-offer', ({ guestSocketId, offer }) => {
+      const { broadcastId } = socket.data;
+
+      if (!broadcastId || !guestSocketId) {
+        return socket.emit('error', { message: 'Missing broadcast ID or guest socket ID' });
+      }
+
+      logger.info(`[Preview] Host sending offer to guest ${guestSocketId}`);
+
+      // Send offer directly to the requesting guest
+      io.to(guestSocketId).emit('preview-offer', {
+        offer,
+        hostSocketId: socket.id,
+      });
+    });
+
+    // Guest sends WebRTC answer for preview stream
+    socket.on('preview-answer', ({ hostSocketId, answer }) => {
+      if (!hostSocketId) {
+        return socket.emit('error', { message: 'Missing host socket ID' });
+      }
+
+      logger.info(`[Preview] Guest sending answer to host ${hostSocketId}`);
+
+      // Send answer directly to the host
+      io.to(hostSocketId).emit('preview-answer', {
+        answer,
+        guestSocketId: socket.id,
+      });
+    });
+
+    // Exchange ICE candidates for preview stream
+    socket.on('preview-ice-candidate', ({ targetSocketId, candidate }) => {
+      if (!targetSocketId || !candidate) {
+        return;
+      }
+
+      // Relay ICE candidate to the target
+      io.to(targetSocketId).emit('preview-ice-candidate', {
+        candidate,
+        fromSocketId: socket.id,
+      });
+    });
+
     // Broadcast status changed
     socket.on('broadcast-status-changed', ({ status }) => {
       const { broadcastId } = socket.data;

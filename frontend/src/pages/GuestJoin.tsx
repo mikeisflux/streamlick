@@ -128,13 +128,109 @@ export function GuestJoin() {
     };
   }, [hasJoined]);
 
-  // Listen for broadcast stream preview
+  // Preview stream peer connection ref
+  const previewPcRef = useRef<RTCPeerConnection | null>(null);
+  const hostSocketIdRef = useRef<string | null>(null);
+
+  // ICE servers for WebRTC
+  const ICE_SERVERS: RTCIceServer[] = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ];
+
+  // Request and receive preview stream via WebRTC
+  useEffect(() => {
+    if (!hasJoined || !broadcastInfo?.id) return;
+
+    // Handle WebRTC offer from host
+    const handlePreviewOffer = async ({ offer, hostSocketId }: { offer: RTCSessionDescriptionInit; hostSocketId: string }) => {
+      console.log('[PreviewStream] Received offer from host');
+      hostSocketIdRef.current = hostSocketId;
+
+      // Create peer connection
+      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      previewPcRef.current = pc;
+
+      // Handle incoming tracks
+      pc.ontrack = (event) => {
+        console.log('[PreviewStream] Received track:', event.track.kind);
+        if (event.streams && event.streams[0]) {
+          setBroadcastStream(event.streams[0]);
+        }
+      };
+
+      // Handle ICE candidates
+      pc.onicecandidate = (event) => {
+        if (event.candidate && hostSocketIdRef.current) {
+          socketService.emit('preview-ice-candidate', {
+            targetSocketId: hostSocketIdRef.current,
+            candidate: event.candidate.toJSON(),
+          });
+        }
+      };
+
+      // Handle connection state
+      pc.onconnectionstatechange = () => {
+        console.log('[PreviewStream] Connection state:', pc.connectionState);
+        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+          setBroadcastStream(null);
+          // Try to reconnect after a delay
+          setTimeout(() => {
+            if (hasJoined && broadcastInfo?.id) {
+              console.log('[PreviewStream] Reconnecting...');
+              socketService.emit('request-preview-stream', { broadcastId: broadcastInfo.id });
+            }
+          }, 2000);
+        }
+      };
+
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        socketService.emit('preview-answer', {
+          hostSocketId,
+          answer: pc.localDescription?.toJSON(),
+        });
+      } catch (error) {
+        console.error('[PreviewStream] Error handling offer:', error);
+      }
+    };
+
+    // Handle ICE candidate from host
+    const handlePreviewIceCandidate = async ({ candidate, fromSocketId }: { candidate: RTCIceCandidateInit; fromSocketId: string }) => {
+      if (!previewPcRef.current) return;
+
+      try {
+        await previewPcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (error) {
+        console.error('[PreviewStream] Error adding ICE candidate:', error);
+      }
+    };
+
+    socketService.on('preview-offer', handlePreviewOffer);
+    socketService.on('preview-ice-candidate', handlePreviewIceCandidate);
+
+    // Request preview stream from host
+    console.log('[PreviewStream] Requesting preview stream...');
+    socketService.emit('request-preview-stream', { broadcastId: broadcastInfo.id });
+
+    return () => {
+      socketService.off('preview-offer', handlePreviewOffer);
+      socketService.off('preview-ice-candidate', handlePreviewIceCandidate);
+
+      // Close peer connection
+      if (previewPcRef.current) {
+        previewPcRef.current.close();
+        previewPcRef.current = null;
+      }
+    };
+  }, [hasJoined, broadcastInfo?.id]);
+
+  // Listen for greenroom participants and chat
   useEffect(() => {
     if (!hasJoined) return;
-
-    const handleBroadcastStream = (stream: MediaStream) => {
-      setBroadcastStream(stream);
-    };
 
     // Listen for greenroom participants
     const handleGreenroomParticipantJoined = ({ participantId, name }: { participantId: string; name: string }) => {
@@ -180,7 +276,6 @@ export function GuestJoin() {
       setPublicChatMessages((prev) => [...prev, message]);
     };
 
-    socketService.on('broadcast-stream', handleBroadcastStream);
     socketService.on('greenroom-participant-joined', handleGreenroomParticipantJoined);
     socketService.on('greenroom-participant-left', handleGreenroomParticipantLeft);
     socketService.on('greenroom-stream', handleGreenroomStream);
@@ -188,7 +283,6 @@ export function GuestJoin() {
     socketService.on('public-chat-message', handlePublicChatMessage);
 
     return () => {
-      socketService.off('broadcast-stream', handleBroadcastStream);
       socketService.off('greenroom-participant-joined', handleGreenroomParticipantJoined);
       socketService.off('greenroom-participant-left', handleGreenroomParticipantLeft);
       socketService.off('greenroom-stream', handleGreenroomStream);
@@ -411,53 +505,6 @@ export function GuestJoin() {
         </header>
 
         <main className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
-          {/* Broadcast Stream Preview - 25% width in top right corner (only in greenroom) */}
-          {guestStatus === 'greenroom' && (
-            <div className="absolute top-4 right-4 z-50" style={{ width: '25%', minWidth: '200px', maxWidth: '400px' }}>
-              <div className="bg-black rounded-lg overflow-hidden shadow-2xl border border-gray-700">
-                <div className="relative aspect-video">
-                  {broadcastStream ? (
-                    <video
-                      ref={broadcastVideoRef}
-                      autoPlay
-                      playsInline
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-900">
-                      <div className="text-center">
-                        <svg className="w-8 h-8 text-gray-600 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
-                        <p className="text-gray-500 text-xs">Live Stream Preview</p>
-                      </div>
-                    </div>
-                  )}
-                  <div className="absolute top-2 left-2 bg-red-600 px-2 py-0.5 rounded text-xs text-white font-medium flex items-center gap-1">
-                    <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></div>
-                    LIVE
-                  </div>
-                </div>
-                {/* Volume Slider */}
-                <div className="bg-gray-800 px-3 py-2 flex items-center gap-2">
-                  <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                  </svg>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={streamVolume}
-                    onChange={(e) => setStreamVolume(parseFloat(e.target.value))}
-                    className="flex-1 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                  />
-                  <span className="text-xs text-gray-400 w-8">{Math.round(streamVolume * 100)}%</span>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Main Video Area */}
           <div className="flex-1 flex flex-col items-center justify-center p-6">
             <div className="w-full max-w-3xl">
@@ -575,8 +622,53 @@ export function GuestJoin() {
             </div>
           </div>
 
-          {/* Right Sidebar - Participants & Chat */}
+          {/* Right Sidebar - Stream Preview, Participants & Chat */}
           <div className="w-full lg:w-80 bg-gray-800 border-l border-gray-700 flex flex-col">
+            {/* Live Stream Preview - Fixed at top of sidebar */}
+            <div className="flex-shrink-0 border-b border-gray-700">
+              <div className="bg-black">
+                <div className="relative aspect-video">
+                  {broadcastStream ? (
+                    <video
+                      ref={broadcastVideoRef}
+                      autoPlay
+                      playsInline
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gray-900">
+                      <div className="text-center">
+                        <svg className="w-8 h-8 text-gray-600 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <p className="text-gray-500 text-xs">Live Stream Preview</p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="absolute top-2 left-2 bg-red-600 px-2 py-0.5 rounded text-xs text-white font-medium flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></div>
+                    LIVE
+                  </div>
+                </div>
+                {/* Volume Slider */}
+                <div className="bg-gray-800 px-3 py-2 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                  </svg>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={streamVolume}
+                    onChange={(e) => setStreamVolume(parseFloat(e.target.value))}
+                    className="flex-1 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                  />
+                  <span className="text-xs text-gray-400 w-8">{Math.round(streamVolume * 100)}%</span>
+                </div>
+              </div>
+            </div>
+
             {/* Participants Section */}
             <div className="p-4 border-b border-gray-700">
               <h3 className="font-semibold text-white">Participants</h3>

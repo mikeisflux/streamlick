@@ -43,6 +43,7 @@ import {
   useTeleprompter,
   useAutoMuteDuringVideos,
   useStudioHandlers,
+  usePreviewStream,
 } from '../hooks/studio';
 import { useCanvasSettings } from '../hooks/studio/useCanvasSettings';
 import { socketService } from '../services/socket.service';
@@ -71,6 +72,9 @@ export function Studio() {
 
   // Auto-mute during video playback
   useAutoMuteDuringVideos(localStream, audioEnabled);
+
+  // Preview stream - send canvas output to guests in greenroom
+  usePreviewStream(broadcastId);
 
   // Feature toggles
   const {
