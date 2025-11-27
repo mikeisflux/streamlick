@@ -502,7 +502,7 @@ export function Studio() {
               audioEnabled={audioEnabled}
               isLocalUserOnStage={isLocalUserOnStage}
               backstageParticipants={Array.from(remoteParticipants.values()).filter((p) => p.role === 'backstage')}
-              greenroomParticipants={Array.from(remoteParticipants.values()).filter((p) => p.role === 'guest')}
+              greenroomParticipants={[]} // All waiting participants now use role='backstage', promoted to 'guest' when on stage
               screenShareStream={screenShareStream}
               onAddToStage={handleAddToStage}
               onRemoveFromStage={handleRemoveFromStage}

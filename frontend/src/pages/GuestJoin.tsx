@@ -443,14 +443,26 @@ export function GuestJoin() {
 
       console.log('[GuestStream] Starting active polling - will keep searching for host...');
 
-      // Send an offer immediately
+      // Send an offer immediately only if not connected
       if (!guestStreamConnectedRef.current) {
-        console.log('[GuestStream] Active poll: sending offer to host...');
-        guestStreamAnswerReceivedRef.current = false;
-        setupGuestStream();
+        // Also check if we have an active connection in progress
+        if (guestStreamPcRef.current) {
+          const state = guestStreamPcRef.current.connectionState;
+          if (state === 'connecting' || state === 'connected') {
+            console.log('[GuestStream] Active poll: connection already in progress or connected, skipping initial offer');
+          } else {
+            console.log('[GuestStream] Active poll: sending initial offer to host...');
+            guestStreamAnswerReceivedRef.current = false;
+            setupGuestStream();
+          }
+        } else {
+          console.log('[GuestStream] Active poll: sending initial offer to host...');
+          guestStreamAnswerReceivedRef.current = false;
+          setupGuestStream();
+        }
       }
 
-      // Set up continuous polling
+      // Set up continuous polling with longer interval since connection stability is key
       activePollingIntervalRef.current = setInterval(() => {
         if (guestStreamConnectedRef.current) {
           // Stop polling if connected
@@ -462,17 +474,23 @@ export function GuestJoin() {
           return;
         }
 
-        // Check if we got an answer but connection isn't established yet
-        if (guestStreamAnswerReceivedRef.current && guestStreamPcRef.current) {
+        // Check if we have an active connection
+        if (guestStreamPcRef.current) {
           const state = guestStreamPcRef.current.connectionState;
-          if (state === 'connecting' || state === 'new') {
-            console.log('[GuestStream] Active poll: connection in progress, waiting...');
-            return; // Don't resend while connecting
+          // Don't recreate if we're connecting or already connected
+          if (state === 'connecting' || state === 'connected') {
+            console.log('[GuestStream] Active poll: connection in progress/connected, skipping...');
+            return;
+          }
+          // Also check if we got an answer and are waiting for ICE to complete
+          if (guestStreamAnswerReceivedRef.current && state === 'new') {
+            console.log('[GuestStream] Active poll: answer received, waiting for ICE...');
+            return;
           }
         }
 
-        // Send another offer
-        console.log('[GuestStream] Active poll: sending offer to host...');
+        // Only send new offer if connection is failed/disconnected/closed or doesn't exist
+        console.log('[GuestStream] Active poll: connection not established, sending offer to host...');
         guestStreamAnswerReceivedRef.current = false;
         setupGuestStream();
       }, ACTIVE_POLLING_INTERVAL);
@@ -482,13 +500,18 @@ export function GuestJoin() {
     const handleResendStreamOffer = () => {
       console.log('[GuestStream] Host requested stream offer resend');
 
-      // If already connected, just resend
-      if (guestStreamConnectedRef.current) {
-        console.log('[GuestStream] Already connected, resending offer for host reconnect...');
-        setupGuestStream();
-        return;
+      // CRITICAL FIX: If already connected and stream is flowing, DO NOT recreate the connection
+      // This prevents flickering caused by constant reconnection
+      if (guestStreamConnectedRef.current && guestStreamPcRef.current) {
+        const state = guestStreamPcRef.current.connectionState;
+        if (state === 'connected') {
+          console.log('[GuestStream] Already connected with active stream, ignoring resend request to prevent flickering');
+          return;
+        }
       }
 
+      // Only proceed if not connected
+      console.log('[GuestStream] Not connected, proceeding with resend...');
       guestStreamAnswerReceivedRef.current = false;
       guestStreamRetryCountRef.current = 0;
 

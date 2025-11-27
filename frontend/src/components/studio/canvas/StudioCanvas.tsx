@@ -1276,7 +1276,10 @@ export function StudioCanvas({
     }
   }, [screenShareStream]);
 
-  // Manage video elements for remote participants
+  // Track which participants have audio added to mixer
+  const participantAudioAddedRef = useRef<Set<string>>(new Set());
+
+  // Manage video elements for remote participants AND add their audio to the mixer
   useEffect(() => {
     const currentParticipantIds = Array.from(remoteParticipants.keys());
     const existingVideoIds = Array.from(remoteVideoElementsRef.current.keys());
@@ -1294,6 +1297,21 @@ export function StudioCanvas({
       // Skip backstage and screen-share participants
       if (participant.role === 'backstage' || participantId === 'screen-share') return;
 
+      // Add participant audio to mixer if not already added (for on-stage participants)
+      if (!participantAudioAddedRef.current.has(participantId) && participant.audioEnabled) {
+        const audioTrack = participant.stream.getAudioTracks()[0];
+        if (audioTrack) {
+          console.log('[StudioCanvas] Adding participant audio to mixer:', participantId);
+          try {
+            const audioStream = new MediaStream([audioTrack]);
+            audioMixerService.addStream(`participant-${participantId}`, audioStream);
+            participantAudioAddedRef.current.add(participantId);
+          } catch (err) {
+            console.error('[StudioCanvas] Failed to add participant audio to mixer:', participantId, err);
+          }
+        }
+      }
+
       // Skip if video element already exists
       if (remoteVideoElementsRef.current.has(participantId)) {
         // Update srcObject if stream changed
@@ -1302,6 +1320,20 @@ export function StudioCanvas({
           console.log('[StudioCanvas] Updating stream for participant:', participantId);
           existingVideo.srcObject = participant.stream;
           existingVideo.play().catch(err => console.error('[StudioCanvas] Failed to play remote video:', participantId, err));
+
+          // Also update audio in mixer when stream changes
+          if (participant.audioEnabled) {
+            const audioTrack = participant.stream.getAudioTracks()[0];
+            if (audioTrack) {
+              console.log('[StudioCanvas] Updating participant audio in mixer:', participantId);
+              try {
+                const audioStream = new MediaStream([audioTrack]);
+                audioMixerService.addStream(`participant-${participantId}`, audioStream);
+              } catch (err) {
+                console.error('[StudioCanvas] Failed to update participant audio in mixer:', participantId, err);
+              }
+            }
+          }
         }
         return;
       }
@@ -1318,15 +1350,36 @@ export function StudioCanvas({
       remoteVideoElementsRef.current.set(participantId, video);
     });
 
-    // Remove video elements for participants that left
+    // Remove video elements and audio for participants that left or went backstage
     existingVideoIds.forEach((videoId) => {
-      if (!currentParticipantIds.includes(videoId)) {
+      const participant = remoteParticipants.get(videoId);
+      const shouldRemove = !currentParticipantIds.includes(videoId) ||
+                          (participant && participant.role === 'backstage');
+
+      if (shouldRemove) {
         console.log('[StudioCanvas] Removing video element for participant:', videoId);
         const video = remoteVideoElementsRef.current.get(videoId);
         if (video) {
           video.srcObject = null;
         }
         remoteVideoElementsRef.current.delete(videoId);
+
+        // Also remove audio from mixer
+        if (participantAudioAddedRef.current.has(videoId)) {
+          console.log('[StudioCanvas] Removing participant audio from mixer:', videoId);
+          audioMixerService.removeStream(`participant-${videoId}`);
+          participantAudioAddedRef.current.delete(videoId);
+        }
+      }
+    });
+
+    // Also check for participants that went backstage but weren't in existingVideoIds
+    participantAudioAddedRef.current.forEach((participantId) => {
+      const participant = remoteParticipants.get(participantId);
+      if (!participant || participant.role === 'backstage') {
+        console.log('[StudioCanvas] Removing backstage participant audio from mixer:', participantId);
+        audioMixerService.removeStream(`participant-${participantId}`);
+        participantAudioAddedRef.current.delete(participantId);
       }
     });
 
@@ -1336,6 +1389,12 @@ export function StudioCanvas({
         video.srcObject = null;
       });
       remoteVideoElementsRef.current.clear();
+
+      // Clean up audio from mixer
+      participantAudioAddedRef.current.forEach((participantId) => {
+        audioMixerService.removeStream(`participant-${participantId}`);
+      });
+      participantAudioAddedRef.current.clear();
     };
   }, [remoteParticipants]);
 

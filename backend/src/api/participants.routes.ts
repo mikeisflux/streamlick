@@ -31,7 +31,8 @@ router.post('/invite', authenticate, async (req: AuthRequest, res) => {
       data: {
         broadcastId,
         name,
-        role: role || 'guest',
+        // Default to 'backstage' so guests start waiting, then promoted to 'guest' when added to stage
+        role: role || 'backstage',
         status: 'invited',
         joinLinkToken,
         joinLinkExpiry,

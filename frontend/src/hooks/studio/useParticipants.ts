@@ -24,9 +24,14 @@ interface UseParticipantsProps {
   showChatOnStream: boolean;
 }
 
-// Combined polling interval in milliseconds (3 seconds)
+// Combined polling interval in milliseconds (5 seconds)
 // This polls for participants AND requests streams in one operation
-const POLL_INTERVAL = 3000;
+// IMPORTANT: Increased from 3s to 5s to reduce connection churn and flickering
+const POLL_INTERVAL = 5000;
+
+// Track last stream request time to debounce requests
+let lastStreamRequestTime = 0;
+const STREAM_REQUEST_DEBOUNCE = 10000; // Only request streams every 10 seconds max
 
 export function useParticipants({ broadcastId, showChatOnStream }: UseParticipantsProps) {
   const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map());
@@ -105,11 +110,15 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
           return updated;
         });
 
-        // COMBINED POLL: Always request streams if any participant is missing one
-        // This runs every poll cycle (3 seconds) - more aggressive than before
-        if (shouldRequestStreams) {
+        // COMBINED POLL: Request streams if any participant is missing one
+        // But debounce to prevent constant reconnection causing flickering
+        const now = Date.now();
+        if (shouldRequestStreams && (now - lastStreamRequestTime) > STREAM_REQUEST_DEBOUNCE) {
           console.log('[useParticipants] Poll: requesting streams for participants without video:', participantsWithoutStreams);
           socketService.emit('request-guest-streams');
+          lastStreamRequestTime = now;
+        } else if (shouldRequestStreams) {
+          console.log('[useParticipants] Poll: skipping stream request (debounce), participants without video:', participantsWithoutStreams);
         }
       } catch (error) {
         // Don't log 401/403 errors as they're expected when not authenticated
@@ -184,7 +193,9 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
       });
     };
 
-    // Handle greenroom participant joined - update role to 'guest' for greenroom display
+    // Handle greenroom participant joined - set role to 'backstage' until promoted to live
+    // IMPORTANT: Greenroom participants start as 'backstage' and become 'guest' when promoted
+    // This allows the "Add to Stage" button to actually do something (promote backstage -> guest)
     const handleGreenroomParticipantJoined = ({ participantId, name }: any) => {
       // Only show toast if we haven't seen this participant yet (from polling)
       if (!knownParticipantIdsRef.current.has(participantId)) {
@@ -197,19 +208,22 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
         const updated = new Map(prev);
         const existing = updated.get(participantId);
         if (existing) {
-          // Update existing participant's role to guest (greenroom)
-          existing.role = 'guest';
+          // Keep existing role if already promoted to 'guest' (on stage)
+          // Only update to 'backstage' if they don't have a role yet or are still backstage
+          if (existing.role !== 'guest') {
+            existing.role = 'backstage';
+          }
           existing.name = name || existing.name;
           updated.set(participantId, existing);
         } else {
-          // Add new participant with guest role
+          // Add new participant with backstage role (greenroom = backstage until promoted)
           updated.set(participantId, {
             id: participantId,
             name: name || `Guest ${updated.size + 1}`,
             stream: null,
             audioEnabled: true,
             videoEnabled: true,
-            role: 'guest', // Greenroom participants have role 'guest'
+            role: 'backstage', // Greenroom participants start as backstage, promoted to 'guest' to go on stage
           });
         }
         return updated;
