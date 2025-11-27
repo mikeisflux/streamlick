@@ -24,10 +24,9 @@ interface UseParticipantsProps {
   showChatOnStream: boolean;
 }
 
-// Polling interval in milliseconds (3 seconds)
+// Combined polling interval in milliseconds (3 seconds)
+// This polls for participants AND requests streams in one operation
 const POLL_INTERVAL = 3000;
-// Stream request interval - how often to request streams from participants without video
-const STREAM_REQUEST_INTERVAL = 5000;
 
 export function useParticipants({ broadcastId, showChatOnStream }: UseParticipantsProps) {
   const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map());
@@ -44,11 +43,13 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
 
   // Track known participant IDs to detect new joins
   const knownParticipantIdsRef = useRef<Set<string>>(new Set());
-  // Track last time we requested guest streams
-  const lastStreamRequestRef = useRef<number>(0);
 
   // HTTP polling for greenroom participants - this is the PRIMARY mechanism
   // Socket events are supplementary for real-time updates
+  // IMPORTANT: This polling NEVER stops - it continuously:
+  //   1. Polls for new participants every 3 seconds
+  //   2. Requests streams from ANY participant without video
+  //   This ensures we always pick up new guests and retry failed connections
   useEffect(() => {
     if (!broadcastId) return;
 
@@ -77,6 +78,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
         // Update state - merge with existing to preserve streams
         // Track if we need to request streams (outside the setter)
         let shouldRequestStreams = false;
+        let participantsWithoutStreams: string[] = [];
 
         setRemoteParticipants((prev) => {
           const updated = new Map<string, RemoteParticipant>();
@@ -88,6 +90,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
             // Check if this participant needs a stream
             if (!hasStream && p.videoEnabled) {
               shouldRequestStreams = true;
+              participantsWithoutStreams.push(p.name || p.id);
             }
             updated.set(p.id, {
               id: p.id,
@@ -102,11 +105,10 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
           return updated;
         });
 
-        // If any participant is missing a stream and enough time has passed, request streams
-        const now = Date.now();
-        if (shouldRequestStreams && (now - lastStreamRequestRef.current) >= STREAM_REQUEST_INTERVAL) {
-          console.log('[useParticipants] Detected participants without streams, requesting guest streams...');
-          lastStreamRequestRef.current = now;
+        // COMBINED POLL: Always request streams if any participant is missing one
+        // This runs every poll cycle (3 seconds) - more aggressive than before
+        if (shouldRequestStreams) {
+          console.log('[useParticipants] Poll: requesting streams for participants without video:', participantsWithoutStreams);
           socketService.emit('request-guest-streams');
         }
       } catch (error) {

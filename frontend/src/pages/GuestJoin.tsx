@@ -280,12 +280,15 @@ export function GuestJoin() {
   const guestStreamPcRef = useRef<RTCPeerConnection | null>(null);
   const hostStreamSocketIdRef = useRef<string | null>(null);
 
-  // Retry logic for guest stream offers
+  // Active polling for guest stream offers - NEVER give up until connected
   const guestStreamAnswerReceivedRef = useRef(false);
   const guestStreamRetryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const guestStreamRetryCountRef = useRef(0);
-  const GUEST_STREAM_MAX_RETRIES = 10; // More retries since host might refresh
-  const GUEST_STREAM_RETRY_DELAY = 3000; // 3 seconds
+  const guestStreamConnectedRef = useRef(false); // True when WebRTC is fully connected
+  const activePollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const GUEST_STREAM_MAX_RETRIES = 10; // Initial retry burst
+  const GUEST_STREAM_RETRY_DELAY = 3000; // 3 seconds for initial burst
+  const ACTIVE_POLLING_INTERVAL = 5000; // 5 seconds for continuous polling after initial burst
 
   useEffect(() => {
     if (!hasJoined || !broadcastInfo?.id || !localStream) return;
@@ -293,10 +296,11 @@ export function GuestJoin() {
     console.log('[GuestStream] Setting up P2P stream to host');
     guestStreamAnswerReceivedRef.current = false;
     guestStreamRetryCountRef.current = 0;
+    guestStreamConnectedRef.current = false;
 
     // Handle answer from host
     const handleGuestStreamAnswer = async ({ answer, hostSocketId }: { answer: RTCSessionDescriptionInit; hostSocketId: string }) => {
-      console.log('[GuestStream] Received answer from host');
+      console.log('[GuestStream] Received answer from host - connection in progress');
       guestStreamAnswerReceivedRef.current = true;
       hostStreamSocketIdRef.current = hostSocketId;
 
@@ -306,6 +310,9 @@ export function GuestJoin() {
         guestStreamRetryTimeoutRef.current = null;
       }
 
+      // Note: Don't stop active polling here - wait for connectionState to be 'connected'
+      // The active polling will check connectionState and stop itself when connected
+
       if (!guestStreamPcRef.current) {
         console.warn('[GuestStream] No peer connection for answer');
         return;
@@ -313,9 +320,11 @@ export function GuestJoin() {
 
       try {
         await guestStreamPcRef.current.setRemoteDescription(new RTCSessionDescription(answer));
-        console.log('[GuestStream] Remote description set successfully');
+        console.log('[GuestStream] Remote description set successfully, waiting for WebRTC connection...');
       } catch (error) {
         console.error('[GuestStream] Error setting remote description:', error);
+        // Reset flag so active polling will retry
+        guestStreamAnswerReceivedRef.current = false;
       }
     };
 
@@ -362,14 +371,30 @@ export function GuestJoin() {
       pc.onconnectionstatechange = () => {
         console.log('[GuestStream] Connection state:', pc.connectionState);
 
-        // If connection failed or disconnected, try to reconnect
+        // Track when fully connected - stop polling
+        if (pc.connectionState === 'connected') {
+          console.log('[GuestStream] WebRTC connected! Stopping active polling.');
+          guestStreamConnectedRef.current = true;
+          // Stop active polling since we're connected
+          if (activePollingIntervalRef.current) {
+            clearInterval(activePollingIntervalRef.current);
+            activePollingIntervalRef.current = null;
+          }
+          if (guestStreamRetryTimeoutRef.current) {
+            clearTimeout(guestStreamRetryTimeoutRef.current);
+            guestStreamRetryTimeoutRef.current = null;
+          }
+        }
+
+        // If connection failed or disconnected, restart active polling
         if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-          console.log('[GuestStream] Connection lost, will retry...');
+          console.log('[GuestStream] Connection lost, restarting active polling...');
           guestStreamAnswerReceivedRef.current = false;
+          guestStreamConnectedRef.current = false;
           guestStreamRetryCountRef.current = 0;
           // Start retry after a short delay
           guestStreamRetryTimeoutRef.current = setTimeout(() => {
-            sendOfferWithRetry();
+            startActivePolling();
           }, 2000);
         }
       };
@@ -388,36 +413,98 @@ export function GuestJoin() {
       }
     };
 
-    // Function to send offer with retry logic
+    // Function to send offer with retry logic (initial burst)
     const sendOfferWithRetry = () => {
       if (!hasJoined || !broadcastInfo?.id || !localStream) return;
+      if (guestStreamConnectedRef.current) return; // Already connected
 
       console.log(`[GuestStream] Sending offer (attempt ${guestStreamRetryCountRef.current + 1}/${GUEST_STREAM_MAX_RETRIES + 1})...`);
       setupGuestStream();
 
       // Set up retry if no answer received
       guestStreamRetryTimeoutRef.current = setTimeout(() => {
+        if (guestStreamConnectedRef.current) return; // Connected during timeout
+
         if (!guestStreamAnswerReceivedRef.current && guestStreamRetryCountRef.current < GUEST_STREAM_MAX_RETRIES) {
           guestStreamRetryCountRef.current++;
           console.log('[GuestStream] No answer received, retrying...');
           sendOfferWithRetry();
         } else if (!guestStreamAnswerReceivedRef.current) {
-          console.warn('[GuestStream] Max retries reached, host may not be available');
+          console.log('[GuestStream] Initial burst complete, switching to active polling mode...');
+          startActivePolling();
         }
       }, GUEST_STREAM_RETRY_DELAY);
+    };
+
+    // Active polling - continuously search for host until connected (NEVER give up)
+    const startActivePolling = () => {
+      if (guestStreamConnectedRef.current) return; // Already connected
+      if (activePollingIntervalRef.current) return; // Already polling
+
+      console.log('[GuestStream] Starting active polling - will keep searching for host...');
+
+      // Send an offer immediately
+      if (!guestStreamConnectedRef.current) {
+        console.log('[GuestStream] Active poll: sending offer to host...');
+        guestStreamAnswerReceivedRef.current = false;
+        setupGuestStream();
+      }
+
+      // Set up continuous polling
+      activePollingIntervalRef.current = setInterval(() => {
+        if (guestStreamConnectedRef.current) {
+          // Stop polling if connected
+          console.log('[GuestStream] Active poll: connected! Stopping polling.');
+          if (activePollingIntervalRef.current) {
+            clearInterval(activePollingIntervalRef.current);
+            activePollingIntervalRef.current = null;
+          }
+          return;
+        }
+
+        // Check if we got an answer but connection isn't established yet
+        if (guestStreamAnswerReceivedRef.current && guestStreamPcRef.current) {
+          const state = guestStreamPcRef.current.connectionState;
+          if (state === 'connecting' || state === 'new') {
+            console.log('[GuestStream] Active poll: connection in progress, waiting...');
+            return; // Don't resend while connecting
+          }
+        }
+
+        // Send another offer
+        console.log('[GuestStream] Active poll: sending offer to host...');
+        guestStreamAnswerReceivedRef.current = false;
+        setupGuestStream();
+      }, ACTIVE_POLLING_INTERVAL);
     };
 
     // Handle request from host to resend stream offer (when host reconnects)
     const handleResendStreamOffer = () => {
       console.log('[GuestStream] Host requested stream offer resend');
+
+      // If already connected, just resend
+      if (guestStreamConnectedRef.current) {
+        console.log('[GuestStream] Already connected, resending offer for host reconnect...');
+        setupGuestStream();
+        return;
+      }
+
       guestStreamAnswerReceivedRef.current = false;
       guestStreamRetryCountRef.current = 0;
+
       // Clear any existing retry timeout
       if (guestStreamRetryTimeoutRef.current) {
         clearTimeout(guestStreamRetryTimeoutRef.current);
         guestStreamRetryTimeoutRef.current = null;
       }
-      // Send offer immediately
+
+      // Stop active polling if running (will restart fresh)
+      if (activePollingIntervalRef.current) {
+        clearInterval(activePollingIntervalRef.current);
+        activePollingIntervalRef.current = null;
+      }
+
+      // Send offer immediately with fresh retry cycle
       sendOfferWithRetry();
 
       // Also re-emit join-greenroom to ensure host gets the notification
@@ -442,6 +529,14 @@ export function GuestJoin() {
         clearTimeout(guestStreamRetryTimeoutRef.current);
         guestStreamRetryTimeoutRef.current = null;
       }
+      // Clear active polling interval
+      if (activePollingIntervalRef.current) {
+        clearInterval(activePollingIntervalRef.current);
+        activePollingIntervalRef.current = null;
+      }
+      // Reset connected state
+      guestStreamConnectedRef.current = false;
+
       socketService.off('guest-stream-answer', handleGuestStreamAnswer);
       socketService.off('guest-stream-ice-candidate', handleGuestStreamIceCandidate);
       socketService.off('resend-stream-offer', handleResendStreamOffer);
