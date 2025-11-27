@@ -13,6 +13,8 @@ class SocketService {
   private readonly maxReconnectDelay = 30000; // 30 seconds
   // CRITICAL FIX: Track event listeners for cleanup
   private eventListeners = new Map<string, Set<(...args: any[]) => void>>();
+  // CRITICAL FIX: Queue listeners registered before socket connects
+  private pendingListeners = new Map<string, Set<(...args: any[]) => void>>();
 
   connect(token?: string): void {
     if (this.socket?.connected) return;
@@ -39,6 +41,20 @@ class SocketService {
     this.socket.on('connect', () => {
       this.reconnectAttempts = 0; // Reset on successful connection
     });
+
+    // CRITICAL FIX: Register any pending listeners that were queued before socket was created
+    this.pendingListeners.forEach((listeners, event) => {
+      listeners.forEach(callback => {
+        console.log(`[SocketService] Registering pending listener for event: ${event}`);
+        this.socket?.on(event, callback);
+        // Track in eventListeners for cleanup
+        if (!this.eventListeners.has(event)) {
+          this.eventListeners.set(event, new Set());
+        }
+        this.eventListeners.get(event)!.add(callback);
+      });
+    });
+    this.pendingListeners.clear();
 
     this.socket.on('disconnect', (reason: string) => {
     });
@@ -76,7 +92,13 @@ class SocketService {
 
   // CRITICAL FIX: New method to remove all custom event listeners
   removeAllListeners(): void {
-    if (!this.socket) return;
+    // Clear pending listeners queue
+    this.pendingListeners.clear();
+
+    if (!this.socket) {
+      this.eventListeners.clear();
+      return;
+    }
 
     // Remove all tracked custom listeners
     this.eventListeners.forEach((listeners, event) => {
@@ -99,7 +121,15 @@ class SocketService {
   }
 
   on<T = unknown>(event: string, callback: (data: T) => void): void {
-    if (!this.socket) return;
+    // CRITICAL FIX: Queue listeners if socket not yet created
+    if (!this.socket) {
+      console.log(`[SocketService] Queuing listener for event: ${event} (socket not yet created)`);
+      if (!this.pendingListeners.has(event)) {
+        this.pendingListeners.set(event, new Set());
+      }
+      this.pendingListeners.get(event)!.add(callback as (...args: any[]) => void);
+      return;
+    }
 
     // CRITICAL FIX: Track listeners for cleanup
     if (!this.eventListeners.has(event)) {
@@ -111,19 +141,29 @@ class SocketService {
   }
 
   off<T = unknown>(event: string, callback?: (data: T) => void): void {
-    if (!this.socket) return;
-
-    // CRITICAL FIX: Remove from tracking
+    // CRITICAL FIX: Also remove from pending listeners queue
     if (callback) {
+      this.pendingListeners.get(event)?.delete(callback as (...args: any[]) => void);
+      if (this.pendingListeners.get(event)?.size === 0) {
+        this.pendingListeners.delete(event);
+      }
       this.eventListeners.get(event)?.delete(callback);
       if (this.eventListeners.get(event)?.size === 0) {
         this.eventListeners.delete(event);
       }
-      this.socket.off(event, callback);
     } else {
       // Remove all listeners for this event
+      this.pendingListeners.delete(event);
       this.eventListeners.delete(event);
-      this.socket.off(event);
+    }
+
+    // Only call socket.off if socket exists
+    if (this.socket) {
+      if (callback) {
+        this.socket.off(event, callback);
+      } else {
+        this.socket.off(event);
+      }
     }
   }
 
