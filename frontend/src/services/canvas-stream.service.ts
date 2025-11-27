@@ -4,8 +4,11 @@
  * both displays on screen AND provides output stream for media server
  */
 
+type StreamReadyCallback = (stream: MediaStream) => void;
+
 class CanvasStreamService {
   private outputStream: MediaStream | null = null;
+  private streamReadyCallbacks: Set<StreamReadyCallback> = new Set();
 
   /**
    * Set the canvas output stream
@@ -20,6 +23,16 @@ class CanvasStreamService {
         videoTracks: stream.getVideoTracks().length,
         audioTracks: stream.getAudioTracks().length,
       });
+
+      // Notify all waiting callbacks that stream is ready
+      this.streamReadyCallbacks.forEach(callback => {
+        try {
+          callback(stream);
+        } catch (error) {
+          console.error('[CanvasStreamService] Error in stream ready callback:', error);
+        }
+      });
+      this.streamReadyCallbacks.clear();
     } else {
       console.log('[CanvasStreamService] Output stream cleared');
     }
@@ -36,6 +49,35 @@ class CanvasStreamService {
     }
 
     return this.outputStream;
+  }
+
+  /**
+   * Check if stream is available
+   */
+  isStreamReady(): boolean {
+    return this.outputStream !== null;
+  }
+
+  /**
+   * Subscribe to be notified when stream becomes ready
+   * If stream is already ready, callback is invoked immediately
+   * Returns unsubscribe function
+   */
+  onStreamReady(callback: StreamReadyCallback): () => void {
+    // If stream is already available, call immediately
+    if (this.outputStream) {
+      callback(this.outputStream);
+      return () => {}; // No-op unsubscribe since callback already fired
+    }
+
+    // Otherwise, queue the callback
+    this.streamReadyCallbacks.add(callback);
+    console.log('[CanvasStreamService] Queued stream ready callback, waiting for canvas...');
+
+    // Return unsubscribe function
+    return () => {
+      this.streamReadyCallbacks.delete(callback);
+    };
   }
 
   /**

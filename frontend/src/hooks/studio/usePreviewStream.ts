@@ -3,6 +3,10 @@
  *
  * This hook handles WebRTC peer connections to send the composed canvas
  * output to guests in the greenroom so they can see the live broadcast.
+ *
+ * KEY BEHAVIOR: Even before "Go Live", when a guest joins the greenroom,
+ * we start P2P streaming the canvas preview to them. This allows guests
+ * to see what the stream will look like before going live.
  */
 import { useEffect, useRef, useCallback } from 'react';
 import { socketService } from '../../services/socket.service';
@@ -18,18 +22,26 @@ interface PeerConnection {
   guestSocketId: string;
 }
 
+interface PendingRequest {
+  guestId: string;
+  guestSocketId: string;
+}
+
 export function usePreviewStream(broadcastId: string | undefined) {
   // Map of guest socket IDs to their peer connections
   const peerConnectionsRef = useRef<Map<string, PeerConnection>>(new Map());
+  // Queue of pending preview requests waiting for canvas stream
+  const pendingRequestsRef = useRef<PendingRequest[]>([]);
+  // Track unsubscribe function for canvas stream ready callback
+  const unsubscribeRef = useRef<(() => void) | null>(null);
 
-  // Handle guest requesting preview stream
-  const handlePreviewStreamRequested = useCallback(async ({ guestId, guestSocketId }: { guestId: string; guestSocketId: string }) => {
-    console.log('[PreviewStream] Guest requested preview:', guestId, guestSocketId);
+  // Create peer connection and send offer to guest
+  const createPeerConnectionForGuest = useCallback(async (guestId: string, guestSocketId: string, canvasStream: MediaStream) => {
+    console.log('[PreviewStream] Creating peer connection for guest:', guestId, guestSocketId);
 
-    // Get the canvas output stream
-    const canvasStream = canvasStreamService.getOutputStream();
-    if (!canvasStream) {
-      console.warn('[PreviewStream] No canvas stream available');
+    // Check if we already have a connection for this guest
+    if (peerConnectionsRef.current.has(guestSocketId)) {
+      console.log('[PreviewStream] Already have connection for guest, skipping:', guestSocketId);
       return;
     }
 
@@ -40,6 +52,9 @@ export function usePreviewStream(broadcastId: string | undefined) {
     const videoTrack = canvasStream.getVideoTracks()[0];
     if (videoTrack) {
       pc.addTrack(videoTrack, canvasStream);
+      console.log('[PreviewStream] Added video track to peer connection');
+    } else {
+      console.warn('[PreviewStream] No video track in canvas stream');
     }
 
     // Handle ICE candidates
@@ -74,12 +89,45 @@ export function usePreviewStream(broadcastId: string | undefined) {
         guestSocketId,
         offer: pc.localDescription?.toJSON(),
       });
+      console.log('[PreviewStream] Sent offer to guest:', guestSocketId);
     } catch (error) {
       console.error('[PreviewStream] Error creating offer:', error);
       peerConnectionsRef.current.delete(guestSocketId);
       pc.close();
     }
   }, []);
+
+  // Handle guest requesting preview stream
+  const handlePreviewStreamRequested = useCallback(async ({ guestId, guestSocketId }: { guestId: string; guestSocketId: string }) => {
+    console.log('[PreviewStream] Guest requested preview:', guestId, guestSocketId);
+
+    // Get the canvas output stream
+    const canvasStream = canvasStreamService.getOutputStream();
+
+    if (canvasStream) {
+      // Canvas stream is ready, create peer connection immediately
+      await createPeerConnectionForGuest(guestId, guestSocketId, canvasStream);
+    } else {
+      // Canvas stream not ready yet - queue the request
+      console.log('[PreviewStream] Canvas stream not ready, queuing request for guest:', guestSocketId);
+      pendingRequestsRef.current.push({ guestId, guestSocketId });
+
+      // Subscribe to be notified when canvas becomes ready (if not already subscribed)
+      if (!unsubscribeRef.current) {
+        unsubscribeRef.current = canvasStreamService.onStreamReady(async (stream) => {
+          console.log('[PreviewStream] Canvas stream now ready, processing', pendingRequestsRef.current.length, 'pending requests');
+
+          // Process all pending requests
+          const pending = [...pendingRequestsRef.current];
+          pendingRequestsRef.current = [];
+
+          for (const request of pending) {
+            await createPeerConnectionForGuest(request.guestId, request.guestSocketId, stream);
+          }
+        });
+      }
+    }
+  }, [createPeerConnectionForGuest]);
 
   // Handle answer from guest
   const handlePreviewAnswer = useCallback(async ({ answer, guestSocketId }: { answer: RTCSessionDescriptionInit; guestSocketId: string }) => {
@@ -125,6 +173,15 @@ export function usePreviewStream(broadcastId: string | undefined) {
       socketService.off('preview-stream-requested', handlePreviewStreamRequested);
       socketService.off('preview-answer', handlePreviewAnswer);
       socketService.off('preview-ice-candidate', handlePreviewIceCandidate);
+
+      // Clean up canvas stream ready subscription
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
+
+      // Clear pending requests
+      pendingRequestsRef.current = [];
 
       // Close all peer connections
       peerConnectionsRef.current.forEach(({ pc }) => {
