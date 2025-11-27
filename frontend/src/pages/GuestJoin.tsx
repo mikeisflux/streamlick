@@ -656,6 +656,7 @@ export function GuestJoin() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                   </svg>
                   <input
+                    id="stream-volume"
                     type="range"
                     min="0"
                     max="1"
@@ -663,6 +664,7 @@ export function GuestJoin() {
                     value={streamVolume}
                     onChange={(e) => setStreamVolume(parseFloat(e.target.value))}
                     className="flex-1 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                    aria-label="Stream volume"
                   />
                   <span className="text-xs text-gray-400 w-8">{Math.round(streamVolume * 100)}%</span>
                 </div>
@@ -766,12 +768,14 @@ export function GuestJoin() {
                 <div className="p-4 border-t border-gray-700">
                   <div className="flex gap-2">
                     <input
+                      id="chat-message"
                       type="text"
                       value={chatMessage}
                       onChange={(e) => setChatMessage(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && handleSendPrivateChat()}
                       placeholder="Type a message..."
                       className="flex-1 px-3 py-2 bg-gray-700 text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      aria-label="Chat message"
                     />
                     <button
                       onClick={handleSendPrivateChat}
@@ -888,10 +892,11 @@ export function GuestJoin() {
 
             {/* Camera Selector */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="camera-select" className="block text-sm font-medium text-gray-700 mb-2">
                 Camera
               </label>
               <select
+                id="camera-select"
                 value={selectedVideoDevice}
                 onChange={(e) => setSelectedVideoDevice(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
@@ -906,10 +911,11 @@ export function GuestJoin() {
 
             {/* Microphone Selector */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="microphone-select" className="block text-sm font-medium text-gray-700 mb-2">
                 Microphone
               </label>
               <select
+                id="microphone-select"
                 value={selectedAudioDevice}
                 onChange={(e) => setSelectedAudioDevice(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"

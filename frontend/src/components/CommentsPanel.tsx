@@ -310,6 +310,7 @@ export function CommentsPanel({ broadcastId, onCommentClick }: CommentsPanelProp
         </div>
         <div className="flex gap-2">
           <input
+            id="comments-message"
             type="text"
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
@@ -321,6 +322,7 @@ export function CommentsPanel({ broadcastId, onCommentClick }: CommentsPanelProp
             placeholder="Type your message..."
             className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             disabled={isPosting}
+            aria-label="Comment message"
           />
           <button
             onClick={handlePostComment}

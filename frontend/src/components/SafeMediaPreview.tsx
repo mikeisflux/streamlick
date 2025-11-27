@@ -132,6 +132,7 @@ export function SafeMediaPreview({
         style={style}
         muted={muted}
         autoPlay={autoPlay}
+        playsInline
         controls={controls}
         preload={preload}
         onError={handleError}

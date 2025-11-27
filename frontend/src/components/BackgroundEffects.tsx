@@ -198,12 +198,14 @@ export function BackgroundEffects({ currentEffect, onEffectChange }: BackgroundE
             Blur Amount: {blurAmount}px
           </label>
           <input
+            id="blur-amount"
             type="range"
             min="0"
             max="20"
             value={blurAmount}
             onChange={(e) => handleBlurChange(parseInt(e.target.value))}
             className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+            aria-label="Background blur amount"
           />
         </div>
       )}
@@ -212,11 +214,12 @@ export function BackgroundEffects({ currentEffect, onEffectChange }: BackgroundE
       {effectType === 'greenscreen' && (
         <div className="space-y-3">
           <div>
-            <label className="text-xs text-gray-400 block mb-1">
+            <label htmlFor="chroma-color" className="text-xs text-gray-400 block mb-1">
               Chroma Key Color
             </label>
             <div className="flex gap-2">
               <input
+                id="chroma-color"
                 type="color"
                 value={chromaColor}
                 onChange={(e) => {
@@ -224,8 +227,10 @@ export function BackgroundEffects({ currentEffect, onEffectChange }: BackgroundE
                   handleChromaSettingChange();
                 }}
                 className="w-12 h-8 rounded cursor-pointer"
+                aria-label="Chroma key color picker"
               />
               <input
+                id="chroma-color-text"
                 type="text"
                 value={chromaColor}
                 onChange={(e) => {
@@ -234,15 +239,17 @@ export function BackgroundEffects({ currentEffect, onEffectChange }: BackgroundE
                 }}
                 className="flex-1 px-2 py-1 bg-gray-700 text-white text-xs rounded border border-gray-600"
                 placeholder="#00ff00"
+                aria-label="Chroma key color hex value"
               />
             </div>
           </div>
 
           <div>
-            <label className="text-xs text-gray-400 block mb-1">
+            <label htmlFor="chroma-similarity" className="text-xs text-gray-400 block mb-1">
               Similarity: {Math.round(chromaSimilarity * 100)}%
             </label>
             <input
+              id="chroma-similarity"
               type="range"
               min="0"
               max="100"
@@ -252,14 +259,16 @@ export function BackgroundEffects({ currentEffect, onEffectChange }: BackgroundE
                 handleChromaSettingChange();
               }}
               className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+              aria-label="Chroma key similarity"
             />
           </div>
 
           <div>
-            <label className="text-xs text-gray-400 block mb-1">
+            <label htmlFor="chroma-smoothness" className="text-xs text-gray-400 block mb-1">
               Smoothness: {Math.round(chromaSmoothness * 100)}%
             </label>
             <input
+              id="chroma-smoothness"
               type="range"
               min="0"
               max="100"
@@ -269,6 +278,7 @@ export function BackgroundEffects({ currentEffect, onEffectChange }: BackgroundE
                 handleChromaSettingChange();
               }}
               className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+              aria-label="Chroma key smoothness"
             />
           </div>
         </div>
