@@ -201,6 +201,54 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Reset user password
+router.post('/users/:id/reset-password', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Generate a random password if not provided
+    const newPassword = password || generateRandomPassword();
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update user password
+    await prisma.user.update({
+      where: { id },
+      data: { password: hashedPassword },
+    });
+
+    res.json({
+      message: 'Password reset successfully',
+      password: newPassword // Return plaintext password for admin to share with user
+    });
+  } catch (error) {
+    logger.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// Helper function to generate random password
+function generateRandomPassword(): string {
+  const length = 12;
+  const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+  let password = '';
+  for (let i = 0; i < length; i++) {
+    password += charset.charAt(Math.floor(Math.random() * charset.length));
+  }
+  return password;
+}
+
 /**
  * BROADCAST MANAGEMENT ROUTES
  */

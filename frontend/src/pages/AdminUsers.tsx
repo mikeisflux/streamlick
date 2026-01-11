@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
-import { Users, Search, UserPlus, Shield, Mail, Calendar, ArrowLeft } from 'lucide-react';
+import { Users, Search, UserPlus, Shield, Mail, Calendar, ArrowLeft, MoreVertical, Key, Eye, EyeOff, Copy, Check, UserCog, CreditCard, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface User {
@@ -25,6 +25,13 @@ export function AdminUsers() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [newUser, setNewUser] = useState({ email: '', name: '', password: '', planType: 'free' });
   const [editPlanType, setEditPlanType] = useState('free');
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [userPasswords, setUserPasswords] = useState<Record<string, string>>({});
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -46,6 +53,18 @@ export function AdminUsers() {
       );
     }
   }, [searchQuery, users]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchUsers = async () => {
     try {
@@ -120,6 +139,52 @@ export function AdminUsers() {
     } catch (error) {
       console.error('Error deleting user:', error);
       toast.error('Failed to delete user');
+    }
+  };
+
+  const resetPassword = async (user: User) => {
+    try {
+      const response = await api.post(`/admin/users/${user.id}/reset-password`);
+      const newPassword = response.data.password;
+
+      // Store the password for this user so they can view it later
+      setUserPasswords(prev => ({ ...prev, [user.id]: newPassword }));
+      setSelectedUser(user);
+      setCurrentPassword(newPassword);
+      setShowPassword(false);
+      setCopied(false);
+      setShowPasswordModal(true);
+      setOpenDropdown(null);
+
+      toast.success('Password reset successfully');
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      toast.error('Failed to reset password');
+    }
+  };
+
+  const viewPassword = (user: User) => {
+    const storedPassword = userPasswords[user.id];
+    if (storedPassword) {
+      setSelectedUser(user);
+      setCurrentPassword(storedPassword);
+      setShowPassword(false);
+      setCopied(false);
+      setShowPasswordModal(true);
+    } else {
+      toast.error('No password available. Reset the password first to view it.');
+    }
+    setOpenDropdown(null);
+  };
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(currentPassword);
+      setCopied(true);
+      toast.success('Password copied to clipboard');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      toast.error('Failed to copy password');
     }
   };
 
@@ -304,33 +369,73 @@ export function AdminUsers() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="relative" ref={openDropdown === user.id ? dropdownRef : null}>
                           <button
-                            onClick={() => toggleAdminStatus(user.id, user.isAdmin)}
-                            className={`px-3 py-1 rounded text-xs ${
-                              user.isAdmin
-                                ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'
-                                : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
-                            } transition-colors`}
+                            onClick={() => setOpenDropdown(openDropdown === user.id ? null : user.id)}
+                            className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
                           >
-                            {user.isAdmin ? 'Remove Admin' : 'Make Admin'}
+                            <MoreVertical className="w-5 h-5 text-gray-400" />
                           </button>
-                          <button
-                            onClick={() => {
-                              setSelectedUser(user);
-                              setEditPlanType(user.planType);
-                              setShowEditPlanModal(true);
-                            }}
-                            className="px-3 py-1 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded text-xs transition-colors"
-                          >
-                            Edit Plan
-                          </button>
-                          <button
-                            onClick={() => deleteUser(user.id)}
-                            className="px-3 py-1 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded text-xs transition-colors"
-                          >
-                            Delete
-                          </button>
+
+                          {openDropdown === user.id && (
+                            <div className="absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-10">
+                              <div className="py-1">
+                                <button
+                                  onClick={() => {
+                                    setOpenDropdown(null);
+                                    toggleAdminStatus(user.id, user.isAdmin);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors"
+                                >
+                                  <UserCog className="w-4 h-4" />
+                                  {user.isAdmin ? 'Remove Admin' : 'Make Admin'}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setSelectedUser(user);
+                                    setEditPlanType(user.planType);
+                                    setShowEditPlanModal(true);
+                                    setOpenDropdown(null);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors"
+                                >
+                                  <CreditCard className="w-4 h-4" />
+                                  Edit Plan
+                                </button>
+                                <div className="border-t border-gray-700 my-1"></div>
+                                <button
+                                  onClick={() => resetPassword(user)}
+                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors"
+                                >
+                                  <Key className="w-4 h-4" />
+                                  Reset Password
+                                </button>
+                                <button
+                                  onClick={() => viewPassword(user)}
+                                  className={`w-full flex items-center gap-2 px-4 py-2 text-sm transition-colors ${
+                                    userPasswords[user.id]
+                                      ? 'text-gray-300 hover:bg-gray-700'
+                                      : 'text-gray-500 cursor-not-allowed'
+                                  }`}
+                                  disabled={!userPasswords[user.id]}
+                                >
+                                  <Eye className="w-4 h-4" />
+                                  View Password
+                                </button>
+                                <div className="border-t border-gray-700 my-1"></div>
+                                <button
+                                  onClick={() => {
+                                    setOpenDropdown(null);
+                                    deleteUser(user.id);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-gray-700 transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  Delete User
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -457,6 +562,70 @@ export function AdminUsers() {
                   className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
                 >
                   Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Password Modal */}
+        {showPasswordModal && selectedUser && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full border border-gray-700">
+              <h3 className="text-xl font-bold text-white mb-2">User Password</h3>
+              <p className="text-sm text-gray-400 mb-4">{selectedUser.email}</p>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={currentPassword}
+                      readOnly
+                      className="w-full px-3 py-2 pr-20 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono focus:outline-none"
+                    />
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                      <button
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="p-1.5 hover:bg-gray-600 rounded transition-colors"
+                        title={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-4 h-4 text-gray-400" />
+                        ) : (
+                          <Eye className="w-4 h-4 text-gray-400" />
+                        )}
+                      </button>
+                      <button
+                        onClick={copyToClipboard}
+                        className="p-1.5 hover:bg-gray-600 rounded transition-colors"
+                        title="Copy to clipboard"
+                      >
+                        {copied ? (
+                          <Check className="w-4 h-4 text-green-400" />
+                        ) : (
+                          <Copy className="w-4 h-4 text-gray-400" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
+                  <p className="text-xs text-yellow-400">
+                    This password will only be available during this session. Make sure to share it with the user securely.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowPasswordModal(false);
+                    setSelectedUser(null);
+                    setCurrentPassword('');
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                >
+                  Close
                 </button>
               </div>
             </div>
