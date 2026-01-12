@@ -192,6 +192,32 @@ const canDrawFromCache = p.videoEnabled && cache && cache.lastFrameTime > 0;
 
 ---
 
+### Change 11: Debug Logging Added
+**File:** `frontend/src/components/studio/canvas/StudioCanvas.tsx`
+**Lines:** ~419-449
+
+**Purpose:** Add debug logging to track exactly what's happening with remote participant video state. Logs only when state changes (not every frame) to avoid flooding console.
+
+**What it logs:**
+- videoEnabled
+- hasVideo (is there a video element)
+- videoReady (readyState >= 2 AND has dimensions)
+- readyState (raw value)
+- videoWidth/Height
+- hasSrcObject
+- hasCache
+- cacheLastFrame timestamp
+
+**How to use:**
+1. Open browser DevTools (F12)
+2. Go to Console tab
+3. Filter for "FLICKER DEBUG"
+4. Watch for state changes when flickering occurs
+
+**Status:** APPLIED - FOR DEBUGGING
+
+---
+
 ## Debugging Checklist
 
 If still flickering, check:

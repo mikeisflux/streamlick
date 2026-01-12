@@ -416,6 +416,9 @@ export function StudioCanvas({
           return cache;
         };
 
+        // DEBUG: Track flicker issues - log only when state changes
+        const debugStateRef = (window as any).__flickerDebug = (window as any).__flickerDebug || {};
+
         // Draw participants
         allParticipants.forEach((p, i) => {
           if (i >= positions.length) return;
@@ -427,6 +430,26 @@ export function StudioCanvas({
 
           const cache = getCache(p.id, pos.width, pos.height);
           const hasCachedFrame = cache && cache.lastFrameTime > 0;
+
+          // DEBUG: Log state changes for remote participants
+          if (p.type === 'remote') {
+            const debugKey = `${p.id}_state`;
+            const currentState = JSON.stringify({
+              videoEnabled: p.videoEnabled,
+              hasVideo: !!p.video,
+              videoReady,
+              readyState: p.video?.readyState,
+              videoWidth: p.video?.videoWidth,
+              videoHeight: p.video?.videoHeight,
+              hasSrcObject: !!p.video?.srcObject,
+              hasCache: !!cache,
+              cacheLastFrame: cache?.lastFrameTime || 0,
+            });
+            if (debugStateRef[debugKey] !== currentState) {
+              console.log(`[FLICKER DEBUG] ${p.id.substring(0, 8)}:`, JSON.parse(currentState));
+              debugStateRef[debugKey] = currentState;
+            }
+          }
 
           // SIMPLIFIED: Always try to update cache if video is ready, always draw from cache if available
           const shouldDrawAvatar = !p.videoEnabled && p.type === 'local' && avatarImageRef.current;
