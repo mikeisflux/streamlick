@@ -403,13 +403,25 @@ export function StudioCanvas({
         const cornerRadius = 16;
 
         // Helper to get/create cache
+        // IMPORTANT: Preserve lastFrameTime when resizing to prevent flickering
         const getCache = (id: string, w: number, h: number) => {
           let cache = participantCanvasCacheRef.current.get(id);
-          if (!cache || Math.abs(cache.canvas.width - w) > 10 || Math.abs(cache.canvas.height - h) > 10) {
+          const needsResize = cache && (Math.abs(cache.canvas.width - w) > 50 || Math.abs(cache.canvas.height - h) > 50);
+
+          if (!cache || needsResize) {
             const newCanvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(Math.round(w), Math.round(h)) : (() => { const c = document.createElement('canvas'); c.width = Math.round(w); c.height = Math.round(h); return c; })();
             const newCtx = newCanvas.getContext('2d');
             if (newCtx) {
-              cache = { canvas: newCanvas, ctx: newCtx, lastFrameTime: 0 };
+              // CRITICAL: If we had an old cache with content, copy it to the new cache
+              // This prevents flickering during resize by keeping the last frame visible
+              const oldLastFrameTime = cache?.lastFrameTime || 0;
+              if (cache && oldLastFrameTime > 0) {
+                try {
+                  // Scale the old content to fit the new size
+                  newCtx.drawImage(cache.canvas, 0, 0, newCanvas.width, newCanvas.height);
+                } catch {}
+              }
+              cache = { canvas: newCanvas, ctx: newCtx, lastFrameTime: oldLastFrameTime };
               participantCanvasCacheRef.current.set(id, cache);
             }
           }
@@ -457,6 +469,11 @@ export function StudioCanvas({
             ctx.clip();
             ctx.drawImage(avatarImageRef.current!, avatarX, avatarY, size, size);
             ctx.restore();
+          } else {
+            // Fallback: Draw dark background if nothing else to draw
+            // This prevents visual artifacts from previous frame content
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
           }
 
           ctx.restore();
