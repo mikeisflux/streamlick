@@ -1045,7 +1045,7 @@ export function StudioCanvas({
             ctx.arc(avatarX + size / 2, avatarY + size / 2, size / 2, 0, Math.PI * 2);
             ctx.closePath();
             ctx.clip();
-            ctx.drawImage(avatarImageRef.current, avatarX, avatarY, size, size);
+            ctx.drawImage(avatarImageRef.current!, avatarX, avatarY, size, size);
             ctx.restore();
           }
           // else: placeholder - dark background already drawn
