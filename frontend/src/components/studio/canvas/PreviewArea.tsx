@@ -236,7 +236,10 @@ export function PreviewArea({
                   playsInline
                   muted
                   ref={(el) => {
-                    if (el && participant.stream) el.srcObject = participant.stream;
+                    // Only set srcObject if it's different to prevent flickering
+                    if (el && participant.stream && el.srcObject !== participant.stream) {
+                      el.srcObject = participant.stream;
+                    }
                   }}
                   className="w-full h-full object-cover"
                 />
@@ -351,7 +354,10 @@ export function PreviewArea({
                   playsInline
                   muted
                   ref={(el) => {
-                    if (el && participant.stream) el.srcObject = participant.stream;
+                    // Only set srcObject if it's different to prevent flickering
+                    if (el && participant.stream && el.srcObject !== participant.stream) {
+                      el.srcObject = participant.stream;
+                    }
                   }}
                   className="w-full h-full object-cover"
                 />

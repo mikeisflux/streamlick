@@ -11,7 +11,10 @@ export function VideoPreview({ stream, muted = false, className = '' }: VideoPre
 
   useEffect(() => {
     if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
+      // Only set srcObject if it's different to prevent flickering
+      if (videoRef.current.srcObject !== stream) {
+        videoRef.current.srcObject = stream;
+      }
     }
   }, [stream]);
 

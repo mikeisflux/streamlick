@@ -657,13 +657,23 @@ export function StudioCanvas({
 
       if (remoteVideoElementsRef.current.has(id)) {
         const video = remoteVideoElementsRef.current.get(id)!;
-        const isPlaying = video.readyState >= 2 && video.videoWidth > 0 && !video.paused;
-        if (isPlaying) return;
+        // CRITICAL: Never update srcObject if video has valid dimensions and is not paused
+        // This prevents flickering from stream object reference changes during WebRTC renegotiation
+        const hasValidVideo = video.videoWidth > 0 && video.videoHeight > 0;
+        const isPlaying = video.readyState >= 2 && hasValidVideo && !video.paused;
 
-        if (video.srcObject !== p.stream && p.stream) {
-          video.srcObject = p.stream;
+        if (isPlaying) {
+          // Video is working - don't touch srcObject at all
+          return;
+        }
+
+        // Only try to fix if video is actually broken
+        if (video.paused && hasValidVideo) {
+          // Video paused but has valid dimensions - just resume
           video.play().catch(() => {});
-        } else if (video.paused) {
+        } else if (!hasValidVideo && video.srcObject !== p.stream && p.stream) {
+          // No valid video and stream changed - update srcObject
+          video.srcObject = p.stream;
           video.play().catch(() => {});
         }
         return;

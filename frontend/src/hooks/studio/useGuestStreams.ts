@@ -51,9 +51,16 @@ export function useGuestStreams(
   }) => {
     console.log('[GuestStreams] Received offer from guest:', participantId);
 
-    // Close existing connection for this participant if any
+    // Check if we already have a working connection - ignore new offer to prevent flickering
     const existing = connectionsRef.current.get(participantId);
     if (existing) {
+      const state = existing.pc.connectionState;
+      if (state === 'connected' || state === 'connecting') {
+        console.log('[GuestStreams] Already have active connection for', participantId, '- ignoring offer to prevent flickering');
+        return;
+      }
+      // Only close if connection is actually broken
+      console.log('[GuestStreams] Closing broken connection for', participantId, '- state:', state);
       existing.pc.close();
       connectionsRef.current.delete(participantId);
     }
