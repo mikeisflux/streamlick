@@ -898,49 +898,22 @@ export function StudioCanvas({
 
           const pos = positions[index];
 
-          // DIAGNOSTIC: Log video state periodically for debugging
-          if (frameCount % 60 === 0 && p.type === 'remote' && p.video) {
-            const stream = p.video.srcObject as MediaStream | null;
-            const videoTracks = stream?.getVideoTracks() || [];
-            console.log('[StudioCanvas] Remote video state:', {
-              id: p.id,
-              readyState: p.video.readyState,
-              paused: p.video.paused,
-              videoEnabled: p.videoEnabled,
-              hasStream: !!stream,
-              streamActive: stream?.active,
-              videoTracks: videoTracks.length,
-              trackEnabled: videoTracks[0]?.enabled,
-              trackMuted: videoTracks[0]?.muted,
-              trackReadyState: videoTracks[0]?.readyState,
-            });
-
-            // If video is paused and should be playing, force retry
-            if (p.video.paused && stream && stream.active) {
-              console.log('[StudioCanvas] Forcing play() for paused video:', p.id);
-              p.video.play().catch(err => console.error('[StudioCanvas] Force play failed:', p.id, err));
-            }
-          }
-
-          // Draw video only when camera is enabled and video is ready
-          // NOTE: For MediaStream, readyState may stay at 1 if track is muted/inactive
-          // We try to draw anyway if readyState >= 1 and stream looks active
-          const stream = p.video?.srcObject as MediaStream | null;
-          const videoTrack = stream?.getVideoTracks()[0];
-          const canDrawVideo = p.videoEnabled && p.video && (
-            p.video.readyState >= 2 ||
-            (p.video.readyState >= 1 && videoTrack?.enabled && !videoTrack?.muted)
-          );
-
-          if (canDrawVideo) {
+          // Draw video when camera is enabled
+          // Use readyState >= 1 (HAVE_METADATA) to reduce flickering - drawImage will
+          // simply draw nothing if no frame is available, which is better than showing placeholder
+          if (p.videoEnabled && p.video && p.video.readyState >= 1) {
             // Draw video - camera is ON
             try {
-              ctx.drawImage(p.video!, pos.x, pos.y, pos.width, pos.height);
-            } catch (err) {
-              // If draw fails, show placeholder
+              ctx.drawImage(p.video, pos.x, pos.y, pos.width, pos.height);
+            } catch {
+              // If draw fails, show dark background (not a jarring placeholder)
               ctx.fillStyle = '#1a1a1a';
               ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
             }
+          } else if (p.videoEnabled && p.video && p.video.readyState === 0) {
+            // Video not ready at all - draw dark background, not placeholder
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
           } else if (!p.videoEnabled && p.type === 'local' && avatarImageRef.current) {
             // Draw avatar when camera is OFF (local user only)
             // First draw dark background
@@ -1392,13 +1365,13 @@ export function StudioCanvas({
         }
       }
 
-      // Skip if video element already exists
+      // Skip if video element already exists - only update if absolutely necessary
       if (remoteVideoElementsRef.current.has(participantId)) {
         const existingVideo = remoteVideoElementsRef.current.get(participantId);
         if (!existingVideo) return;
 
         // Check if stream actually changed by comparing track IDs
-        // This prevents unnecessary srcObject updates that cause AbortError
+        // This prevents unnecessary srcObject updates that cause flickering
         const existingStream = existingVideo.srcObject as MediaStream | null;
         const newStream = participant.stream;
 
@@ -1406,12 +1379,13 @@ export function StudioCanvas({
         const existingTrackIds = existingStream?.getVideoTracks().map(t => t.id).join(',') || '';
         const newTrackIds = newStream?.getVideoTracks().map(t => t.id).join(',') || '';
 
-        // Only update if tracks actually changed
-        if (existingTrackIds !== newTrackIds && newStream) {
+        // Only update if tracks actually changed AND there are new tracks
+        // Skip update if newTrackIds is empty (stream has no video tracks)
+        if (existingTrackIds !== newTrackIds && newStream && newTrackIds) {
           console.log('[StudioCanvas] Stream tracks changed for participant:', participantId, { oldTracks: existingTrackIds, newTracks: newTrackIds });
           existingVideo.srcObject = newStream;
 
-          // Only play if video is paused
+          // Only play if video is paused - don't interrupt playing video
           if (existingVideo.paused) {
             existingVideo.play().catch(err => console.error('[StudioCanvas] Failed to play remote video:', participantId, err));
           }
