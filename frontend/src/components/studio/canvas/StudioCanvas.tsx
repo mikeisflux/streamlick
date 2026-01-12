@@ -1,31 +1,18 @@
-// # WEBCAM-ISSUE - canvas continues streaming disabled video, remote video cleanup
 /**
  * StudioCanvas - Canvas 2D API Rendering System
  *
- * Single unified rendering system that:
+ * Renders all participants, overlays, and effects to a canvas that:
  * - Displays live canvas in browser (what user sees)
  * - Exports output stream via canvas.captureStream() for media server
- * - Handles all layouts, participants, overlays, and text rendering
- *
- * Features:
- * - 10 layout types (Solo, Cropped, Group, Spotlight, News, Screen, PIP, Cinema, Grid, Advanced)
- * - Background/logo/overlay image rendering
- * - Audio visualization (pulsating rings when speaking)
- * - Text overlays (captions, banners, chat, teleprompter, social comments)
- * - Remote participant video management
- * - Screen share video rendering
  */
 
 import { useRef, useEffect, useState } from 'react';
-import { CaptionOverlay } from './CanvasOverlay';
-import { ParticipantBox } from './ParticipantBox';
-import { TeleprompterOverlay } from './TeleprompterOverlay';
-import { CommentOverlay } from './CommentOverlay';
 import { Caption } from '../../../services/caption.service';
-import { mediaStorageService } from '../../../services/media-storage.service';
 import { canvasStreamService } from '../../../services/canvas-stream.service';
 import { audioMixerService } from '../../../services/audio-mixer.service';
 import { useAudioLevel } from '../../../hooks/studio/useAudioLevel';
+import { useCanvasMedia } from '../../../hooks/studio/useCanvasMedia';
+import { calculateParticipantPositions } from '../../../hooks/studio/useLayoutCalculations';
 
 interface Banner {
   id: string;
@@ -64,7 +51,7 @@ interface Comment {
 
 interface StudioCanvasProps {
   localStream: MediaStream | null;
-  rawStream: MediaStream | null; // Raw audio before noise gate - for audio level detection
+  rawStream: MediaStream | null;
   videoEnabled: boolean;
   audioEnabled: boolean;
   isLocalUserOnStage: boolean;
@@ -115,28 +102,15 @@ export function StudioCanvas({
   showChatOnStream,
   chatOverlayPosition,
   chatOverlaySize,
-  isDraggingChat,
-  isResizingChat,
-  chatOverlayRef,
-  onChatOverlayDragStart,
-  onChatOverlayResizeStart,
   captionsEnabled,
   currentCaption,
   editMode = false,
   backgroundColor = '#0F1419',
-  showResolutionBadge = true,
-  showPositionNumbers = true,
-  showConnectionQuality = true,
-  showLowerThirds = true,
-  onRemoveFromStage,
   teleprompterNotes = '',
   teleprompterFontSize = 24,
-  teleprompterIsScrolling = false,
-  teleprompterScrollSpeed = 2,
   teleprompterScrollPosition = 0,
   showTeleprompterOnCanvas = false,
   displayedComment = null,
-  onDismissComment = () => {},
   orientation = 'landscape',
 }: StudioCanvasProps) {
   const mainVideoRef = useRef<HTMLVideoElement>(null);
@@ -144,27 +118,21 @@ export function StudioCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const [volume, setVolume] = useState(100);
 
-  // Canvas rendering
+  // Canvas rendering refs
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const outputStreamRef = useRef<MediaStream | null>(null);
   const remoteVideoElementsRef = useRef<Map<string, HTMLVideoElement>>(new Map());
-
-  // Per-participant offscreen canvas cache to prevent flickering
-  // Each participant gets their own offscreen canvas that caches the last good frame
-  // This eliminates flickering during WebRTC stream renegotiations
   const participantCanvasCacheRef = useRef<Map<string, { canvas: OffscreenCanvas | HTMLCanvasElement; ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D; lastFrameTime: number }>>(new Map());
+  const participantAudioAddedRef = useRef<Set<string>>(new Set());
 
-  // Cached images for canvas rendering
-  const backgroundImageRef = useRef<HTMLImageElement | null>(null);
-  const logoImageRef = useRef<HTMLImageElement | null>(null);
-  const overlayImageRef = useRef<HTMLImageElement | null>(null);
-  const avatarImageRef = useRef<HTMLImageElement | null>(null);
+  // Use extracted media hook
+  const { backgroundImageRef, logoImageRef, overlayImageRef, avatarImageRef, videoClipRef } = useCanvasMedia();
 
-  // Video clip for playback on canvas
-  const videoClipRef = useRef<HTMLVideoElement | null>(null);
-  const videoClipUrlRef = useRef<string | null>(null);
+  // Detect if local user is speaking
+  const isLocalSpeaking = useAudioLevel(rawStream || localStream, audioEnabled);
+  const isLocalSpeakingRef = useRef(isLocalSpeaking);
 
   // Refs for props (to avoid stale closures in render loop)
   const isLocalUserOnStageRef = useRef(isLocalUserOnStage);
@@ -182,19 +150,14 @@ export function StudioCanvas({
   const teleprompterFontSizeRef = useRef(teleprompterFontSize);
   const teleprompterScrollPositionRef = useRef(teleprompterScrollPosition);
   const displayedCommentRef = useRef(displayedComment);
+  const remoteParticipantsRef = useRef(remoteParticipants);
 
-  // Detect if local user is speaking (for voice animations) - use RAW audio before noise gate
-  const isLocalSpeaking = useAudioLevel(rawStream || localStream, audioEnabled);
-  const isLocalSpeakingRef = useRef(isLocalSpeaking);
-
-  // Banners state and ref (declared early for use in refs)
+  // Banners state
   const [banners, setBanners] = useState<Banner[]>([]);
   const bannersRef = useRef(banners);
 
-  // CRITICAL: Ref for remoteParticipants to avoid stale closure in render loop
-  // The render loop runs inside a useEffect that captures the initial remoteParticipants value
-  // Without this ref, the render loop would never see role changes (e.g., backstage -> guest)
-  const remoteParticipantsRef = useRef(remoteParticipants);
+  // Track speaking participants
+  const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
 
   // Update refs when props change
   useEffect(() => {
@@ -215,141 +178,31 @@ export function StudioCanvas({
     teleprompterScrollPositionRef.current = teleprompterScrollPosition;
     displayedCommentRef.current = displayedComment;
     bannersRef.current = banners;
-    // CRITICAL: Keep remoteParticipants ref in sync for the render loop
     remoteParticipantsRef.current = remoteParticipants;
   }, [isLocalUserOnStage, videoEnabled, selectedLayout, isSharingScreen, isLocalSpeaking, captionsEnabled, currentCaption,
       chatMessages, showChatOnStream, chatOverlayPosition, chatOverlaySize, teleprompterNotes, showTeleprompterOnCanvas,
       teleprompterFontSize, teleprompterScrollPosition, displayedComment, banners, remoteParticipants]);
 
-  // Track which remote participants are speaking
-  const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
-
-  // Load style settings from localStorage
-  const [styleSettings, setStyleSettings] = useState({
-    cameraFrame: 'rounded' as 'none' | 'rounded' | 'circle' | 'square',
-    borderWidth: 2,
-    primaryColor: '#0066ff',
-    mirrorVideo: false,
-  });
-
-  // Load stream background from localStorage
-  const [streamBackground, setStreamBackground] = useState<string | null>(null);
-
+  // Load banners from localStorage
   useEffect(() => {
     const loadBanners = () => {
       const saved = localStorage.getItem('banners');
       if (saved) {
-        try {
-          setBanners(JSON.parse(saved));
-        } catch (e) {
-          console.error('Failed to load banners:', e);
-        }
+        try { setBanners(JSON.parse(saved)); } catch {}
       }
     };
-
     loadBanners();
 
-    // Listen for storage changes from other tabs
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'banners') {
-        loadBanners();
-      }
+      if (e.key === 'banners') loadBanners();
     };
-
-    // Listen for custom event for same-tab updates
-    const handleBannersUpdated = ((e: CustomEvent) => {
-      setBanners(e.detail);
-    }) as EventListener;
+    const handleBannersUpdated = ((e: CustomEvent) => setBanners(e.detail)) as EventListener;
 
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('bannersUpdated', handleBannersUpdated);
-
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('bannersUpdated', handleBannersUpdated);
-    };
-  }, []);
-
-  // Load style settings
-  useEffect(() => {
-    const loadStyleSettings = () => {
-      const cameraFrame = (localStorage.getItem('style_cameraFrame') as any) || 'rounded';
-      const borderWidth = parseInt(localStorage.getItem('style_borderWidth') || '2');
-      const primaryColor = localStorage.getItem('style_primaryColor') || '#0066ff';
-      const mirrorVideo = localStorage.getItem('mirrorVideo') === 'true';
-
-      setStyleSettings({
-        cameraFrame,
-        borderWidth,
-        primaryColor,
-        mirrorVideo,
-      });
-    };
-
-    loadStyleSettings();
-
-    // Listen for storage changes from other tabs
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key?.startsWith('style_') || e.key === 'mirrorVideo') {
-        loadStyleSettings();
-      }
-    };
-
-    // Listen for custom event for same-tab updates
-    const handleStyleSettingsUpdated = ((e: CustomEvent) => {
-      // Load mirror video from localStorage since it's not part of the style event
-      const mirrorVideo = localStorage.getItem('mirrorVideo') === 'true';
-
-      setStyleSettings({
-        cameraFrame: e.detail.cameraFrame,
-        borderWidth: e.detail.borderWidth,
-        primaryColor: e.detail.primaryColor,
-        mirrorVideo,
-      });
-    }) as EventListener;
-
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('styleSettingsUpdated', handleStyleSettingsUpdated);
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('styleSettingsUpdated', handleStyleSettingsUpdated);
-    };
-  }, []);
-
-  // Load stream background
-  useEffect(() => {
-
-    // CRITICAL: Load background immediately on mount to avoid race condition
-    const loadInitialBackground = async () => {
-      const streamBackgroundAssetId = localStorage.getItem('streamBackgroundAssetId');
-      const streamBackground = localStorage.getItem('streamBackground');
-
-      if (streamBackgroundAssetId) {
-        try {
-          const mediaData = await mediaStorageService.getMedia(streamBackgroundAssetId);
-          if (mediaData) {
-            const objectURL = URL.createObjectURL(mediaData.blob);
-            setStreamBackground(objectURL);
-          }
-        } catch (error) {
-          console.error('[StudioCanvas] Failed to load background from IndexedDB:', error);
-        }
-      } else if (streamBackground) {
-        setStreamBackground(streamBackground);
-      }
-    };
-
-    loadInitialBackground();
-
-    // Listen for custom event for background updates
-    const handleBackgroundUpdated = ((e: CustomEvent) => {
-      setStreamBackground(e.detail.url);
-    }) as EventListener;
-
-    window.addEventListener('backgroundUpdated', handleBackgroundUpdated);
-
-    return () => {
-      window.removeEventListener('backgroundUpdated', handleBackgroundUpdated);
     };
   }, []);
 
@@ -358,7 +211,6 @@ export function StudioCanvas({
     const audioContexts = new Map<string, { context: AudioContext; analyser: AnalyserNode; source: MediaStreamAudioSourceNode; frameId: number }>();
 
     const setupAudioAnalyzer = (participantId: string, stream: MediaStream, audioEnabled: boolean) => {
-      // Clean up existing analyzer if any
       const existing = audioContexts.get(participantId);
       if (existing) {
         cancelAnimationFrame(existing.frameId);
@@ -368,13 +220,8 @@ export function StudioCanvas({
         audioContexts.delete(participantId);
       }
 
-      // Don't set up analyzer if audio is disabled or no audio tracks
       if (!audioEnabled || !stream.getAudioTracks().length) {
-        setSpeakingParticipants(prev => {
-          const next = new Set(prev);
-          next.delete(participantId);
-          return next;
-        });
+        setSpeakingParticipants(prev => { const next = new Set(prev); next.delete(participantId); return next; });
         return;
       }
 
@@ -390,245 +237,60 @@ export function StudioCanvas({
         source.connect(analyser);
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        const speakingThreshold = 10;
 
         const checkAudioLevel = () => {
           analyser.getByteFrequencyData(dataArray);
-
           let sum = 0;
-          for (let i = 0; i < dataArray.length; i++) {
-            sum += dataArray[i];
-          }
+          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
           const average = sum / dataArray.length;
-          const speaking = average > speakingThreshold;
 
           setSpeakingParticipants(prev => {
             const next = new Set(prev);
-            if (speaking) {
-              next.add(participantId);
-            } else {
-              next.delete(participantId);
-            }
+            if (average > 10) next.add(participantId);
+            else next.delete(participantId);
             return next;
           });
 
           const frameId = requestAnimationFrame(checkAudioLevel);
           audioContexts.set(participantId, { context: audioContext, analyser, source, frameId });
         };
-
         checkAudioLevel();
-      } catch (error) {
-        console.error(`[StudioCanvas] Failed to create audio analyser for ${participantId}:`, error);
-      }
+      } catch {}
     };
 
-    // Set up analyzers for all remote participants
-    remoteParticipants.forEach((participant, id) => {
-      if (participant.stream) {
-        setupAudioAnalyzer(id, participant.stream, participant.audioEnabled);
-      }
-    });
+    remoteParticipants.forEach((p, id) => { if (p.stream) setupAudioAnalyzer(id, p.stream, p.audioEnabled); });
 
-    // Cleanup
     return () => {
       audioContexts.forEach(({ context, analyser, source, frameId }) => {
         cancelAnimationFrame(frameId);
         source.disconnect();
         analyser.disconnect();
-        if (context.state !== 'closed') {
-          context.close();
-        }
+        if (context.state !== 'closed') context.close();
       });
-      audioContexts.clear();
     };
   }, [remoteParticipants]);
 
-  // Load stream logo from localStorage
-  const [streamLogo, setStreamLogo] = useState<string | null>(null);
-
-  // Load stream overlay from localStorage
-  const [streamOverlay, setStreamOverlay] = useState<string | null>(null);
-
-  // Custom layout positions for edit mode
-  interface ParticipantPosition {
-    id: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }
-
-  const [customLayoutPositions, setCustomLayoutPositions] = useState<Map<string, ParticipantPosition>>(new Map());
-
-  // Load custom layout positions from localStorage
-  useEffect(() => {
-    const loadCustomLayout = () => {
-      const saved = localStorage.getItem(`customLayout_${selectedLayout}`);
-      if (saved) {
-        try {
-          const positions = JSON.parse(saved);
-          setCustomLayoutPositions(new Map(positions));
-        } catch (e) {
-          console.error('Failed to load custom layout:', e);
-        }
-      } else {
-        // Initialize with default positions if no custom layout
-        setCustomLayoutPositions(new Map());
-      }
-    };
-
-    loadCustomLayout();
-  }, [selectedLayout]);
-
-  // Save custom layout positions to localStorage
-  const saveCustomLayout = () => {
-    const positions = Array.from(customLayoutPositions.entries());
-    localStorage.setItem(`customLayout_${selectedLayout}`, JSON.stringify(positions));
-  };
-
-  // Handle position change for a participant
-  const handlePositionChange = (participantId: string, position: { x: number; y: number; width: number; height: number }) => {
-    setCustomLayoutPositions(prev => {
-      const newMap = new Map(prev);
-      newMap.set(participantId, { id: participantId, ...position });
-      return newMap;
-    });
-  };
-
-  // Auto-save when positions change (debounced in real implementation)
-  useEffect(() => {
-    if (editMode && customLayoutPositions.size > 0) {
-      const timeoutId = setTimeout(() => {
-        saveCustomLayout();
-      }, 500); // Debounce saves
-
-      return () => clearTimeout(timeoutId);
-    }
-  }, [customLayoutPositions, editMode]);
-
-  useEffect(() => {
-    // CRITICAL: Load all media immediately on mount from IndexedDB/localStorage
-    const loadAllMedia = async () => {
-      // Load logo
-      const streamLogoAssetId = localStorage.getItem('streamLogoAssetId');
-      const streamLogoUrl = localStorage.getItem('streamLogo');
-
-      if (streamLogoAssetId) {
-        try {
-          const mediaData = await mediaStorageService.getMedia(streamLogoAssetId);
-          if (mediaData) {
-            const objectURL = URL.createObjectURL(mediaData.blob);
-            setStreamLogo(objectURL);
-          }
-        } catch (error) {
-          console.error('[StudioCanvas] Failed to load logo from IndexedDB:', error);
-        }
-      } else if (streamLogoUrl) {
-        setStreamLogo(streamLogoUrl);
-      }
-
-      // Load overlay
-      const streamOverlayAssetId = localStorage.getItem('streamOverlayAssetId');
-      const streamOverlayUrl = localStorage.getItem('streamOverlay');
-
-      if (streamOverlayAssetId) {
-        try {
-          const mediaData = await mediaStorageService.getMedia(streamOverlayAssetId);
-          if (mediaData) {
-            const objectURL = URL.createObjectURL(mediaData.blob);
-            setStreamOverlay(objectURL);
-          }
-        } catch (error) {
-          console.error('[StudioCanvas] Failed to load overlay from IndexedDB:', error);
-        }
-      } else if (streamOverlayUrl) {
-        setStreamOverlay(streamOverlayUrl);
-      }
-
-      // Video clips are not auto-loaded - they play only when explicitly triggered via playVideoClip event
-    };
-
-    loadAllMedia();
-
-    // Listen for custom event for logo updates
-    const handleLogoUpdated = ((e: CustomEvent) => {
-      setStreamLogo(e.detail.url);
-    }) as EventListener;
-
-    // Listen for custom event for overlay updates
-    const handleOverlayUpdated = ((e: CustomEvent) => {
-      setStreamOverlay(e.detail.url);
-    }) as EventListener;
-
-    window.addEventListener('logoUpdated', handleLogoUpdated);
-    window.addEventListener('overlayUpdated', handleOverlayUpdated);
-
-    return () => {
-      window.removeEventListener('logoUpdated', handleLogoUpdated);
-      window.removeEventListener('overlayUpdated', handleOverlayUpdated);
-    };
-  }, []);
-
-  // Canvas initialization and rendering loop
+  // Canvas initialization and render loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Initialize canvas context
-    const ctx = canvas.getContext('2d', {
-      alpha: false,
-      desynchronized: true,
-    });
-
-    if (!ctx) {
-      console.error('[StudioCanvas] Failed to get 2D context');
-      return;
-    }
-
+    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    if (!ctx) return;
     canvasCtxRef.current = ctx;
 
-    // Set canvas resolution (1920x1080 for landscape, 1080x1920 for portrait)
-    if (orientation === 'portrait') {
-      canvas.width = 1080;
-      canvas.height = 1920;
-    } else {
-      canvas.width = 1920;
-      canvas.height = 1080;
-    }
+    // Set canvas resolution
+    canvas.width = orientation === 'portrait' ? 1080 : 1920;
+    canvas.height = orientation === 'portrait' ? 1920 : 1080;
 
-    console.log('[StudioCanvas] Canvas initialized:', {
-      width: canvas.width,
-      height: canvas.height,
-      orientation,
-    });
-
-    // Capture canvas stream for media server (30 FPS)
-    // This is the "splitter" - one rendering system that both displays AND streams
+    // Capture canvas stream for media server
     try {
       const canvasStream = canvas.captureStream(30);
       outputStreamRef.current = canvasStream;
-
-      // Make stream available to useBroadcast via canvasStreamService
       canvasStreamService.setOutputStream(canvasStream);
+    } catch {}
 
-      console.log('[StudioCanvas] Canvas stream captured and registered:', {
-        streamId: canvasStream.id,
-        videoTracks: canvasStream.getVideoTracks().length,
-        audioTracks: canvasStream.getAudioTracks().length,
-      });
-
-      // TODO: Combine with audio from audioMixerService
-      // For now, the video track is captured - audio will be added separately
-    } catch (error) {
-      console.error('[StudioCanvas] Failed to capture canvas stream:', error);
-    }
-
-    // Start rendering loop
-    let frameCount = 0;
     let lastFrameTime = performance.now();
-
-    // Track video stability - count consecutive frames where video was drawable
-    // This prevents flickering from single-frame dropouts
     const videoStableFrames = new Map<string, number>();
 
     const render = () => {
@@ -637,660 +299,222 @@ export function StudioCanvas({
       const now = performance.now();
       const elapsed = now - lastFrameTime;
 
-      // Target 30 FPS (33ms per frame)
-      if (elapsed >= 33) {
+      if (elapsed >= 33) { // 30 FPS
         lastFrameTime = now - (elapsed % 33);
-        frameCount++;
 
         // Clear canvas
         ctx.fillStyle = backgroundColor;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Draw background image (full canvas)
+        // Draw background
         if (backgroundImageRef.current) {
           ctx.drawImage(backgroundImageRef.current, 0, 0, canvas.width, canvas.height);
         }
 
-        // Collect all on-stage participants (local + remote)
-        // CRITICAL: Use ref to get current remoteParticipants value to avoid stale closure
-        // This ensures we see role changes (backstage -> guest) when participants are promoted
-        // IMPORTANT: Only include participants explicitly marked as 'guest' role
-        // Participants with null/undefined/backstage role stay in the preview area
-        const onStageRemote = Array.from(remoteParticipantsRef.current.values()).filter(
-          (p) => p.role === 'guest' && p.id !== 'screen-share'
-        );
+        // Collect on-stage participants
+        const onStageRemote = Array.from(remoteParticipantsRef.current.values())
+          .filter(p => p.role === 'guest' && p.id !== 'screen-share');
 
-        const allParticipants: Array<{ type: 'local' | 'remote', id: string, video?: HTMLVideoElement, participant?: any, videoEnabled: boolean }> = [];
+        const allParticipants: Array<{ type: 'local' | 'remote', id: string, video?: HTMLVideoElement, participant?: RemoteParticipant, videoEnabled: boolean }> = [];
 
-        // Add local participant if on stage
         if (isLocalUserOnStageRef.current && mainVideoRef.current) {
-          allParticipants.push({
-            type: 'local',
-            id: 'local',
-            video: mainVideoRef.current,
-            videoEnabled: videoEnabledRef.current
-          });
+          allParticipants.push({ type: 'local', id: 'local', video: mainVideoRef.current, videoEnabled: videoEnabledRef.current });
         }
 
-        // Add remote participants
-        // CRITICAL: Create video elements on-demand if needed
-        // This handles the timing race when a participant is promoted from backstage to guest
-        // The useEffect that creates video elements might not have run yet
-        onStageRemote.forEach((participant) => {
-          let video = remoteVideoElementsRef.current.get(participant.id);
-
-          // If video element doesn't exist but participant has a stream, create it on-demand
-          // This ensures promoted participants appear immediately without waiting for useEffect
-          if (!video && participant.stream) {
-            console.log('[StudioCanvas] Creating video element on-demand for promoted participant:', participant.id);
+        onStageRemote.forEach(p => {
+          let video = remoteVideoElementsRef.current.get(p.id);
+          if (!video && p.stream) {
             video = document.createElement('video');
             video.autoplay = true;
             video.playsInline = true;
-            video.muted = true; // Audio handled by audioMixerService
-            video.srcObject = participant.stream;
-            video.play().catch(err => console.error('[StudioCanvas] Failed to play remote video:', participant.id, err));
-            remoteVideoElementsRef.current.set(participant.id, video);
+            video.muted = true;
+            video.srcObject = p.stream;
+            video.play().catch(() => {});
+            remoteVideoElementsRef.current.set(p.id, video);
 
-            // Also add audio to mixer for the newly promoted participant
-            if (participant.audioEnabled) {
-              const audioTrack = participant.stream.getAudioTracks()[0];
+            if (p.audioEnabled) {
+              const audioTrack = p.stream.getAudioTracks()[0];
               if (audioTrack) {
-                console.log('[StudioCanvas] Adding promoted participant audio to mixer:', participant.id);
                 try {
-                  const audioStream = new MediaStream([audioTrack]);
-                  audioMixerService.addStream(`participant-${participant.id}`, audioStream);
-                  participantAudioAddedRef.current.add(participant.id);
-                } catch (err) {
-                  console.error('[StudioCanvas] Failed to add participant audio to mixer:', participant.id, err);
-                }
+                  audioMixerService.addStream(`participant-${p.id}`, new MediaStream([audioTrack]));
+                  participantAudioAddedRef.current.add(p.id);
+                } catch {}
               }
             }
           }
-
-          if (video) {
-            allParticipants.push({
-              type: 'remote',
-              id: participant.id,
-              video,
-              participant,
-              videoEnabled: participant.videoEnabled
-            });
-          }
+          if (video) allParticipants.push({ type: 'remote', id: p.id, video, participant: p, videoEnabled: p.videoEnabled });
         });
 
-        // Calculate layout based on selected layout and screen share state
-        const layout = selectedLayoutRef.current;
-        const isScreenSharing = isSharingScreenRef.current;
-        const participantCount = allParticipants.length;
+        // Calculate positions
+        const positions = calculateParticipantPositions(
+          canvas.width, canvas.height, allParticipants.length,
+          selectedLayoutRef.current, isSharingScreenRef.current || !!screenShareVideoRef.current?.srcObject
+        );
 
-        // Layout 6 (Screen Share) takes priority when screen sharing
-        const activeLayout = (isScreenSharing || screenShareVideoRef.current?.srcObject) ? 6 : layout;
+        const cornerRadius = 16;
 
-        // Calculate participant positions based on layout
-        interface ParticipantPosition {
-          x: number;
-          y: number;
-          width: number;
-          height: number;
-        }
-
-        const positions: ParticipantPosition[] = [];
-
-        switch (activeLayout) {
-          case 1: // Solo - single participant centered, or side-by-side with margins for multiple
-            {
-              const margin = 50;
-              const gap = 20;
-              if (participantCount === 1) {
-                // Single participant: centered at 60% of screen, 16:9 aspect ratio
-                const boxWidth = canvas.width * 0.6;
-                const boxHeight = boxWidth * (9 / 16);
-                positions.push({
-                  x: (canvas.width - boxWidth) / 2,
-                  y: (canvas.height - boxHeight) / 2,
-                  width: boxWidth,
-                  height: boxHeight
-                });
-              } else if (participantCount === 2) {
-                // Two participants: side by side, compact 16:9 boxes centered
-                const boxWidth = canvas.width * 0.4;  // 40% width each
-                const boxHeight = boxWidth * (9 / 16);  // Maintain 16:9 aspect ratio
-                const totalWidth = boxWidth * 2 + gap;
-                const startX = (canvas.width - totalWidth) / 2;
-                const startY = (canvas.height - boxHeight) / 2;
-                allParticipants.forEach((_, i) => {
-                  positions.push({
-                    x: startX + i * (boxWidth + gap),
-                    y: startY,
-                    width: boxWidth,
-                    height: boxHeight
-                  });
-                });
-              } else {
-                // 3+ participants: grid with margins
-                const cols = Math.ceil(Math.sqrt(participantCount));
-                const rows = Math.ceil(participantCount / cols);
-                const availableWidth = canvas.width - margin * 2 - gap * (cols - 1);
-                const availableHeight = canvas.height - margin * 2 - gap * (rows - 1);
-                const boxWidth = availableWidth / cols;
-                const boxHeight = availableHeight / rows;
-                allParticipants.forEach((_, i) => {
-                  const col = i % cols;
-                  const row = Math.floor(i / cols);
-                  positions.push({
-                    x: margin + col * (boxWidth + gap),
-                    y: margin + row * (boxHeight + gap),
-                    width: boxWidth,
-                    height: boxHeight
-                  });
-                });
-              }
-            }
-            break;
-
-          case 2: // Cropped - 2x2 grid with margins
-            {
-              const margin = 50;
-              const gap = 20;
-              const cols = 2;
-              const rows = 2;
-              const availableWidth = canvas.width - margin * 2 - gap * (cols - 1);
-              const availableHeight = canvas.height - margin * 2 - gap * (rows - 1);
-              const boxWidth = availableWidth / cols;
-              const boxHeight = availableHeight / rows;
-              allParticipants.forEach((_, i) => {
-                const col = i % cols;
-                const row = Math.floor(i / cols);
-                positions.push({
-                  x: margin + col * (boxWidth + gap),
-                  y: margin + row * (boxHeight + gap),
-                  width: boxWidth,
-                  height: boxHeight
-                });
-              });
-            }
-            break;
-
-          case 3: // Group - auto-calculated equal grid with margins
-            {
-              const margin = 50;
-              const gap = 20;
-              const cols = Math.ceil(Math.sqrt(participantCount));
-              const rows = Math.ceil(participantCount / cols);
-              const availableWidth = canvas.width - margin * 2 - gap * (cols - 1);
-              const availableHeight = canvas.height - margin * 2 - gap * (rows - 1);
-              const boxWidth = availableWidth / cols;
-              const boxHeight = availableHeight / rows;
-              allParticipants.forEach((_, i) => {
-                const col = i % cols;
-                const row = Math.floor(i / cols);
-                positions.push({
-                  x: margin + col * (boxWidth + gap),
-                  y: margin + row * (boxHeight + gap),
-                  width: boxWidth,
-                  height: boxHeight
-                });
-              });
-            }
-            break;
-
-          case 4: // Spotlight - one large + small boxes above
-            if (participantCount === 1) {
-              positions.push({ x: 0, y: 0, width: canvas.width, height: canvas.height });
-            } else {
-              const topBarHeight = canvas.height * 0.25;
-              const mainHeight = canvas.height * 0.75;
-              const thumbnailWidth = canvas.width / Math.min(3, participantCount - 1);
-
-              // First participant is main (large)
-              positions.push({ x: 0, y: topBarHeight, width: canvas.width, height: mainHeight });
-
-              // Rest are thumbnails in top bar
-              for (let i = 1; i < participantCount; i++) {
-                positions.push({
-                  x: (i - 1) * thumbnailWidth,
-                  y: 0,
-                  width: thumbnailWidth,
-                  height: topBarHeight
-                });
-              }
-            }
-            break;
-
-          case 5: // News - side by side with margins and gap
-            {
-              const margin = 50; // Outer margin
-              const gap = 20; // Gap between boxes
-              const availableWidth = canvas.width - margin * 2 - gap;
-              const availableHeight = canvas.height - margin * 2;
-              const boxWidth = availableWidth / 2;
-              const boxHeight = availableHeight;
-              allParticipants.forEach((_, i) => {
-                positions.push({
-                  x: margin + i * (boxWidth + gap),
-                  y: margin,
-                  width: boxWidth,
-                  height: boxHeight
-                });
-              });
-            }
-            break;
-
-          case 6: // Screen Share - thumbnails on top, screen share below
-            // For now, just layout participants - screen share will be added later
-            {
-              const topBarHeight = canvas.height * 0.12;
-              const thumbnailWidth = participantCount > 0 ? canvas.width / participantCount : canvas.width;
-              allParticipants.forEach((_, i) => {
-                positions.push({
-                  x: i * thumbnailWidth,
-                  y: 0,
-                  width: thumbnailWidth,
-                  height: topBarHeight
-                });
-              });
-            }
-            break;
-
-          case 7: // Picture-in-Picture - main + corner overlay
-            if (participantCount === 1) {
-              positions.push({ x: 0, y: 0, width: canvas.width, height: canvas.height });
-            } else {
-              // First participant fullscreen
-              positions.push({ x: 0, y: 0, width: canvas.width, height: canvas.height });
-
-              // Others in bottom-right corner
-              const pipWidth = 240;
-              const pipHeight = 180;
-              const gap = 10;
-              for (let i = 1; i < participantCount; i++) {
-                positions.push({
-                  x: canvas.width - pipWidth - gap,
-                  y: canvas.height - (pipHeight + gap) * (i),
-                  width: pipWidth,
-                  height: pipHeight
-                });
-              }
-            }
-            break;
-
-          case 8: // Cinema - wide format with margins
-            {
-              const margin = 50;
-              const gap = 20;
-              const availableWidth = canvas.width - margin * 2 - (participantCount > 1 ? gap : 0);
-              const availableHeight = canvas.height - margin * 2;
-              const boxWidth = participantCount > 1 ? availableWidth / 2 : availableWidth;
-              allParticipants.forEach((_, i) => {
-                positions.push({
-                  x: margin + i * (boxWidth + gap),
-                  y: margin,
-                  width: boxWidth,
-                  height: availableHeight
-                });
-              });
-            }
-            break;
-
-          case 9: // Video Grid - auto grid with gaps
-            {
-              const cols = Math.ceil(Math.sqrt(participantCount));
-              const rows = Math.ceil(participantCount / cols);
-              const gap = 4;
-              const boxWidth = (canvas.width - gap * (cols + 1)) / cols;
-              const boxHeight = (canvas.height - gap * (rows + 1)) / rows;
-              allParticipants.forEach((_, i) => {
-                const col = i % cols;
-                const row = Math.floor(i / cols);
-                positions.push({
-                  x: gap + col * (boxWidth + gap),
-                  y: gap + row * (boxHeight + gap),
-                  width: boxWidth,
-                  height: boxHeight
-                });
-              });
-            }
-            break;
-
-          default:
-            // Fallback to group layout with margins
-            {
-              const margin = 50;
-              const gap = 20;
-              const cols = Math.ceil(Math.sqrt(participantCount));
-              const rows = Math.ceil(participantCount / cols);
-              const availableWidth = canvas.width - margin * 2 - gap * (cols - 1);
-              const availableHeight = canvas.height - margin * 2 - gap * (rows - 1);
-              const boxWidth = availableWidth / cols;
-              const boxHeight = availableHeight / rows;
-              allParticipants.forEach((_, i) => {
-                const col = i % cols;
-                const row = Math.floor(i / cols);
-                positions.push({
-                  x: margin + col * (boxWidth + gap),
-                  y: margin + row * (boxHeight + gap),
-                  width: boxWidth,
-                  height: boxHeight
-                });
-              });
-            }
-        }
-
-        // Draw all participants using calculated positions
-        const cornerRadius = 16; // Rounded corner radius for participant boxes
-
-        // Helper function to get or create offscreen canvas cache for a participant
-        const getOrCreateParticipantCache = (participantId: string, width: number, height: number) => {
-          let cache = participantCanvasCacheRef.current.get(participantId);
-
-          // Create new cache or resize if dimensions changed significantly
-          if (!cache || Math.abs(cache.canvas.width - width) > 10 || Math.abs(cache.canvas.height - height) > 10) {
-            // Use OffscreenCanvas if available, fallback to regular canvas
-            let newCanvas: OffscreenCanvas | HTMLCanvasElement;
-            let newCtx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
-
-            if (typeof OffscreenCanvas !== 'undefined') {
-              newCanvas = new OffscreenCanvas(Math.round(width), Math.round(height));
-              newCtx = newCanvas.getContext('2d');
-            } else {
-              newCanvas = document.createElement('canvas');
-              newCanvas.width = Math.round(width);
-              newCanvas.height = Math.round(height);
-              newCtx = newCanvas.getContext('2d');
-            }
-
+        // Helper to get/create cache
+        const getCache = (id: string, w: number, h: number) => {
+          let cache = participantCanvasCacheRef.current.get(id);
+          if (!cache || Math.abs(cache.canvas.width - w) > 10 || Math.abs(cache.canvas.height - h) > 10) {
+            const newCanvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(Math.round(w), Math.round(h)) : (() => { const c = document.createElement('canvas'); c.width = Math.round(w); c.height = Math.round(h); return c; })();
+            const newCtx = newCanvas.getContext('2d');
             if (newCtx) {
               cache = { canvas: newCanvas, ctx: newCtx, lastFrameTime: 0 };
-              participantCanvasCacheRef.current.set(participantId, cache);
+              participantCanvasCacheRef.current.set(id, cache);
             }
           }
-
           return cache;
         };
 
-        allParticipants.forEach((p, index) => {
-          if (index >= positions.length) return;
+        // Draw participants
+        allParticipants.forEach((p, i) => {
+          if (i >= positions.length) return;
+          const pos = positions[i];
 
-          const pos = positions[index];
-          const participantKey = p.id;
+          const videoReady = p.video && p.video.readyState >= 3 && p.video.videoWidth > 0 && p.video.videoHeight > 0 && !p.video.paused;
+          const currentStable = videoStableFrames.get(p.id) || 0;
+          videoStableFrames.set(p.id, videoReady ? Math.min(currentStable + 1, 60) : Math.max(currentStable - 0.5, 0));
+          const stableCount = videoStableFrames.get(p.id) || 0;
 
-          // Check video readiness - require HAVE_ENOUGH_DATA (readyState >= 3) for more reliable frames
-          // Also verify video dimensions are valid to avoid drawing blank/corrupted frames
-          const videoReady = p.video &&
-                            p.video.readyState >= 3 &&
-                            p.video.videoWidth > 0 &&
-                            p.video.videoHeight > 0 &&
-                            !p.video.paused;
-
-          // Update stability tracking with very asymmetric gain/decay
-          // CRITICAL: Require high stability before trusting video data
-          const currentStable = videoStableFrames.get(participantKey) || 0;
-          if (videoReady) {
-            // Build stability incrementally, cap at 60 (2 seconds at 30fps)
-            videoStableFrames.set(participantKey, Math.min(currentStable + 1, 60));
-          } else if (currentStable > 0) {
-            // Decay VERY slowly - only lose 0.5 stability per frame to ride out brief dropouts
-            // This means we can survive 120 frames (4 seconds) of dropout before losing cached frame
-            videoStableFrames.set(participantKey, currentStable - 0.5);
-          }
-
-          const stableFrameCount = videoStableFrames.get(participantKey) || 0;
-
-          // Get or create the cache to check if we have a cached frame yet
-          const existingCache = participantCanvasCacheRef.current.get(participantKey);
-          const hasExistingCachedFrame = existingCache && existingCache.lastFrameTime > 0;
-
-          // CRITICAL: Use different stability thresholds for first frame vs updates
-          // First frame: Capture immediately when video is ready (stableFrameCount >= 1)
-          // Updates: Require 6 stable frames to prevent flickering from transient states
-          const videoIsStableEnough = hasExistingCachedFrame ? stableFrameCount >= 6 : stableFrameCount >= 1;
-
-          // Get or create the offscreen canvas cache for this participant
-          const cache = getOrCreateParticipantCache(participantKey, pos.width, pos.height);
+          const cache = getCache(p.id, pos.width, pos.height);
           const hasCachedFrame = cache && cache.lastFrameTime > 0;
+          const videoIsStable = hasCachedFrame ? stableCount >= 6 : stableCount >= 1;
 
-          // CRITICAL FIX: Always draw from cache when camera is enabled
-          // Only update cache when video is stable enough - this prevents flickering
-          // The cache acts as a frame buffer that smooths out WebRTC stream instabilities
-          const shouldUpdateCache = p.videoEnabled && videoReady && videoIsStableEnough && cache;
+          const shouldUpdateCache = p.videoEnabled && videoReady && videoIsStable && cache;
           const shouldDrawFromCache = p.videoEnabled && hasCachedFrame;
           const shouldDrawAvatar = !p.videoEnabled && p.type === 'local' && avatarImageRef.current;
-          const shouldDrawPlaceholder = p.videoEnabled && !hasCachedFrame && !videoReady;
 
-          // Set up rounded corner clip
           ctx.save();
           ctx.beginPath();
           ctx.roundRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
           ctx.clip();
 
-          // Always draw background first as safety net
-          if (shouldDrawPlaceholder || shouldDrawAvatar || (!shouldDrawFromCache && !shouldDrawAvatar)) {
+          if (!shouldDrawFromCache && !shouldDrawAvatar) {
             ctx.fillStyle = '#1a1a1a';
             ctx.fill();
           }
 
-          // First, update the cache if video is stable enough
           if (shouldUpdateCache) {
-            try {
-              // Only update cache - don't draw directly from video to main canvas
-              cache.ctx.drawImage(p.video!, 0, 0, cache.canvas.width, cache.canvas.height);
-              cache.lastFrameTime = now;
-            } catch (err) {
-              // Cache update failed - don't change lastFrameTime, keep using old cached frame
-            }
+            try { cache!.ctx.drawImage(p.video!, 0, 0, cache!.canvas.width, cache!.canvas.height); cache!.lastFrameTime = now; } catch {}
           }
 
-          // Then, always draw from cache (which may have just been updated)
           if (shouldDrawFromCache && cache) {
-            try {
-              ctx.drawImage(cache.canvas, pos.x, pos.y, pos.width, pos.height);
-            } catch {
-              ctx.fillStyle = '#1a1a1a';
-              ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
-            }
+            try { ctx.drawImage(cache.canvas, pos.x, pos.y, pos.width, pos.height); } catch { ctx.fillStyle = '#1a1a1a'; ctx.fillRect(pos.x, pos.y, pos.width, pos.height); }
           } else if (shouldDrawAvatar) {
-            // Camera is OFF - draw circular avatar in center
             const size = Math.min(pos.width, pos.height) * 0.5;
             const avatarX = pos.x + (pos.width - size) / 2;
             const avatarY = pos.y + (pos.height - size) / 2;
             ctx.save();
             ctx.beginPath();
             ctx.arc(avatarX + size / 2, avatarY + size / 2, size / 2, 0, Math.PI * 2);
-            ctx.closePath();
             ctx.clip();
             ctx.drawImage(avatarImageRef.current!, avatarX, avatarY, size, size);
             ctx.restore();
           }
-          // else: placeholder - dark background already drawn
 
-          // Restore context to remove rounded corner clip before drawing overlays
           ctx.restore();
 
-          // Draw pulsating ring when speaking AND camera is off (avatar visible)
+          // Draw speaking ring
           const isSpeaking = p.type === 'local' ? isLocalSpeakingRef.current : speakingParticipants.has(p.id);
-          const isCameraOff = !p.videoEnabled;
-
-          if (isSpeaking && isCameraOff) {
-            // Calculate center of participant box
+          if (isSpeaking && !p.videoEnabled) {
             const centerX = pos.x + pos.width / 2;
             const centerY = pos.y + pos.height / 2;
             const baseRadius = Math.min(pos.width, pos.height) / 2;
+            const radius = baseRadius * (Math.sin(now * 0.003) * 0.1 + 0.9);
 
-            // Pulsating animation based on time
-            const pulseSpeed = 0.003;
-            const pulseAmount = Math.sin(now * pulseSpeed) * 0.1 + 0.9; // Oscillates between 0.8 and 1.0
-            const radius = baseRadius * pulseAmount;
-
-            // Draw multiple rings for glow effect
             ctx.save();
-            for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
               ctx.beginPath();
-              ctx.arc(centerX, centerY, radius + i * 8, 0, Math.PI * 2);
-              ctx.strokeStyle = `rgba(0, 255, 0, ${0.6 - i * 0.2})`; // Green with decreasing opacity
-              ctx.lineWidth = 4 - i;
+              ctx.arc(centerX, centerY, radius + j * 8, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(0, 255, 0, ${0.6 - j * 0.2})`;
+              ctx.lineWidth = 4 - j;
               ctx.stroke();
             }
             ctx.restore();
           }
 
-          // Draw name tag at bottom of participant box (per Structure.md)
-          const participantName = p.type === 'local' ? 'You' : (p.participant?.name || 'Guest');
+          // Draw name tag
+          const name = p.type === 'local' ? 'You' : (p.participant?.name || 'Guest');
           const nameTagHeight = 40;
-          const nameTagPadding = 12;
           const nameTagY = pos.y + pos.height - nameTagHeight - 8;
-
-          // Measure text width for background
           ctx.font = '600 20px Inter, system-ui, sans-serif';
-          const textWidth = ctx.measureText(participantName).width;
-          const nameTagWidth = Math.min(textWidth + nameTagPadding * 2, pos.width - 16);
-
-          // Draw rounded rectangle background
+          const textWidth = ctx.measureText(name).width;
+          const nameTagWidth = Math.min(textWidth + 24, pos.width - 16);
           const nameTagX = pos.x + 8;
+
           ctx.fillStyle = isSpeaking ? 'rgba(0, 200, 0, 0.85)' : 'rgba(0, 0, 0, 0.75)';
           ctx.beginPath();
-          const nameTagCornerRadius = 20;
-          ctx.moveTo(nameTagX + nameTagCornerRadius, nameTagY);
-          ctx.lineTo(nameTagX + nameTagWidth - nameTagCornerRadius, nameTagY);
-          ctx.quadraticCurveTo(nameTagX + nameTagWidth, nameTagY, nameTagX + nameTagWidth, nameTagY + nameTagCornerRadius);
-          ctx.lineTo(nameTagX + nameTagWidth, nameTagY + nameTagHeight - nameTagCornerRadius);
-          ctx.quadraticCurveTo(nameTagX + nameTagWidth, nameTagY + nameTagHeight, nameTagX + nameTagWidth - nameTagCornerRadius, nameTagY + nameTagHeight);
-          ctx.lineTo(nameTagX + nameTagCornerRadius, nameTagY + nameTagHeight);
-          ctx.quadraticCurveTo(nameTagX, nameTagY + nameTagHeight, nameTagX, nameTagY + nameTagHeight - nameTagCornerRadius);
-          ctx.lineTo(nameTagX, nameTagY + nameTagCornerRadius);
-          ctx.quadraticCurveTo(nameTagX, nameTagY, nameTagX + nameTagCornerRadius, nameTagY);
-          ctx.closePath();
+          ctx.roundRect(nameTagX, nameTagY, nameTagWidth, nameTagHeight, 20);
           ctx.fill();
 
-          // Draw participant name
           ctx.fillStyle = 'white';
           ctx.textBaseline = 'middle';
-          ctx.fillText(participantName, nameTagX + nameTagPadding, nameTagY + nameTagHeight / 2, nameTagWidth - nameTagPadding * 2);
+          ctx.fillText(name, nameTagX + 12, nameTagY + nameTagHeight / 2, nameTagWidth - 24);
         });
 
-        // Draw screen share video (Layout 6 only)
-        if (activeLayout === 6 && screenShareVideoRef.current && screenShareVideoRef.current.srcObject) {
+        // Draw screen share (Layout 6)
+        if ((selectedLayoutRef.current === 6 || isSharingScreenRef.current) && screenShareVideoRef.current?.srcObject) {
           const video = screenShareVideoRef.current;
           if (video.readyState >= 2) {
             const topBarHeight = canvas.height * 0.12;
-            const screenShareY = topBarHeight;
-            const screenShareHeight = canvas.height - topBarHeight;
-
-            // Draw screen share full width below participant thumbnails
-            ctx.drawImage(video, 0, screenShareY, canvas.width, screenShareHeight);
+            ctx.drawImage(video, 0, topBarHeight, canvas.width, canvas.height - topBarHeight);
           }
         }
 
-        // DIAGNOSTIC: Log video state every 60 frames
-        if (frameCount % 60 === 0) {
-          console.log('[StudioCanvas] Participant state:', {
-            totalParticipants: allParticipants.length,
-            localOnStage: isLocalUserOnStageRef.current,
-            localVideoEnabled: videoEnabledRef.current,
-            localVideoReady: mainVideoRef.current?.readyState,
-            remoteCount: onStageRemote.length,
-            layout: activeLayout,
-            isScreenSharing: isScreenSharing,
-          });
-        }
-
-        // Draw video clip (full-screen, on top of participants but below overlays)
-        if (videoClipRef.current && videoClipRef.current.readyState >= 2) {
+        // Draw video clip
+        if (videoClipRef.current?.readyState >= 2) {
           ctx.drawImage(videoClipRef.current, 0, 0, canvas.width, canvas.height);
         }
 
-        // Draw overlay image (full-screen, on top of video clips)
+        // Draw overlay
         if (overlayImageRef.current) {
           ctx.drawImage(overlayImageRef.current, 0, 0, canvas.width, canvas.height);
         }
 
-        // Draw logo (top-left corner)
+        // Draw logo
         if (logoImageRef.current) {
-          const logoSize = 150;
-          ctx.drawImage(logoImageRef.current, 20, 20, logoSize, logoSize);
+          ctx.drawImage(logoImageRef.current, 20, 20, 150, 150);
         }
 
-        // Draw captions (bottom center)
+        // Draw captions
         if (captionsEnabledRef.current && currentCaptionRef.current) {
           const caption = currentCaptionRef.current;
-          const padding = 20;
-          const maxWidth = canvas.width - padding * 2;
-          const bottomMargin = 80;
-
-          // Set caption text style
           ctx.font = 'bold 32px Arial, sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'bottom';
-
-          // Measure text for background box
+          const maxWidth = canvas.width - 40;
           const textMetrics = ctx.measureText(caption.text);
           const textWidth = Math.min(textMetrics.width, maxWidth);
-          const textHeight = 40; // Approximate text height
-          const boxPadding = 15;
 
-          // Draw semi-transparent background
           ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-          ctx.fillRect(
-            canvas.width / 2 - textWidth / 2 - boxPadding,
-            canvas.height - bottomMargin - textHeight - boxPadding,
-            textWidth + boxPadding * 2,
-            textHeight + boxPadding * 2
-          );
-
-          // Draw white text with shadow for better readability
-          ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-          ctx.shadowBlur = 4;
-          ctx.shadowOffsetX = 2;
-          ctx.shadowOffsetY = 2;
+          ctx.fillRect(canvas.width / 2 - textWidth / 2 - 15, canvas.height - 120 - 40 - 15, textWidth + 30, 40 + 30);
           ctx.fillStyle = '#ffffff';
-          ctx.fillText(caption.text, canvas.width / 2, canvas.height - bottomMargin, maxWidth);
-
-          // Reset shadow
-          ctx.shadowColor = 'transparent';
-          ctx.shadowBlur = 0;
-          ctx.shadowOffsetX = 0;
-          ctx.shadowOffsetY = 0;
+          ctx.fillText(caption.text, canvas.width / 2, canvas.height - 80, maxWidth);
         }
 
-        // Draw banners (lower thirds, text overlays, CTAs)
-        const visibleBanners = bannersRef.current.filter(b => b.visible);
-        visibleBanners.forEach((banner) => {
+        // Draw banners
+        bannersRef.current.filter(b => b.visible).forEach(banner => {
           let x = 0, y = 0;
           const bannerHeight = 80;
           const bannerWidth = banner.type === 'lower-third' ? 400 : canvas.width * 0.8;
 
-          // Position based on banner.position
           switch (banner.position) {
-            case 'top-left':
-              x = 20; y = 100;
-              break;
-            case 'top-center':
-              x = (canvas.width - bannerWidth) / 2; y = 100;
-              break;
-            case 'top-right':
-              x = canvas.width - bannerWidth - 20; y = 100;
-              break;
-            case 'bottom-left':
-              x = 20; y = canvas.height - bannerHeight - 20;
-              break;
-            case 'bottom-center':
-              x = (canvas.width - bannerWidth) / 2; y = canvas.height - bannerHeight - 20;
-              break;
-            case 'bottom-right':
-              x = canvas.width - bannerWidth - 20; y = canvas.height - bannerHeight - 20;
-              break;
+            case 'top-left': x = 20; y = 100; break;
+            case 'top-center': x = (canvas.width - bannerWidth) / 2; y = 100; break;
+            case 'top-right': x = canvas.width - bannerWidth - 20; y = 100; break;
+            case 'bottom-left': x = 20; y = canvas.height - bannerHeight - 20; break;
+            case 'bottom-center': x = (canvas.width - bannerWidth) / 2; y = canvas.height - bannerHeight - 20; break;
+            case 'bottom-right': x = canvas.width - bannerWidth - 20; y = canvas.height - bannerHeight - 20; break;
           }
 
-          // Draw banner background
           ctx.fillStyle = banner.backgroundColor || 'rgba(0, 0, 0, 0.7)';
           ctx.fillRect(x, y, bannerWidth, bannerHeight);
-
-          // Draw banner text
           ctx.font = 'bold 24px Arial, sans-serif';
           ctx.fillStyle = banner.textColor || '#ffffff';
           ctx.textAlign = 'left';
           ctx.textBaseline = 'top';
           ctx.fillText(banner.title, x + 15, y + 15, bannerWidth - 30);
-
           if (banner.subtitle) {
             ctx.font = '18px Arial, sans-serif';
             ctx.fillText(banner.subtitle, x + 15, y + 45, bannerWidth - 30);
@@ -1301,32 +525,22 @@ export function StudioCanvas({
         if (showChatOnStreamRef.current && chatMessagesRef.current.length > 0) {
           const chatPos = chatOverlayPositionRef.current;
           const chatSize = chatOverlaySizeRef.current;
-          const padding = 10;
-          const messageHeight = 40;
-          const maxMessages = Math.floor((chatSize.height - padding * 2) / messageHeight);
+          const maxMessages = Math.floor((chatSize.height - 20) / 40);
           const recentMessages = chatMessagesRef.current.slice(-maxMessages);
 
-          // Draw chat background
           ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
           ctx.fillRect(chatPos.x, chatPos.y, chatSize.width, chatSize.height);
 
-          // Draw chat messages
-          ctx.font = '16px Arial, sans-serif';
           ctx.textAlign = 'left';
           ctx.textBaseline = 'top';
-
-          recentMessages.forEach((msg, index) => {
-            const y = chatPos.y + padding + index * messageHeight;
-
-            // Author name in bold
+          recentMessages.forEach((msg, i) => {
+            const y = chatPos.y + 10 + i * 40;
             ctx.fillStyle = '#4a9eff';
             ctx.font = 'bold 16px Arial, sans-serif';
-            ctx.fillText(msg.author + ':', chatPos.x + padding, y, chatSize.width - padding * 2);
-
-            // Message text
+            ctx.fillText(msg.author + ':', chatPos.x + 10, y, chatSize.width - 20);
             ctx.fillStyle = '#ffffff';
             ctx.font = '16px Arial, sans-serif';
-            ctx.fillText(msg.message, chatPos.x + padding, y + 20, chatSize.width - padding * 2);
+            ctx.fillText(msg.message, chatPos.x + 10, y + 20, chatSize.width - 20);
           });
         }
 
@@ -1337,36 +551,30 @@ export function StudioCanvas({
           const teleprompterWidth = 600;
           const teleprompterHeight = 200;
           const x = (canvas.width - teleprompterWidth) / 2;
-          const y = canvas.height - teleprompterHeight - 150; // Above captions
+          const y = canvas.height - teleprompterHeight - 150;
 
-          // Semi-transparent background
           ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
           ctx.fillRect(x, y, teleprompterWidth, teleprompterHeight);
 
-          // Teleprompter text
           ctx.save();
           ctx.beginPath();
           ctx.rect(x, y, teleprompterWidth, teleprompterHeight);
           ctx.clip();
-
           ctx.font = `${fontSize}px Arial, sans-serif`;
           ctx.fillStyle = '#ffffff';
           ctx.textAlign = 'left';
           ctx.textBaseline = 'top';
 
-          const lines = teleprompterNotesRef.current.split('\n');
-          const lineHeight = fontSize * 1.4;
-          lines.forEach((line, index) => {
-            const lineY = y + 10 - scrollPos + index * lineHeight;
-            if (lineY > y - lineHeight && lineY < y + teleprompterHeight) {
+          teleprompterNotesRef.current.split('\n').forEach((line, i) => {
+            const lineY = y + 10 - scrollPos + i * fontSize * 1.4;
+            if (lineY > y - fontSize && lineY < y + teleprompterHeight) {
               ctx.fillText(line, x + 10, lineY, teleprompterWidth - 20);
             }
           });
-
           ctx.restore();
         }
 
-        // Draw displayed comment (from social media)
+        // Draw displayed comment
         if (displayedCommentRef.current) {
           const comment = displayedCommentRef.current;
           const commentWidth = 400;
@@ -1374,647 +582,137 @@ export function StudioCanvas({
           const x = canvas.width - commentWidth - 20;
           const y = 200;
 
-          // Comment background
+          const platformColors: Record<string, string> = {
+            youtube: '#FF0000', facebook: '#1877F2', twitch: '#9146FF',
+            linkedin: '#0A66C2', x: '#000000', rumble: '#85C742'
+          };
+
           ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
           ctx.fillRect(x, y, commentWidth, commentHeight);
-
-          // Platform badge
-          const platformColors: Record<string, string> = {
-            youtube: '#FF0000',
-            facebook: '#1877F2',
-            twitch: '#9146FF',
-            linkedin: '#0A66C2',
-            x: '#000000',
-            rumble: '#85C742'
-          };
           ctx.fillStyle = platformColors[comment.platform] || '#666666';
           ctx.fillRect(x, y, commentWidth, 8);
 
-          // Author name
           ctx.font = 'bold 16px Arial, sans-serif';
           ctx.fillStyle = '#ffffff';
           ctx.textAlign = 'left';
           ctx.textBaseline = 'top';
           ctx.fillText(comment.authorName, x + 10, y + 15, commentWidth - 20);
-
-          // Comment text
           ctx.font = '14px Arial, sans-serif';
           ctx.fillStyle = '#cccccc';
           ctx.fillText(comment.message, x + 10, y + 40, commentWidth - 20);
-
-          // Platform name
           ctx.font = '12px Arial, sans-serif';
           ctx.fillStyle = '#888888';
           ctx.fillText(comment.platform.toUpperCase(), x + 10, y + commentHeight - 25, commentWidth - 20);
-        }
-
-        // Log FPS and rendering state every 60 frames
-        if (frameCount % 60 === 0) {
-          const fps = 1000 / elapsed;
-          console.log('[StudioCanvas] Render state:', {
-            fps: fps.toFixed(1),
-            hasBackground: !!backgroundImageRef.current,
-            hasOverlay: !!overlayImageRef.current,
-            hasLogo: !!logoImageRef.current,
-            hasAvatar: !!avatarImageRef.current,
-          });
         }
       }
 
       animationFrameRef.current = requestAnimationFrame(render);
     };
 
-    // Start render loop
     render();
 
-    // Cleanup
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-
-      // Clear canvas stream from service
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       canvasStreamService.setOutputStream(null);
       outputStreamRef.current = null;
     };
-  }, [backgroundColor, orientation]);
+  }, [backgroundColor, orientation, speakingParticipants]);
 
-  // Set video srcObject for local stream
-  // CRITICAL: Must depend on isLocalUserOnStage because video element is conditionally rendered
+  // Set local video srcObject
   useEffect(() => {
     const video = mainVideoRef.current;
     if (!video || !localStream) return;
-
-    console.log('[StudioCanvas] Setting video srcObject:', {
-      hasVideo: !!video,
-      hasStream: !!localStream,
-      streamActive: localStream.active,
-      videoTracks: localStream.getVideoTracks().length,
-      audioTracks: localStream.getAudioTracks().length,
-      isLocalUserOnStage,
-    });
-
     video.srcObject = localStream;
-
-    // Add event listeners to track video loading
-    const handleLoadedMetadata = () => {
-      console.log('[StudioCanvas] Video metadata loaded:', {
-        readyState: video.readyState,
-        videoWidth: video.videoWidth,
-        videoHeight: video.videoHeight,
-      });
-    };
-
-    const handleCanPlay = () => {
-      console.log('[StudioCanvas] Video can play:', {
-        readyState: video.readyState,
-        videoWidth: video.videoWidth,
-        videoHeight: video.videoHeight,
-      });
-    };
-
-    const handleError = (err: Event) => {
-      console.error('[StudioCanvas] Video error:', err);
-    };
-
-    video.addEventListener('loadedmetadata', handleLoadedMetadata);
-    video.addEventListener('canplay', handleCanPlay);
-    video.addEventListener('error', handleError);
-
-    video.play().catch(err => console.error('[StudioCanvas] Failed to play local video:', err));
-
-    return () => {
-      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      video.removeEventListener('canplay', handleCanPlay);
-      video.removeEventListener('error', handleError);
-    };
+    video.play().catch(() => {});
   }, [localStream, isLocalUserOnStage]);
 
-  // Set video srcObject for screen share
+  // Set screen share srcObject
   useEffect(() => {
     if (screenShareVideoRef.current && screenShareStream) {
       screenShareVideoRef.current.srcObject = screenShareStream;
-      screenShareVideoRef.current.play().catch(err => console.error('[StudioCanvas] Failed to play screen share:', err));
+      screenShareVideoRef.current.play().catch(() => {});
     }
   }, [screenShareStream]);
 
-  // Track which participants have audio added to mixer
-  const participantAudioAddedRef = useRef<Set<string>>(new Set());
-
-  // Manage video elements for remote participants AND add their audio to the mixer
+  // Manage remote video elements
   useEffect(() => {
-    const currentParticipantIds = Array.from(remoteParticipants.keys());
-    const existingVideoIds = Array.from(remoteVideoElementsRef.current.keys());
+    const currentIds = Array.from(remoteParticipants.keys());
+    const existingIds = Array.from(remoteVideoElementsRef.current.keys());
 
-    console.log('[StudioCanvas] Managing remote participant videos:', {
-      currentParticipants: currentParticipantIds,
-      existingVideos: existingVideoIds,
-    });
+    currentIds.forEach(id => {
+      const p = remoteParticipants.get(id);
+      if (!p?.stream || p.role !== 'guest' || id === 'screen-share') return;
 
-    // Create video elements for new participants
-    currentParticipantIds.forEach((participantId) => {
-      const participant = remoteParticipants.get(participantId);
-      if (!participant || !participant.stream) return;
-
-      // Skip participants not on stage: only 'guest' role goes on stage
-      // null/undefined/backstage roles stay in preview area
-      if (participant.role !== 'guest' || participantId === 'screen-share') return;
-
-      // Add participant audio to mixer if not already added (for on-stage participants)
-      if (!participantAudioAddedRef.current.has(participantId) && participant.audioEnabled) {
-        const audioTrack = participant.stream.getAudioTracks()[0];
+      if (!participantAudioAddedRef.current.has(id) && p.audioEnabled) {
+        const audioTrack = p.stream.getAudioTracks()[0];
         if (audioTrack) {
-          console.log('[StudioCanvas] Adding participant audio to mixer:', participantId);
           try {
-            const audioStream = new MediaStream([audioTrack]);
-            audioMixerService.addStream(`participant-${participantId}`, audioStream);
-            participantAudioAddedRef.current.add(participantId);
-          } catch (err) {
-            console.error('[StudioCanvas] Failed to add participant audio to mixer:', participantId, err);
-          }
+            audioMixerService.addStream(`participant-${id}`, new MediaStream([audioTrack]));
+            participantAudioAddedRef.current.add(id);
+          } catch {}
         }
       }
 
-      // Skip if video element already exists - only update if absolutely necessary
-      if (remoteVideoElementsRef.current.has(participantId)) {
-        const existingVideo = remoteVideoElementsRef.current.get(participantId);
-        if (!existingVideo) return;
+      if (remoteVideoElementsRef.current.has(id)) {
+        const video = remoteVideoElementsRef.current.get(id)!;
+        const isPlaying = video.readyState >= 2 && video.videoWidth > 0 && !video.paused;
+        if (isPlaying) return;
 
-        // CRITICAL: Never update srcObject if video is currently playing with valid dimensions
-        // WebRTC handles track changes internally - updating srcObject causes flicker
-        const isVideoPlaying = existingVideo.readyState >= 2 &&
-                               existingVideo.videoWidth > 0 &&
-                               existingVideo.videoHeight > 0 &&
-                               !existingVideo.paused;
-
-        if (isVideoPlaying) {
-          // Video is playing fine - don't touch srcObject at all
-          // Just ensure audio is in mixer if enabled
-          if (participant.audioEnabled && !participantAudioAddedRef.current.has(participantId)) {
-            const audioTrack = participant.stream?.getAudioTracks()[0];
-            if (audioTrack) {
-              try {
-                const audioStream = new MediaStream([audioTrack]);
-                audioMixerService.addStream(`participant-${participantId}`, audioStream);
-                participantAudioAddedRef.current.add(participantId);
-              } catch (err) {
-                console.error('[StudioCanvas] Failed to add participant audio to mixer:', participantId, err);
-              }
-            }
-          }
-          return;
-        }
-
-        // Video not playing properly - check if we need to update srcObject
-        const existingStream = existingVideo.srcObject as MediaStream | null;
-        const newStream = participant.stream;
-
-        // Only update if stream object actually changed (not just track IDs)
-        // This is more conservative to prevent flickering from WebRTC renegotiations
-        if (existingStream !== newStream && newStream) {
-          console.log('[StudioCanvas] Updating srcObject for participant (video not playing):', participantId);
-          existingVideo.srcObject = newStream;
-          existingVideo.play().catch(err => console.error('[StudioCanvas] Failed to play remote video:', participantId, err));
-
-          // Update audio in mixer
-          if (participant.audioEnabled) {
-            const audioTrack = newStream.getAudioTracks()[0];
-            if (audioTrack) {
-              try {
-                const audioStream = new MediaStream([audioTrack]);
-                audioMixerService.addStream(`participant-${participantId}`, audioStream);
-                participantAudioAddedRef.current.add(participantId);
-              } catch (err) {
-                console.error('[StudioCanvas] Failed to update participant audio in mixer:', participantId, err);
-              }
-            }
-          }
-        } else if (existingVideo.paused) {
-          // Same stream but paused - try to resume
-          existingVideo.play().catch(err => console.error('[StudioCanvas] Failed to resume remote video:', participantId, err));
+        if (video.srcObject !== p.stream && p.stream) {
+          video.srcObject = p.stream;
+          video.play().catch(() => {});
+        } else if (video.paused) {
+          video.play().catch(() => {});
         }
         return;
       }
 
-      // Create new video element
-      console.log('[StudioCanvas] Creating video element for participant:', participantId);
       const video = document.createElement('video');
       video.autoplay = true;
       video.playsInline = true;
-      video.muted = true; // Muted because audio is handled by audioMixerService
-      video.srcObject = participant.stream;
-      video.play().catch(err => console.error('[StudioCanvas] Failed to play remote video:', participantId, err));
-
-      remoteVideoElementsRef.current.set(participantId, video);
+      video.muted = true;
+      video.srcObject = p.stream;
+      video.play().catch(() => {});
+      remoteVideoElementsRef.current.set(id, video);
     });
 
-    // Remove video elements and audio for participants that left or are not on stage
-    // Only 'guest' role should have video elements; others (null/undefined/backstage) should be removed
-    existingVideoIds.forEach((videoId) => {
-      const participant = remoteParticipants.get(videoId);
-      const shouldRemove = !currentParticipantIds.includes(videoId) ||
-                          (participant && participant.role !== 'guest');
-
-      if (shouldRemove) {
-        console.log('[StudioCanvas] Removing video element for participant:', videoId);
-        const video = remoteVideoElementsRef.current.get(videoId);
-        if (video) {
-          video.srcObject = null;
+    existingIds.forEach(id => {
+      const p = remoteParticipants.get(id);
+      if (!currentIds.includes(id) || (p && p.role !== 'guest')) {
+        remoteVideoElementsRef.current.get(id)?.srcObject && (remoteVideoElementsRef.current.get(id)!.srcObject = null);
+        remoteVideoElementsRef.current.delete(id);
+        if (participantAudioAddedRef.current.has(id)) {
+          audioMixerService.removeStream(`participant-${id}`);
+          participantAudioAddedRef.current.delete(id);
         }
-        remoteVideoElementsRef.current.delete(videoId);
-
-        // Also remove audio from mixer
-        if (participantAudioAddedRef.current.has(videoId)) {
-          console.log('[StudioCanvas] Removing participant audio from mixer:', videoId);
-          audioMixerService.removeStream(`participant-${videoId}`);
-          participantAudioAddedRef.current.delete(videoId);
-        }
-
-        // Clean up the offscreen canvas cache for this participant
-        if (participantCanvasCacheRef.current.has(videoId)) {
-          console.log('[StudioCanvas] Removing canvas cache for participant:', videoId);
-          participantCanvasCacheRef.current.delete(videoId);
-        }
+        participantCanvasCacheRef.current.delete(id);
       }
     });
 
-    // Also check for participants that are no longer on stage
-    // Only 'guest' role should have audio in mixer; others (null/undefined/backstage) should be removed
-    participantAudioAddedRef.current.forEach((participantId) => {
-      const participant = remoteParticipants.get(participantId);
-      if (!participant || participant.role !== 'guest') {
-        console.log('[StudioCanvas] Removing off-stage participant audio from mixer:', participantId);
-        audioMixerService.removeStream(`participant-${participantId}`);
-        participantAudioAddedRef.current.delete(participantId);
+    participantAudioAddedRef.current.forEach(id => {
+      const p = remoteParticipants.get(id);
+      if (!p || p.role !== 'guest') {
+        audioMixerService.removeStream(`participant-${id}`);
+        participantAudioAddedRef.current.delete(id);
       }
     });
 
-    // Cleanup on unmount
     return () => {
-      remoteVideoElementsRef.current.forEach((video) => {
-        video.srcObject = null;
-      });
+      remoteVideoElementsRef.current.forEach(v => { v.srcObject = null; });
       remoteVideoElementsRef.current.clear();
-
-      // Clean up audio from mixer
-      participantAudioAddedRef.current.forEach((participantId) => {
-        audioMixerService.removeStream(`participant-${participantId}`);
-      });
+      participantAudioAddedRef.current.forEach(id => audioMixerService.removeStream(`participant-${id}`));
       participantAudioAddedRef.current.clear();
-
-      // Clean up participant canvas cache
       participantCanvasCacheRef.current.clear();
     };
   }, [remoteParticipants]);
 
-  // Load background image
-  useEffect(() => {
-    if (!streamBackground) {
-      backgroundImageRef.current = null;
-      return;
-    }
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      backgroundImageRef.current = img;
-      console.log('[StudioCanvas] Background image loaded:', img.width, 'x', img.height);
-    };
-    img.onerror = (err) => {
-      console.error('[StudioCanvas] Failed to load background image:', err);
-      backgroundImageRef.current = null;
-    };
-    img.src = streamBackground;
-  }, [streamBackground]);
-
-  // Load logo image
-  useEffect(() => {
-    if (!streamLogo) {
-      logoImageRef.current = null;
-      return;
-    }
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      logoImageRef.current = img;
-      console.log('[StudioCanvas] Logo image loaded:', img.width, 'x', img.height);
-    };
-    img.onerror = (err) => {
-      console.error('[StudioCanvas] Failed to load logo image:', err);
-      logoImageRef.current = null;
-    };
-    img.src = streamLogo;
-  }, [streamLogo]);
-
-  // Load overlay image (full-screen)
-  useEffect(() => {
-    if (!streamOverlay) {
-      overlayImageRef.current = null;
-      return;
-    }
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      overlayImageRef.current = img;
-      console.log('[StudioCanvas] Overlay image loaded:', img.width, 'x', img.height);
-    };
-    img.onerror = (err) => {
-      console.error('[StudioCanvas] Failed to load overlay image:', err);
-      overlayImageRef.current = null;
-    };
-    img.src = streamOverlay;
-  }, [streamOverlay]);
-
-  // Listen for explicit video clip play command
-  useEffect(() => {
-    const handlePlayVideoClip = ((e: CustomEvent) => {
-      const { url } = e.detail;
-
-      // Clean up previous video clip
-      if (videoClipRef.current) {
-        videoClipRef.current.pause();
-        videoClipRef.current.src = '';
-        audioMixerService.removeStream('video-clip');
-        videoClipRef.current = null;
-      }
-
-      if (!url) {
-        videoClipUrlRef.current = null;
-        return;
-      }
-
-      videoClipUrlRef.current = url;
-
-      const video = document.createElement('video');
-      video.crossOrigin = 'anonymous';
-      video.src = url;
-      video.loop = false;
-      video.muted = false; // Keep unmuted for audio capture
-      video.playsInline = true;
-
-      video.onloadedmetadata = () => {
-        console.log('[StudioCanvas] Video clip loaded:', video.videoWidth, 'x', video.videoHeight, 'duration:', video.duration);
-        videoClipRef.current = video;
-
-        // Add video audio to mixer for studio monitoring and broadcast
-        try {
-          audioMixerService.addMediaElement('video-clip', video);
-          audioMixerService.setStreamVolume('video-clip', 1.0); // Full volume
-          console.log('[StudioCanvas] Video clip audio added to mixer');
-        } catch (err) {
-          console.error('[StudioCanvas] Failed to add video clip audio to mixer:', err);
-        }
-
-        // Start playback
-        video.play().catch((err) => {
-          console.error('[StudioCanvas] Failed to play video clip:', err);
-        });
-      };
-
-      video.onended = () => {
-        console.log('[StudioCanvas] Video clip ended');
-        // Clean up when video ends
-        audioMixerService.removeStream('video-clip');
-        videoClipRef.current = null;
-        videoClipUrlRef.current = null;
-        // Dispatch event to clear the active state in MediaAssetsPanel
-        window.dispatchEvent(new CustomEvent('videoClipEnded'));
-      };
-
-      video.onerror = (err) => {
-        console.error('[StudioCanvas] Failed to load video clip:', err);
-        videoClipRef.current = null;
-        videoClipUrlRef.current = null;
-      };
-    }) as EventListener;
-
-    const handleStopVideoClip = () => {
-      if (videoClipRef.current) {
-        videoClipRef.current.pause();
-        videoClipRef.current.src = '';
-        audioMixerService.removeStream('video-clip');
-        videoClipRef.current = null;
-        videoClipUrlRef.current = null;
-      }
-    };
-
-    window.addEventListener('playVideoClip', handlePlayVideoClip);
-    window.addEventListener('stopVideoClip', handleStopVideoClip);
-
-    return () => {
-      window.removeEventListener('playVideoClip', handlePlayVideoClip);
-      window.removeEventListener('stopVideoClip', handleStopVideoClip);
-      // Cleanup on unmount
-      if (videoClipRef.current) {
-        videoClipRef.current.pause();
-        videoClipRef.current.src = '';
-        audioMixerService.removeStream('video-clip');
-      }
-    };
-  }, []);
-
-  // Load avatar image
-  useEffect(() => {
-    const avatarUrl = localStorage.getItem('selectedAvatar');
-    if (!avatarUrl) {
-      avatarImageRef.current = null;
-      return;
-    }
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      avatarImageRef.current = img;
-      console.log('[StudioCanvas] Avatar image loaded:', img.width, 'x', img.height);
-    };
-    img.onerror = (err) => {
-      console.error('[StudioCanvas] Failed to load avatar image:', err);
-      avatarImageRef.current = null;
-    };
-    img.src = avatarUrl;
-  }, []); // Load once on mount
-
-  // Calculate total participants (local user if on stage + remote on-stage)
-  const onStageParticipants = Array.from(remoteParticipants.values()).filter(
-    (p) => p.role !== 'backstage' && p.id !== 'screen-share'
-  );
-  const totalParticipants = (isLocalUserOnStage ? 1 : 0) + onStageParticipants.length;
-
-  // Dynamic grid calculation using the formula: cols = Math.ceil(Math.sqrt(count))
-  const calculateDynamicGrid = (participantCount: number) => {
-    // Special case for solo layout: use 2x2 grid to keep same size as 4-person layout
-    if (participantCount === 1) {
-      return { cols: 2, rows: 2 };
-    }
-    const cols = Math.ceil(Math.sqrt(participantCount));
-    const rows = Math.ceil(participantCount / cols);
-    return { cols, rows };
-  };
-
-  // Layout system - implements all 8 layout types
-  const getLayoutStyles = (layoutId: number | 'screenshare') => {
-    // When screen is being shared, use layout 6 (Screen)
-    if (layoutId === 'screenshare' || (isSharingScreen && selectedLayout === 6)) {
-      return {
-        type: 'screen',
-        container: 'flex flex-col gap-1 p-1',
-        topBar: 'flex flex-row gap-1',
-        topBarHeight: 'h-[12%]', // Smaller participant thumbnails (12% instead of 25%)
-        screenShare: 'flex-1 h-[88%]', // Almost fullscreen for shared screen (88% instead of 75%)
-      };
-    }
-
-    const numericLayoutId = typeof layoutId === 'number' ? layoutId : selectedLayout;
-
-    switch (numericLayoutId) {
-      case 1: // Solo - One person fills entire screen
-        return {
-          type: 'solo',
-          container: 'grid gap-2 p-2',
-          gridCols: 1,
-          gridRows: 1,
-          mainVideo: 'col-span-1 row-span-1',
-        };
-
-      case 2: // Cropped - 2x2 grid, tight boxes
-        return {
-          type: 'cropped',
-          container: 'grid gap-2 p-2',
-          gridCols: 2,
-          gridRows: 2,
-          mainVideo: 'col-span-1 row-span-1',
-        };
-
-      case 3: // Group - Equal-sized grid (auto-calculated)
-        const { cols, rows } = calculateDynamicGrid(totalParticipants);
-        return {
-          type: 'group',
-          container: 'grid gap-2 p-2',
-          gridCols: cols,
-          gridRows: rows,
-          mainVideo: 'col-span-1 row-span-1',
-        };
-
-      case 4: // Spotlight - One large + small boxes above
-        return {
-          type: 'spotlight',
-          container: 'grid gap-2 p-2',
-          gridCols: 3,
-          gridRows: 4,
-          mainVideo: 'col-span-3 row-span-3', // Bottom 3 rows
-          secondaryVideo: 'col-span-1 row-span-1', // Top row slots
-        };
-
-      case 5: // News - Side by side (2 columns)
-        return {
-          type: 'news',
-          container: 'grid gap-2 p-2',
-          gridCols: 2,
-          gridRows: 1,
-          mainVideo: 'col-span-1 row-span-1',
-        };
-
-      case 6: // Screen - Handled above with screen share
-        return {
-          type: 'screen',
-          container: 'flex flex-col gap-2 p-2',
-          topBar: 'flex flex-row gap-2',
-          topBarHeight: 'h-[25%]',
-          screenShare: 'flex-1 h-[75%]',
-        };
-
-      case 7: // Picture-in-Picture - Full screen with overlay
-        return {
-          type: 'pip',
-          container: 'relative p-2',
-          mainVideo: 'w-full h-full',
-          pipOverlay: 'absolute bottom-4 right-4 w-1/4 h-1/4',
-        };
-
-      case 8: // Cinema - Wide format (21:9 aspect)
-        return {
-          type: 'cinema',
-          container: 'grid gap-2 p-2',
-          gridCols: totalParticipants > 1 ? 2 : 1,
-          gridRows: 1,
-          mainVideo: 'col-span-1 row-span-1',
-        };
-
-      case 9: // Video Grid - Auto-adjusting grid layout
-        const videoGrid = calculateDynamicGrid(totalParticipants);
-        return {
-          type: 'videogrid',
-          container: 'grid gap-4 p-4',
-          gridCols: videoGrid.cols,
-          gridRows: videoGrid.rows,
-          mainVideo: 'col-span-1 row-span-1 w-full h-full',
-        };
-
-      case 10: // Advanced Positioning - Draggable participants
-        return {
-          type: 'draggable',
-          container: 'relative w-full h-full',
-          mainVideo: 'absolute',
-        };
-
-      default:
-        // Fallback to group layout
-        const fallbackGrid = calculateDynamicGrid(totalParticipants);
-        return {
-          type: 'group',
-          container: 'grid gap-2 p-2',
-          gridCols: fallbackGrid.cols,
-          gridRows: fallbackGrid.rows,
-          mainVideo: 'col-span-1 row-span-1',
-        };
-    }
-  };
-
-  // Set srcObject for screen share video
-  useEffect(() => {
-    if (screenShareVideoRef.current && screenShareStream) {
-      screenShareVideoRef.current.srcObject = screenShareStream;
-      // Ensure video plays
-      screenShareVideoRef.current.play().catch(err =>
-        console.error('Failed to play screen share video:', err)
-      );
-    }
-  }, [screenShareStream]);
-
-  // Get position styles for banner overlay
-  const getBannerPositionStyles = (position: Banner['position']) => {
-    const positions = {
-      'top-left': { top: '20px', left: '20px' },
-      'top-center': { top: '20px', left: '50%', transform: 'translateX(-50%)' },
-      'top-right': { top: '20px', right: '20px' },
-      'bottom-left': { bottom: '20px', left: '20px' },
-      'bottom-center': { bottom: '20px', left: '50%', transform: 'translateX(-50%)' },
-      'bottom-right': { bottom: '20px', right: '20px' },
-    };
-    return positions[position];
-  };
-
-  // Calculate aspect ratio based on orientation
-  const aspectRatio = orientation === 'portrait' ? '9 / 16' : '16 / 9';
-
   const handleFullscreen = () => {
     if (containerRef.current) {
-      if (document.fullscreenElement) {
-        document.exitFullscreen();
-      } else {
-        containerRef.current.requestFullscreen();
-      }
+      document.fullscreenElement ? document.exitFullscreen() : containerRef.current.requestFullscreen();
     }
   };
 
-  const handleVolumeChange = (newVolume: number) => {
-    setVolume(newVolume);
-    // Volume is controlled via audioMixerService in Studio.tsx via canvasSettings.inputVolume
-    // This function just updates local UI state
-  };
+  const aspectRatio = orientation === 'portrait' ? '9 / 16' : '16 / 9';
 
   return (
     <div
@@ -2032,18 +730,11 @@ export function StudioCanvas({
         justifyContent: 'center',
       }}
     >
-      {/* Canvas - renders all output */}
       <canvas
         ref={canvasRef}
-        style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'contain',
-          backgroundColor: '#000',
-        }}
+        style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
       />
 
-      {/* Fullscreen button - bottom right */}
       <button
         onClick={handleFullscreen}
         className="absolute bottom-2 right-2 bg-black/50 hover:bg-black/70 text-white p-2 rounded text-lg opacity-0 group-hover:opacity-100 transition-opacity"
@@ -2053,7 +744,6 @@ export function StudioCanvas({
         [ ]
       </button>
 
-      {/* Volume control - bottom center */}
       <div
         className="absolute bottom-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
         style={{ zIndex: 50 }}
@@ -2062,37 +752,18 @@ export function StudioCanvas({
           <div className="text-white text-sm font-medium">Volume</div>
           <div className="flex items-center gap-3">
             <span className="text-white text-xs">0</span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={volume}
-              onChange={(e) => handleVolumeChange(parseInt(e.target.value))}
-              className="w-32 h-2"
-            />
+            <input type="range" min="0" max="100" value={volume} onChange={e => setVolume(parseInt(e.target.value))} className="w-32 h-2" />
             <span className="text-white text-xs">100</span>
           </div>
           <div className="text-white text-sm">{volume}%</div>
         </div>
       </div>
 
-      {/* Hidden video elements for stream management */}
       {localStream && isLocalUserOnStage && (
-        <video
-          ref={mainVideoRef}
-          autoPlay
-          playsInline
-          muted
-          style={{ display: 'none' }}
-        />
+        <video ref={mainVideoRef} autoPlay playsInline muted style={{ display: 'none' }} />
       )}
       {screenShareStream && (
-        <video
-          ref={screenShareVideoRef}
-          autoPlay
-          playsInline
-          style={{ display: 'none' }}
-        />
+        <video ref={screenShareVideoRef} autoPlay playsInline style={{ display: 'none' }} />
       )}
     </div>
   );

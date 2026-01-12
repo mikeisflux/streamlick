@@ -21,3 +21,6 @@ export { useStudioHandlers } from './useStudioHandlers';
 export { useAutoMuteDuringVideos } from './useAutoMuteDuringVideos';
 export { usePreviewStream } from './usePreviewStream';
 export { useGuestStreams } from './useGuestStreams';
+export { useCanvasMedia } from './useCanvasMedia';
+export { useRemoteVideoElements } from './useRemoteVideoElements';
+export { calculateParticipantPositions, calculateDynamicGrid, getLayoutStyles } from './useLayoutCalculations';
