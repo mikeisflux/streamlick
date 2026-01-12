@@ -52,6 +52,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
   // Previously these were module-level variables, causing state to leak between component instances
   const lastStreamRequestTimeRef = useRef<number>(0);
   const previousParticipantIdsRef = useRef<Set<string>>(new Set());
+  const isFirstPollRef = useRef<boolean>(true);
 
   // HTTP polling for greenroom participants - this is the PRIMARY mechanism
   // Socket events are supplementary for real-time updates
@@ -132,9 +133,19 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
         });
 
         // COMBINED POLL: Request streams if any participant is missing one
-        // But debounce to prevent constant reconnection causing flickering
+        // On first poll (page load/reload), always request streams immediately
+        // After that, debounce to prevent constant reconnection causing flickering
         const now = Date.now();
-        if (shouldRequestStreams && (now - lastStreamRequestTimeRef.current) > STREAM_REQUEST_DEBOUNCE) {
+        const isFirstPoll = isFirstPollRef.current;
+
+        if (isFirstPoll && participants.length > 0) {
+          // First poll after page load - request streams for ALL participants regardless of role
+          // This ensures we reconnect to existing on-stage guests after host reload
+          console.log('[useParticipants] First poll: requesting streams for all', participants.length, 'participants');
+          socketService.emit('request-guest-streams');
+          lastStreamRequestTimeRef.current = now;
+          isFirstPollRef.current = false;
+        } else if (shouldRequestStreams && (now - lastStreamRequestTimeRef.current) > STREAM_REQUEST_DEBOUNCE) {
           console.log('[useParticipants] Poll: requesting streams for participants without video:', participantsWithoutStreams);
           socketService.emit('request-guest-streams');
           lastStreamRequestTimeRef.current = now;

@@ -138,10 +138,16 @@ export function useStudioInitialization({
 
         // Request existing guests to resend their stream offers
         // This handles the case where guests joined before the host connected
+        // Do this multiple times with increasing delays to handle WebRTC setup timing
         setTimeout(() => {
-          console.log('[Studio Init] Requesting existing guests to resend stream offers');
+          console.log('[Studio Init] Requesting existing guests to resend stream offers (1s)');
           socketService.emit('request-guest-streams');
         }, 1000);
+
+        setTimeout(() => {
+          console.log('[Studio Init] Requesting existing guests to resend stream offers (3s)');
+          socketService.emit('request-guest-streams');
+        }, 3000);
 
         // Set initialized flag BEFORE setting loading to false (atomic state update)
         isInitializedRef.current = true;
