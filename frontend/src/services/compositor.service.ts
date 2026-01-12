@@ -28,51 +28,22 @@ import type { PerformanceMetrics } from '../types';
 import logger from '../utils/logger';
 import type { Caption } from './caption.service';
 
-// CanvasCaptureMediaStreamTrack extends MediaStreamTrack with requestFrame() method
-// This is returned by canvas.captureStream(0) for manual frame capture mode
-interface CanvasCaptureMediaStreamTrack extends MediaStreamTrack {
-  requestFrame(): void;
-}
-
-interface ParticipantStream {
-  id: string;
-  name: string;
-  stream: MediaStream;
-  isLocal: boolean;
-  audioEnabled: boolean;
-  videoEnabled: boolean;
-  avatarUrl?: string; // Optional avatar image URL for when video is disabled
-}
-
-interface LayoutConfig {
-  type: 'grid' | 'spotlight' | 'sidebar' | 'pip' | 'screenshare';
-  spotlightId?: string; // For spotlight layout
-  positions?: Array<{ x: number; y: number; width: number; height: number }>;
-}
-
-interface OverlayAsset {
-  id: string;
-  type: 'logo' | 'banner' | 'background';
-  url: string;
-  position?: { x: number; y: number; width?: number; height?: number };
-}
-
-interface ChatMessage {
-  id: string;
-  platform: 'youtube' | 'facebook' | 'twitch' | 'x' | 'rumble';
-  author: string;
-  message: string;
-  timestamp: Date;
-}
-
-interface LowerThird {
-  id: string;
-  name: string;
-  title?: string;
-  subtitle?: string;
-  style?: 'modern' | 'classic' | 'minimal' | 'bold';
-  position?: 'left' | 'center' | 'right';
-}
+// Import modular utilities
+import {
+  type ParticipantStream,
+  type LayoutConfig,
+  type OverlayAsset,
+  type ChatMessage,
+  type LowerThird,
+  createAudioAnalyser as createAnalyser,
+  getAudioLevel,
+  createFrozenDetectionState,
+  checkCanvasFrozen as checkFrozen,
+  DEFAULT_FROZEN_CONFIG,
+  type FrozenDetectionState,
+  createSilentAudioTrack,
+  drawAntiMuteNoise,
+} from './compositor';
 
 class CompositorService {
   private canvas: HTMLCanvasElement | null = null;
@@ -134,12 +105,8 @@ class CompositorService {
   private performanceCallback?: (metrics: PerformanceMetrics) => void;
 
   // Pixel delta monitoring for frozen canvas detection
-  private lastPixelSample: Uint8ClampedArray | null = null;
-  private lastPixelSampleTime = 0;
-  private pixelSampleInterval = 1000; // Check every 1 second
-  private frozenFrameCount = 0;
-  private readonly PIXEL_SAMPLE_SIZE = 100; // 100x100 pixel sample region
-  private readonly MAX_FROZEN_FRAMES = 3; // Alert after 3 consecutive frozen samples
+  private frozenDetection: FrozenDetectionState = createFrozenDetectionState();
+  private readonly PIXEL_SAMPLE_SIZE = DEFAULT_FROZEN_CONFIG.sampleSize;
 
   // Tab visibility detection for aggressive anti-mute
   private isTabVisible = true;
@@ -239,7 +206,7 @@ class CompositorService {
           audioMixerService.addStream(participant.id, audioStream);
 
           // Create audio analyser for pulsating visualization when camera is off
-          this.createAudioAnalyser(participant.id, audioStream);
+          this.createAudioAnalyserForParticipant(participant.id, audioStream);
         }
       }
     }
@@ -368,25 +335,11 @@ class CompositorService {
   /**
    * Create audio analyser for visualizing participant audio levels
    */
-  private createAudioAnalyser(participantId: string, audioStream: MediaStream): void {
-    try {
-      // Create a separate audio context for analysis (not the mixer context)
-      const audioContext = new AudioContext();
-      const source = audioContext.createMediaStreamSource(audioStream);
-      const analyser = audioContext.createAnalyser();
-
-      // Configure analyser for speech detection
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.8;
-
-      // Connect source to analyser (don't connect to destination - just analyze)
-      source.connect(analyser);
-
-      // Store analyser
-      this.audioAnalysers.set(participantId, analyser);
+  private createAudioAnalyserForParticipant(participantId: string, audioStream: MediaStream): void {
+    const result = createAnalyser(audioStream);
+    if (result) {
+      this.audioAnalysers.set(participantId, result.analyser);
       this.audioLevels.set(participantId, 0);
-    } catch (error) {
-      logger.error(`Failed to create audio analyser for ${participantId}:`, error);
     }
   }
 
@@ -396,22 +349,8 @@ class CompositorService {
    */
   private updateAudioLevels(): void {
     this.audioAnalysers.forEach((analyser, participantId) => {
-      const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-      analyser.getByteFrequencyData(dataArray);
-
-      // Calculate average volume
-      let sum = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        sum += dataArray[i];
-      }
-      const average = sum / bufferLength;
-
-      // Normalize to 0-1 range (0-255 → 0-1)
-      const normalizedLevel = average / 255;
-
-      // Store level for drawing
-      this.audioLevels.set(participantId, normalizedLevel);
+      const level = getAudioLevel(analyser);
+      this.audioLevels.set(participantId, level);
     });
   }
 
@@ -894,19 +833,6 @@ class CompositorService {
   }
 
   /**
-   * Create a silent audio track to boost MediaStream priority
-   * Browsers are less likely to suspend streams with audio present
-   */
-  private createSilentAudioTrack(): MediaStreamTrack {
-    const ctx = new AudioContext();
-    const oscillator = ctx.createOscillator();
-    const dst = ctx.createMediaStreamDestination();
-    oscillator.connect(dst);
-    oscillator.start();
-    return dst.stream.getAudioTracks()[0];
-  }
-
-  /**
    * Start compositing loop
    */
   start(): void {
@@ -928,7 +854,7 @@ class CompositorService {
     // Add silent audio track to boost stream priority in browser's scheduling engine
     // Even though composite stream has mixed audio, having audio on the raw canvas stream
     // signals to the browser that this is an active multimedia source
-    const silentAudio = this.createSilentAudioTrack();
+    const silentAudio = createSilentAudioTrack();
     this.outputStream.addTrack(silentAudio);
 
     // CRITICAL: Set contentHint to tell browser this is motion video content
@@ -968,8 +894,8 @@ class CompositorService {
           this.outputStream = this.canvas!.captureStream(30);
 
           // Add silent audio track to boost stream priority
-          const silentAudio = this.createSilentAudioTrack();
-          this.outputStream.addTrack(silentAudio);
+          const newSilentAudio = createSilentAudioTrack();
+          this.outputStream.addTrack(newSilentAudio);
 
           const newVideoTrack = this.outputStream.getVideoTracks()[0];
 
@@ -1196,46 +1122,10 @@ class CompositorService {
       }
 
       // ANTI-MUTE: Draw imperceptible noise to prevent browser from detecting static canvas
-      // contentHint='motion' alone is NOT sufficient - browser still detects static canvas during countdown
-      // CRITICAL FIX: Delta must be > 0.5 to avoid frozen detection
-      // Drawing MANY pixels with higher alpha, distributed across canvas
-      this.ctx!.save();
-
-      // CRITICAL FIX: Draw noise in the SAME region that frozen detection samples from (center 100x100)
-      // Previous bug: noise was drawn randomly across entire canvas, so sample region missed it
-      // This guarantees the frozen detection will see pixel changes
+      // Use modular utility for anti-mute noise drawing
       const sampleX = Math.floor((this.WIDTH - this.PIXEL_SAMPLE_SIZE) / 2);
       const sampleY = Math.floor((this.HEIGHT - this.PIXEL_SAMPLE_SIZE) / 2);
-
-      if (this.isTabVisible) {
-        // Normal mode: Draw 50 noise pixels in sample region
-        // Alpha 0.15 = 85% transparent, creates strong delta while still imperceptible
-        this.ctx!.globalAlpha = 0.15;
-        for (let i = 0; i < 50; i++) {
-          this.ctx!.fillStyle = `rgb(${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)})`;
-          this.ctx!.fillRect(
-            sampleX + Math.random() * this.PIXEL_SAMPLE_SIZE,  // X within sample region
-            sampleY + Math.random() * this.PIXEL_SAMPLE_SIZE,  // Y within sample region
-            2,
-            2
-          );
-        }
-      } else {
-        // AGGRESSIVE MODE: Tab is hidden, browser may throttle more aggressively
-        // Draw 100 pixels with higher alpha in sample region
-        this.ctx!.globalAlpha = 0.2;
-        for (let i = 0; i < 100; i++) {
-          this.ctx!.fillStyle = `rgb(${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)})`;
-          this.ctx!.fillRect(
-            sampleX + Math.random() * this.PIXEL_SAMPLE_SIZE,  // X within sample region
-            sampleY + Math.random() * this.PIXEL_SAMPLE_SIZE,  // Y within sample region
-            3,
-            3
-          );
-        }
-      }
-
-      this.ctx!.restore();
+      drawAntiMuteNoise(this.ctx!, sampleX, sampleY, this.PIXEL_SAMPLE_SIZE, !this.isTabVisible);
 
       // FAILOVER: Draw reconnecting overlay on top of everything if track is being recovered
       if (this.showReconnectingOverlay) {
@@ -1334,67 +1224,12 @@ class CompositorService {
     // Skip frozen detection when video/image overlay is playing
     // Video content (especially timer.mp4) may have low pixel delta but is NOT frozen
     if (this.mediaClipOverlay !== null) {
-      // Reset frozen counter since we're skipping checks during video playback
-      this.frozenFrameCount = 0;
+      this.frozenDetection.frozenFrameCount = 0;
       return;
     }
 
-    const now = Date.now();
-    if (now - this.lastPixelSampleTime < this.pixelSampleInterval) {
-      return; // Not time to check yet
-    }
-
-    this.lastPixelSampleTime = now;
-
-    try {
-      // Sample a region from the center of the canvas
-      const sampleX = Math.floor((this.WIDTH - this.PIXEL_SAMPLE_SIZE) / 2);
-      const sampleY = Math.floor((this.HEIGHT - this.PIXEL_SAMPLE_SIZE) / 2);
-
-      const imageData = this.ctx.getImageData(
-        sampleX,
-        sampleY,
-        this.PIXEL_SAMPLE_SIZE,
-        this.PIXEL_SAMPLE_SIZE
-      );
-
-      const currentSample = imageData.data;
-
-      if (this.lastPixelSample !== null) {
-        // Compare with previous sample
-        let totalDelta = 0;
-        for (let i = 0; i < currentSample.length; i++) {
-          totalDelta += Math.abs(currentSample[i] - this.lastPixelSample[i]);
-        }
-
-        const avgDelta = totalDelta / currentSample.length;
-
-        // Threshold: if average pixel change is less than 0.5 (out of 255), canvas is frozen
-        // This accounts for the imperceptible noise pixel (0.01 alpha) which won't create much delta
-        // But participant video with motion should create significant delta
-        if (avgDelta < 0.5) {
-          this.frozenFrameCount++;
-
-          if (this.frozenFrameCount >= this.MAX_FROZEN_FRAMES) {
-            logger.error(`[Canvas Frozen] CRITICAL: Canvas frozen for ${this.frozenFrameCount} consecutive checks!`, {
-              avgDelta,
-              frameCount: this.frameCount,
-            });
-
-            // Could trigger track recreation here if needed
-            // For now, just alert - the track mute listener will handle recreation
-          }
-        } else {
-          // Canvas is changing - reset frozen counter
-          this.frozenFrameCount = 0;
-        }
-      }
-
-      // Store current sample for next comparison
-      this.lastPixelSample = new Uint8ClampedArray(currentSample);
-    } catch (error) {
-      logger.error('[Canvas Frozen] Error checking canvas frozen state:', error);
-    }
+    // Use modular frozen detection utility
+    checkFrozen(this.ctx, this.WIDTH, this.HEIGHT, this.frozenDetection);
   }
 
   /**
@@ -1412,22 +1247,10 @@ class CompositorService {
         // Force a render even if requestAnimationFrame is throttled
         if (this.isCompositing && this.ctx) {
           try {
-            // Just draw some noise to keep the stream active
+            // Use modular utility for anti-mute noise (isTabHidden=true for aggressive mode)
             const sampleX = Math.floor((this.WIDTH - this.PIXEL_SAMPLE_SIZE) / 2);
             const sampleY = Math.floor((this.HEIGHT - this.PIXEL_SAMPLE_SIZE) / 2);
-
-            this.ctx.save();
-            this.ctx.globalAlpha = 0.2;
-            for (let i = 0; i < 100; i++) {
-              this.ctx.fillStyle = `rgb(${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)})`;
-              this.ctx.fillRect(
-                sampleX + Math.random() * this.PIXEL_SAMPLE_SIZE,
-                sampleY + Math.random() * this.PIXEL_SAMPLE_SIZE,
-                3,
-                3
-              );
-            }
-            this.ctx.restore();
+            drawAntiMuteNoise(this.ctx, sampleX, sampleY, this.PIXEL_SAMPLE_SIZE, true);
           } catch (error) {
             logger.error('[Backup Timer] Error rendering:', error);
           }
