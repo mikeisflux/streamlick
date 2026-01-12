@@ -1,4 +1,4 @@
-import { RefObject, useState, useEffect, useRef } from 'react';
+import { RefObject, useState, useEffect, useRef, memo } from 'react';
 
 interface ParticipantBoxProps {
   stream: MediaStream | null;
@@ -28,7 +28,12 @@ interface ParticipantBoxProps {
   onPositionChange?: (position: { x: number; y: number; width: number; height: number }) => void;
 }
 
-export function ParticipantBox({
+/**
+ * BEST PRACTICE: Memoized ParticipantBox component
+ * Prevents unnecessary re-renders when parent updates but props haven't changed
+ * Critical for performance in multi-participant studio layouts
+ */
+function ParticipantBoxComponent({
   stream,
   videoEnabled,
   audioEnabled = true,
@@ -423,3 +428,38 @@ export function ParticipantBox({
     </div>
   );
 }
+
+/**
+ * BEST PRACTICE: Custom comparison function for React.memo
+ * Only re-render when meaningful props change, not on every parent render
+ */
+function arePropsEqual(prevProps: ParticipantBoxProps, nextProps: ParticipantBoxProps): boolean {
+  // Always re-render if stream reference changes (new stream object)
+  if (prevProps.stream !== nextProps.stream) return false;
+
+  // Check primitive props that affect rendering
+  if (prevProps.videoEnabled !== nextProps.videoEnabled) return false;
+  if (prevProps.audioEnabled !== nextProps.audioEnabled) return false;
+  if (prevProps.isSpeaking !== nextProps.isSpeaking) return false;
+  if (prevProps.name !== nextProps.name) return false;
+  if (prevProps.title !== nextProps.title) return false;
+  if (prevProps.connectionQuality !== nextProps.connectionQuality) return false;
+  if (prevProps.editMode !== nextProps.editMode) return false;
+  if (prevProps.cameraFrame !== nextProps.cameraFrame) return false;
+  if (prevProps.borderWidth !== nextProps.borderWidth) return false;
+  if (prevProps.borderColor !== nextProps.borderColor) return false;
+  if (prevProps.mirrorVideo !== nextProps.mirrorVideo) return false;
+
+  // Check position object (used in edit mode)
+  if (prevProps.position !== nextProps.position) {
+    if (!prevProps.position || !nextProps.position) return false;
+    if (prevProps.position.x !== nextProps.position.x) return false;
+    if (prevProps.position.y !== nextProps.position.y) return false;
+    if (prevProps.position.width !== nextProps.position.width) return false;
+    if (prevProps.position.height !== nextProps.position.height) return false;
+  }
+
+  return true;
+}
+
+export const ParticipantBox = memo(ParticipantBoxComponent, arePropsEqual);

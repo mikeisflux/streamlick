@@ -46,6 +46,158 @@ function validateEnvironment() {
 
 validateEnvironment();
 
+// ==========================================
+// BEST PRACTICE: Connection Limits & Memory Pressure Handling
+// Prevents server overload and ensures stability
+// ==========================================
+
+// Connection limits
+const LIMITS = {
+  MAX_BROADCASTS: parseInt(process.env.MAX_BROADCASTS || '100', 10),
+  MAX_TRANSPORTS_PER_BROADCAST: parseInt(process.env.MAX_TRANSPORTS_PER_BROADCAST || '50', 10),
+  MAX_PRODUCERS_PER_BROADCAST: parseInt(process.env.MAX_PRODUCERS_PER_BROADCAST || '20', 10),
+  MAX_CONSUMERS_PER_BROADCAST: parseInt(process.env.MAX_CONSUMERS_PER_BROADCAST || '500', 10),
+  MAX_CONCURRENT_FFMPEG: parseInt(process.env.MAX_CONCURRENT_FFMPEG || '10', 10),
+  // Memory thresholds (percentage)
+  MEMORY_WARNING_THRESHOLD: 80,
+  MEMORY_CRITICAL_THRESHOLD: 90,
+  MEMORY_REJECT_THRESHOLD: 95,
+};
+
+// Track active FFmpeg processes
+let activeFfmpegProcesses = 0;
+
+// Memory status
+interface MemoryStatus {
+  heapUsedPercent: number;
+  systemUsedPercent: number;
+  isWarning: boolean;
+  isCritical: boolean;
+  shouldRejectNew: boolean;
+}
+
+/**
+ * BEST PRACTICE: Check current memory status
+ * Returns memory metrics and whether new connections should be rejected
+ */
+function getMemoryStatus(): MemoryStatus {
+  const memUsage = process.memoryUsage();
+  const heapUsedPercent = Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100);
+
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const systemUsedPercent = Math.round(((totalMem - freeMem) / totalMem) * 100);
+
+  return {
+    heapUsedPercent,
+    systemUsedPercent,
+    isWarning: heapUsedPercent >= LIMITS.MEMORY_WARNING_THRESHOLD || systemUsedPercent >= LIMITS.MEMORY_WARNING_THRESHOLD,
+    isCritical: heapUsedPercent >= LIMITS.MEMORY_CRITICAL_THRESHOLD || systemUsedPercent >= LIMITS.MEMORY_CRITICAL_THRESHOLD,
+    shouldRejectNew: heapUsedPercent >= LIMITS.MEMORY_REJECT_THRESHOLD || systemUsedPercent >= LIMITS.MEMORY_REJECT_THRESHOLD,
+  };
+}
+
+/**
+ * BEST PRACTICE: Check if new connections should be accepted
+ * Returns error message if rejected, null if accepted
+ */
+function checkConnectionLimits(broadcastId: string, type: 'transport' | 'producer' | 'consumer' | 'broadcast'): string | null {
+  const memStatus = getMemoryStatus();
+
+  // Check memory pressure first
+  if (memStatus.shouldRejectNew) {
+    logger.warn(`[LIMITS] Rejecting new ${type} due to memory pressure: heap=${memStatus.heapUsedPercent}%, system=${memStatus.systemUsedPercent}%`);
+    return 'Server under memory pressure, please try again later';
+  }
+
+  // Log warning if approaching limits
+  if (memStatus.isWarning) {
+    logger.warn(`[LIMITS] Memory warning: heap=${memStatus.heapUsedPercent}%, system=${memStatus.systemUsedPercent}%`);
+  }
+
+  // Check broadcast limits
+  if (type === 'broadcast') {
+    if (broadcasts.size >= LIMITS.MAX_BROADCASTS) {
+      logger.warn(`[LIMITS] Max broadcasts reached: ${broadcasts.size}/${LIMITS.MAX_BROADCASTS}`);
+      return `Maximum concurrent broadcasts (${LIMITS.MAX_BROADCASTS}) reached`;
+    }
+    return null;
+  }
+
+  const broadcast = broadcasts.get(broadcastId);
+  if (!broadcast) {
+    return null; // Will be created, just check global limits
+  }
+
+  // Check per-broadcast limits
+  switch (type) {
+    case 'transport':
+      if (broadcast.transports.size >= LIMITS.MAX_TRANSPORTS_PER_BROADCAST) {
+        logger.warn(`[LIMITS] Max transports reached for ${broadcastId}: ${broadcast.transports.size}/${LIMITS.MAX_TRANSPORTS_PER_BROADCAST}`);
+        return `Maximum transports (${LIMITS.MAX_TRANSPORTS_PER_BROADCAST}) reached for this broadcast`;
+      }
+      break;
+    case 'producer':
+      if (broadcast.producers.size >= LIMITS.MAX_PRODUCERS_PER_BROADCAST) {
+        logger.warn(`[LIMITS] Max producers reached for ${broadcastId}: ${broadcast.producers.size}/${LIMITS.MAX_PRODUCERS_PER_BROADCAST}`);
+        return `Maximum producers (${LIMITS.MAX_PRODUCERS_PER_BROADCAST}) reached for this broadcast`;
+      }
+      break;
+    case 'consumer':
+      if (broadcast.consumers.size >= LIMITS.MAX_CONSUMERS_PER_BROADCAST) {
+        logger.warn(`[LIMITS] Max consumers reached for ${broadcastId}: ${broadcast.consumers.size}/${LIMITS.MAX_CONSUMERS_PER_BROADCAST}`);
+        return `Maximum consumers (${LIMITS.MAX_CONSUMERS_PER_BROADCAST}) reached for this broadcast`;
+      }
+      break;
+  }
+
+  return null;
+}
+
+/**
+ * BEST PRACTICE: Clean up stale broadcasts periodically
+ * Prevents memory leaks from orphaned resources
+ */
+const STALE_BROADCAST_TIMEOUT = 30 * 60 * 1000; // 30 minutes of inactivity
+
+async function cleanupStaleBroadcasts(): Promise<void> {
+  const now = Date.now();
+
+  for (const [broadcastId, broadcast] of broadcasts) {
+    // Skip if broadcast has active sockets or is streaming
+    if (broadcast.sockets.size > 0 || broadcast.isRtmpStreaming) {
+      continue;
+    }
+
+    const inactiveTime = now - broadcast.lastActivity.getTime();
+    if (inactiveTime > STALE_BROADCAST_TIMEOUT) {
+      logger.info(`[CLEANUP] Cleaning up stale broadcast ${broadcastId} (inactive for ${Math.round(inactiveTime / 1000 / 60)} minutes)`);
+      await withCleanupLock(broadcastId, () => cleanupBroadcast(broadcastId));
+    }
+  }
+}
+
+// Run stale cleanup every 5 minutes
+setInterval(cleanupStaleBroadcasts, 5 * 60 * 1000);
+
+// Log memory status periodically (every minute)
+setInterval(() => {
+  const memStatus = getMemoryStatus();
+  if (memStatus.isCritical) {
+    logger.error(`[MEMORY] CRITICAL: heap=${memStatus.heapUsedPercent}%, system=${memStatus.systemUsedPercent}%, broadcasts=${broadcasts.size}`);
+
+    // Attempt garbage collection if available (requires --expose-gc flag)
+    if (global.gc) {
+      logger.info('[MEMORY] Triggering garbage collection');
+      global.gc();
+    }
+  } else if (memStatus.isWarning) {
+    logger.warn(`[MEMORY] WARNING: heap=${memStatus.heapUsedPercent}%, system=${memStatus.systemUsedPercent}%, broadcasts=${broadcasts.size}`);
+  }
+}, 60 * 1000);
+
+// ==========================================
+
 const app = express();
 const server = http.createServer(app);
 
@@ -261,8 +413,11 @@ app.get('/health', (req: express.Request, res: express.Response) => {
     // Get uptime
     const uptime = Math.round(process.uptime());
 
+    // Get memory status for limits
+    const memStatus = getMemoryStatus();
+
     res.json({
-      status: 'ok',
+      status: memStatus.isCritical ? 'degraded' : 'ok',
       timestamp: new Date().toISOString(),
       activeStreams,
       cpuUsage,
@@ -272,12 +427,21 @@ app.get('/health', (req: express.Request, res: express.Response) => {
         used: Math.round(memUsage.heapUsed / 1024 / 1024), // MB
         total: Math.round(memUsage.heapTotal / 1024 / 1024), // MB
         external: Math.round(memUsage.external / 1024 / 1024), // MB
+        heapPercent: memStatus.heapUsedPercent,
+        systemPercent: memStatus.systemUsedPercent,
       },
       system: {
         platform: os.platform(),
         cpuCount: cpus.length,
         totalMemory: Math.round(totalMemory / 1024 / 1024 / 1024), // GB
         freeMemory: Math.round(os.freemem() / 1024 / 1024 / 1024), // GB
+      },
+      limits: {
+        maxBroadcasts: LIMITS.MAX_BROADCASTS,
+        currentBroadcasts: broadcasts.size,
+        acceptingNew: !memStatus.shouldRejectNew && broadcasts.size < LIMITS.MAX_BROADCASTS,
+        memoryWarning: memStatus.isWarning,
+        memoryCritical: memStatus.isCritical,
       },
     });
   } catch (error) {
@@ -316,6 +480,28 @@ io.on('connection', (socket) => {
   // Create transport
   socket.on('create-transport', async ({ broadcastId, direction }, callback) => {
     try {
+      // BEST PRACTICE: Check connection limits before creating resources
+      const isNewBroadcast = !broadcasts.has(broadcastId);
+      if (isNewBroadcast) {
+        const broadcastLimitError = checkConnectionLimits(broadcastId, 'broadcast');
+        if (broadcastLimitError) {
+          logger.warn(`[LIMITS] Rejecting new broadcast ${broadcastId}: ${broadcastLimitError}`);
+          if (callback && typeof callback === 'function') {
+            callback({ error: broadcastLimitError });
+          }
+          return;
+        }
+      }
+
+      const transportLimitError = checkConnectionLimits(broadcastId, 'transport');
+      if (transportLimitError) {
+        logger.warn(`[LIMITS] Rejecting transport for ${broadcastId}: ${transportLimitError}`);
+        if (callback && typeof callback === 'function') {
+          callback({ error: transportLimitError });
+        }
+        return;
+      }
+
       // Get or create router for this broadcast
       let router = getRouter(broadcastId);
       if (!router) {

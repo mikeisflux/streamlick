@@ -29,12 +29,8 @@ interface UseParticipantsProps {
 // IMPORTANT: Increased from 3s to 5s to reduce connection churn and flickering
 const POLL_INTERVAL = 5000;
 
-// Track last stream request time to debounce requests
-let lastStreamRequestTime = 0;
+// Debounce interval for stream requests
 const STREAM_REQUEST_DEBOUNCE = 5000; // Request streams every 5 seconds max (reduced from 10s for faster initial connection)
-
-// Track participants we've seen to detect truly new ones
-let previousParticipantIds = new Set<string>();
 
 export function useParticipants({ broadcastId, showChatOnStream }: UseParticipantsProps) {
   const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map());
@@ -51,6 +47,11 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
 
   // Track known participant IDs to detect new joins
   const knownParticipantIdsRef = useRef<Set<string>>(new Set());
+
+  // BEST PRACTICE FIX: Move global state into refs to prevent cross-instance pollution
+  // Previously these were module-level variables, causing state to leak between component instances
+  const lastStreamRequestTimeRef = useRef<number>(0);
+  const previousParticipantIdsRef = useRef<Set<string>>(new Set());
 
   // HTTP polling for greenroom participants - this is the PRIMARY mechanism
   // Socket events are supplementary for real-time updates
@@ -73,7 +74,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
         // Detect new participants that we haven't seen before
         const currentIds = new Set(participants.map(p => p.id));
         const newParticipants = participants.filter(p => !knownParticipantIdsRef.current.has(p.id));
-        const trulyNewParticipants = participants.filter(p => !previousParticipantIds.has(p.id));
+        const trulyNewParticipants = participants.filter(p => !previousParticipantIdsRef.current.has(p.id));
 
         // Show toast for new participants
         for (const p of newParticipants) {
@@ -91,12 +92,12 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
           // Small delay to allow guest to set up their WebRTC connection first
           setTimeout(() => {
             socketService.emit('request-guest-streams');
-            lastStreamRequestTime = Date.now();
+            lastStreamRequestTimeRef.current = Date.now();
           }, 1000);
         }
 
         // Update previous participant IDs for next poll
-        previousParticipantIds = currentIds;
+        previousParticipantIdsRef.current = currentIds;
 
         // Update state - merge with existing to preserve streams
         // Track if we need to request streams (outside the setter)
@@ -131,10 +132,10 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
         // COMBINED POLL: Request streams if any participant is missing one
         // But debounce to prevent constant reconnection causing flickering
         const now = Date.now();
-        if (shouldRequestStreams && (now - lastStreamRequestTime) > STREAM_REQUEST_DEBOUNCE) {
+        if (shouldRequestStreams && (now - lastStreamRequestTimeRef.current) > STREAM_REQUEST_DEBOUNCE) {
           console.log('[useParticipants] Poll: requesting streams for participants without video:', participantsWithoutStreams);
           socketService.emit('request-guest-streams');
-          lastStreamRequestTime = now;
+          lastStreamRequestTimeRef.current = now;
         } else if (shouldRequestStreams) {
           console.log('[useParticipants] Poll: skipping stream request (debounce), participants without video:', participantsWithoutStreams);
         }

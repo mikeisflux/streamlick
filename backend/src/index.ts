@@ -40,6 +40,7 @@ import initializeSocket from './socket';
 import logger from './utils/logger';
 import { validateCsrfToken } from './auth/csrf';
 import { sanitizeInput } from './middleware/sanitize';
+import { disconnectDatabase } from './database/prisma';
 
 // MINOR FIX: Add BigInt JSON serialization support
 // Converts BigInt values to strings when serializing to JSON
@@ -232,11 +233,43 @@ server.listen(PORT, async () => {
   }
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  server.close(() => {
+// BEST PRACTICE: Graceful shutdown with proper cleanup
+// Handles both SIGTERM (Docker/K8s) and SIGINT (Ctrl+C)
+const gracefulShutdown = async (signal: string) => {
+  logger.info(`Received ${signal}, starting graceful shutdown...`);
+
+  // Set a timeout to force exit if shutdown takes too long
+  const shutdownTimeout = setTimeout(() => {
+    logger.error('Shutdown timed out, forcing exit');
+    process.exit(1);
+  }, 30000); // 30 second timeout
+
+  try {
+    // 1. Stop accepting new connections
+    server.close(() => {
+      logger.info('HTTP server closed');
+    });
+
+    // 2. Close Socket.IO connections
+    io.close(() => {
+      logger.info('Socket.IO server closed');
+    });
+
+    // 3. Disconnect from database
+    await disconnectDatabase();
+
+    // 4. Clear timeout and exit cleanly
+    clearTimeout(shutdownTimeout);
+    logger.info('Graceful shutdown complete');
     process.exit(0);
-  });
-});
+  } catch (error) {
+    logger.error('Error during shutdown:', error);
+    clearTimeout(shutdownTimeout);
+    process.exit(1);
+  }
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export { app, server, io };

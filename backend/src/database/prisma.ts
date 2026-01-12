@@ -36,4 +36,19 @@ prisma.$connect()
   .then(() => logger.info('Database connected'))
   .catch((err: any) => logger.error('Database connection error:', err));
 
+/**
+ * BEST PRACTICE: Graceful database disconnection for shutdown
+ * Ensures all pending queries complete and connection pool is closed
+ */
+export async function disconnectDatabase(): Promise<void> {
+  try {
+    logger.info('Disconnecting from database...');
+    await prisma.$disconnect();
+    logger.info('Database disconnected successfully');
+  } catch (error) {
+    logger.error('Error disconnecting from database:', error);
+    throw error;
+  }
+}
+
 export default prisma;
