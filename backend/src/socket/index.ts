@@ -27,6 +27,13 @@ interface SocketData {
 // Store active chat managers
 const activeChatManagers = new Map<string, ChatManager>();
 
+// Store pending disconnect timeouts to allow grace period for reconnection
+// Key: participantId, Value: { timeout: NodeJS.Timeout, broadcastId: string, socketId: string }
+const pendingDisconnects = new Map<string, { timeout: NodeJS.Timeout; broadcastId: string; socketId: string }>();
+
+// Grace period before marking a participant as disconnected (10 seconds)
+const DISCONNECT_GRACE_PERIOD_MS = 10000;
+
 /**
  * CRITICAL FIX: Validate UUID format to prevent DoS attacks
  * Invalid UUIDs can cause database errors and resource exhaustion
@@ -234,13 +241,25 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         socket.data.broadcastId = broadcastId;
         socket.data.participantId = participant.id;
 
+        // Cancel any pending disconnect for this participant (they reconnected!)
+        const pendingDisconnect = pendingDisconnects.get(participant.id);
+        let isReconnecting = false;
+        if (pendingDisconnect) {
+          clearTimeout(pendingDisconnect.timeout);
+          pendingDisconnects.delete(participant.id);
+          isReconnecting = true;
+          logger.info(`[Reconnect] Participant ${participant.id} reconnected via join-studio within grace period`);
+        }
+
         await socket.join(`broadcast:${broadcastId}`);
 
-        // Notify others in the room
-        socket.to(`broadcast:${broadcastId}`).emit('participant-joined', {
-          participantId: participant.id,
-          socketId: socket.id,
-        });
+        // Notify others in the room (skip if reconnecting to avoid duplicate notifications)
+        if (!isReconnecting) {
+          socket.to(`broadcast:${broadcastId}`).emit('participant-joined', {
+            participantId: participant.id,
+            socketId: socket.id,
+          });
+        }
 
         socket.emit('studio-joined', {
           broadcastId,
@@ -266,12 +285,14 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           }
 
           // Mark any 'joined' participants without active sockets as disconnected
+          // Exclude participants in pending disconnect grace period (they may be reconnecting)
+          const pendingDisconnectIds = Array.from(pendingDisconnects.keys());
           const staleParticipants = await prisma.participant.findMany({
             where: {
               broadcastId,
               status: 'joined',
               role: { not: 'host' },
-              id: { notIn: Array.from(activeParticipantIds) },
+              id: { notIn: [...Array.from(activeParticipantIds), ...pendingDisconnectIds] },
             },
             select: { id: true },
           });
@@ -727,8 +748,18 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         // Get participant info and update their status to 'joined'
         const { participantId } = socket.data;
         let participantName = 'Guest';
+        let isReconnecting = false;
 
         if (participantId && isValidUUID(participantId)) {
+          // Cancel any pending disconnect for this participant (they reconnected!)
+          const pendingDisconnect = pendingDisconnects.get(participantId);
+          if (pendingDisconnect) {
+            clearTimeout(pendingDisconnect.timeout);
+            pendingDisconnects.delete(participantId);
+            isReconnecting = true;
+            logger.info(`[Reconnect] Participant ${participantId} reconnected within grace period, cancelled pending disconnect`);
+          }
+
           // Update participant status to 'joined' and set joinedAt timestamp
           const participant = await prisma.participant.update({
             where: { id: participantId },
@@ -743,11 +774,17 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
         }
 
         // Notify the broadcast room where the host studio is listening
-        socket.to(`broadcast:${broadcastId}`).emit('greenroom-participant-joined', {
-          participantId,
-          name: participantName,
-          socketId: socket.id,
-        });
+        // Only send 'joined' event if this is NOT a reconnection (to prevent duplicate notifications)
+        if (!isReconnecting) {
+          socket.to(`broadcast:${broadcastId}`).emit('greenroom-participant-joined', {
+            participantId,
+            name: participantName,
+            socketId: socket.id,
+          });
+        } else {
+          // For reconnections, notify that the guest is still here (no new join notification)
+          logger.info(`[Reconnect] Skipping greenroom-participant-joined event for reconnecting participant ${participantId}`);
+        }
 
         socket.emit('greenroom-joined', { broadcastId });
       } catch (error) {
@@ -1349,10 +1386,74 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
     // Disconnect
     socket.on('disconnect', async () => {
       const { broadcastId, participantId } = socket.data;
+      const isGuest = socket.data.isGuest === true;
 
       // CRITICAL FIX: Clean up resources on disconnect
       if (broadcastId) {
-        // Update participant status to 'disconnected' in database
+        // For guests, use grace period to allow reconnection after brief network hiccups
+        if (isGuest && participantId && isValidUUID(participantId)) {
+          logger.info(`[Disconnect] Guest ${participantId} disconnected, starting ${DISCONNECT_GRACE_PERIOD_MS / 1000}s grace period...`);
+
+          // Cancel any existing pending disconnect for this participant
+          const existing = pendingDisconnects.get(participantId);
+          if (existing) {
+            clearTimeout(existing.timeout);
+          }
+
+          // Set up grace period timeout
+          const timeout = setTimeout(async () => {
+            // Check if this participant has reconnected with a new socket
+            const broadcastRoom = io.sockets.adapter.rooms.get(`broadcast:${broadcastId}`);
+            let hasReconnected = false;
+
+            if (broadcastRoom) {
+              for (const socketId of broadcastRoom) {
+                const connectedSocket = io.sockets.sockets.get(socketId);
+                if (connectedSocket?.data?.participantId === participantId) {
+                  hasReconnected = true;
+                  break;
+                }
+              }
+            }
+
+            if (hasReconnected) {
+              logger.info(`[Disconnect] Participant ${participantId} reconnected during grace period, not marking as disconnected`);
+              pendingDisconnects.delete(participantId);
+              return;
+            }
+
+            // Grace period expired and no reconnection - mark as disconnected
+            logger.info(`[Disconnect] Grace period expired for participant ${participantId}, marking as disconnected`);
+
+            try {
+              await prisma.participant.update({
+                where: { id: participantId },
+                data: {
+                  status: 'disconnected',
+                  leftAt: new Date(),
+                },
+              });
+              logger.info(`[Disconnect] Participant ${participantId} marked as disconnected`);
+            } catch (error) {
+              logger.error('Error updating participant status on disconnect:', error);
+            }
+
+            // Notify others in the room about disconnection
+            io.to(`broadcast:${broadcastId}`).emit('participant-disconnected', {
+              participantId,
+            });
+            io.to(`greenroom:${broadcastId}`).emit('greenroom-participant-left', {
+              participantId,
+            });
+
+            pendingDisconnects.delete(participantId);
+          }, DISCONNECT_GRACE_PERIOD_MS);
+
+          pendingDisconnects.set(participantId, { timeout, broadcastId, socketId: socket.id });
+          return; // Don't process further for guests - wait for grace period
+        }
+
+        // For hosts/non-guests, process disconnect immediately
         if (participantId && isValidUUID(participantId)) {
           try {
             await prisma.participant.update({
@@ -1389,8 +1490,8 @@ export function initializeSocket(httpServer: HttpServer): SocketServer {
           }
         }
 
-        // Notify others in the room about disconnection
-        if (participantId) {
+        // Notify others in the room about disconnection (for non-guests only)
+        if (participantId && !isGuest) {
           socket.to(`broadcast:${broadcastId}`).emit('participant-disconnected', {
             participantId,
           });
