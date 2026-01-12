@@ -1027,16 +1027,16 @@ export function StudioCanvas({
           const nameTagX = pos.x + 8;
           ctx.fillStyle = isSpeaking ? 'rgba(0, 200, 0, 0.85)' : 'rgba(0, 0, 0, 0.75)';
           ctx.beginPath();
-          const cornerRadius = 20;
-          ctx.moveTo(nameTagX + cornerRadius, nameTagY);
-          ctx.lineTo(nameTagX + nameTagWidth - cornerRadius, nameTagY);
-          ctx.quadraticCurveTo(nameTagX + nameTagWidth, nameTagY, nameTagX + nameTagWidth, nameTagY + cornerRadius);
-          ctx.lineTo(nameTagX + nameTagWidth, nameTagY + nameTagHeight - cornerRadius);
-          ctx.quadraticCurveTo(nameTagX + nameTagWidth, nameTagY + nameTagHeight, nameTagX + nameTagWidth - cornerRadius, nameTagY + nameTagHeight);
-          ctx.lineTo(nameTagX + cornerRadius, nameTagY + nameTagHeight);
-          ctx.quadraticCurveTo(nameTagX, nameTagY + nameTagHeight, nameTagX, nameTagY + nameTagHeight - cornerRadius);
-          ctx.lineTo(nameTagX, nameTagY + cornerRadius);
-          ctx.quadraticCurveTo(nameTagX, nameTagY, nameTagX + cornerRadius, nameTagY);
+          const nameTagCornerRadius = 20;
+          ctx.moveTo(nameTagX + nameTagCornerRadius, nameTagY);
+          ctx.lineTo(nameTagX + nameTagWidth - nameTagCornerRadius, nameTagY);
+          ctx.quadraticCurveTo(nameTagX + nameTagWidth, nameTagY, nameTagX + nameTagWidth, nameTagY + nameTagCornerRadius);
+          ctx.lineTo(nameTagX + nameTagWidth, nameTagY + nameTagHeight - nameTagCornerRadius);
+          ctx.quadraticCurveTo(nameTagX + nameTagWidth, nameTagY + nameTagHeight, nameTagX + nameTagWidth - nameTagCornerRadius, nameTagY + nameTagHeight);
+          ctx.lineTo(nameTagX + nameTagCornerRadius, nameTagY + nameTagHeight);
+          ctx.quadraticCurveTo(nameTagX, nameTagY + nameTagHeight, nameTagX, nameTagY + nameTagHeight - nameTagCornerRadius);
+          ctx.lineTo(nameTagX, nameTagY + nameTagCornerRadius);
+          ctx.quadraticCurveTo(nameTagX, nameTagY, nameTagX + nameTagCornerRadius, nameTagY);
           ctx.closePath();
           ctx.fill();
 
