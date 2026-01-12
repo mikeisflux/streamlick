@@ -31,7 +31,10 @@ const POLL_INTERVAL = 5000;
 
 // Track last stream request time to debounce requests
 let lastStreamRequestTime = 0;
-const STREAM_REQUEST_DEBOUNCE = 10000; // Only request streams every 10 seconds max
+const STREAM_REQUEST_DEBOUNCE = 5000; // Request streams every 5 seconds max (reduced from 10s for faster initial connection)
+
+// Track participants we've seen to detect truly new ones
+let previousParticipantIds = new Set<string>();
 
 export function useParticipants({ broadcastId, showChatOnStream }: UseParticipantsProps) {
   const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map());
@@ -70,6 +73,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
         // Detect new participants that we haven't seen before
         const currentIds = new Set(participants.map(p => p.id));
         const newParticipants = participants.filter(p => !knownParticipantIdsRef.current.has(p.id));
+        const trulyNewParticipants = participants.filter(p => !previousParticipantIds.has(p.id));
 
         // Show toast for new participants
         for (const p of newParticipants) {
@@ -79,6 +83,20 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
 
         // Update known IDs
         knownParticipantIdsRef.current = currentIds;
+
+        // If there are truly new participants (not seen in previous polls), request streams immediately
+        // This ensures new guests get their streams requested right away, not after the debounce period
+        if (trulyNewParticipants.length > 0) {
+          console.log('[useParticipants] New participants detected, requesting streams immediately:', trulyNewParticipants.map(p => p.name));
+          // Small delay to allow guest to set up their WebRTC connection first
+          setTimeout(() => {
+            socketService.emit('request-guest-streams');
+            lastStreamRequestTime = Date.now();
+          }, 1000);
+        }
+
+        // Update previous participant IDs for next poll
+        previousParticipantIds = currentIds;
 
         // Update state - merge with existing to preserve streams
         // Track if we need to request streams (outside the setter)
@@ -301,6 +319,13 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
         const participant = updated.get(participantId);
         if (participant) {
           participant.role = role;
+
+          // CRITICAL: If promoting to live but participant has no stream, request it immediately
+          // This ensures the guest appears on canvas as soon as possible
+          if (role === 'guest' && !participant.stream) {
+            console.log('[useParticipants] Participant promoted to live but has no stream, requesting immediately');
+            socketService.emit('request-guest-streams');
+          }
         }
         return updated;
       });
@@ -361,6 +386,17 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
   // Participant management actions
   const handlePromoteToLive = useCallback((participantId: string) => {
     socketService.emit('promote-to-live', { participantId });
+
+    // Immediately request streams when promoting - don't wait for the response
+    // This ensures the guest's stream is requested in parallel with the promote
+    setRemoteParticipants((prev) => {
+      const participant = prev.get(participantId);
+      if (participant && !participant.stream) {
+        console.log('[useParticipants] Promoting participant without stream, requesting immediately');
+        socketService.emit('request-guest-streams');
+      }
+      return prev; // Return unchanged - just using this to access state
+    });
   }, []);
 
   const handleDemoteToBackstage = useCallback((participantId: string) => {

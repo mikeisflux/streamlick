@@ -94,13 +94,38 @@ export function useGuestStreams(
     };
 
     // Handle connection state changes
+    // Track disconnected timeout to avoid premature stream removal
+    let disconnectedTimeout: NodeJS.Timeout | null = null;
+
     pc.onconnectionstatechange = () => {
       console.log('[GuestStreams] Connection state for', participantId, ':', pc.connectionState);
 
-      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-        // Clean up and notify
+      // Clear any pending disconnected timeout
+      if (disconnectedTimeout) {
+        clearTimeout(disconnectedTimeout);
+        disconnectedTimeout = null;
+      }
+
+      if (pc.connectionState === 'disconnected') {
+        // IMPORTANT: 'disconnected' can be temporary - ICE may reconnect
+        // Wait 5 seconds before removing the stream to allow recovery
+        console.log('[GuestStreams] Connection disconnected, waiting 5s for recovery...');
+        disconnectedTimeout = setTimeout(() => {
+          // Check if still disconnected (might have recovered)
+          if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+            console.log('[GuestStreams] Connection did not recover, removing stream');
+            connectionsRef.current.delete(participantId);
+            onStreamRemoved(participantId);
+          } else {
+            console.log('[GuestStreams] Connection recovered to:', pc.connectionState);
+          }
+        }, 5000);
+      } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        // These are terminal states - remove immediately
         connectionsRef.current.delete(participantId);
         onStreamRemoved(participantId);
+      } else if (pc.connectionState === 'connected') {
+        console.log('[GuestStreams] Connection established successfully for', participantId);
       }
     };
 
