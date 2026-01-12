@@ -343,3 +343,69 @@ if (pendingIceCandidatesRef.current.length > 0) {
 **Status:** APPLIED
 
 ---
+
+### Change 14: Fix Connection Closed During Negotiation
+**File:** `frontend/src/hooks/guest/useGuestStream.ts`
+**Lines:** 20-22, 54-88, 117-125, 198-224
+
+**Problem:** WebRTC-internals showed `ICE connection state: new => "closed"` - connections were being closed before ICE negotiation even started. The aggressive retry logic (every 3 seconds) was closing connections that were still negotiating.
+
+**Root Cause from webrtc-internals:**
+```
+ICE connection state: new => "closed"
+Connection state: new => "closed"
+ICE Candidate pair: (empty)
+ICE candidate grid: (empty)
+```
+
+The `setupGuestStream` function unconditionally closed existing connections:
+```javascript
+if (guestStreamPcRef.current) {
+  guestStreamPcRef.current.close();  // Killed connections mid-negotiation!
+}
+```
+
+When retry fired (every 3 seconds), if an answer was in transit, the connection got killed before ICE negotiation could complete.
+
+**Fix:**
+1. Added guards in `setupGuestStream` to protect active connections:
+   - Skip if connection state is 'connected' or 'connecting'
+   - Skip if ICE connection state is 'checking'
+   - Skip if answer was received and connection is still in 'new' state (ICE pending)
+
+2. Added ICE state logging for debugging:
+   - `oniceconnectionstatechange` handler
+   - `onicegatheringstatechange` handler
+
+3. Increased retry delays to give more time for negotiation:
+   - `GUEST_STREAM_RETRY_DELAY`: 3s → 5s
+   - `ACTIVE_POLLING_INTERVAL`: 5s → 8s
+   - `GUEST_STREAM_MAX_RETRIES`: 10 → 5
+
+```javascript
+const setupGuestStream = async (forceNew = false) => {
+  // Check if we should skip creating a new connection
+  if (guestStreamPcRef.current && !forceNew) {
+    const state = guestStreamPcRef.current.connectionState;
+    const iceState = guestStreamPcRef.current.iceConnectionState;
+
+    if (state === 'connected') {
+      console.log('[GuestStream] Already connected, skipping new connection');
+      return;
+    }
+    if (state === 'connecting' || iceState === 'checking') {
+      console.log('[GuestStream] Connection in progress, skipping new connection');
+      return;
+    }
+    if (guestStreamAnswerReceivedRef.current && (state === 'new' || iceState === 'new')) {
+      console.log('[GuestStream] Answer received, ICE negotiation pending, skipping');
+      return;
+    }
+  }
+  // ... rest of function
+};
+```
+
+**Status:** APPLIED
+
+---

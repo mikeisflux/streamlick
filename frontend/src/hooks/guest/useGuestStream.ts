@@ -17,9 +17,9 @@ const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun1.l.google.com:19302' },
 ];
 
-const GUEST_STREAM_MAX_RETRIES = 10;
-const GUEST_STREAM_RETRY_DELAY = 3000; // 3 seconds
-const ACTIVE_POLLING_INTERVAL = 5000; // 5 seconds
+const GUEST_STREAM_MAX_RETRIES = 5;
+const GUEST_STREAM_RETRY_DELAY = 5000; // 5 seconds - give more time for ICE negotiation
+const ACTIVE_POLLING_INTERVAL = 8000; // 8 seconds - less aggressive polling
 
 interface UseGuestStreamOptions {
   hasJoined: boolean;
@@ -52,17 +52,40 @@ export function useGuestStream({
     guestStreamConnectedRef.current = false;
 
     // Create peer connection and send offer
-    const setupGuestStream = async () => {
+    const setupGuestStream = async (forceNew = false) => {
+      // Check if we should skip creating a new connection
+      if (guestStreamPcRef.current && !forceNew) {
+        const state = guestStreamPcRef.current.connectionState;
+        const iceState = guestStreamPcRef.current.iceConnectionState;
+
+        // Don't close connections that are actively working
+        if (state === 'connected') {
+          console.log('[GuestStream] Already connected, skipping new connection');
+          return;
+        }
+        if (state === 'connecting' || iceState === 'checking') {
+          console.log('[GuestStream] Connection in progress (state:', state, 'ice:', iceState, '), skipping new connection');
+          return;
+        }
+        // If we received an answer and connection is still being set up, wait
+        if (guestStreamAnswerReceivedRef.current && (state === 'new' || iceState === 'new')) {
+          console.log('[GuestStream] Answer received, ICE negotiation pending, skipping new connection');
+          return;
+        }
+      }
+
       console.log('[GuestStream] Creating peer connection to send stream to host');
 
       // Close existing connection if any (for retries)
       if (guestStreamPcRef.current) {
+        console.log('[GuestStream] Closing old connection (state:', guestStreamPcRef.current.connectionState, ')');
         guestStreamPcRef.current.close();
       }
 
       // Clear pending ICE candidates from previous attempt
       pendingIceCandidatesRef.current = [];
       hostStreamSocketIdRef.current = null;
+      guestStreamAnswerReceivedRef.current = false;
 
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
       guestStreamPcRef.current = pc;
@@ -91,9 +114,19 @@ export function useGuestStream({
         }
       };
 
+      // Handle ICE connection state for debugging
+      pc.oniceconnectionstatechange = () => {
+        console.log('[GuestStream] ICE connection state:', pc.iceConnectionState);
+      };
+
+      // Handle ICE gathering state
+      pc.onicegatheringstatechange = () => {
+        console.log('[GuestStream] ICE gathering state:', pc.iceGatheringState);
+      };
+
       // Handle connection state
       pc.onconnectionstatechange = () => {
-        console.log('[GuestStream] Connection state:', pc.connectionState);
+        console.log('[GuestStream] Connection state:', pc.connectionState, '(ICE:', pc.iceConnectionState, ')');
 
         // Track when fully connected - stop polling
         if (pc.connectionState === 'connected') {
@@ -169,25 +202,9 @@ export function useGuestStream({
 
       console.log('[GuestStream] Starting active polling - will keep searching for host...');
 
-      // Send an offer immediately only if not connected
-      if (!guestStreamConnectedRef.current) {
-        if (guestStreamPcRef.current) {
-          const state = guestStreamPcRef.current.connectionState;
-          if (state === 'connecting' || state === 'connected') {
-            console.log(
-              '[GuestStream] Active poll: connection already in progress or connected, skipping initial offer'
-            );
-          } else {
-            console.log('[GuestStream] Active poll: sending initial offer to host...');
-            guestStreamAnswerReceivedRef.current = false;
-            setupGuestStream();
-          }
-        } else {
-          console.log('[GuestStream] Active poll: sending initial offer to host...');
-          guestStreamAnswerReceivedRef.current = false;
-          setupGuestStream();
-        }
-      }
+      // Send an offer immediately (setupGuestStream has guards to prevent closing active connections)
+      console.log('[GuestStream] Active poll: attempting initial connection...');
+      setupGuestStream();
 
       // Set up continuous polling
       activePollingIntervalRef.current = setInterval(() => {
@@ -200,20 +217,8 @@ export function useGuestStream({
           return;
         }
 
-        if (guestStreamPcRef.current) {
-          const state = guestStreamPcRef.current.connectionState;
-          if (state === 'connecting' || state === 'connected') {
-            console.log('[GuestStream] Active poll: connection in progress/connected, skipping...');
-            return;
-          }
-          if (guestStreamAnswerReceivedRef.current && state === 'new') {
-            console.log('[GuestStream] Active poll: answer received, waiting for ICE...');
-            return;
-          }
-        }
-
-        console.log('[GuestStream] Active poll: connection not established, sending offer to host...');
-        guestStreamAnswerReceivedRef.current = false;
+        // setupGuestStream has guards to prevent closing connections in progress
+        console.log('[GuestStream] Active poll: checking connection...');
         setupGuestStream();
       }, ACTIVE_POLLING_INTERVAL);
     };
