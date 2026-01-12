@@ -136,7 +136,10 @@ export function registerWebRTCSignalingHandlers(socket: Socket, io: SocketServer
 
     logger.info(`[GuestStream] Host requesting all guests to resend stream offers for broadcast ${broadcastId}`);
 
+    // Emit to BOTH broadcast and greenroom rooms to reach all guests
+    // Guests join greenroom:${broadcastId}, not broadcast:${broadcastId}
     socket.to(`broadcast:${broadcastId}`).emit('resend-stream-offer');
+    socket.to(`greenroom:${broadcastId}`).emit('resend-stream-offer');
   });
 
   // ============================================
