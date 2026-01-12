@@ -980,18 +980,18 @@ export function StudioCanvas({
           ctx.fill();
           ctx.clip(); // Clip to rounded rectangle for video
 
-          // Draw video when camera is enabled
-          // Use readyState >= 1 (HAVE_METADATA) to reduce flickering - drawImage will
-          // simply draw nothing if no frame is available, which is better than showing placeholder
-          if (p.videoEnabled && p.video && p.video.readyState >= 1) {
+          // Draw video when camera is enabled AND we have actual frame data
+          // Require readyState >= 2 (HAVE_CURRENT_DATA) AND videoWidth > 0 to ensure frame exists
+          // This prevents flickering from drawing before video is ready
+          const hasVideoFrame = p.video && p.video.readyState >= 2 && p.video.videoWidth > 0;
+
+          if (p.videoEnabled && hasVideoFrame) {
             // Draw video - camera is ON (clipped to rounded corners)
             try {
-              ctx.drawImage(p.video, pos.x, pos.y, pos.width, pos.height);
+              ctx.drawImage(p.video!, pos.x, pos.y, pos.width, pos.height);
             } catch {
               // If draw fails, background already drawn
             }
-          } else if (p.videoEnabled && p.video && p.video.readyState === 0) {
-            // Video not ready at all - background already drawn
           } else if (!p.videoEnabled && p.type === 'local' && avatarImageRef.current) {
             // Draw circular avatar in center (background already drawn with rounded corners)
             const size = Math.min(pos.width, pos.height) * 0.5;
