@@ -603,8 +603,8 @@ export function GuestJoin() {
         const updated = new Map(prev);
         const participant = updated.get(participantId);
         if (participant) {
-          participant.stream = stream;
-          updated.set(participantId, participant);
+          // IMPORTANT: Create new object to trigger React re-render
+          updated.set(participantId, { ...participant, stream });
         }
         return updated;
       });
