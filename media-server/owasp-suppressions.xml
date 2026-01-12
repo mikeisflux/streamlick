@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions
+	xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+	<suppress>
+		<notes><![CDATA[
+      file name: kotlin-stdlib-1.2.71.jar
+      ]]></notes>
+		<packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/kotlin\-stdlib@.*$
+		</packageUrl>
+		<cve>CVE-2019-10101</cve>
+	</suppress>
+	<suppress>
+		<notes><![CDATA[
+   file name: kotlin-stdlib-1.2.71.jar
+   ]]></notes>
+		<packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/kotlin\-stdlib@.*$
+		</packageUrl>
+		<cve>CVE-2019-10102</cve>
+	</suppress>
+	<suppress>
+		<notes><![CDATA[
+   file name: kotlin-stdlib-1.2.71.jar
+   ]]></notes>
+		<packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/kotlin\-stdlib@.*$
+		</packageUrl>
+		<cve>CVE-2019-10103</cve>
+	</suppress>
+	<suppress>
+		<notes><![CDATA[
+   file name: kotlin-stdlib-common-1.2.71.jar
+   ]]></notes>
+		<packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/kotlin\-stdlib\-common@.*$
+		</packageUrl>
+		<cve>CVE-2019-10101</cve>
+	</suppress>
+	<suppress>
+		<notes><![CDATA[
+   file name: kotlin-stdlib-common-1.2.71.jar
+   ]]></notes>
+		<packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/kotlin\-stdlib\-common@.*$
+		</packageUrl>
+		<cve>CVE-2019-10102</cve>
+	</suppress>
+	<suppress>
+		<notes><![CDATA[
+   file name: kotlin-stdlib-common-1.2.71.jar
+   ]]></notes>
+		<packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/kotlin\-stdlib\-common@.*$
+		</packageUrl>
+		<cve>CVE-2019-10103</cve>
+	</suppress>
+	<suppress>
+		<notes><![CDATA[
+   file name: netty-tcnative-classes-2.0.46.Final.jar
+   ]]></notes>
+		<packageUrl regex="true">^pkg:maven/io\.netty/netty\-tcnative\-classes@.*$
+		</packageUrl>
+		<cve>CVE-2019-20445</cve>
+	</suppress>
+	<suppress>
+		<notes><![CDATA[
+   file name: netty-tcnative-classes-2.0.46.Final.jar
+   ]]></notes>
+		<packageUrl regex="true">^pkg:maven/io\.netty/netty\-tcnative\-classes@.*$
+		</packageUrl>
+		<cve>CVE-2019-20444</cve>
+	</suppress>
+	<suppress>
+		<notes><![CDATA[
+   file name: tensorflow-1.15.0.jar
+   ]]></notes>
+		<packageUrl regex="true">^pkg:maven/org\.tensorflow/tensorflow@.*$
+		</packageUrl>
+		<vulnerabilityName>CVE-2021-35958</vulnerabilityName>
+	</suppress>
+	<suppress>
+	   <notes><![CDATA[
+	   file name: spring-.*-5.3.20.jar
+	   We don't use http invoker/features of Spring. In addition it's an old vulnerability
+	   and reactivated by NVD for some unknown reason. Take a look at the references and discussions 
+	   ]]></notes>
+	   <packageUrl regex="true">^pkg:maven/org\.springframework/spring\-.*@.*$</packageUrl>
+	   <cve>CVE-2016-1000027</cve>
+	</suppress>
+	<suppress>
+	   <notes><![CDATA[
+	   file name: snakeyaml-1.30.jar
+	   snakeyaml is being used through redisson->jackson-databind-yaml. 
+	   There is no yaml usage of Redisson in Ant Media Server
+	   ]]></notes>
+	   <packageUrl regex="true">^pkg:maven/org\.yaml/snakeyaml@.*$</packageUrl>
+	   <vulnerabilityName>CVE-2022-1471</vulnerabilityName>
+	</suppress>
+	<suppress>
+	   <notes><![CDATA[
+	   file name: tomcat-coyote-10.1.19.jar
+	   This vulnerability is about Tomcat fails to handle some cases of excessive HTTP headers correctly. We don't have problem with our headers in our end
+	   ]]></notes>
+	   <packageUrl regex="true">^pkg:maven/org\.apache\.tomcat/tomcat-coyote@10\.1\.19$</packageUrl>
+	   <cve>CVE-2024-34750</cve>
+	</suppress>
+	<suppress>
+	   <notes><![CDATA[
+	   file name: tomcat-catalina-10.1.34.jar
+	   This vulnerability seems to be fixed in 10.1.34 Otherwise, Ant Media Server works on Linux which is a case sensitve OS. So this doesn't affect the software.   
+	   ]]></notes>
+	   <packageUrl regex="true">^pkg:maven/org\.apache\.tomcat/tomcat-catalina@10\.1\.34$</packageUrl>
+	   <cve>CVE-2024-56337</cve>
+	</suppress>
+	<suppress>
+	   <notes><![CDATA[
+	   file name: ffmpeg-7.1-1.5.11.jar
+	   file name: ffmpeg-7.1-1.5.11-linux-arm64.jar
+	   This vulnerability causes problem when Ant Media Server pulls a HLS stream as a stream source. If you're not pulling HLS stream from a source, it will not effect you. 
+	   If you're pulling a stream from a third party resource, then make sure your third party is trusted until there is a fix available for this issue on FFmpeg side. When the fix is available,
+	   we'll update the FFmpeg version in Ant Media Server. 
+	   ]]></notes>
+	   <packageUrl regex="true">^pkg:maven/org\.bytedeco/ffmpeg@.*$</packageUrl>
+	   <vulnerabilityName>CVE-2023-6603</vulnerabilityName>
+	</suppress>
+	<suppress>
+	   <notes><![CDATA[
+	   file name: ffmpeg-7.1-1.5.11.jar
+	   file name: ffmpeg-7.1-1.5.11-linux-arm64.jar
+	   We're not using immersive audio so that this vulnerability does not have an impact to Ant Media Server. When the fix is available,
+	   we'll also update the FFmpeg version in Ant Media Server. 
+	   ]]></notes>
+	   <packageUrl regex="true">^pkg:maven/org\.bytedeco/ffmpeg@.*$</packageUrl>
+	   <vulnerabilityName>CVE-2025-25469</vulnerabilityName>
+	</suppress>
+	<suppress>
+	   <notes><![CDATA[
+	   file name: ffmpeg-7.1-1.5.11.jar
+	   file name: ffmpeg-7.1-1.5.11-linux-arm64.jar
+	   Ant Media Server does not decode JPEGs so that this vulnerability does not have an impact to Ant Media Server. When the fix is available,
+	   we'll also update the FFmpeg version in Ant Media Server.
+	   ]]></notes>
+	   <packageUrl regex="true">^pkg:maven/org\.bytedeco/ffmpeg@.*$</packageUrl>
+	   <vulnerabilityName>CVE-2025-22921</vulnerabilityName>
+	</suppress>
+	<suppress>
+	   <notes><![CDATA[
+	   file name: ffmpeg-7.1-1.5.11.jar
+	   file name: ffmpeg-7.1-1.5.11-linux-arm64.jar
+	   This vulnerability is about opening a crafted AAC file. This case can only happen when putting that file as a stream source. 
+	   For this scenario, we recommend users to open the trusted files and when the fix is available, we'll update the FFmpeg version in Ant Media Server. 
+	   ]]></notes>
+	   <packageUrl regex="true">^pkg:maven/org\.bytedeco/ffmpeg@.*$</packageUrl>
+	   <vulnerabilityName>CVE-2025-22919</vulnerabilityName>
+	</suppress>
+	<suppress>
+	   <notes><![CDATA[
+	   file name: spring-security-crypto-6.2.8.jar
+	   This vulnerability is about BCryptPasswordEncoder and it is not used by Ant Media Server.  
+	   ]]></notes>
+       <packageUrl regex="true">^pkg:maven/org\.springframework/security/spring\-security\-crypto@.*$</packageUrl>
+	   <vulnerabilityName>CVE-2025-22228</vulnerabilityName>
+	</suppress>
+	<suppress>
+	   <notes><![CDATA[
+	   file name: ffmpeg-7.1-1.5.11.jar
+	   file name: ffmpeg-7.1-1.5.11-linux-arm64.jar
+	   FFmpeg will be upgraded when a new version is available
+	   ]]></notes>
+	   <packageUrl regex="true">^pkg:maven/org\.bytedeco/ffmpeg@.*$</packageUrl>
+	   <vulnerabilityName>CVE-2025-1594</vulnerabilityName>
+	</suppress>
+	<suppress>
+	   <notes><![CDATA[
+	   file name: ffmpeg-7.1-1.5.11-linux-arm64.jar
+	   This vulnerability is related to the ALS Decoder and we don't use the alsdecoder in Ant Media Server so we are supressing it.
+       When the fix is available, we'll also update the FFmpeg version in Ant Media Server.
+	   ]]></notes>
+	   <packageUrl regex="true">^pkg:maven/org\.bytedeco/ffmpeg@.*$</packageUrl>
+	   <vulnerabilityName>CVE-2025-7700</vulnerabilityName>
+	</suppress>
+	
+		
+</suppressions>

@@ -1,0 +1,465 @@
+package io.antmedia.test.statistic;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+import org.awaitility.Awaitility;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.mockito.Mockito;
+import org.red5.server.api.scope.IScope;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationContext;
+
+import com.esotericsoftware.minlog.Log;
+
+import io.antmedia.AntMediaApplicationAdapter;
+import io.antmedia.AppSettings;
+import io.antmedia.datastore.db.DataStore;
+import io.antmedia.datastore.db.DataStoreFactory;
+import io.antmedia.datastore.db.InMemoryDataStore;
+import io.antmedia.datastore.db.types.Broadcast;
+import io.antmedia.datastore.db.types.BroadcastUpdate;
+import io.antmedia.datastore.db.types.ConnectionEvent;
+import io.antmedia.datastore.db.types.Subscriber;
+import io.antmedia.muxer.IAntMediaStreamHandler;
+import io.antmedia.settings.ServerSettings;
+import io.antmedia.statistic.DashViewerStats;
+import io.antmedia.statistic.ViewerStats;
+import io.vertx.core.Vertx;
+
+public class DashViewerStatsTest {
+	
+	static Vertx vertx;	
+	
+	private static Logger log = LoggerFactory.getLogger(DashViewerStatsTest.class);
+	
+	@BeforeClass
+	public static void beforeClass() {
+		vertx = io.vertx.core.Vertx.vertx();
+	}
+	
+	@AfterClass
+	public static void afterClass() {
+		vertx.close();
+	}
+
+	@Test
+	public void testDASHViewerCount() {
+		DashViewerStats viewerStats = new DashViewerStats();
+			
+		viewerStats.setVertx(vertx);
+		DataStore dataStore = new InMemoryDataStore("datastore");
+		viewerStats.setDataStore(dataStore);
+		
+		String streamId = String.valueOf((Math.random() * 999999));
+
+		Broadcast broadcast = new Broadcast();
+
+		try {
+			broadcast.setStreamId(streamId);
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		for (int i = 0; i < 100; i++) {
+			String sessionId = String.valueOf((Math.random() * 999999));
+			viewerStats.registerNewViewer(streamId, sessionId, null);
+		}
+
+		Awaitility.await().atMost(10, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(
+				()->viewerStats.getViewerCount(streamId) == 100 );
+		
+		int viewerCount = viewerStats.getViewerCount(streamId);
+		assertEquals(100, viewerCount);
+
+		assertEquals(0, viewerStats.getViewerCount("no_streamid"));
+
+		//Add same session ID
+		for (int i = 0; i < 10; i++) {
+			String sessionId = "sameSessionID";
+			viewerStats.registerNewViewer(streamId, sessionId, null);
+		}
+
+		Awaitility.await().atMost(10, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(
+				()->viewerStats.getViewerCount(streamId) == 101 );
+
+		viewerCount = viewerStats.getViewerCount(streamId);
+		assertEquals(101, viewerCount);
+
+	}
+
+	@Test
+	public void testSubscriberEvents() {
+		DashViewerStats viewerStats = new DashViewerStats();
+		
+		viewerStats.setVertx(vertx);
+
+		DataStore dataStore = new InMemoryDataStore("datastore");
+		AppSettings appSettings = new AppSettings();
+		appSettings.setWriteSubscriberEventsToDatastore(true);
+		
+		dataStore.setAppSettings(appSettings);
+		viewerStats.setDataStore(dataStore);
+		viewerStats.setServerSettings(new ServerSettings());
+		
+		String streamId = "stream1";
+		
+		viewerStats.resetViewerMap(streamId,ViewerStats.DASH_TYPE);
+		
+		// create a subscriber play
+		Subscriber subscriberPlay = new Subscriber();
+		subscriberPlay.setStreamId(streamId);
+		subscriberPlay.setSubscriberId("subscriber1");
+		subscriberPlay.setB32Secret("6qsp6qhndryqs56zjmvs37i6gqtjsdvc");
+		subscriberPlay.setType(Subscriber.PLAY_TYPE);
+		dataStore.addSubscriber(subscriberPlay.getStreamId(), subscriberPlay);
+		
+		String sessionId = String.valueOf((Math.random() * 999999));
+		// check if viewer is added
+		viewerStats.registerNewViewer(streamId, sessionId, subscriberPlay.getSubscriberId());
+		Awaitility.await().atMost(15, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(
+				()-> {
+				boolean eventExist = false;
+				Subscriber subData = dataStore.getSubscriber(streamId, subscriberPlay.getSubscriberId());
+				
+				List<ConnectionEvent> events = dataStore.getConnectionEvents(streamId, subscriberPlay.getSubscriberId(), 0, 50); 
+				
+				if(events.size() == 1) {
+					ConnectionEvent event2 = events.get(0);
+					eventExist = ConnectionEvent.CONNECTED_EVENT == event2.getEventType();
+				}
+
+				return (subData.isConnected()) && subData.getCurrentConcurrentConnections() == 1  && eventExist; }
+		);
+	
+		viewerStats.resetViewerMap(streamId, ViewerStats.DASH_TYPE);
+		Map<String, String> map = viewerStats.getSessionId2subscriberId();
+		assertTrue(map.isEmpty());
+		
+	}
+	
+	@Test
+	public void testGetTimeout() {
+		AppSettings settings = new AppSettings();
+		
+		settings.setDashFragmentDuration("");
+		
+		int defaultValue = DashViewerStats.DEFAULT_TIME_PERIOD_FOR_VIEWER_COUNT;
+		assertEquals(defaultValue, DashViewerStats.getTimeoutMSFromSettings(settings, defaultValue, DashViewerStats.DASH_TYPE));
+		
+		settings.setDashFragmentDuration("0.5");
+		
+		assertEquals(10000, DashViewerStats.getTimeoutMSFromSettings(settings, defaultValue, DashViewerStats.DASH_TYPE));
+		
+	}
+	
+	@Test
+	public void testSetApplicationContextSubscribers() {
+		ApplicationContext context = mock(ApplicationContext.class);
+
+		
+
+			DataStoreFactory dsf = new DataStoreFactory();
+			dsf.setDbType("memorydb");
+			dsf.setDbName("datastore");
+			when(context.getBean(DataStoreFactory.BEAN_NAME)).thenReturn(dsf);
+
+			when(context.containsBean(AppSettings.BEAN_NAME)).thenReturn(true);
+			
+			when(context.getBean(IAntMediaStreamHandler.VERTX_BEAN_NAME)).thenReturn(vertx);
+
+			AppSettings settings = new AppSettings();
+
+			//set dash fragment duration to 0.5
+			settings.setDashFragmentDuration("0.5");
+			settings.setWriteSubscriberEventsToDatastore(true);
+			
+			when(context.getBean(AppSettings.BEAN_NAME)).thenReturn(settings);
+			when(context.getBean(ServerSettings.BEAN_NAME)).thenReturn(new ServerSettings());
+			
+			AntMediaApplicationAdapter adapter = Mockito.mock(AntMediaApplicationAdapter.class);
+			when(context.getBean(AntMediaApplicationAdapter.BEAN_NAME)).thenReturn(adapter);
+			
+			when(adapter.getScope()).thenReturn(Mockito.mock(IScope.class));
+
+			
+			DashViewerStats viewerStats = Mockito.spy(new DashViewerStats());
+			
+			viewerStats.setTimePeriodMS(1000);
+			viewerStats.setApplicationContext(context);
+			
+			Broadcast broadcast = new Broadcast();
+			broadcast.setStatus(AntMediaApplicationAdapter.BROADCAST_STATUS_BROADCASTING);
+			broadcast.setName("name");
+			broadcast.setUpdateTime(System.currentTimeMillis());
+			doReturn(true).when(viewerStats).isStreaming(Mockito.any());			
+			
+			dsf.setWriteStatsToDatastore(true);
+			dsf.setWriteSubscriberEventsToDatastore(true);
+			
+			dsf.setApplicationContext(context);
+			String streamId = dsf.getDataStore().save(broadcast);
+
+			assertEquals(1000, viewerStats.getTimePeriodMS());
+			assertEquals(10000, viewerStats.getTimeoutMS());
+
+			String sessionId = "sessionId" + (int)(Math.random() * 10000);
+			String sessionId2 = "sessionId" + (int)(Math.random() * 10000);
+			
+			// create a subscriber play
+			Subscriber subscriberPlay = new Subscriber();
+			subscriberPlay.setStreamId(streamId);
+			subscriberPlay.setSubscriberId("subscriber1");
+			subscriberPlay.setB32Secret("6qsp6qhndryqs56zjmvs37i6gqtjsdvc");
+			subscriberPlay.setType(Subscriber.PLAY_TYPE);
+			subscriberPlay.setConcurrentConnectionsLimit(2);
+			dsf.getDataStore().addSubscriber(subscriberPlay.getStreamId(), subscriberPlay);
+			
+			Subscriber subscriberPlay2 = new Subscriber();
+			subscriberPlay2.setStreamId(streamId);
+			subscriberPlay2.setSubscriberId("subscriber2");
+			subscriberPlay2.setB32Secret("6qsp6qhndryqs56zjmvs37i6gqtjsdvc");
+			subscriberPlay2.setType(Subscriber.PLAY_TYPE);
+			dsf.getDataStore().addSubscriber(subscriberPlay2.getStreamId(), subscriberPlay2);			
+			
+			Subscriber subscriberPlay3 = new Subscriber();
+			subscriberPlay3.setStreamId(streamId);
+			subscriberPlay3.setSubscriberId("subscriber3");
+			subscriberPlay3.setB32Secret("6qsp6qhndryqs56zjmvs37i6gqtjsdvc");
+			subscriberPlay3.setType(Subscriber.PLAY_TYPE);
+			dsf.getDataStore().addSubscriber(subscriberPlay3.getStreamId(), subscriberPlay3);				
+			
+			viewerStats.registerNewViewer(streamId, sessionId, subscriberPlay.getSubscriberId());
+			viewerStats.registerNewViewer(streamId, sessionId2, subscriberPlay.getSubscriberId());
+			
+			Awaitility.await().atMost(10, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(
+					()->viewerStats.getViewerCount(streamId) == 2 );
+
+			Awaitility.await().atMost(10, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(
+					()->viewerStats.getIncreaseCounterMap(streamId) == 2 );
+			
+			Awaitility.await().atMost(10, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(
+					()->viewerStats.getTotalViewerCount() == 2 );
+			
+			//Viewer timeout increase
+			viewerStats.registerNewViewer(streamId, sessionId, subscriberPlay2.getSubscriberId());
+			viewerStats.registerNewViewer(streamId, sessionId2, subscriberPlay2.getSubscriberId());
+			
+			Awaitility.await().atMost(15, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(
+					()-> {
+					boolean eventExist = false;
+					Subscriber subData = dsf.getDataStore().getSubscriber(streamId, subscriberPlay.getSubscriberId());
+					
+					List<ConnectionEvent> events = dsf.getDataStore().getConnectionEvents(streamId, subscriberPlay.getSubscriberId(), 0, 50);
+					
+					if(events.size() == 2) {
+						ConnectionEvent event = events.get(0);
+						
+						eventExist = ConnectionEvent.CONNECTED_EVENT == events.get(0).getEventType();
+					}
+					log.info("isConnected: {} currentConcurrentConnections: {} events.size:{} eventExist: {}", subData.isConnected(), subData.getCurrentConcurrentConnections(), events.size(), eventExist);
+
+					return subData.isConnected() && subData.getCurrentConcurrentConnections() == 2 && eventExist; 
+			});
+			
+			broadcast.setUpdateTime(System.currentTimeMillis());
+			BroadcastUpdate update = new BroadcastUpdate();
+			update.setUpdateTime(broadcast.getUpdateTime());
+			dsf.getDataStore().updateBroadcastFields(streamId, update);
+			
+			// Check viewer is online
+			Awaitility.await().atMost(20, TimeUnit.SECONDS).until(
+					()-> dsf.getDataStore().get(streamId).getDashViewerCount() == 2);
+			
+			// Wait some time for detect disconnect
+			Awaitility.await().atMost(20, TimeUnit.SECONDS).until(
+					()-> dsf.getDataStore().get(streamId).getDashViewerCount() == 0);
+			
+			assertEquals(0, viewerStats.getViewerCount(streamId));
+			assertEquals(0, viewerStats.getIncreaseCounterMap(streamId));
+			assertEquals(0, viewerStats.getTotalViewerCount());
+			
+			// a disconnection event should be added 
+			Subscriber subData = dsf.getDataStore().getSubscriber(streamId, subscriberPlay2.getSubscriberId());
+			
+			List<ConnectionEvent> events = dsf.getDataStore().getConnectionEvents(streamId, subscriberPlay2.getSubscriberId(), 0, 50);
+			
+			assertEquals(4, events.size());
+			ConnectionEvent eventDis = events.get(3);
+			assertSame(ConnectionEvent.DISCONNECTED_EVENT, eventDis.getEventType());
+			
+			// Broadcast finished test
+			broadcast.setStatus(AntMediaApplicationAdapter.BROADCAST_STATUS_FINISHED);
+			dsf.getDataStore().save(broadcast);
+			doReturn(false).when(viewerStats).isStreaming(Mockito.any());			
+
+			
+			Awaitility.await().atMost(20, TimeUnit.SECONDS).until(
+					()-> dsf.getDataStore().save(broadcast).equals(streamId));
+			
+			
+			viewerStats.registerNewViewer(streamId, sessionId, subscriberPlay3.getSubscriberId());
+			
+			Awaitility.await().atMost(20, TimeUnit.SECONDS).until(
+					()-> viewerStats.getViewerCount(streamId) == 1);
+			
+
+			assertEquals(1, viewerStats.getViewerCount(streamId));
+			assertEquals(1, viewerStats.getIncreaseCounterMap(streamId));
+			assertEquals(1, viewerStats.getTotalViewerCount());
+			
+			// Wait some time for detect disconnect
+			Awaitility.await().atMost(20, TimeUnit.SECONDS).until(
+					()-> dsf.getDataStore().get(streamId).getDashViewerCount() == 0);
+			
+			// Check Viewer 
+			Awaitility.await().atMost(10, TimeUnit.SECONDS).until(
+					()-> viewerStats.getViewerCount(streamId) == 0);
+			
+			Awaitility.await().atMost(10, TimeUnit.SECONDS).until(
+					()-> viewerStats.getIncreaseCounterMap(streamId) == 0);
+			
+			Awaitility.await().atMost(10, TimeUnit.SECONDS).until(
+					()-> viewerStats.getTotalViewerCount() == 0);
+			
+
+			Subscriber subData2 = dsf.getDataStore().getSubscriber(streamId, subscriberPlay3.getSubscriberId());
+			
+			List<ConnectionEvent> events2 = dsf.getDataStore().getConnectionEvents(streamId, subscriberPlay3.getSubscriberId(), 0, 50);
+			
+			assertEquals(2, events2.size());	
+			ConnectionEvent eventDis2 = events2.get(1);
+			assertSame(ConnectionEvent.DISCONNECTED_EVENT, eventDis2.getEventType());		
+			
+		
+		
+	}	
+
+	@Test
+	public void testSetApplicationContext() {
+		ApplicationContext context = mock(ApplicationContext.class);
+
+		try {
+
+			DataStoreFactory dsf = new DataStoreFactory();
+			dsf.setDbType("memorydb");
+			dsf.setDbName("datastore");
+			when(context.getBean(DataStoreFactory.BEAN_NAME)).thenReturn(dsf);
+
+			when(context.containsBean(AppSettings.BEAN_NAME)).thenReturn(true);
+			
+			when(context.getBean(IAntMediaStreamHandler.VERTX_BEAN_NAME)).thenReturn(vertx);
+
+			AppSettings settings = new AppSettings();
+
+			//set dash fragment duration time to 1
+			settings.setDashFragmentDuration("0.5");
+			when(context.getBean(AppSettings.BEAN_NAME)).thenReturn(settings);
+			when(context.getBean(ServerSettings.BEAN_NAME)).thenReturn(new ServerSettings());
+			
+			AntMediaApplicationAdapter adapter = Mockito.mock(AntMediaApplicationAdapter.class);
+			when(context.getBean(AntMediaApplicationAdapter.BEAN_NAME)).thenReturn(adapter);
+			
+			when(adapter.getScope()).thenReturn(Mockito.mock(IScope.class));
+			
+			DashViewerStats viewerStats = Mockito.spy(new DashViewerStats());
+			
+			viewerStats.setTimePeriodMS(1000);
+			viewerStats.setApplicationContext(context);
+			
+			Broadcast broadcast = new Broadcast();
+			broadcast.setStatus(AntMediaApplicationAdapter.BROADCAST_STATUS_BROADCASTING);
+			broadcast.setName("name");
+			
+			doReturn(true).when(viewerStats).isStreaming(Mockito.any());			
+
+			dsf.setWriteStatsToDatastore(true);
+			dsf.setApplicationContext(context);
+			String streamId = dsf.getDataStore().save(broadcast);
+
+			assertEquals(1000, viewerStats.getTimePeriodMS());
+			assertEquals(10000, viewerStats.getTimeoutMS());
+
+			String sessionId = "sessionId" + (int)(Math.random() * 10000);
+
+			viewerStats.registerNewViewer(streamId, sessionId, null);
+			
+			Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(
+					()->viewerStats.getViewerCount(streamId) == 1 );
+
+			Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(
+					()->viewerStats.getIncreaseCounterMap(streamId) == 1 );
+			
+			Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(
+					()->viewerStats.getTotalViewerCount() == 1 );
+			
+			//Viewer timeout increase
+			viewerStats.registerNewViewer(streamId, sessionId, null);
+			
+			// Check viewer is online
+			Awaitility.await().atMost(30, TimeUnit.SECONDS).until(
+					()-> dsf.getDataStore().get(streamId).getDashViewerCount() == 1);
+			
+			// Wait some time for detect disconnect
+			Awaitility.await().atMost(30, TimeUnit.SECONDS).until(
+					()-> dsf.getDataStore().get(streamId).getDashViewerCount() == 0);
+			
+			assertEquals(0, viewerStats.getViewerCount(streamId));
+			assertEquals(0, viewerStats.getIncreaseCounterMap(streamId));
+			assertEquals(0, viewerStats.getTotalViewerCount());
+			
+			// Broadcast finished test
+			broadcast.setStatus(AntMediaApplicationAdapter.BROADCAST_STATUS_FINISHED);
+			dsf.getDataStore().save(broadcast);
+			doReturn(false).when(viewerStats).isStreaming(Mockito.any());			
+
+			Awaitility.await().atMost(30, TimeUnit.SECONDS).until(
+					()-> dsf.getDataStore().save(broadcast).equals(streamId));
+			
+			
+			viewerStats.registerNewViewer(streamId, sessionId, null);
+			
+			Awaitility.await().atMost(30, TimeUnit.SECONDS).until(
+					()-> viewerStats.getViewerCount(streamId) == 1);
+			
+			assertEquals(1, viewerStats.getViewerCount(streamId));
+			assertEquals(1, viewerStats.getIncreaseCounterMap(streamId));
+			assertEquals(1, viewerStats.getTotalViewerCount());
+			
+			// Wait some time for detect disconnect
+			Awaitility.await().atMost(30, TimeUnit.SECONDS).until(
+					()-> dsf.getDataStore().get(streamId).getDashViewerCount() == 0);
+			
+			// Check Viewer 
+			Awaitility.await().atMost(30, TimeUnit.SECONDS).until(
+					()-> viewerStats.getViewerCount(streamId) == 0);
+			
+			Awaitility.await().atMost(30, TimeUnit.SECONDS).until(
+					()-> viewerStats.getIncreaseCounterMap(streamId) == 0);
+			
+			Awaitility.await().atMost(30, TimeUnit.SECONDS).until(
+					()-> viewerStats.getTotalViewerCount() == 0);
+			
+			
+		} catch (Exception e) {
+			e.printStackTrace();
+			fail(e.getMessage());
+		}
+		
+		
+	}
+
+}
