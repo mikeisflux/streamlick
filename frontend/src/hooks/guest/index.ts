@@ -7,10 +7,6 @@
 
 export { useDeviceEnumeration, type DeviceEnumerationResult } from './useDeviceEnumeration';
 export { useStatusListeners, type GuestStatus, type StatusListenersOptions } from './useStatusListeners';
-
-// TODO: Create and export these hooks:
-// export { usePreviewStream } from './usePreviewStream';
-// export { useGuestStream } from './useGuestStream';
-// export { useGreenroomChat } from './useGreenroomChat';
-// export { useBroadcastVideo } from './useBroadcastVideo';
-// export { useGuestJoinSession } from './useGuestJoinSession';
+export { usePreviewStream } from './usePreviewStream';
+export { useGuestStream } from './useGuestStream';
+export { useGreenroomChat, type GreenroomParticipant, type ChatMessage } from './useGreenroomChat';

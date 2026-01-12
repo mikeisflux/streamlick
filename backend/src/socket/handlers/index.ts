@@ -7,24 +7,33 @@
  * Usage in main socket/index.ts:
  *
  * ```typescript
- * import { registerParticipantHandlers, registerWebRTCSignalingHandlers } from './handlers';
+ * import {
+ *   registerStudioHandlers,
+ *   registerParticipantHandlers,
+ *   registerGreenroomHandlers,
+ *   registerChatHandlers,
+ *   registerScreenShareHandlers,
+ *   registerWebRTCSignalingHandlers,
+ *   registerHealthMonitoringHandlers,
+ *   registerRtmpHandlers,
+ *   registerDisconnectHandler,
+ * } from './handlers';
  *
  * io.on('connection', (socket) => {
+ *   registerStudioHandlers(socket, io);
  *   registerParticipantHandlers(socket, io);
- *   registerWebRTCSignalingHandlers(socket, io);
  *   // ... other handlers
+ *   registerDisconnectHandler(socket, io);
  * });
  * ```
  */
 
+export { registerStudioHandlers, pendingDisconnects, DISCONNECT_GRACE_PERIOD_MS } from './studio.handlers';
 export { registerParticipantHandlers } from './participant.handlers';
+export { registerGreenroomHandlers } from './greenroom.handlers';
+export { registerChatHandlers, activeChatManagers } from './chat.handlers';
+export { registerScreenShareHandlers } from './screen-share.handlers';
 export { registerWebRTCSignalingHandlers } from './webrtc-signaling.handlers';
-
-// TODO: Create and export these handlers:
-// export { registerStudioHandlers } from './studio.handlers';
-// export { registerGreenroomHandlers } from './greenroom.handlers';
-// export { registerChatHandlers } from './chat.handlers';
-// export { registerScreenShareHandlers } from './screen-share.handlers';
-// export { registerHealthMonitoringHandlers } from './health-monitoring.handlers';
-// export { registerRtmpHandlers } from './rtmp.handlers';
-// export { registerDisconnectHandler } from './disconnect.handler';
+export { registerHealthMonitoringHandlers } from './health-monitoring.handlers';
+export { registerRtmpHandlers } from './rtmp.handlers';
+export { registerDisconnectHandler } from './disconnect.handler';
