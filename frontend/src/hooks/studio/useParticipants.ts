@@ -192,8 +192,10 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
         const updated = new Map(prev);
         for (const p of participants) {
           const existing = prev.get(p.id);
-          // Default null/undefined role to 'backstage' to ensure participants start in preview area
-          const role = (p.role || 'backstage') as 'host' | 'guest' | 'backstage';
+          // CRITICAL: Preserve existing 'guest' role if already on stage
+          // Don't let sync reset role to 'backstage' - that causes video element deletion and flickering
+          const apiRole = (p.role || 'backstage') as 'host' | 'guest' | 'backstage';
+          const role = existing?.role === 'guest' ? 'guest' : apiRole;
           updated.set(p.id, {
             id: p.id,
             name: p.name,

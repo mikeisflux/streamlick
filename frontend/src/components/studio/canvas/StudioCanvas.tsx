@@ -209,22 +209,45 @@ export function StudioCanvas({
   }, []);
 
   // Monitor audio levels for remote participants
-  useEffect(() => {
-    const audioContexts = new Map<string, { context: AudioContext; analyser: AnalyserNode; source: MediaStreamAudioSourceNode; frameId: number }>();
+  // CRITICAL: Use a ref to persist audio contexts across re-renders
+  // This prevents constant recreation of audio contexts which causes flickering
+  const audioContextsRef = useRef<Map<string, { context: AudioContext; analyser: AnalyserNode; source: MediaStreamAudioSourceNode; frameId: number; streamId: string }>>(new Map());
 
-    const setupAudioAnalyzer = (participantId: string, stream: MediaStream, audioEnabled: boolean) => {
-      const existing = audioContexts.get(participantId);
+  useEffect(() => {
+    const currentParticipantIds = new Set<string>();
+
+    remoteParticipants.forEach((p, id) => {
+      if (!p.stream || !p.audioEnabled || !p.stream.getAudioTracks().length) {
+        // Remove analyzer if audio is disabled
+        const existing = audioContextsRef.current.get(id);
+        if (existing) {
+          cancelAnimationFrame(existing.frameId);
+          existing.source.disconnect();
+          existing.analyser.disconnect();
+          if (existing.context.state !== 'closed') existing.context.close();
+          audioContextsRef.current.delete(id);
+        }
+        setSpeakingParticipants(prev => { const next = new Set(prev); next.delete(id); return next; });
+        return;
+      }
+
+      currentParticipantIds.add(id);
+      const streamId = p.stream.id;
+
+      // CRITICAL: Only create new analyzer if we don't have one or the stream changed
+      const existing = audioContextsRef.current.get(id);
+      if (existing && existing.streamId === streamId) {
+        // Already have a working analyzer for this stream - do nothing
+        return;
+      }
+
+      // Close old analyzer if exists (stream changed)
       if (existing) {
         cancelAnimationFrame(existing.frameId);
         existing.source.disconnect();
         existing.analyser.disconnect();
-        existing.context.close();
-        audioContexts.delete(participantId);
-      }
-
-      if (!audioEnabled || !stream.getAudioTracks().length) {
-        setSpeakingParticipants(prev => { const next = new Set(prev); next.delete(participantId); return next; });
-        return;
+        if (existing.context.state !== 'closed') existing.context.close();
+        audioContextsRef.current.delete(id);
       }
 
       try {
@@ -233,14 +256,12 @@ export function StudioCanvas({
         analyser.fftSize = 512;
         analyser.smoothingTimeConstant = 0.8;
 
-        const audioTrack = stream.getAudioTracks()[0];
+        const audioTrack = p.stream.getAudioTracks()[0];
         const clonedStream = new MediaStream([audioTrack.clone()]);
         const source = audioContext.createMediaStreamSource(clonedStream);
         source.connect(analyser);
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-        // Track previous speaking state to avoid unnecessary re-renders
         let wasSpeaking = false;
 
         const checkAudioLevel = () => {
@@ -250,36 +271,53 @@ export function StudioCanvas({
           const average = sum / dataArray.length;
           const isSpeaking = average > 10;
 
-          // CRITICAL: Only update state if speaking status actually changed
-          // This prevents 60 FPS re-renders which cause flickering
           if (isSpeaking !== wasSpeaking) {
             wasSpeaking = isSpeaking;
             setSpeakingParticipants(prev => {
               const next = new Set(prev);
-              if (isSpeaking) next.add(participantId);
-              else next.delete(participantId);
+              if (isSpeaking) next.add(id);
+              else next.delete(id);
               return next;
             });
           }
 
           const frameId = requestAnimationFrame(checkAudioLevel);
-          audioContexts.set(participantId, { context: audioContext, analyser, source, frameId });
+          const entry = audioContextsRef.current.get(id);
+          if (entry) entry.frameId = frameId;
         };
-        checkAudioLevel();
+
+        const frameId = requestAnimationFrame(checkAudioLevel);
+        audioContextsRef.current.set(id, { context: audioContext, analyser, source, frameId, streamId });
       } catch {}
-    };
+    });
 
-    remoteParticipants.forEach((p, id) => { if (p.stream) setupAudioAnalyzer(id, p.stream, p.audioEnabled); });
+    // Remove analyzers for participants that left
+    audioContextsRef.current.forEach((entry, id) => {
+      if (!currentParticipantIds.has(id)) {
+        cancelAnimationFrame(entry.frameId);
+        entry.source.disconnect();
+        entry.analyser.disconnect();
+        if (entry.context.state !== 'closed') entry.context.close();
+        audioContextsRef.current.delete(id);
+      }
+    });
 
+    // Only cleanup on unmount - don't cleanup on every remoteParticipants change
+    return () => {};
+  }, [remoteParticipants]);
+
+  // Cleanup audio contexts on unmount only
+  useEffect(() => {
     return () => {
-      audioContexts.forEach(({ context, analyser, source, frameId }) => {
+      audioContextsRef.current.forEach(({ context, analyser, source, frameId }) => {
         cancelAnimationFrame(frameId);
         source.disconnect();
         analyser.disconnect();
         if (context.state !== 'closed') context.close();
       });
+      audioContextsRef.current.clear();
     };
-  }, [remoteParticipants]);
+  }, []);
 
   // Canvas initialization and render loop
   useEffect(() => {
@@ -646,6 +684,7 @@ export function StudioCanvas({
   }, [screenShareStream]);
 
   // Manage remote video elements
+  // CRITICAL: Don't cleanup on every remoteParticipants change - only cleanup specific items that are no longer needed
   useEffect(() => {
     const currentIds = Array.from(remoteParticipants.keys());
     const existingIds = Array.from(remoteVideoElementsRef.current.keys());
@@ -697,6 +736,7 @@ export function StudioCanvas({
       remoteVideoElementsRef.current.set(id, video);
     });
 
+    // Only remove video elements for participants that actually left or are no longer guests
     existingIds.forEach(id => {
       const p = remoteParticipants.get(id);
       if (!currentIds.includes(id) || (p && p.role !== 'guest')) {
@@ -718,6 +758,15 @@ export function StudioCanvas({
       }
     });
 
+    // CRITICAL: Don't return a cleanup function here!
+    // The cleanup was clearing ALL video elements on every remoteParticipants change,
+    // which caused flickering because new video elements need time to start playing.
+    // Only cleanup specific items (done above) when they are no longer needed.
+    return () => {};
+  }, [remoteParticipants]);
+
+  // Cleanup video elements ONLY on component unmount
+  useEffect(() => {
     return () => {
       remoteVideoElementsRef.current.forEach(v => { v.srcObject = null; });
       remoteVideoElementsRef.current.clear();
@@ -725,7 +774,7 @@ export function StudioCanvas({
       participantAudioAddedRef.current.clear();
       participantCanvasCacheRef.current.clear();
     };
-  }, [remoteParticipants]);
+  }, []);
 
   const handleFullscreen = () => {
     if (containerRef.current) {

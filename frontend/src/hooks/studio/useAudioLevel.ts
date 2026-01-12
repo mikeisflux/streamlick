@@ -49,6 +49,10 @@ export function useAudioLevel(stream: MediaStream | null, audioEnabled: boolean)
       // Start analyzing audio levels
       const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
 
+      // CRITICAL: Track previous speaking state to avoid unnecessary re-renders
+      // Only update state when speaking status actually changes
+      let wasSpeaking = false;
+
       const checkAudioLevel = () => {
         if (!analyserRef.current) return;
 
@@ -65,7 +69,12 @@ export function useAudioLevel(stream: MediaStream | null, audioEnabled: boolean)
         const speakingThreshold = 10;
         const speaking = average > speakingThreshold;
 
-        setIsSpeaking(speaking);
+        // CRITICAL: Only update state if speaking status actually changed
+        // This prevents 60 FPS re-renders which cause flickering
+        if (speaking !== wasSpeaking) {
+          wasSpeaking = speaking;
+          setIsSpeaking(speaking);
+        }
 
         animationFrameRef.current = requestAnimationFrame(checkAudioLevel);
       };
