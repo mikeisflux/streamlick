@@ -113,8 +113,10 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
             const existing = prev.get(p.id);
             const hasStream = existing?.stream || null;
             // Check if this participant needs a stream (only if they're on stage = 'guest' role)
-            // Default null/undefined role to 'backstage' to ensure participants start in preview area
-            const role = (p.role || 'backstage') as 'host' | 'guest' | 'backstage';
+            // CRITICAL: Preserve existing 'guest' role if already on stage
+            // Don't let poll reset role to 'backstage' - that causes video element deletion and flickering
+            const apiRole = (p.role || 'backstage') as 'host' | 'guest' | 'backstage';
+            const role = existing?.role === 'guest' ? 'guest' : apiRole;
             if (!hasStream && p.videoEnabled && role === 'guest') {
               shouldRequestStreams = true;
               participantsWithoutStreams.push(p.name || p.id);
