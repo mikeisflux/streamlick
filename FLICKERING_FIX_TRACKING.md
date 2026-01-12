@@ -218,6 +218,33 @@ const canDrawFromCache = p.videoEnabled && cache && cache.lastFrameTime > 0;
 
 ---
 
+### Change 12: Fix Duplicate Offer Handling in useGuestStreams
+**File:** `frontend/src/hooks/studio/useGuestStreams.ts`
+**Lines:** 54-66
+
+**Problem:** When the host requests guests to resend stream offers (at 1s and 3s after init), the second offer arrives while the first connection is still in `state: "new"` (ICE hasn't started yet). The code was only ignoring offers for "connected" or "connecting" states, treating "new" as "broken" and closing the connection.
+
+**Root Cause from Logs:**
+```
+[GuestStreams] Received offer from guest: d0ab7c2d-...
+... connection established ...
+[GuestStreams] Received offer from guest: d0ab7c2d-...
+[GuestStreams] Closing broken connection for d0ab7c2d-... - state: new
+```
+
+**Fix:**
+```javascript
+// Before:
+if (state === 'connected' || state === 'connecting') {
+
+// After - also protect 'new' state:
+if (state === 'connected' || state === 'connecting' || state === 'new') {
+```
+
+**Status:** APPLIED
+
+---
+
 ## Debugging Checklist
 
 If still flickering, check:

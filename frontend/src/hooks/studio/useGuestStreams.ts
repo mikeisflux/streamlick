@@ -55,11 +55,13 @@ export function useGuestStreams(
     const existing = connectionsRef.current.get(participantId);
     if (existing) {
       const state = existing.pc.connectionState;
-      if (state === 'connected' || state === 'connecting') {
-        console.log('[GuestStreams] Already have active connection for', participantId, '- ignoring offer to prevent flickering');
+      // CRITICAL: Include 'new' state - connection is being set up, don't interrupt it
+      // This prevents duplicate offers from causing connection recreation and flickering
+      if (state === 'connected' || state === 'connecting' || state === 'new') {
+        console.log('[GuestStreams] Already have active connection for', participantId, '- ignoring offer (state:', state, ')');
         return;
       }
-      // Only close if connection is actually broken
+      // Only close if connection is actually broken (failed/closed/disconnected)
       console.log('[GuestStreams] Closing broken connection for', participantId, '- state:', state);
       existing.pc.close();
       connectionsRef.current.delete(participantId);
