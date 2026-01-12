@@ -111,8 +111,10 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
           for (const p of participants) {
             const existing = prev.get(p.id);
             const hasStream = existing?.stream || null;
-            // Check if this participant needs a stream
-            if (!hasStream && p.videoEnabled) {
+            // Check if this participant needs a stream (only if they're on stage = 'guest' role)
+            // Default null/undefined role to 'backstage' to ensure participants start in preview area
+            const role = (p.role || 'backstage') as 'host' | 'guest' | 'backstage';
+            if (!hasStream && p.videoEnabled && role === 'guest') {
               shouldRequestStreams = true;
               participantsWithoutStreams.push(p.name || p.id);
             }
@@ -122,7 +124,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
               stream: hasStream, // Preserve existing stream
               audioEnabled: p.audioEnabled,
               videoEnabled: p.videoEnabled,
-              role: p.role as 'host' | 'guest' | 'backstage',
+              role,
             });
           }
 
@@ -177,13 +179,15 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
         const updated = new Map(prev);
         for (const p of participants) {
           const existing = prev.get(p.id);
+          // Default null/undefined role to 'backstage' to ensure participants start in preview area
+          const role = (p.role || 'backstage') as 'host' | 'guest' | 'backstage';
           updated.set(p.id, {
             id: p.id,
             name: p.name,
             stream: existing?.stream || null, // Preserve existing stream
             audioEnabled: p.audioEnabled,
             videoEnabled: p.videoEnabled,
-            role: p.role as 'host' | 'guest' | 'backstage',
+            role,
           });
         }
         return updated;

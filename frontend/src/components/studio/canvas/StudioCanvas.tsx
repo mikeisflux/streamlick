@@ -151,6 +151,11 @@ export function StudioCanvas({
   const outputStreamRef = useRef<MediaStream | null>(null);
   const remoteVideoElementsRef = useRef<Map<string, HTMLVideoElement>>(new Map());
 
+  // Per-participant offscreen canvas cache to prevent flickering
+  // Each participant gets their own offscreen canvas that caches the last good frame
+  // This eliminates flickering during WebRTC stream renegotiations
+  const participantCanvasCacheRef = useRef<Map<string, { canvas: OffscreenCanvas | HTMLCanvasElement; ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D; lastFrameTime: number }>>(new Map());
+
   // Cached images for canvas rendering
   const backgroundImageRef = useRef<HTMLImageElement | null>(null);
   const logoImageRef = useRef<HTMLImageElement | null>(null);
@@ -649,8 +654,10 @@ export function StudioCanvas({
         // Collect all on-stage participants (local + remote)
         // CRITICAL: Use ref to get current remoteParticipants value to avoid stale closure
         // This ensures we see role changes (backstage -> guest) when participants are promoted
+        // IMPORTANT: Only include participants explicitly marked as 'guest' role
+        // Participants with null/undefined/backstage role stay in the preview area
         const onStageRemote = Array.from(remoteParticipantsRef.current.values()).filter(
-          (p) => p.role !== 'backstage' && p.id !== 'screen-share'
+          (p) => p.role === 'guest' && p.id !== 'screen-share'
         );
 
         const allParticipants: Array<{ type: 'local' | 'remote', id: string, video?: HTMLVideoElement, participant?: any, videoEnabled: boolean }> = [];
@@ -972,6 +979,35 @@ export function StudioCanvas({
         // Draw all participants using calculated positions
         const cornerRadius = 16; // Rounded corner radius for participant boxes
 
+        // Helper function to get or create offscreen canvas cache for a participant
+        const getOrCreateParticipantCache = (participantId: string, width: number, height: number) => {
+          let cache = participantCanvasCacheRef.current.get(participantId);
+
+          // Create new cache or resize if dimensions changed significantly
+          if (!cache || Math.abs(cache.canvas.width - width) > 10 || Math.abs(cache.canvas.height - height) > 10) {
+            // Use OffscreenCanvas if available, fallback to regular canvas
+            let newCanvas: OffscreenCanvas | HTMLCanvasElement;
+            let newCtx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+
+            if (typeof OffscreenCanvas !== 'undefined') {
+              newCanvas = new OffscreenCanvas(Math.round(width), Math.round(height));
+              newCtx = newCanvas.getContext('2d');
+            } else {
+              newCanvas = document.createElement('canvas');
+              newCanvas.width = Math.round(width);
+              newCanvas.height = Math.round(height);
+              newCtx = newCanvas.getContext('2d');
+            }
+
+            if (newCtx) {
+              cache = { canvas: newCanvas, ctx: newCtx, lastFrameTime: 0 };
+              participantCanvasCacheRef.current.set(participantId, cache);
+            }
+          }
+
+          return cache;
+        };
+
         allParticipants.forEach((p, index) => {
           if (index >= positions.length) return;
 
@@ -979,10 +1015,8 @@ export function StudioCanvas({
           const participantKey = p.id;
 
           // Check video readiness for stability tracking
-          // Use readyState >= 1 (HAVE_METADATA) which is more lenient than >= 2 (HAVE_CURRENT_DATA)
-          // This reduces flickering because metadata (dimensions) is available earlier than frame data
-          // drawImage will still work with readyState 1 for most WebRTC streams
-          const videoReady = p.video && p.video.readyState >= 1 && p.video.videoWidth > 0;
+          // Use readyState >= 2 (HAVE_CURRENT_DATA) for more reliable frame availability
+          const videoReady = p.video && p.video.readyState >= 2 && p.video.videoWidth > 0;
 
           // Update stability tracking with very asymmetric gain/decay
           // This prevents flickering from WebRTC stream renegotiations
@@ -997,13 +1031,19 @@ export function StudioCanvas({
 
           const stableFrameCount = videoStableFrames.get(participantKey) || 0;
 
+          // Get or create the offscreen canvas cache for this participant
+          const cache = getOrCreateParticipantCache(participantKey, pos.width, pos.height);
+
           // Determine what to draw:
-          // 1. Video: camera enabled AND (video ready OR have stability buffer)
-          // 2. Avatar: camera disabled AND have avatar (local only)
-          // 3. Placeholder: camera disabled or no video element
-          const shouldAttemptVideo = p.videoEnabled && p.video && (videoReady || stableFrameCount > 0);
+          // 1. Video: camera enabled AND video ready - cache and draw
+          // 2. Cached frame: camera enabled AND have cached frame but video not ready
+          // 3. Avatar: camera disabled AND have avatar (local only)
+          // 4. Placeholder: camera disabled or no video element and no cache
+          const shouldDrawLiveVideo = p.videoEnabled && videoReady;
+          const hasCachedFrame = cache && cache.lastFrameTime > 0;
+          const shouldDrawCachedVideo = p.videoEnabled && !videoReady && hasCachedFrame;
           const shouldDrawAvatar = !p.videoEnabled && p.type === 'local' && avatarImageRef.current;
-          const shouldDrawPlaceholder = !shouldAttemptVideo && !shouldDrawAvatar;
+          const shouldDrawPlaceholder = !shouldDrawLiveVideo && !shouldDrawCachedVideo && !shouldDrawAvatar;
 
           // Set up rounded corner clip
           ctx.save();
@@ -1011,29 +1051,37 @@ export function StudioCanvas({
           ctx.roundRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
           ctx.clip();
 
-          // Draw strategy:
-          // - If NOT attempting video: always draw dark background first
-          // - If attempting video with HIGH stability (>= 15): skip background, draw video directly
-          //   This preserves the last good frame during brief dropouts
-          // - If attempting video with LOW stability (< 15): draw background first as safety net
-          //   Then draw video on top - if video draws, it covers background; if not, we see background
-          const highStability = stableFrameCount >= 15;
-
-          if (!shouldAttemptVideo || (shouldAttemptVideo && !highStability)) {
+          // Always draw background first as safety net
+          if (shouldDrawPlaceholder || (!shouldDrawLiveVideo && !shouldDrawCachedVideo && !shouldDrawAvatar)) {
             ctx.fillStyle = '#1a1a1a';
             ctx.fill();
           }
 
-          if (shouldAttemptVideo) {
-            // Camera is ON - try to draw video
+          if (shouldDrawLiveVideo && cache) {
+            // Camera is ON and video is ready - draw live video AND cache to offscreen canvas
             try {
+              // Draw to main canvas
               ctx.drawImage(p.video!, pos.x, pos.y, pos.width, pos.height);
-            } catch {
-              // Draw failed - background already drawn if low stability, draw it now if high stability
-              if (highStability) {
+
+              // Cache the frame to offscreen canvas for later use during dropouts
+              cache.ctx.drawImage(p.video!, 0, 0, cache.canvas.width, cache.canvas.height);
+              cache.lastFrameTime = now;
+            } catch (err) {
+              // Draw failed - try cached frame or draw background
+              if (hasCachedFrame) {
+                ctx.drawImage(cache.canvas, pos.x, pos.y, pos.width, pos.height);
+              } else {
                 ctx.fillStyle = '#1a1a1a';
                 ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
               }
+            }
+          } else if (shouldDrawCachedVideo && cache) {
+            // Video not ready but we have a cached frame - use it to prevent flickering
+            try {
+              ctx.drawImage(cache.canvas, pos.x, pos.y, pos.width, pos.height);
+            } catch {
+              ctx.fillStyle = '#1a1a1a';
+              ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
             }
           } else if (shouldDrawAvatar) {
             // Camera is OFF - draw circular avatar in center
@@ -1464,8 +1512,9 @@ export function StudioCanvas({
       const participant = remoteParticipants.get(participantId);
       if (!participant || !participant.stream) return;
 
-      // Skip backstage and screen-share participants
-      if (participant.role === 'backstage' || participantId === 'screen-share') return;
+      // Skip participants not on stage: only 'guest' role goes on stage
+      // null/undefined/backstage roles stay in preview area
+      if (participant.role !== 'guest' || participantId === 'screen-share') return;
 
       // Add participant audio to mixer if not already added (for on-stage participants)
       if (!participantAudioAddedRef.current.has(participantId) && participant.audioEnabled) {
@@ -1536,11 +1585,12 @@ export function StudioCanvas({
       remoteVideoElementsRef.current.set(participantId, video);
     });
 
-    // Remove video elements and audio for participants that left or went backstage
+    // Remove video elements and audio for participants that left or are not on stage
+    // Only 'guest' role should have video elements; others (null/undefined/backstage) should be removed
     existingVideoIds.forEach((videoId) => {
       const participant = remoteParticipants.get(videoId);
       const shouldRemove = !currentParticipantIds.includes(videoId) ||
-                          (participant && participant.role === 'backstage');
+                          (participant && participant.role !== 'guest');
 
       if (shouldRemove) {
         console.log('[StudioCanvas] Removing video element for participant:', videoId);
@@ -1556,14 +1606,21 @@ export function StudioCanvas({
           audioMixerService.removeStream(`participant-${videoId}`);
           participantAudioAddedRef.current.delete(videoId);
         }
+
+        // Clean up the offscreen canvas cache for this participant
+        if (participantCanvasCacheRef.current.has(videoId)) {
+          console.log('[StudioCanvas] Removing canvas cache for participant:', videoId);
+          participantCanvasCacheRef.current.delete(videoId);
+        }
       }
     });
 
-    // Also check for participants that went backstage but weren't in existingVideoIds
+    // Also check for participants that are no longer on stage
+    // Only 'guest' role should have audio in mixer; others (null/undefined/backstage) should be removed
     participantAudioAddedRef.current.forEach((participantId) => {
       const participant = remoteParticipants.get(participantId);
-      if (!participant || participant.role === 'backstage') {
-        console.log('[StudioCanvas] Removing backstage participant audio from mixer:', participantId);
+      if (!participant || participant.role !== 'guest') {
+        console.log('[StudioCanvas] Removing off-stage participant audio from mixer:', participantId);
         audioMixerService.removeStream(`participant-${participantId}`);
         participantAudioAddedRef.current.delete(participantId);
       }
@@ -1581,6 +1638,9 @@ export function StudioCanvas({
         audioMixerService.removeStream(`participant-${participantId}`);
       });
       participantAudioAddedRef.current.clear();
+
+      // Clean up participant canvas cache
+      participantCanvasCacheRef.current.clear();
     };
   }, [remoteParticipants]);
 
