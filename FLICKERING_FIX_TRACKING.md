@@ -172,30 +172,13 @@ const canDrawFromCache = p.videoEnabled && cache && cache.lastFrameTime > 0;
 
 ---
 
-### Change 9: Added Dark Background Fallback
-**File:** `frontend/src/components/studio/canvas/StudioCanvas.tsx`
-**Lines:** ~448-467
-
-**Problem:** After removing the initial dark background draw, if we couldn't draw from cache OR avatar, we drew nothing at all. This could cause visual artifacts or show previous frame content.
-
-**Fix:** Added `else` clause to draw dark background as fallback when nothing else can be drawn.
-
-**Status:** APPLIED
+### Change 9: Dark Background Fallback - REVERTED
+**Status:** REVERTED - Made preview black
 
 ---
 
-### Change 10: Cache Resize Preservation
-**File:** `frontend/src/components/studio/canvas/StudioCanvas.tsx`
-**Lines:** ~405-428
-
-**Problem:** When cache was recreated due to size change (>10px difference), `lastFrameTime` was reset to 0 and old content was lost. If positions changed slightly, this caused flickering because we'd draw dark frame until video caught up.
-
-**Fix:**
-1. Increased size tolerance from 10px to 50px to reduce unnecessary cache recreation
-2. When recreating cache, preserve `lastFrameTime` from old cache
-3. Copy old cache content to new cache (scaled to new size) to maintain visual continuity
-
-**Status:** APPLIED
+### Change 10: Cache Resize Preservation - REVERTED
+**Status:** REVERTED - Made preview black
 
 ---
 
