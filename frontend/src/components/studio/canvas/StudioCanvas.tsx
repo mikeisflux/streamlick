@@ -726,27 +726,53 @@ export function StudioCanvas({
         const positions: ParticipantPosition[] = [];
 
         switch (activeLayout) {
-          case 1: // Solo - single participant centered at 60% of screen, 16:9 aspect ratio
-            if (participantCount === 1) {
-              const boxWidth = canvas.width * 0.6;
-              const boxHeight = boxWidth * (9 / 16); // 16:9 aspect ratio
-              positions.push({
-                x: (canvas.width - boxWidth) / 2,
-                y: (canvas.height - boxHeight) / 2,
-                width: boxWidth,
-                height: boxHeight
-              });
-            } else {
-              // Fallback to grid for multiple
-              const cols = Math.ceil(Math.sqrt(participantCount));
-              const rows = Math.ceil(participantCount / cols);
-              const boxWidth = canvas.width / cols;
-              const boxHeight = canvas.height / rows;
-              allParticipants.forEach((_, i) => {
-                const col = i % cols;
-                const row = Math.floor(i / cols);
-                positions.push({ x: col * boxWidth, y: row * boxHeight, width: boxWidth, height: boxHeight });
-              });
+          case 1: // Solo - single participant centered, or side-by-side with margins for multiple
+            {
+              const margin = 50;
+              const gap = 20;
+              if (participantCount === 1) {
+                // Single participant: centered at 60% of screen, 16:9 aspect ratio
+                const boxWidth = canvas.width * 0.6;
+                const boxHeight = boxWidth * (9 / 16);
+                positions.push({
+                  x: (canvas.width - boxWidth) / 2,
+                  y: (canvas.height - boxHeight) / 2,
+                  width: boxWidth,
+                  height: boxHeight
+                });
+              } else if (participantCount === 2) {
+                // Two participants: side by side with margins
+                const availableWidth = canvas.width - margin * 2 - gap;
+                const availableHeight = canvas.height - margin * 2;
+                const boxWidth = availableWidth / 2;
+                const boxHeight = availableHeight;
+                allParticipants.forEach((_, i) => {
+                  positions.push({
+                    x: margin + i * (boxWidth + gap),
+                    y: margin,
+                    width: boxWidth,
+                    height: boxHeight
+                  });
+                });
+              } else {
+                // 3+ participants: grid with margins
+                const cols = Math.ceil(Math.sqrt(participantCount));
+                const rows = Math.ceil(participantCount / cols);
+                const availableWidth = canvas.width - margin * 2 - gap * (cols - 1);
+                const availableHeight = canvas.height - margin * 2 - gap * (rows - 1);
+                const boxWidth = availableWidth / cols;
+                const boxHeight = availableHeight / rows;
+                allParticipants.forEach((_, i) => {
+                  const col = i % cols;
+                  const row = Math.floor(i / cols);
+                  positions.push({
+                    x: margin + col * (boxWidth + gap),
+                    y: margin + row * (boxHeight + gap),
+                    width: boxWidth,
+                    height: boxHeight
+                  });
+                });
+              }
             }
             break;
 
