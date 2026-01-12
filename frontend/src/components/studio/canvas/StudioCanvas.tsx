@@ -622,6 +622,10 @@ export function StudioCanvas({
     let frameCount = 0;
     let lastFrameTime = performance.now();
 
+    // Track video stability - count consecutive frames where video was drawable
+    // This prevents flickering from single-frame dropouts
+    const videoStableFrames = new Map<string, number>();
+
     const render = () => {
       if (!ctx || !canvas) return;
 
@@ -982,11 +986,28 @@ export function StudioCanvas({
           ctx.clip(); // Clip to rounded rectangle for video
 
           // Draw video when camera is enabled AND we have actual frame data
-          // Require readyState >= 2 (HAVE_CURRENT_DATA) AND videoWidth > 0 to ensure frame exists
-          // This prevents flickering from drawing before video is ready
-          const hasVideoFrame = p.video && p.video.readyState >= 2 && p.video.videoWidth > 0;
+          // Use stability tracking to prevent flickering from single-frame dropouts:
+          // - Build up stability quickly when video is ready (increment by 2)
+          // - Decay stability slowly when video drops (decrement by 1)
+          // - Keep drawing video as long as we have any stability buffer
+          const videoReady = p.video && p.video.readyState >= 2 && p.video.videoWidth > 0;
+          const participantKey = p.id;
 
-          if (p.videoEnabled && hasVideoFrame) {
+          // Update stability tracking with asymmetric gain/decay
+          const currentStable = videoStableFrames.get(participantKey) || 0;
+          if (videoReady) {
+            // Build stability quickly - increment by 2, cap at 10
+            videoStableFrames.set(participantKey, Math.min(currentStable + 2, 10));
+          } else if (currentStable > 0) {
+            // Decay slowly - decrement by 1 to ride out brief dropouts
+            videoStableFrames.set(participantKey, currentStable - 1);
+          }
+
+          // Draw video if we have any stability (allows brief dropouts without flicker)
+          const stableFrameCount = videoStableFrames.get(participantKey) || 0;
+          const shouldDrawVideo = p.videoEnabled && stableFrameCount > 0 && p.video;
+
+          if (shouldDrawVideo) {
             // Draw video - camera is ON (clipped to rounded corners)
             try {
               ctx.drawImage(p.video!, pos.x, pos.y, pos.width, pos.height);
