@@ -1014,36 +1014,43 @@ export function StudioCanvas({
           const pos = positions[index];
           const participantKey = p.id;
 
-          // Check video readiness for stability tracking
-          // Use readyState >= 2 (HAVE_CURRENT_DATA) for more reliable frame availability
-          const videoReady = p.video && p.video.readyState >= 2 && p.video.videoWidth > 0;
+          // Check video readiness - require HAVE_ENOUGH_DATA (readyState >= 3) for more reliable frames
+          // Also verify video dimensions are valid to avoid drawing blank/corrupted frames
+          const videoReady = p.video &&
+                            p.video.readyState >= 3 &&
+                            p.video.videoWidth > 0 &&
+                            p.video.videoHeight > 0 &&
+                            !p.video.paused;
 
           // Update stability tracking with very asymmetric gain/decay
-          // This prevents flickering from WebRTC stream renegotiations
+          // CRITICAL: Require high stability before trusting video data
           const currentStable = videoStableFrames.get(participantKey) || 0;
           if (videoReady) {
-            // Build stability very quickly - increment by 5, cap at 30 (1 second at 30fps)
-            videoStableFrames.set(participantKey, Math.min(currentStable + 5, 30));
+            // Build stability incrementally, cap at 60 (2 seconds at 30fps)
+            videoStableFrames.set(participantKey, Math.min(currentStable + 1, 60));
           } else if (currentStable > 0) {
-            // Decay very slowly - decrement by 1 to ride out stream renegotiations
-            videoStableFrames.set(participantKey, currentStable - 1);
+            // Decay VERY slowly - only lose 0.5 stability per frame to ride out brief dropouts
+            // This means we can survive 120 frames (4 seconds) of dropout before losing cached frame
+            videoStableFrames.set(participantKey, currentStable - 0.5);
           }
 
           const stableFrameCount = videoStableFrames.get(participantKey) || 0;
 
+          // CRITICAL: Require at least 6 stable frames (200ms at 30fps) before updating cache
+          // This prevents flickering from rapid ready/not-ready transitions
+          const videoIsStableEnough = stableFrameCount >= 6;
+
           // Get or create the offscreen canvas cache for this participant
           const cache = getOrCreateParticipantCache(participantKey, pos.width, pos.height);
-
-          // Determine what to draw:
-          // 1. Video: camera enabled AND video ready - cache and draw
-          // 2. Cached frame: camera enabled AND have cached frame but video not ready
-          // 3. Avatar: camera disabled AND have avatar (local only)
-          // 4. Placeholder: camera disabled or no video element and no cache
-          const shouldDrawLiveVideo = p.videoEnabled && videoReady;
           const hasCachedFrame = cache && cache.lastFrameTime > 0;
-          const shouldDrawCachedVideo = p.videoEnabled && !videoReady && hasCachedFrame;
+
+          // CRITICAL FIX: Always draw from cache when camera is enabled
+          // Only update cache when video is stable enough - this prevents flickering
+          // The cache acts as a frame buffer that smooths out WebRTC stream instabilities
+          const shouldUpdateCache = p.videoEnabled && videoReady && videoIsStableEnough && cache;
+          const shouldDrawFromCache = p.videoEnabled && hasCachedFrame;
           const shouldDrawAvatar = !p.videoEnabled && p.type === 'local' && avatarImageRef.current;
-          const shouldDrawPlaceholder = !shouldDrawLiveVideo && !shouldDrawCachedVideo && !shouldDrawAvatar;
+          const shouldDrawPlaceholder = p.videoEnabled && !hasCachedFrame && !videoReady;
 
           // Set up rounded corner clip
           ctx.save();
@@ -1052,31 +1059,24 @@ export function StudioCanvas({
           ctx.clip();
 
           // Always draw background first as safety net
-          if (shouldDrawPlaceholder || (!shouldDrawLiveVideo && !shouldDrawCachedVideo && !shouldDrawAvatar)) {
+          if (shouldDrawPlaceholder || shouldDrawAvatar || (!shouldDrawFromCache && !shouldDrawAvatar)) {
             ctx.fillStyle = '#1a1a1a';
             ctx.fill();
           }
 
-          if (shouldDrawLiveVideo && cache) {
-            // Camera is ON and video is ready - draw live video AND cache to offscreen canvas
+          // First, update the cache if video is stable enough
+          if (shouldUpdateCache) {
             try {
-              // Draw to main canvas
-              ctx.drawImage(p.video!, pos.x, pos.y, pos.width, pos.height);
-
-              // Cache the frame to offscreen canvas for later use during dropouts
+              // Only update cache - don't draw directly from video to main canvas
               cache.ctx.drawImage(p.video!, 0, 0, cache.canvas.width, cache.canvas.height);
               cache.lastFrameTime = now;
             } catch (err) {
-              // Draw failed - try cached frame or draw background
-              if (hasCachedFrame) {
-                ctx.drawImage(cache.canvas, pos.x, pos.y, pos.width, pos.height);
-              } else {
-                ctx.fillStyle = '#1a1a1a';
-                ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
-              }
+              // Cache update failed - don't change lastFrameTime, keep using old cached frame
             }
-          } else if (shouldDrawCachedVideo && cache) {
-            // Video not ready but we have a cached frame - use it to prevent flickering
+          }
+
+          // Then, always draw from cache (which may have just been updated)
+          if (shouldDrawFromCache && cache) {
             try {
               ctx.drawImage(cache.canvas, pos.x, pos.y, pos.width, pos.height);
             } catch {
