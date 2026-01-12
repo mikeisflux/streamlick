@@ -186,6 +186,11 @@ export function StudioCanvas({
   const [banners, setBanners] = useState<Banner[]>([]);
   const bannersRef = useRef(banners);
 
+  // CRITICAL: Ref for remoteParticipants to avoid stale closure in render loop
+  // The render loop runs inside a useEffect that captures the initial remoteParticipants value
+  // Without this ref, the render loop would never see role changes (e.g., backstage -> guest)
+  const remoteParticipantsRef = useRef(remoteParticipants);
+
   // Update refs when props change
   useEffect(() => {
     isLocalUserOnStageRef.current = isLocalUserOnStage;
@@ -205,9 +210,11 @@ export function StudioCanvas({
     teleprompterScrollPositionRef.current = teleprompterScrollPosition;
     displayedCommentRef.current = displayedComment;
     bannersRef.current = banners;
+    // CRITICAL: Keep remoteParticipants ref in sync for the render loop
+    remoteParticipantsRef.current = remoteParticipants;
   }, [isLocalUserOnStage, videoEnabled, selectedLayout, isSharingScreen, isLocalSpeaking, captionsEnabled, currentCaption,
       chatMessages, showChatOnStream, chatOverlayPosition, chatOverlaySize, teleprompterNotes, showTeleprompterOnCanvas,
-      teleprompterFontSize, teleprompterScrollPosition, displayedComment, banners]);
+      teleprompterFontSize, teleprompterScrollPosition, displayedComment, banners, remoteParticipants]);
 
   // Track which remote participants are speaking
   const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
@@ -636,7 +643,9 @@ export function StudioCanvas({
         }
 
         // Collect all on-stage participants (local + remote)
-        const onStageRemote = Array.from(remoteParticipants.values()).filter(
+        // CRITICAL: Use ref to get current remoteParticipants value to avoid stale closure
+        // This ensures we see role changes (backstage -> guest) when participants are promoted
+        const onStageRemote = Array.from(remoteParticipantsRef.current.values()).filter(
           (p) => p.role !== 'backstage' && p.id !== 'screen-share'
         );
 
