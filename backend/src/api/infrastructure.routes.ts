@@ -117,6 +117,16 @@ router.post('/deploy', async (req, res) => {
     }
 
 
+    // Generate TURN credentials upfront so they match between API response and server config
+    let turnCredentials: { username: string; password: string; secret: string } | undefined;
+    if (role === 'turn-server') {
+      turnCredentials = {
+        username: generateToken(16), // 32-char hex username
+        password: generateToken(32), // 64-char hex password
+        secret: generateToken(32),   // 64-char hex secret for long-term auth
+      };
+    }
+
     // Deploy server via Hetzner API
     const server = await hetznerService.deployServer({
       name,
@@ -126,6 +136,7 @@ router.post('/deploy', async (req, res) => {
       sshKeys: sshKeys || [],
       backendUrl: backendApiUrl || backendUrl, // Media servers use this to connect to backend
       upstreamServers,
+      turnCredentials, // Pass TURN credentials to ensure consistency
       // Note: streamingMethod is always 'daily' - configured via environment in cloud-init
     });
 
@@ -211,22 +222,17 @@ router.post('/deploy', async (req, res) => {
         'Restrict Redis access via firewall rules (only allow backend servers)',
         'Enable Redis TLS in production'
       ];
-    } else if (role === 'turn-server') {
-      // Generate secure credentials for TURN server
-      const turnUsername = generateToken(16); // 32-char hex username
-      const turnPassword = generateToken(32); // 64-char hex password
-      const turnSecret = generateToken(32); // 64-char hex secret for long-term auth
-
-
+    } else if (role === 'turn-server' && turnCredentials) {
+      // Use the same credentials that were passed to the cloud-init script
       responseData.server.host = server.public_net.ipv4.ip;
       responseData.server.ports = {
         turn: 3478,
         turnTls: 5349,
         udpRange: '49152-65535'
       };
-      responseData.server.username = turnUsername;
-      responseData.server.password = turnPassword;
-      responseData.server.secret = turnSecret;
+      responseData.server.username = turnCredentials.username;
+      responseData.server.password = turnCredentials.password;
+      responseData.server.secret = turnCredentials.secret;
       responseData.server.urls = [
         `turn:${server.public_net.ipv4.ip}:3478`,
         `turns:${server.public_net.ipv4.ip}:5349`
@@ -239,8 +245,8 @@ router.post('/deploy', async (req, res) => {
               `turn:${server.public_net.ipv4.ip}:3478`,
               `turns:${server.public_net.ipv4.ip}:5349`
             ],
-            username: turnUsername,
-            credential: turnPassword
+            username: turnCredentials.username,
+            credential: turnCredentials.password
           }
         ]
       };

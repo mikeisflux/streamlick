@@ -156,6 +156,12 @@ class HetznerService {
     redisUrl?: string; // For API servers connecting to shared Redis
     upstreamServers?: string[]; // For load balancer configuration
     domain?: string; // Domain name for SSL/Nginx config
+    // TURN server credentials (passed from route to ensure consistency)
+    turnCredentials?: {
+      username: string;
+      password: string;
+      secret: string;
+    };
   }): Promise<HetznerServer> {
     try {
       const client = await this.getClient();
@@ -232,7 +238,7 @@ class HetznerService {
       case 'redis-server':
         return this.getRedisServerScript();
       case 'turn-server':
-        return this.getTurnServerScript();
+        return this.getTurnServerScript(options.turnCredentials);
       default:
         throw new Error(`Unknown server role: ${role}`);
     }
@@ -707,11 +713,13 @@ echo "⚠️  Remember to change the default password!"
   /**
    * TURN Server (Coturn) cloud-init script
    * Installs and configures Coturn for WebRTC TURN/STUN relay
+   * @param credentials - Pre-generated credentials to ensure consistency with API response
    */
-  private getTurnServerScript(): string {
-    const turnUsername = this.generateSecurePassword(16);
-    const turnPassword = this.generateSecurePassword(32);
-    const turnSecret = this.generateSecurePassword(32);
+  private getTurnServerScript(credentials?: { username: string; password: string; secret: string }): string {
+    // Use provided credentials or generate new ones (provided credentials ensure API response matches server config)
+    const turnUsername = credentials?.username || this.generateSecurePassword(16);
+    const turnPassword = credentials?.password || this.generateSecurePassword(32);
+    const turnSecret = credentials?.secret || this.generateSecurePassword(32);
 
     return `#!/bin/bash
 set -e
