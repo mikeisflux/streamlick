@@ -898,10 +898,49 @@ export function StudioCanvas({
 
           const pos = positions[index];
 
+          // DIAGNOSTIC: Log video state periodically for debugging
+          if (frameCount % 60 === 0 && p.type === 'remote' && p.video) {
+            const stream = p.video.srcObject as MediaStream | null;
+            const videoTracks = stream?.getVideoTracks() || [];
+            console.log('[StudioCanvas] Remote video state:', {
+              id: p.id,
+              readyState: p.video.readyState,
+              paused: p.video.paused,
+              videoEnabled: p.videoEnabled,
+              hasStream: !!stream,
+              streamActive: stream?.active,
+              videoTracks: videoTracks.length,
+              trackEnabled: videoTracks[0]?.enabled,
+              trackMuted: videoTracks[0]?.muted,
+              trackReadyState: videoTracks[0]?.readyState,
+            });
+
+            // If video is paused and should be playing, force retry
+            if (p.video.paused && stream && stream.active) {
+              console.log('[StudioCanvas] Forcing play() for paused video:', p.id);
+              p.video.play().catch(err => console.error('[StudioCanvas] Force play failed:', p.id, err));
+            }
+          }
+
           // Draw video only when camera is enabled and video is ready
-          if (p.videoEnabled && p.video && p.video.readyState >= 2) {
+          // NOTE: For MediaStream, readyState may stay at 1 if track is muted/inactive
+          // We try to draw anyway if readyState >= 1 and stream looks active
+          const stream = p.video?.srcObject as MediaStream | null;
+          const videoTrack = stream?.getVideoTracks()[0];
+          const canDrawVideo = p.videoEnabled && p.video && (
+            p.video.readyState >= 2 ||
+            (p.video.readyState >= 1 && videoTrack?.enabled && !videoTrack?.muted)
+          );
+
+          if (canDrawVideo) {
             // Draw video - camera is ON
-            ctx.drawImage(p.video, pos.x, pos.y, pos.width, pos.height);
+            try {
+              ctx.drawImage(p.video!, pos.x, pos.y, pos.width, pos.height);
+            } catch (err) {
+              // If draw fails, show placeholder
+              ctx.fillStyle = '#1a1a1a';
+              ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+            }
           } else if (!p.videoEnabled && p.type === 'local' && avatarImageRef.current) {
             // Draw avatar when camera is OFF (local user only)
             // First draw dark background
