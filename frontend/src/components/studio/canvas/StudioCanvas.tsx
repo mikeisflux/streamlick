@@ -662,8 +662,40 @@ export function StudioCanvas({
         }
 
         // Add remote participants
+        // CRITICAL: Create video elements on-demand if needed
+        // This handles the timing race when a participant is promoted from backstage to guest
+        // The useEffect that creates video elements might not have run yet
         onStageRemote.forEach((participant) => {
-          const video = remoteVideoElementsRef.current.get(participant.id);
+          let video = remoteVideoElementsRef.current.get(participant.id);
+
+          // If video element doesn't exist but participant has a stream, create it on-demand
+          // This ensures promoted participants appear immediately without waiting for useEffect
+          if (!video && participant.stream) {
+            console.log('[StudioCanvas] Creating video element on-demand for promoted participant:', participant.id);
+            video = document.createElement('video');
+            video.autoplay = true;
+            video.playsInline = true;
+            video.muted = true; // Audio handled by audioMixerService
+            video.srcObject = participant.stream;
+            video.play().catch(err => console.error('[StudioCanvas] Failed to play remote video:', participant.id, err));
+            remoteVideoElementsRef.current.set(participant.id, video);
+
+            // Also add audio to mixer for the newly promoted participant
+            if (participant.audioEnabled) {
+              const audioTrack = participant.stream.getAudioTracks()[0];
+              if (audioTrack) {
+                console.log('[StudioCanvas] Adding promoted participant audio to mixer:', participant.id);
+                try {
+                  const audioStream = new MediaStream([audioTrack]);
+                  audioMixerService.addStream(`participant-${participant.id}`, audioStream);
+                  participantAudioAddedRef.current.add(participant.id);
+                } catch (err) {
+                  console.error('[StudioCanvas] Failed to add participant audio to mixer:', participant.id, err);
+                }
+              }
+            }
+          }
+
           if (video) {
             allParticipants.push({
               type: 'remote',

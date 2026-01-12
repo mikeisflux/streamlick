@@ -17,6 +17,7 @@ export function GuestJoin() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasJoined, setHasJoined] = useState(false);
   const [guestStatus, setGuestStatus] = useState<'greenroom' | 'backstage' | 'live'>('greenroom');
+  const [myParticipantId, setMyParticipantId] = useState<string | null>(null);
 
   // Broadcast stream preview state
   const [broadcastStream, setBroadcastStream] = useState<MediaStream | null>(null);
@@ -99,7 +100,13 @@ export function GuestJoin() {
   useEffect(() => {
     if (!hasJoined) return;
 
-    const handlePromoted = () => {
+    const handlePromoted = ({ participantId }: { participantId: string }) => {
+      // CRITICAL: Only process if this promotion is for US, not other guests
+      if (participantId !== myParticipantId) {
+        console.log('[GuestJoin] Ignoring promotion event for different participant:', participantId);
+        return;
+      }
+
       setGuestStatus('live');
       toast.success('You are now LIVE on the broadcast!', {
         duration: 5000,
@@ -107,7 +114,12 @@ export function GuestJoin() {
       });
     };
 
-    const handleDemoted = () => {
+    const handleDemoted = ({ participantId }: { participantId: string }) => {
+      // Only process if this demotion is for us
+      if (participantId !== myParticipantId) {
+        return;
+      }
+
       setGuestStatus('backstage');
       toast.success('Moved to backstage');
     };
@@ -126,7 +138,7 @@ export function GuestJoin() {
       socketService.off('participant-demoted', handleDemoted);
       socketService.off('moved-to-backstage', handleMovedToBackstage);
     };
-  }, [hasJoined]);
+  }, [hasJoined, myParticipantId]);
 
   // Preview stream peer connection ref
   const previewPcRef = useRef<RTCPeerConnection | null>(null);
@@ -716,6 +728,9 @@ export function GuestJoin() {
       });
 
       const participant = response.data.participant;
+
+      // Store our participant ID for checking promotion events
+      setMyParticipantId(participant.id);
 
       // Connect to studio with participant token for guest authentication
       socketService.connect(undefined, token);
