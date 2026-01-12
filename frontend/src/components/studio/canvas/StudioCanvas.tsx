@@ -463,7 +463,7 @@ export function StudioCanvas({
         }
 
         // Draw video clip
-        if (videoClipRef.current?.readyState >= 2) {
+        if (videoClipRef.current && videoClipRef.current.readyState >= 2) {
           ctx.drawImage(videoClipRef.current, 0, 0, canvas.width, canvas.height);
         }
 
