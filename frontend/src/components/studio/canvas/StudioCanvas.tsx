@@ -1314,16 +1314,31 @@ export function StudioCanvas({
 
       // Skip if video element already exists
       if (remoteVideoElementsRef.current.has(participantId)) {
-        // Update srcObject if stream changed
         const existingVideo = remoteVideoElementsRef.current.get(participantId);
-        if (existingVideo && existingVideo.srcObject !== participant.stream) {
-          console.log('[StudioCanvas] Updating stream for participant:', participantId);
-          existingVideo.srcObject = participant.stream;
-          existingVideo.play().catch(err => console.error('[StudioCanvas] Failed to play remote video:', participantId, err));
+        if (!existingVideo) return;
+
+        // Check if stream actually changed by comparing track IDs
+        // This prevents unnecessary srcObject updates that cause AbortError
+        const existingStream = existingVideo.srcObject as MediaStream | null;
+        const newStream = participant.stream;
+
+        // Get video track IDs from both streams
+        const existingTrackIds = existingStream?.getVideoTracks().map(t => t.id).join(',') || '';
+        const newTrackIds = newStream?.getVideoTracks().map(t => t.id).join(',') || '';
+
+        // Only update if tracks actually changed
+        if (existingTrackIds !== newTrackIds && newStream) {
+          console.log('[StudioCanvas] Stream tracks changed for participant:', participantId, { oldTracks: existingTrackIds, newTracks: newTrackIds });
+          existingVideo.srcObject = newStream;
+
+          // Only play if video is paused
+          if (existingVideo.paused) {
+            existingVideo.play().catch(err => console.error('[StudioCanvas] Failed to play remote video:', participantId, err));
+          }
 
           // Also update audio in mixer when stream changes
           if (participant.audioEnabled) {
-            const audioTrack = participant.stream.getAudioTracks()[0];
+            const audioTrack = newStream.getAudioTracks()[0];
             if (audioTrack) {
               console.log('[StudioCanvas] Updating participant audio in mixer:', participantId);
               try {
