@@ -240,18 +240,27 @@ export function StudioCanvas({
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
+        // Track previous speaking state to avoid unnecessary re-renders
+        let wasSpeaking = false;
+
         const checkAudioLevel = () => {
           analyser.getByteFrequencyData(dataArray);
           let sum = 0;
           for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
           const average = sum / dataArray.length;
+          const isSpeaking = average > 10;
 
-          setSpeakingParticipants(prev => {
-            const next = new Set(prev);
-            if (average > 10) next.add(participantId);
-            else next.delete(participantId);
-            return next;
-          });
+          // CRITICAL: Only update state if speaking status actually changed
+          // This prevents 60 FPS re-renders which cause flickering
+          if (isSpeaking !== wasSpeaking) {
+            wasSpeaking = isSpeaking;
+            setSpeakingParticipants(prev => {
+              const next = new Set(prev);
+              if (isSpeaking) next.add(participantId);
+              else next.delete(participantId);
+              return next;
+            });
+          }
 
           const frameId = requestAnimationFrame(checkAudioLevel);
           audioContexts.set(participantId, { context: audioContext, analyser, source, frameId });
