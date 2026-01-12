@@ -1,7 +1,7 @@
 import jwt, { SignOptions } from 'jsonwebtoken';
 import crypto from 'crypto';
 import { JwtPayload } from '../types';
-import prisma from '../database/prisma';
+import prisma, { PrismaTransactionClient } from '../database/prisma';
 
 // CRITICAL FIX: Require JWT_SECRET to be set, no weak default
 if (!process.env.JWT_SECRET) {
@@ -55,12 +55,19 @@ export function hashToken(token: string): string {
 /**
  * CRITICAL FIX: Store refresh token in database
  * Enables token revocation on logout and security events
+ *
+ * @param userId - User ID to associate the token with
+ * @param token - The refresh token to store
+ * @param deviceInfo - Optional device/browser info
+ * @param ipAddress - Optional IP address
+ * @param tx - Optional transaction client for atomic operations
  */
 export async function storeRefreshToken(
   userId: string,
   token: string,
   deviceInfo?: string,
-  ipAddress?: string
+  ipAddress?: string,
+  tx?: PrismaTransactionClient
 ): Promise<void> {
   const tokenHash = hashToken(token);
 
@@ -68,7 +75,10 @@ export async function storeRefreshToken(
   const decoded = jwt.decode(token) as any;
   const expiresAt = new Date(decoded.exp * 1000);
 
-  await prisma.refreshToken.create({
+  // Use transaction client if provided, otherwise use default prisma
+  const client = tx || prisma;
+
+  await client.refreshToken.create({
     data: {
       userId,
       tokenHash,

@@ -18,6 +18,15 @@ import {
 } from '../services/youtube.service';
 import { getIOInstance } from '../socket/io-instance';
 import { forceDeleteBroadcastDestinations } from '../utils/cleanup-destinations';
+import { validateBody } from '../middleware/validate';
+import {
+  createBroadcastSchema,
+  updateBroadcastSchema,
+  startBroadcastSchema,
+  type CreateBroadcastInput,
+  type UpdateBroadcastInput,
+  type StartBroadcastInput,
+} from '../schemas/broadcast.schema';
 
 const router = Router();
 
@@ -42,9 +51,9 @@ function getErrorMessage(error: unknown): string {
 // Get all broadcasts for user (with pagination)
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
-    // Pagination parameters
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100); // Max 100 per page
+    // Pagination parameters (simple manual parsing - transforms don't work well with middleware)
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const skip = (page - 1) * limit;
 
     // CRITICAL FIX: Add pagination to prevent performance issues with large datasets
@@ -85,9 +94,15 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
 });
 
 // Create new broadcast
-router.post('/', authenticate, async (req: AuthRequest, res) => {
+// BEST PRACTICE: Zod schema validation for broadcast creation
+router.post('/', authenticate, validateBody(createBroadcastSchema), async (req: AuthRequest, res) => {
   try {
-    const { title, description, scheduledAt, studioConfig } = req.body;
+    // Input validated via Zod schema:
+    // - title: required, max 200 chars
+    // - description: optional, max 5000 chars
+    // - scheduledAt: optional, must be in the future
+    // - studioConfig: optional, validated object
+    const { title, description, scheduledAt, studioConfig } = req.body as CreateBroadcastInput;
 
     const broadcast = await prisma.broadcast.create({
       data: {
@@ -136,9 +151,11 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
 });
 
 // Update broadcast
-router.patch('/:id', authenticate, async (req: AuthRequest, res) => {
+// BEST PRACTICE: Zod schema validation for broadcast updates
+router.patch('/:id', authenticate, validateBody(updateBroadcastSchema), async (req: AuthRequest, res) => {
   try {
-    const { title, description, scheduledAt, studioConfig, status } = req.body;
+    // Input validated via Zod schema with field constraints
+    const { title, description, scheduledAt, studioConfig, status } = req.body as UpdateBroadcastInput;
 
     const broadcast = await prisma.broadcast.updateMany({
       where: {
@@ -191,9 +208,13 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res) => {
 });
 
 // Start broadcast
-router.post('/:id/start', authenticate, async (req: AuthRequest, res) => {
+// BEST PRACTICE: Zod schema validation for start broadcast request
+router.post('/:id/start', authenticate, validateBody(startBroadcastSchema), async (req: AuthRequest, res) => {
   try {
-    const { destinationIds, destinationSettings = {} } = req.body; // destinationSettings: { [destinationId]: { privacyStatus, scheduledStartTime } }
+    // Input validated via Zod schema:
+    // - destinationIds: optional array of UUIDs, max 10 destinations
+    // - destinationSettings: optional record of per-destination settings
+    const { destinationIds, destinationSettings } = req.body as StartBroadcastInput;
 
     // NUCLEAR CLEANUP: Force delete ALL old broadcast destinations using utility function
     // This runs BEFORE any processing to ensure a clean slate every time

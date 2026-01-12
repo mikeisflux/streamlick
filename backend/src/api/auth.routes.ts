@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import prisma from '../database/prisma';
+import prisma, { withTransaction } from '../database/prisma';
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -17,6 +17,19 @@ import { setAuthCookies, clearAuthCookies, COOKIE_NAMES } from '../auth/cookies'
 import { provideCsrfToken, validateCsrfToken } from '../auth/csrf';
 import logger from '../utils/logger';
 import { authRateLimiter, passwordResetRateLimiter } from '../middleware/rate-limit';
+import { validateBody } from '../middleware/validate';
+import {
+  loginSchema,
+  registerSchema,
+  updateProfileSchema,
+  changePasswordSchema,
+  verifyEmailSchema,
+  type LoginInput,
+  type RegisterInput,
+  type UpdateProfileInput,
+  type ChangePasswordInput,
+  type VerifyEmailInput,
+} from '../schemas/auth.schema';
 
 const router = Router();
 
@@ -26,15 +39,13 @@ router.get('/csrf-token', provideCsrfToken);
 // CRITICAL FIX: Apply rate limiting to login endpoint
 // Protects against brute force attacks (5 attempts per 15 minutes per IP)
 // Login with email/password
-router.post('/login', authRateLimiter, async (req, res) => {
+// BEST PRACTICE: Zod schema validation for type-safe input handling
+router.post('/login', authRateLimiter, validateBody(loginSchema), async (req, res) => {
   try {
-    const { email, password } = req.body;
+    // Input is validated and typed via Zod schema
+    const { email, password } = req.body as LoginInput;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
-    }
-
-    // Find user by email
+    // Find user by email (email is already normalized by schema)
     const user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
@@ -82,38 +93,16 @@ router.post('/login', authRateLimiter, async (req, res) => {
 // CRITICAL FIX: Apply rate limiting to register endpoint
 // Protects against account creation abuse (5 attempts per 15 minutes per IP)
 // Register new user
-router.post('/register', authRateLimiter, async (req, res) => {
+// BEST PRACTICE: Zod schema validation replaces manual email/password validation
+router.post('/register', authRateLimiter, validateBody(registerSchema), async (req, res) => {
   try {
-    const { email, password, name } = req.body;
+    // Input is validated via Zod schema:
+    // - Email: RFC 5322 compliant, normalized to lowercase
+    // - Password: min 8 chars, uppercase, lowercase, number required
+    // - Name: optional, max 100 chars
+    const { email, password, name } = req.body as RegisterInput;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
-    }
-
-    // MINOR FIX: Use RFC 5322 compliant email validation regex
-    // This prevents registration with invalid emails like a@b.c
-    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ error: 'Invalid email format' });
-    }
-
-    // Validate password strength (minimum 8 characters with complexity)
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters long' });
-    }
-
-    // Check password complexity: at least one uppercase, one lowercase, one number
-    const hasUpperCase = /[A-Z]/.test(password);
-    const hasLowerCase = /[a-z]/.test(password);
-    const hasNumber = /[0-9]/.test(password);
-
-    if (!hasUpperCase || !hasLowerCase || !hasNumber) {
-      return res.status(400).json({
-        error: 'Password must contain at least one uppercase letter, one lowercase letter, and one number'
-      });
-    }
-
-    // Check if user exists
+    // Check if user exists (email already normalized by schema)
     const existingUser = await prisma.user.findUnique({ where: { email } });
 
     if (existingUser) {
@@ -127,28 +116,57 @@ router.post('/register', authRateLimiter, async (req, res) => {
     const verificationToken = crypto.randomBytes(32).toString('hex');
     const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        name,
-        planType: 'free',
-        role: 'user',
-        emailVerified: false,
-        emailVerificationToken: verificationToken,
-        emailVerificationExpiry: verificationExpiry,
-      },
+    // BEST PRACTICE: Use transaction for atomic user creation + token storage
+    // This ensures both operations succeed or both fail together
+    const { user, accessToken, refreshToken } = await withTransaction(async (tx) => {
+      // Create user within transaction
+      const newUser = await tx.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          name,
+          planType: 'free',
+          role: 'user',
+          emailVerified: false,
+          emailVerificationToken: verificationToken,
+          emailVerificationExpiry: verificationExpiry,
+        },
+      });
+
+      // Generate tokens
+      const newAccessToken = generateAccessToken({
+        userId: newUser.id,
+        email: newUser.email,
+        role: newUser.role as 'user' | 'admin'
+      });
+      const newRefreshToken = generateRefreshToken({
+        userId: newUser.id,
+        email: newUser.email,
+        role: newUser.role as 'user' | 'admin'
+      });
+
+      // Store refresh token within the same transaction
+      await storeRefreshToken(
+        newUser.id,
+        newRefreshToken,
+        req.headers['user-agent'],
+        req.ip,
+        tx // Pass transaction client
+      );
+
+      return {
+        user: newUser,
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken
+      };
     });
 
-    // Send verification email with retry logic
+    // Send verification email OUTSIDE transaction (non-critical, can fail separately)
     const maxEmailRetries = 3;
-    let emailSent = false;
 
     for (let attempt = 1; attempt <= maxEmailRetries; attempt++) {
       try {
         await sendVerificationEmail(email, verificationToken);
-        emailSent = true;
         break;
       } catch (emailError) {
         logger.warn(`Failed to send verification email (attempt ${attempt}/${maxEmailRetries}):`, emailError);
@@ -164,17 +182,6 @@ router.post('/register', authRateLimiter, async (req, res) => {
         }
       }
     }
-
-    const accessToken = generateAccessToken({ userId: user.id, email: user.email, role: user.role as 'user' | 'admin' });
-    const refreshToken = generateRefreshToken({ userId: user.id, email: user.email, role: user.role as 'user' | 'admin' });
-
-    // CRITICAL FIX: Store refresh token in database for revocation capability
-    await storeRefreshToken(
-      user.id,
-      refreshToken,
-      req.headers['user-agent'],
-      req.ip
-    );
 
     // Set tokens in httpOnly cookies for XSS protection
     setAuthCookies(res, accessToken, refreshToken);
@@ -227,9 +234,10 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
 });
 
 // Update profile
-router.patch('/profile', authenticate, async (req: AuthRequest, res) => {
+// BEST PRACTICE: Zod schema validation for profile updates
+router.patch('/profile', authenticate, validateBody(updateProfileSchema), async (req: AuthRequest, res) => {
   try {
-    const { name, avatarUrl } = req.body;
+    const { name, avatarUrl } = req.body as UpdateProfileInput;
 
     const user = await prisma.user.update({
       where: { id: req.user!.userId },
@@ -345,29 +353,15 @@ router.post('/refresh', authRateLimiter, async (req, res) => {
 });
 
 // CRITICAL FIX: Change password endpoint with token revocation
-router.post('/change-password', authenticate, async (req: AuthRequest, res) => {
+// BEST PRACTICE: Zod schema validation replaces manual password validation
+router.post('/change-password', authenticate, validateBody(changePasswordSchema), async (req: AuthRequest, res) => {
   try {
-    const { currentPassword, newPassword } = req.body;
+    // Input validated via Zod schema:
+    // - currentPassword: required, non-empty
+    // - newPassword: min 8 chars, uppercase, lowercase, number required
+    // - Also validates new password differs from current
+    const { currentPassword, newPassword } = req.body as ChangePasswordInput;
     const userId = req.user!.userId;
-
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Current password and new password are required' });
-    }
-
-    // Validate new password strength (minimum 8 characters with complexity)
-    if (newPassword.length < 8) {
-      return res.status(400).json({ error: 'New password must be at least 8 characters long' });
-    }
-
-    const hasUpperCase = /[A-Z]/.test(newPassword);
-    const hasLowerCase = /[a-z]/.test(newPassword);
-    const hasNumber = /[0-9]/.test(newPassword);
-
-    if (!hasUpperCase || !hasLowerCase || !hasNumber) {
-      return res.status(400).json({
-        error: 'Password must contain at least one uppercase letter, one lowercase letter, and one number'
-      });
-    }
 
     // Get current user
     const user = await prisma.user.findUnique({
@@ -410,13 +404,11 @@ router.post('/change-password', authenticate, async (req: AuthRequest, res) => {
 });
 
 // Verify email with token
-router.post('/verify-email', async (req, res) => {
+// BEST PRACTICE: Zod schema validation for token
+router.post('/verify-email', validateBody(verifyEmailSchema), async (req, res) => {
   try {
-    const { token } = req.body;
-
-    if (!token) {
-      return res.status(400).json({ error: 'Verification token is required' });
-    }
+    // Token validated via Zod schema (min 32 chars, max 128 chars)
+    const { token } = req.body as VerifyEmailInput;
 
     // Find user by verification token
     const user = await prisma.user.findFirst({
