@@ -421,17 +421,14 @@ export function StudioCanvas({
           if (i >= positions.length) return;
           const pos = positions[i];
 
-          const videoReady = p.video && p.video.readyState >= 3 && p.video.videoWidth > 0 && p.video.videoHeight > 0 && !p.video.paused;
-          const currentStable = videoStableFrames.get(p.id) || 0;
-          videoStableFrames.set(p.id, videoReady ? Math.min(currentStable + 1, 60) : Math.max(currentStable - 0.5, 0));
-          const stableCount = videoStableFrames.get(p.id) || 0;
+          // CRITICAL FIX: Use readyState >= 2 (HAVE_CURRENT_DATA) instead of >= 3
+          // readyState 2 is sufficient to draw the current frame
+          const videoReady = p.video && p.video.readyState >= 2 && p.video.videoWidth > 0 && p.video.videoHeight > 0;
 
           const cache = getCache(p.id, pos.width, pos.height);
           const hasCachedFrame = cache && cache.lastFrameTime > 0;
-          const videoIsStable = hasCachedFrame ? stableCount >= 6 : stableCount >= 1;
 
-          const shouldUpdateCache = p.videoEnabled && videoReady && videoIsStable && cache;
-          const shouldDrawFromCache = p.videoEnabled && hasCachedFrame;
+          // SIMPLIFIED: Always try to update cache if video is ready, always draw from cache if available
           const shouldDrawAvatar = !p.videoEnabled && p.type === 'local' && avatarImageRef.current;
 
           ctx.save();
@@ -439,16 +436,16 @@ export function StudioCanvas({
           ctx.roundRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
           ctx.clip();
 
-          if (!shouldDrawFromCache && !shouldDrawAvatar) {
-            ctx.fillStyle = '#1a1a1a';
-            ctx.fill();
+          // CRITICAL: Update cache FIRST, then check if we can draw from it
+          // This prevents the first frame from being dark
+          if (p.videoEnabled && videoReady && cache) {
+            try { cache.ctx.drawImage(p.video!, 0, 0, cache.canvas.width, cache.canvas.height); cache.lastFrameTime = now; } catch {}
           }
 
-          if (shouldUpdateCache) {
-            try { cache!.ctx.drawImage(p.video!, 0, 0, cache!.canvas.width, cache!.canvas.height); cache!.lastFrameTime = now; } catch {}
-          }
+          // Now check if we can draw from cache (including if we just updated it)
+          const canDrawFromCache = p.videoEnabled && cache && cache.lastFrameTime > 0;
 
-          if (shouldDrawFromCache && cache) {
+          if (canDrawFromCache) {
             try { ctx.drawImage(cache.canvas, pos.x, pos.y, pos.width, pos.height); } catch { ctx.fillStyle = '#1a1a1a'; ctx.fillRect(pos.x, pos.y, pos.width, pos.height); }
           } else if (shouldDrawAvatar) {
             const size = Math.min(pos.width, pos.height) * 0.5;
@@ -705,22 +702,21 @@ export function StudioCanvas({
 
       if (remoteVideoElementsRef.current.has(id)) {
         const video = remoteVideoElementsRef.current.get(id)!;
-        // CRITICAL: Never update srcObject if video has valid dimensions and is not paused
-        // This prevents flickering from stream object reference changes during WebRTC renegotiation
+        // CRITICAL: Never touch srcObject if video is already working or has an active stream
+        // This prevents flickering from ANY kind of update
         const hasValidVideo = video.videoWidth > 0 && video.videoHeight > 0;
-        const isPlaying = video.readyState >= 2 && hasValidVideo && !video.paused;
+        const hasSrcObject = video.srcObject !== null;
+        const isPlaying = video.readyState >= 2 && !video.paused;
 
-        if (isPlaying) {
-          // Video is working - don't touch srcObject at all
+        // If video has a srcObject and is playing (or at least has data), leave it completely alone
+        if (hasSrcObject && (isPlaying || hasValidVideo)) {
+          // Video is working - don't touch anything
+          if (video.paused) video.play().catch(() => {});
           return;
         }
 
-        // Only try to fix if video is actually broken
-        if (video.paused && hasValidVideo) {
-          // Video paused but has valid dimensions - just resume
-          video.play().catch(() => {});
-        } else if (!hasValidVideo && video.srcObject !== p.stream && p.stream) {
-          // No valid video and stream changed - update srcObject
+        // Only set srcObject if we don't have one at all
+        if (!hasSrcObject && p.stream) {
           video.srcObject = p.stream;
           video.play().catch(() => {});
         }

@@ -1,92 +1,187 @@
-# Video Flickering Fix - Status Tracking
+# Video Flickering Fix - Detailed Change Log
 
-## Problem Summary
-Guest video flickering on the stage canvas, while preview tiles work correctly.
+## Problem
+Guest video flickering on the stage canvas. Preview tiles work fine.
 
-## Root Causes Identified
+---
 
-### 1. Audio Analyzer Recreation (FIXED)
+## Change Log (Chronological)
+
+### Change 1: Audio Analyzer Recreation Fix
 **File:** `frontend/src/components/studio/canvas/StudioCanvas.tsx`
-**Issue:** Audio analyzers were being torn down and recreated every time `remoteParticipants` changed (every 5 seconds from poll + socket events)
-**Fix:**
-- Store audio contexts in a ref that persists across re-renders
-- Only create new analyzers if stream changed or analyzer doesn't exist
-- Only cleanup on component unmount, not on every dependency change
+**Lines:** 211-320
 
-### 2. Video Element Cleanup (FIXED)
+**Problem:** Audio analyzers were being destroyed and recreated every time `remoteParticipants` changed (every 5 seconds from poll + socket events). The `useEffect` cleanup function was clearing ALL audio contexts on every dependency change.
+
+**Fix:**
+- Store audio contexts in a `useRef` that persists across re-renders (`audioContextsRef`)
+- Only create new analyzers when stream actually changes (compare `streamId`)
+- Separate unmount cleanup from dependency change handling
+- Add check `if (existing && existing.streamId === streamId) return;` to skip if already have working analyzer
+
+**Status:** APPLIED
+
+---
+
+### Change 2: Video Element Cleanup Fix
 **File:** `frontend/src/components/studio/canvas/StudioCanvas.tsx`
-**Issue:** The cleanup function in the video element management useEffect was clearing ALL video elements and canvas cache every time `remoteParticipants` changed
-**Fix:**
-- Changed cleanup to only run on component unmount
-- Added separate unmount-only useEffect for cleanup
-- Specific items are removed when participants leave (not all at once)
+**Lines:** 686-737
 
-### 3. Role Preservation - Participants Sync (FIXED)
+**Problem:** The cleanup function in the video element management `useEffect` was clearing ALL video elements and canvas cache every time `remoteParticipants` changed. New video elements need time to load.
+
+**Fix:**
+- Changed cleanup to only run on component unmount (separate `useEffect` with empty deps)
+- Changed main effect to return `() => {}` instead of full cleanup
+- Individual items are removed only when participants actually leave
+
+**Status:** APPLIED
+
+---
+
+### Change 3: Role Preservation in handleParticipantsSync
 **File:** `frontend/src/hooks/studio/useParticipants.ts`
-**Issue:** `handleParticipantsSync` was not preserving the 'guest' role when receiving sync events, causing role to reset to 'backstage'
-**Fix:** Added same role preservation logic as poll handler:
+**Lines:** 195-206
+
+**Problem:** `handleParticipantsSync` was not preserving the 'guest' role when receiving sync events, causing role to reset to 'backstage'. This triggered video element deletion because the condition `p.role !== 'guest'` became true.
+
+**Fix:**
 ```javascript
 const apiRole = (p.role || 'backstage') as 'host' | 'guest' | 'backstage';
 const role = existing?.role === 'guest' ? 'guest' : apiRole;
 ```
 
-### 4. Role Preservation - Poll Handler (PREVIOUSLY FIXED)
-**File:** `frontend/src/hooks/studio/useParticipants.ts`
-**Status:** Already fixed in previous session
-
-### 5. WebRTC Offer Handling (PREVIOUSLY FIXED)
-**File:** `frontend/src/hooks/studio/useGuestStreams.ts`
-**Status:** Already fixed - ignores offers if connection is already connected/connecting
+**Status:** APPLIED
 
 ---
 
-## Files Modified
+### Change 4: useAudioLevel 60 FPS Re-renders Fix
+**File:** `frontend/src/hooks/studio/useAudioLevel.ts`
+**Lines:** 52-77
 
-| File | Status | Changes |
-|------|--------|---------|
-| `frontend/src/components/studio/canvas/StudioCanvas.tsx` | MODIFIED | Fixed audio analyzer and video element cleanup |
-| `frontend/src/hooks/studio/useParticipants.ts` | MODIFIED | Fixed role preservation in handleParticipantsSync |
-| `frontend/src/hooks/studio/useAudioLevel.ts` | MODIFIED | Fixed 60 FPS re-renders - only update state when speaking status changes |
+**Problem:** `setIsSpeaking(speaking)` was called on every animation frame (60 FPS) even when the value hadn't changed. This caused 60 state updates per second.
 
----
+**Fix:**
+```javascript
+let wasSpeaking = false;
+// ... inside checkAudioLevel:
+if (speaking !== wasSpeaking) {
+  wasSpeaking = speaking;
+  setIsSpeaking(speaking);
+}
+```
 
-## Files Verified (No Issues Found)
-
-| File | Status | Notes |
-|------|--------|-------|
-| `frontend/src/components/studio/canvas/PreviewArea.tsx` | OK | Uses direct video element with srcObject check |
-| `frontend/src/components/VideoPreview.tsx` | OK | Has srcObject check |
-| `frontend/src/hooks/studio/useGuestStreams.ts` | OK | Has connection state check to prevent reconnection |
-| `frontend/src/components/guest/GuestGreenroom.tsx` | OK | Uses standard video rendering |
-| `frontend/src/components/guest/GuestStreamPreview.tsx` | OK | Uses standard video rendering |
-| `frontend/src/hooks/guest/useGuestStream.ts` | OK | Uses refs for state, no React re-renders |
-| `frontend/src/hooks/studio/useBroadcast.ts` | OK | Interval only runs during recording, properly cleaned up |
-| `frontend/src/hooks/studio/useFeatureLifecycles.ts` | OK | Intervals only run when enabled, properly cleaned up |
-| `frontend/src/components/RecordingControls.tsx` | OK | Interval uses ref, properly cleaned up |
-| `frontend/src/components/ProducerMode.tsx` | OK | Animation frames properly managed with cleanup |
-| `frontend/src/components/CountdownTimer.tsx` | OK | Interval properly cleaned up |
-| `frontend/src/components/ClipManager.tsx` | OK | Interval stored in ref, properly cleaned up |
-| `frontend/src/components/ViewerCount.tsx` | OK | Interval cleaned up on dependency change |
-| `frontend/src/pages/Studio.tsx` | OK | useEffects have proper dependencies and cleanups |
-| `frontend/src/hooks/studio/useChatOverlay.ts` | OK | Animation frames only during active drag/resize |
+**Status:** APPLIED
 
 ---
 
-## Testing Checklist
+### Change 5: Video ReadyState Check Relaxed
+**File:** `frontend/src/components/studio/canvas/StudioCanvas.tsx`
+**Line:** 424 (now ~424)
 
-- [ ] Guest joins greenroom - preview appears without flickering
-- [ ] Guest promoted to stage - canvas shows guest without flickering
-- [ ] Host refreshes page - guests reconnect without flickering
-- [ ] Multiple guests on stage - all stable
-- [ ] Audio levels detected correctly for speaking indicators
-- [ ] Guest demoted to backstage - removed from canvas cleanly
+**Problem:** Video readyState check was `>= 3` (HAVE_FUTURE_DATA) which is too strict. ReadyState 2 (HAVE_CURRENT_DATA) is sufficient to draw frames.
+
+**Fix:**
+```javascript
+// Before:
+const videoReady = p.video && p.video.readyState >= 3 && ...
+// After:
+const videoReady = p.video && p.video.readyState >= 2 && ...
+```
+
+**Status:** APPLIED
 
 ---
 
-## Remaining Potential Issues
+### Change 6: Removed Stability Tracking
+**File:** `frontend/src/components/studio/canvas/StudioCanvas.tsx`
+**Lines:** ~424-434
 
-1. **Video readyState check**: Currently uses `readyState >= 3` which may be too strict. Consider relaxing to `>= 2`
+**Problem:** Complex stability tracking (`videoStableFrames`, `stableCount`, `videoIsStable`) was overly cautious and might have been causing frames to be skipped.
 
-2. **Stability tracking**: The stability counter system may be over-engineered. Consider simplifying if issues persist.
+**Fix:** Removed stability tracking entirely. Now always update cache if video is ready, always draw from cache if available.
 
-3. **Canvas cache recreation**: If layout size changes by >10px, cache is recreated. May cause brief flicker during resize.
+**Status:** APPLIED
+
+---
+
+### Change 7: Stricter srcObject Protection in useEffect
+**File:** `frontend/src/components/studio/canvas/StudioCanvas.tsx`
+**Lines:** 706-727
+
+**Problem:** The `srcObject` was being updated if `video.srcObject !== p.stream`, but object reference comparison might fail even if it's the same stream.
+
+**Fix:**
+```javascript
+// Before: Complex conditions checking video state
+// After: Only set srcObject if we don't have one at all
+if (!hasSrcObject && p.stream) {
+  video.srcObject = p.stream;
+  video.play().catch(() => {});
+}
+```
+
+If video already has a srcObject and is working (playing or has valid dimensions), leave it completely alone.
+
+**Status:** APPLIED
+
+---
+
+### Change 8: Fixed Cache Update Order
+**File:** `frontend/src/components/studio/canvas/StudioCanvas.tsx`
+**Lines:** ~431-452
+
+**Problem:** Dark frame was drawn BEFORE cache was updated, then `shouldDrawFromCache` was checked using the OLD value of `hasCachedFrame`. First frame for any participant was always dark.
+
+**Fix:**
+1. Update cache FIRST
+2. THEN check if we can draw from it (including the just-updated cache)
+```javascript
+// Update cache first
+if (p.videoEnabled && videoReady && cache) {
+  try { cache.ctx.drawImage(...); cache.lastFrameTime = now; } catch {}
+}
+// Now check if we can draw (includes if we just updated)
+const canDrawFromCache = p.videoEnabled && cache && cache.lastFrameTime > 0;
+```
+
+**Status:** APPLIED
+
+---
+
+## Files Modified Summary
+
+| File | Changes |
+|------|---------|
+| `StudioCanvas.tsx` | Audio analyzer fix, video element cleanup fix, readyState relaxed, stability tracking removed, srcObject protection, cache order fix |
+| `useParticipants.ts` | Role preservation in handleParticipantsSync |
+| `useAudioLevel.ts` | 60 FPS re-renders fix |
+
+---
+
+## Debugging Checklist
+
+If still flickering, check:
+
+1. [ ] Is the video element being recreated? (Check if `remoteVideoElementsRef.current.get(id)` returns undefined when it shouldn't)
+2. [ ] Is the cache being cleared? (Check if `participantCanvasCacheRef.current.get(id)` returns undefined)
+3. [ ] Is the role changing? (Add console.log to check `p.role` in render loop)
+4. [ ] Is the stream object changing? (Check if `p.stream.id` changes)
+5. [ ] Is readyState fluctuating? (Log `p.video.readyState` in render loop)
+6. [ ] Is videoWidth/videoHeight 0? (Log these values)
+
+---
+
+## Console Logging to Add for Debugging
+
+Add this inside the render loop to debug:
+```javascript
+console.log('[Render] Participant:', p.id, {
+  videoReady,
+  hasCache: !!cache,
+  cacheLastFrame: cache?.lastFrameTime,
+  canDrawFromCache,
+  videoReadyState: p.video?.readyState,
+  videoWidth: p.video?.videoWidth,
+  hasSrcObject: !!p.video?.srcObject,
+});
+```
