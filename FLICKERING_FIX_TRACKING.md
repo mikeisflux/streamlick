@@ -5,7 +5,31 @@ Guest video flickering on the stage canvas. Preview tiles work fine.
 
 ---
 
-## Change Log (Chronological)
+## HISTORICAL COMMITS (Before Current Session)
+
+These commits were made in previous sessions. Status: ALREADY TRIED, FLICKERING PERSISTS
+
+| Commit | Description | Status |
+|--------|-------------|--------|
+| `5046bf2` | Stricter readyState check (>= 2 + videoWidth > 0) | TRIED - still flickering |
+| `d37eaab` | Added stability tracking | TRIED - still flickering |
+| `1932f91` | Aggressive stability tracking + frame preservation | TRIED - still flickering |
+| `aa0b662` | Per-participant offscreen canvas caching | TRIED - still flickering |
+| `6811daa` | Always draw from cache buffer | TRIED - still flickering |
+| `2b4eca1` | Fix guest view to show full stage when promoted | WORKED for guest view |
+| `763eaad` | Guest preview persistence + video stability | Partially worked |
+| `3004342` | Refactor StudioCanvas from 2099 to 770 lines | Code cleanup only |
+| `b415b18` | Use ref for speakingParticipants in render loop | TRIED - stopped screen flickering |
+| `b296075` | Fix participant reconnection on host reload | Addressed reconnection issue |
+| `e175bff` | Emit to greenroom room for stream requests | Backend fix |
+| `d682e3a` | Ignore offers when already connected | TRIED - reduced flickering |
+| `4975e6b` | Preserve guest role during polling | TRIED - still flickering |
+| `4bff44e` | Only update speaking state when it changes | TRIED - still flickering |
+| `b279f49` | Prevent unnecessary cleanup and re-renders | TRIED - still flickering |
+
+---
+
+## CURRENT SESSION CHANGES
 
 ### Change 1: Audio Analyzer Recreation Fix
 **File:** `frontend/src/components/studio/canvas/StudioCanvas.tsx`
