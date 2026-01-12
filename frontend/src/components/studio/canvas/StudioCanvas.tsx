@@ -750,30 +750,48 @@ export function StudioCanvas({
             }
             break;
 
-          case 2: // Cropped - 2x2 grid
+          case 2: // Cropped - 2x2 grid with margins
             {
+              const margin = 50;
+              const gap = 20;
               const cols = 2;
               const rows = 2;
-              const boxWidth = canvas.width / cols;
-              const boxHeight = canvas.height / rows;
+              const availableWidth = canvas.width - margin * 2 - gap * (cols - 1);
+              const availableHeight = canvas.height - margin * 2 - gap * (rows - 1);
+              const boxWidth = availableWidth / cols;
+              const boxHeight = availableHeight / rows;
               allParticipants.forEach((_, i) => {
                 const col = i % cols;
                 const row = Math.floor(i / cols);
-                positions.push({ x: col * boxWidth, y: row * boxHeight, width: boxWidth, height: boxHeight });
+                positions.push({
+                  x: margin + col * (boxWidth + gap),
+                  y: margin + row * (boxHeight + gap),
+                  width: boxWidth,
+                  height: boxHeight
+                });
               });
             }
             break;
 
-          case 3: // Group - auto-calculated equal grid
+          case 3: // Group - auto-calculated equal grid with margins
             {
+              const margin = 50;
+              const gap = 20;
               const cols = Math.ceil(Math.sqrt(participantCount));
               const rows = Math.ceil(participantCount / cols);
-              const boxWidth = canvas.width / cols;
-              const boxHeight = canvas.height / rows;
+              const availableWidth = canvas.width - margin * 2 - gap * (cols - 1);
+              const availableHeight = canvas.height - margin * 2 - gap * (rows - 1);
+              const boxWidth = availableWidth / cols;
+              const boxHeight = availableHeight / rows;
               allParticipants.forEach((_, i) => {
                 const col = i % cols;
                 const row = Math.floor(i / cols);
-                positions.push({ x: col * boxWidth, y: row * boxHeight, width: boxWidth, height: boxHeight });
+                positions.push({
+                  x: margin + col * (boxWidth + gap),
+                  y: margin + row * (boxHeight + gap),
+                  width: boxWidth,
+                  height: boxHeight
+                });
               });
             }
             break;
@@ -801,11 +819,21 @@ export function StudioCanvas({
             }
             break;
 
-          case 5: // News - side by side
+          case 5: // News - side by side with margins and gap
             {
-              const boxWidth = canvas.width / 2;
+              const margin = 50; // Outer margin
+              const gap = 20; // Gap between boxes
+              const availableWidth = canvas.width - margin * 2 - gap;
+              const availableHeight = canvas.height - margin * 2;
+              const boxWidth = availableWidth / 2;
+              const boxHeight = availableHeight;
               allParticipants.forEach((_, i) => {
-                positions.push({ x: i * boxWidth, y: 0, width: boxWidth, height: canvas.height });
+                positions.push({
+                  x: margin + i * (boxWidth + gap),
+                  y: margin,
+                  width: boxWidth,
+                  height: boxHeight
+                });
               });
             }
             break;
@@ -848,11 +876,20 @@ export function StudioCanvas({
             }
             break;
 
-          case 8: // Cinema - wide format
+          case 8: // Cinema - wide format with margins
             {
-              const boxWidth = participantCount > 1 ? canvas.width / 2 : canvas.width;
+              const margin = 50;
+              const gap = 20;
+              const availableWidth = canvas.width - margin * 2 - (participantCount > 1 ? gap : 0);
+              const availableHeight = canvas.height - margin * 2;
+              const boxWidth = participantCount > 1 ? availableWidth / 2 : availableWidth;
               allParticipants.forEach((_, i) => {
-                positions.push({ x: i * boxWidth, y: 0, width: boxWidth, height: canvas.height });
+                positions.push({
+                  x: margin + i * (boxWidth + gap),
+                  y: margin,
+                  width: boxWidth,
+                  height: availableHeight
+                });
               });
             }
             break;
@@ -878,51 +915,63 @@ export function StudioCanvas({
             break;
 
           default:
-            // Fallback to group layout
+            // Fallback to group layout with margins
             {
+              const margin = 50;
+              const gap = 20;
               const cols = Math.ceil(Math.sqrt(participantCount));
               const rows = Math.ceil(participantCount / cols);
-              const boxWidth = canvas.width / cols;
-              const boxHeight = canvas.height / rows;
+              const availableWidth = canvas.width - margin * 2 - gap * (cols - 1);
+              const availableHeight = canvas.height - margin * 2 - gap * (rows - 1);
+              const boxWidth = availableWidth / cols;
+              const boxHeight = availableHeight / rows;
               allParticipants.forEach((_, i) => {
                 const col = i % cols;
                 const row = Math.floor(i / cols);
-                positions.push({ x: col * boxWidth, y: row * boxHeight, width: boxWidth, height: boxHeight });
+                positions.push({
+                  x: margin + col * (boxWidth + gap),
+                  y: margin + row * (boxHeight + gap),
+                  width: boxWidth,
+                  height: boxHeight
+                });
               });
             }
         }
 
         // Draw all participants using calculated positions
+        const cornerRadius = 16; // Rounded corner radius for participant boxes
+
         allParticipants.forEach((p, index) => {
           if (index >= positions.length) return;
 
           const pos = positions[index];
 
+          // Draw dark background with rounded corners first
+          ctx.save();
+          ctx.beginPath();
+          ctx.roundRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
+          ctx.fillStyle = '#1a1a1a';
+          ctx.fill();
+          ctx.clip(); // Clip to rounded rectangle for video
+
           // Draw video when camera is enabled
           // Use readyState >= 1 (HAVE_METADATA) to reduce flickering - drawImage will
           // simply draw nothing if no frame is available, which is better than showing placeholder
           if (p.videoEnabled && p.video && p.video.readyState >= 1) {
-            // Draw video - camera is ON
+            // Draw video - camera is ON (clipped to rounded corners)
             try {
               ctx.drawImage(p.video, pos.x, pos.y, pos.width, pos.height);
             } catch {
-              // If draw fails, show dark background (not a jarring placeholder)
-              ctx.fillStyle = '#1a1a1a';
-              ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+              // If draw fails, background already drawn
             }
           } else if (p.videoEnabled && p.video && p.video.readyState === 0) {
-            // Video not ready at all - draw dark background, not placeholder
-            ctx.fillStyle = '#1a1a1a';
-            ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+            // Video not ready at all - background already drawn
           } else if (!p.videoEnabled && p.type === 'local' && avatarImageRef.current) {
-            // Draw avatar when camera is OFF (local user only)
-            // First draw dark background
-            ctx.fillStyle = '#1a1a1a';
-            ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
-            // Then draw circular avatar in center
+            // Draw circular avatar in center (background already drawn with rounded corners)
             const size = Math.min(pos.width, pos.height) * 0.5;
             const avatarX = pos.x + (pos.width - size) / 2;
             const avatarY = pos.y + (pos.height - size) / 2;
+            // Draw circular clip for avatar
             ctx.save();
             ctx.beginPath();
             ctx.arc(avatarX + size / 2, avatarY + size / 2, size / 2, 0, Math.PI * 2);
@@ -930,11 +979,11 @@ export function StudioCanvas({
             ctx.clip();
             ctx.drawImage(avatarImageRef.current, avatarX, avatarY, size, size);
             ctx.restore();
-          } else {
-            // Placeholder - camera off without avatar, or video not ready
-            ctx.fillStyle = '#1a1a1a';
-            ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
           }
+          // else: placeholder - background already drawn with rounded corners
+
+          // Restore context to remove rounded corner clip before drawing overlays
+          ctx.restore();
 
           // Draw pulsating ring when speaking AND camera is off (avatar visible)
           const isSpeaking = p.type === 'local' ? isLocalSpeakingRef.current : speakingParticipants.has(p.id);
