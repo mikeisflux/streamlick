@@ -741,15 +741,16 @@ export function StudioCanvas({
                   height: boxHeight
                 });
               } else if (participantCount === 2) {
-                // Two participants: side by side with margins
-                const availableWidth = canvas.width - margin * 2 - gap;
-                const availableHeight = canvas.height - margin * 2;
-                const boxWidth = availableWidth / 2;
-                const boxHeight = availableHeight;
+                // Two participants: side by side, compact 16:9 boxes centered
+                const boxWidth = canvas.width * 0.4;  // 40% width each
+                const boxHeight = boxWidth * (9 / 16);  // Maintain 16:9 aspect ratio
+                const totalWidth = boxWidth * 2 + gap;
+                const startX = (canvas.width - totalWidth) / 2;
+                const startY = (canvas.height - boxHeight) / 2;
                 allParticipants.forEach((_, i) => {
                   positions.push({
-                    x: margin + i * (boxWidth + gap),
-                    y: margin,
+                    x: startX + i * (boxWidth + gap),
+                    y: startY,
                     width: boxWidth,
                     height: boxHeight
                   });
