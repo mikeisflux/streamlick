@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { Prisma } from '@prisma/client';
 import prisma from '../database/prisma';
 import { authenticate, AuthRequest } from '../auth/middleware';
 import logger from '../utils/logger';
@@ -110,7 +111,7 @@ router.post('/', authenticate, validateBody(createBroadcastSchema), async (req: 
         title,
         description,
         scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
-        studioConfig: studioConfig || {},
+        studioConfig: (studioConfig || {}) as Prisma.InputJsonValue,
         status: 'scheduled',
       },
     });
@@ -166,7 +167,7 @@ router.patch('/:id', authenticate, validateBody(updateBroadcastSchema), async (r
         ...(title && { title }),
         ...(description !== undefined && { description }),
         ...(scheduledAt && { scheduledAt: new Date(scheduledAt) }),
-        ...(studioConfig && { studioConfig }),
+        ...(studioConfig && { studioConfig: studioConfig as Prisma.InputJsonValue }),
         ...(status && { status }),
       },
     });
