@@ -133,22 +133,30 @@ class AntMediaService {
   }
 
   /**
-   * Add multiple RTMP endpoints to a broadcast (batch)
-   * Uses the custom endpoint created for StreamLick
+   * Add multiple RTMP endpoints to a broadcast (sequential)
+   * Ant Media Server doesn't have a batch endpoint, so we add them one by one
    */
   async addRtmpEndpointsBatch(streamId: string, endpoints: RtmpEndpoint[]): Promise<RtmpEndpoint[]> {
-    try {
-      const response = await this.client.post(
-        `/broadcasts/${streamId}/rtmp-endpoints-batch`,
-        endpoints.map(e => ({ rtmpUrl: e.rtmpUrl }))
-      );
+    const results: RtmpEndpoint[] = [];
+    const errors: string[] = [];
 
-      logger.info('[AntMedia] RTMP endpoints batch added:', endpoints.length);
-      return response.data;
-    } catch (error) {
-      logger.error('[AntMedia] Failed to add RTMP endpoints batch:', error);
-      throw error;
+    for (const endpoint of endpoints) {
+      try {
+        const result = await this.addRtmpEndpoint(streamId, endpoint.rtmpUrl);
+        results.push(result);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        logger.error('[AntMedia] Failed to add RTMP endpoint:', endpoint.rtmpUrl, errorMsg);
+        errors.push(`${endpoint.rtmpUrl}: ${errorMsg}`);
+      }
     }
+
+    if (errors.length > 0) {
+      logger.warn('[AntMedia] Some RTMP endpoints failed:', errors);
+    }
+
+    logger.info('[AntMedia] RTMP endpoints added:', results.length, 'of', endpoints.length);
+    return results;
   }
 
   /**
