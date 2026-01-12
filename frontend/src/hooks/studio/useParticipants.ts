@@ -228,11 +228,12 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
         if (existing) {
           // Keep existing role if already promoted to 'guest' (on stage)
           // Only update to 'backstage' if they don't have a role yet or are still backstage
-          if (existing.role !== 'guest') {
-            existing.role = 'backstage';
-          }
-          existing.name = name || existing.name;
-          updated.set(participantId, existing);
+          // IMPORTANT: Create new object to trigger React re-render
+          updated.set(participantId, {
+            ...existing,
+            role: existing.role === 'guest' ? 'guest' : 'backstage',
+            name: name || existing.name,
+          });
         } else {
           // Add new participant with backstage role (greenroom = backstage until promoted)
           updated.set(participantId, {
@@ -289,9 +290,12 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
         const updated = new Map(prev);
         const participant = updated.get(participantId);
         if (participant) {
-          participant.audioEnabled = audio;
-          participant.videoEnabled = video;
-          updated.set(participantId, participant);
+          // IMPORTANT: Create new object to trigger React re-render
+          updated.set(participantId, {
+            ...participant,
+            audioEnabled: audio,
+            videoEnabled: video,
+          });
         }
         return updated;
       });
@@ -318,7 +322,12 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
         const updated = new Map(prev);
         const participant = updated.get(participantId);
         if (participant) {
-          participant.role = role;
+          // IMPORTANT: Create new object to trigger React re-render
+          // This is CRITICAL for the canvas to pick up the role change
+          updated.set(participantId, {
+            ...participant,
+            role,
+          });
 
           // CRITICAL: If promoting to live but participant has no stream, request it immediately
           // This ensures the guest appears on canvas as soon as possible
@@ -337,7 +346,11 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
         const updated = new Map(prev);
         const participant = updated.get(participantId);
         if (participant) {
-          participant.role = role;
+          // IMPORTANT: Create new object to trigger React re-render
+          updated.set(participantId, {
+            ...participant,
+            role,
+          });
         }
         return updated;
       });
