@@ -501,7 +501,7 @@ export function Studio() {
               videoEnabled={videoEnabled}
               audioEnabled={audioEnabled}
               isLocalUserOnStage={isLocalUserOnStage}
-              backstageParticipants={Array.from(remoteParticipants.values()).filter((p) => p.role !== 'guest' && p.role !== 'host')}
+              backstageParticipants={Array.from(remoteParticipants.values()).filter((p) => p.role !== 'host')}
               greenroomParticipants={[]} // All waiting participants (null/undefined/backstage role) show in preview, promoted to 'guest' when on stage
               screenShareStream={screenShareStream}
               onAddToStage={handleAddToStage}

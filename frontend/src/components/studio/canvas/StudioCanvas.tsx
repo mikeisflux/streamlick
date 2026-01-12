@@ -1036,9 +1036,14 @@ export function StudioCanvas({
 
           const stableFrameCount = videoStableFrames.get(participantKey) || 0;
 
-          // CRITICAL: Require at least 6 stable frames (200ms at 30fps) before updating cache
-          // This prevents flickering from rapid ready/not-ready transitions
-          const videoIsStableEnough = stableFrameCount >= 6;
+          // Get or create the cache to check if we have a cached frame yet
+          const existingCache = participantCanvasCacheRef.current.get(participantKey);
+          const hasExistingCachedFrame = existingCache && existingCache.lastFrameTime > 0;
+
+          // CRITICAL: Use different stability thresholds for first frame vs updates
+          // First frame: Capture immediately when video is ready (stableFrameCount >= 1)
+          // Updates: Require 6 stable frames to prevent flickering from transient states
+          const videoIsStableEnough = hasExistingCachedFrame ? stableFrameCount >= 6 : stableFrameCount >= 1;
 
           // Get or create the offscreen canvas cache for this participant
           const cache = getOrCreateParticipantCache(participantKey, pos.width, pos.height);
@@ -1536,39 +1541,58 @@ export function StudioCanvas({
         const existingVideo = remoteVideoElementsRef.current.get(participantId);
         if (!existingVideo) return;
 
-        // Check if stream actually changed by comparing track IDs
-        // This prevents unnecessary srcObject updates that cause flickering
-        const existingStream = existingVideo.srcObject as MediaStream | null;
-        const newStream = participant.stream;
+        // CRITICAL: Never update srcObject if video is currently playing with valid dimensions
+        // WebRTC handles track changes internally - updating srcObject causes flicker
+        const isVideoPlaying = existingVideo.readyState >= 2 &&
+                               existingVideo.videoWidth > 0 &&
+                               existingVideo.videoHeight > 0 &&
+                               !existingVideo.paused;
 
-        // Get video track IDs from both streams
-        const existingTrackIds = existingStream?.getVideoTracks().map(t => t.id).join(',') || '';
-        const newTrackIds = newStream?.getVideoTracks().map(t => t.id).join(',') || '';
-
-        // Only update if tracks actually changed AND there are new tracks
-        // Skip update if newTrackIds is empty (stream has no video tracks)
-        if (existingTrackIds !== newTrackIds && newStream && newTrackIds) {
-          console.log('[StudioCanvas] Stream tracks changed for participant:', participantId, { oldTracks: existingTrackIds, newTracks: newTrackIds });
-          existingVideo.srcObject = newStream;
-
-          // Only play if video is paused - don't interrupt playing video
-          if (existingVideo.paused) {
-            existingVideo.play().catch(err => console.error('[StudioCanvas] Failed to play remote video:', participantId, err));
-          }
-
-          // Also update audio in mixer when stream changes
-          if (participant.audioEnabled) {
-            const audioTrack = newStream.getAudioTracks()[0];
+        if (isVideoPlaying) {
+          // Video is playing fine - don't touch srcObject at all
+          // Just ensure audio is in mixer if enabled
+          if (participant.audioEnabled && !participantAudioAddedRef.current.has(participantId)) {
+            const audioTrack = participant.stream?.getAudioTracks()[0];
             if (audioTrack) {
-              console.log('[StudioCanvas] Updating participant audio in mixer:', participantId);
               try {
                 const audioStream = new MediaStream([audioTrack]);
                 audioMixerService.addStream(`participant-${participantId}`, audioStream);
+                participantAudioAddedRef.current.add(participantId);
+              } catch (err) {
+                console.error('[StudioCanvas] Failed to add participant audio to mixer:', participantId, err);
+              }
+            }
+          }
+          return;
+        }
+
+        // Video not playing properly - check if we need to update srcObject
+        const existingStream = existingVideo.srcObject as MediaStream | null;
+        const newStream = participant.stream;
+
+        // Only update if stream object actually changed (not just track IDs)
+        // This is more conservative to prevent flickering from WebRTC renegotiations
+        if (existingStream !== newStream && newStream) {
+          console.log('[StudioCanvas] Updating srcObject for participant (video not playing):', participantId);
+          existingVideo.srcObject = newStream;
+          existingVideo.play().catch(err => console.error('[StudioCanvas] Failed to play remote video:', participantId, err));
+
+          // Update audio in mixer
+          if (participant.audioEnabled) {
+            const audioTrack = newStream.getAudioTracks()[0];
+            if (audioTrack) {
+              try {
+                const audioStream = new MediaStream([audioTrack]);
+                audioMixerService.addStream(`participant-${participantId}`, audioStream);
+                participantAudioAddedRef.current.add(participantId);
               } catch (err) {
                 console.error('[StudioCanvas] Failed to update participant audio in mixer:', participantId, err);
               }
             }
           }
+        } else if (existingVideo.paused) {
+          // Same stream but paused - try to resume
+          existingVideo.play().catch(err => console.error('[StudioCanvas] Failed to resume remote video:', participantId, err));
         }
         return;
       }
