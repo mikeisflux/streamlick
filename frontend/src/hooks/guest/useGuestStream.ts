@@ -10,12 +10,7 @@
 
 import { useEffect, useRef } from 'react';
 import { socketService } from '../../services/socket.service';
-
-// ICE servers for WebRTC
-const ICE_SERVERS: RTCIceServer[] = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-];
+import { ICE_SERVERS } from '../../utils/webrtc';
 
 const GUEST_STREAM_MAX_RETRIES = 5;
 const GUEST_STREAM_RETRY_DELAY = 5000; // 5 seconds - give more time for ICE negotiation

@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  turn:
+    image: coturn/coturn:latest
+    container_name: streamlick-turn
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - ./data:/var/lib/coturn
+      # Uncomment for TLS certificates
+      # - /etc/letsencrypt:/etc/letsencrypt:ro
+    env_file:
+      - .env
+    # Health check to verify TURN is responding
+    healthcheck:
+      test: ["CMD", "turnadmin", "-l"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

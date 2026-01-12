@@ -11,11 +11,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { socketService } from '../../services/socket.service';
 import { canvasStreamService } from '../../services/canvas-stream.service';
-
-const ICE_SERVERS: RTCIceServer[] = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-];
+import { ICE_SERVERS } from '../../utils/webrtc';
 
 interface PeerConnection {
   pc: RTCPeerConnection;

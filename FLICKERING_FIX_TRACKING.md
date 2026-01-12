@@ -409,3 +409,36 @@ const setupGuestStream = async (forceNew = false) => {
 **Status:** APPLIED
 
 ---
+
+### Change 15: Add TURN Server Support
+**Files:**
+- `frontend/src/config/webrtc.ts` (NEW)
+- `frontend/.env.example`
+- `frontend/src/hooks/guest/useGuestStream.ts`
+- `frontend/src/hooks/guest/usePreviewStream.ts`
+- `frontend/src/hooks/studio/useGuestStreams.ts`
+- `frontend/src/hooks/studio/usePreviewStream.ts`
+- `turn/` directory (NEW)
+
+**Problem:** STUN servers alone only work when at least one peer has a "nice" NAT. For guests worldwide behind symmetric NATs, WebRTC connections will fail without TURN servers.
+
+**Fix:**
+1. Created centralized ICE server configuration (`frontend/src/config/webrtc.ts`)
+2. Added environment variables for TURN server configuration
+3. Updated all WebRTC hooks to use shared ICE config
+4. Created `/turn` directory with deployment scripts for Ubuntu/systemd
+
+**Environment Variables (add to frontend/.env):**
+```
+VITE_TURN_SERVER_URL=turn://your-turn-server:3478
+VITE_TURN_SERVER_USERNAME=streamlick
+VITE_TURN_SERVER_CREDENTIAL=your-password
+```
+
+**Admin Panel:** TURN servers can be deployed via Admin → Infrastructure → TURN Servers tab
+
+**Manual Deploy:** Use `/turn/deploy.sh` on Ubuntu server
+
+**Status:** APPLIED
+
+---
