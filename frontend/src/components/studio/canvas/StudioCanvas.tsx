@@ -976,50 +976,70 @@ export function StudioCanvas({
           if (index >= positions.length) return;
 
           const pos = positions[index];
-
-          // Draw dark background with rounded corners first
-          ctx.save();
-          ctx.beginPath();
-          ctx.roundRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
-          ctx.fillStyle = '#1a1a1a';
-          ctx.fill();
-          ctx.clip(); // Clip to rounded rectangle for video
-
-          // Draw video when camera is enabled AND we have actual frame data
-          // Use stability tracking to prevent flickering from single-frame dropouts:
-          // - Build up stability quickly when video is ready (increment by 2)
-          // - Decay stability slowly when video drops (decrement by 1)
-          // - Keep drawing video as long as we have any stability buffer
-          const videoReady = p.video && p.video.readyState >= 2 && p.video.videoWidth > 0;
           const participantKey = p.id;
 
-          // Update stability tracking with asymmetric gain/decay
+          // Check video readiness for stability tracking
+          // Use readyState >= 1 (HAVE_METADATA) which is more lenient than >= 2 (HAVE_CURRENT_DATA)
+          // This reduces flickering because metadata (dimensions) is available earlier than frame data
+          // drawImage will still work with readyState 1 for most WebRTC streams
+          const videoReady = p.video && p.video.readyState >= 1 && p.video.videoWidth > 0;
+
+          // Update stability tracking with very asymmetric gain/decay
+          // This prevents flickering from WebRTC stream renegotiations
           const currentStable = videoStableFrames.get(participantKey) || 0;
           if (videoReady) {
-            // Build stability quickly - increment by 2, cap at 10
-            videoStableFrames.set(participantKey, Math.min(currentStable + 2, 10));
+            // Build stability very quickly - increment by 5, cap at 30 (1 second at 30fps)
+            videoStableFrames.set(participantKey, Math.min(currentStable + 5, 30));
           } else if (currentStable > 0) {
-            // Decay slowly - decrement by 1 to ride out brief dropouts
+            // Decay very slowly - decrement by 1 to ride out stream renegotiations
             videoStableFrames.set(participantKey, currentStable - 1);
           }
 
-          // Draw video if we have any stability (allows brief dropouts without flicker)
           const stableFrameCount = videoStableFrames.get(participantKey) || 0;
-          const shouldDrawVideo = p.videoEnabled && stableFrameCount > 0 && p.video;
 
-          if (shouldDrawVideo) {
-            // Draw video - camera is ON (clipped to rounded corners)
+          // Determine what to draw:
+          // 1. Video: camera enabled AND (video ready OR have stability buffer)
+          // 2. Avatar: camera disabled AND have avatar (local only)
+          // 3. Placeholder: camera disabled or no video element
+          const shouldAttemptVideo = p.videoEnabled && p.video && (videoReady || stableFrameCount > 0);
+          const shouldDrawAvatar = !p.videoEnabled && p.type === 'local' && avatarImageRef.current;
+          const shouldDrawPlaceholder = !shouldAttemptVideo && !shouldDrawAvatar;
+
+          // Set up rounded corner clip
+          ctx.save();
+          ctx.beginPath();
+          ctx.roundRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
+          ctx.clip();
+
+          // Draw strategy:
+          // - If NOT attempting video: always draw dark background first
+          // - If attempting video with HIGH stability (>= 15): skip background, draw video directly
+          //   This preserves the last good frame during brief dropouts
+          // - If attempting video with LOW stability (< 15): draw background first as safety net
+          //   Then draw video on top - if video draws, it covers background; if not, we see background
+          const highStability = stableFrameCount >= 15;
+
+          if (!shouldAttemptVideo || (shouldAttemptVideo && !highStability)) {
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fill();
+          }
+
+          if (shouldAttemptVideo) {
+            // Camera is ON - try to draw video
             try {
               ctx.drawImage(p.video!, pos.x, pos.y, pos.width, pos.height);
             } catch {
-              // If draw fails, background already drawn
+              // Draw failed - background already drawn if low stability, draw it now if high stability
+              if (highStability) {
+                ctx.fillStyle = '#1a1a1a';
+                ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+              }
             }
-          } else if (!p.videoEnabled && p.type === 'local' && avatarImageRef.current) {
-            // Draw circular avatar in center (background already drawn with rounded corners)
+          } else if (shouldDrawAvatar) {
+            // Camera is OFF - draw circular avatar in center
             const size = Math.min(pos.width, pos.height) * 0.5;
             const avatarX = pos.x + (pos.width - size) / 2;
             const avatarY = pos.y + (pos.height - size) / 2;
-            // Draw circular clip for avatar
             ctx.save();
             ctx.beginPath();
             ctx.arc(avatarX + size / 2, avatarY + size / 2, size / 2, 0, Math.PI * 2);
@@ -1028,7 +1048,7 @@ export function StudioCanvas({
             ctx.drawImage(avatarImageRef.current, avatarX, avatarY, size, size);
             ctx.restore();
           }
-          // else: placeholder - background already drawn with rounded corners
+          // else: placeholder - dark background already drawn
 
           // Restore context to remove rounded corner clip before drawing overlays
           ctx.restore();
