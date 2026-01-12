@@ -32,7 +32,7 @@ export function InviteGuestsPanel({ broadcastId }: InviteGuestsPanelProps) {
       const response = await api.post('/participants/invite', {
         broadcastId,
         name: 'Guest', // Default name, guest can change when joining
-        role: 'guest',
+        role: 'backstage', // Guests start in backstage (preview), promoted to 'guest' when added to stage
       });
 
       const link = response.data.inviteLink;
