@@ -40,6 +40,8 @@ export function useGuestStream({
   const guestStreamRetryCountRef = useRef(0);
   const guestStreamConnectedRef = useRef(false);
   const activePollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Queue for ICE candidates generated before we have the host socket ID
+  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
   useEffect(() => {
     if (!hasJoined || !broadcastId || !localStream) return;
@@ -58,6 +60,10 @@ export function useGuestStream({
         guestStreamPcRef.current.close();
       }
 
+      // Clear pending ICE candidates from previous attempt
+      pendingIceCandidatesRef.current = [];
+      hostStreamSocketIdRef.current = null;
+
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
       guestStreamPcRef.current = pc;
 
@@ -69,11 +75,19 @@ export function useGuestStream({
 
       // Handle ICE candidates
       pc.onicecandidate = (event) => {
-        if (event.candidate && hostStreamSocketIdRef.current) {
-          socketService.emit('guest-stream-ice-candidate', {
-            targetSocketId: hostStreamSocketIdRef.current,
-            candidate: event.candidate.toJSON(),
-          });
+        if (event.candidate) {
+          const candidateJson = event.candidate.toJSON();
+          if (hostStreamSocketIdRef.current) {
+            // We have the host socket ID, send immediately
+            socketService.emit('guest-stream-ice-candidate', {
+              targetSocketId: hostStreamSocketIdRef.current,
+              candidate: candidateJson,
+            });
+          } else {
+            // Queue the candidate until we receive the answer with host socket ID
+            console.log('[GuestStream] Queueing ICE candidate (waiting for host socket ID)');
+            pendingIceCandidatesRef.current.push(candidateJson);
+          }
         }
       };
 
@@ -229,6 +243,18 @@ export function useGuestStream({
       try {
         await guestStreamPcRef.current.setRemoteDescription(new RTCSessionDescription(answer));
         console.log('[GuestStream] Remote description set successfully, waiting for WebRTC connection...');
+
+        // Flush any queued ICE candidates now that we have the host socket ID
+        if (pendingIceCandidatesRef.current.length > 0) {
+          console.log(`[GuestStream] Flushing ${pendingIceCandidatesRef.current.length} queued ICE candidates`);
+          pendingIceCandidatesRef.current.forEach((candidate) => {
+            socketService.emit('guest-stream-ice-candidate', {
+              targetSocketId: hostStreamSocketIdRef.current,
+              candidate,
+            });
+          });
+          pendingIceCandidatesRef.current = [];
+        }
       } catch (error) {
         console.error('[GuestStream] Error setting remote description:', error);
         guestStreamAnswerReceivedRef.current = false;
