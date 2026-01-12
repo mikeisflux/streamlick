@@ -158,6 +158,7 @@ export function StudioCanvas({
 
   // Track speaking participants
   const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
+  const speakingParticipantsRef = useRef<Set<string>>(new Set());
 
   // Update refs when props change
   useEffect(() => {
@@ -179,9 +180,10 @@ export function StudioCanvas({
     displayedCommentRef.current = displayedComment;
     bannersRef.current = banners;
     remoteParticipantsRef.current = remoteParticipants;
+    speakingParticipantsRef.current = speakingParticipants;
   }, [isLocalUserOnStage, videoEnabled, selectedLayout, isSharingScreen, isLocalSpeaking, captionsEnabled, currentCaption,
       chatMessages, showChatOnStream, chatOverlayPosition, chatOverlaySize, teleprompterNotes, showTeleprompterOnCanvas,
-      teleprompterFontSize, teleprompterScrollPosition, displayedComment, banners, remoteParticipants]);
+      teleprompterFontSize, teleprompterScrollPosition, displayedComment, banners, remoteParticipants, speakingParticipants]);
 
   // Load banners from localStorage
   useEffect(() => {
@@ -416,7 +418,7 @@ export function StudioCanvas({
           ctx.restore();
 
           // Draw speaking ring
-          const isSpeaking = p.type === 'local' ? isLocalSpeakingRef.current : speakingParticipants.has(p.id);
+          const isSpeaking = p.type === 'local' ? isLocalSpeakingRef.current : speakingParticipantsRef.current.has(p.id);
           if (isSpeaking && !p.videoEnabled) {
             const centerX = pos.x + pos.width / 2;
             const centerY = pos.y + pos.height / 2;
@@ -616,7 +618,7 @@ export function StudioCanvas({
       canvasStreamService.setOutputStream(null);
       outputStreamRef.current = null;
     };
-  }, [backgroundColor, orientation, speakingParticipants]);
+  }, [backgroundColor, orientation]);
 
   // Set local video srcObject
   useEffect(() => {
