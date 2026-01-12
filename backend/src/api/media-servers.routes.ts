@@ -1,13 +1,19 @@
 /**
  * Media Server Pool Management API
  * Endpoints for monitoring and managing media server pool
+ * Also includes Ant Media Server status endpoints
  */
 
 import { Router } from 'express';
 import { mediaServerPool } from '../services/media-server-pool.service';
+import { antMediaService } from '../services/antmedia.service';
 import { authenticateToken, requireAdmin } from '../auth/middleware';
 
 const router = Router();
+
+// Ant Media Server configuration from environment
+const ANT_MEDIA_SERVER_URL = process.env.ANT_MEDIA_SERVER_URL || '';
+const ANT_MEDIA_APP_NAME = process.env.ANT_MEDIA_APP_NAME || 'StreamLick';
 
 /**
  * GET /api/media-servers
@@ -134,6 +140,71 @@ router.post('/select', authenticateToken, async (req, res) => {
       ip: server.ip,
       activeStreams: server.activeStreams,
     });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/media-servers/ant-media/status
+ * Get Ant Media Server status and health
+ */
+router.get('/ant-media/status', authenticateToken, async (req, res) => {
+  try {
+    // Check if Ant Media Server is configured
+    if (!ANT_MEDIA_SERVER_URL) {
+      return res.json({
+        configured: false,
+        healthy: false,
+        url: null,
+        appName: null,
+        message: 'Ant Media Server not configured. Set ANT_MEDIA_SERVER_URL environment variable.',
+      });
+    }
+
+    // Perform health check
+    const healthy = await antMediaService.healthCheck();
+
+    // Get server stats if healthy
+    let stats: { broadcastCount: number; totalViewers: number } | null = null;
+    if (healthy) {
+      stats = await antMediaService.getServerStats();
+    }
+
+    res.json({
+      configured: true,
+      healthy,
+      url: ANT_MEDIA_SERVER_URL,
+      appName: ANT_MEDIA_APP_NAME,
+      stats,
+      message: healthy ? 'Ant Media Server is online and healthy' : 'Ant Media Server is not responding',
+    });
+  } catch (error: any) {
+    res.json({
+      configured: !!ANT_MEDIA_SERVER_URL,
+      healthy: false,
+      url: ANT_MEDIA_SERVER_URL || null,
+      appName: ANT_MEDIA_APP_NAME,
+      stats: null,
+      message: `Error checking Ant Media Server: ${error.message}`,
+    });
+  }
+});
+
+/**
+ * GET /api/media-servers/ant-media/broadcasts
+ * List active broadcasts on Ant Media Server
+ */
+router.get('/ant-media/broadcasts', authenticateToken, async (req, res) => {
+  try {
+    if (!ANT_MEDIA_SERVER_URL) {
+      return res.status(400).json({
+        error: 'Ant Media Server not configured',
+      });
+    }
+
+    const broadcasts = await antMediaService.listBroadcasts();
+    res.json(broadcasts);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

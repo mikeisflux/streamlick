@@ -1,6 +1,7 @@
 /**
  * Admin Media Servers Management Page
  * Monitor and scale media server infrastructure
+ * Includes Ant Media Server status monitoring
  */
 
 import { useState, useEffect } from 'react';
@@ -35,10 +36,23 @@ interface PoolStats {
   servers: MediaServer[];
 }
 
+interface AntMediaStatus {
+  configured: boolean;
+  healthy: boolean;
+  url: string | null;
+  appName: string | null;
+  stats: {
+    broadcastCount: number;
+    totalViewers: number;
+  } | null;
+  message: string;
+}
+
 export function AdminServers() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const [stats, setStats] = useState<PoolStats | null>(null);
+  const [antMediaStatus, setAntMediaStatus] = useState<AntMediaStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
@@ -56,8 +70,12 @@ export function AdminServers() {
   // Load server stats
   const loadStats = async () => {
     try {
-      const response = await api.get('/media-servers/stats');
-      setStats(response.data);
+      const [poolResponse, antMediaResponse] = await Promise.all([
+        api.get('/media-servers/stats'),
+        api.get('/media-servers/ant-media/status'),
+      ]);
+      setStats(poolResponse.data);
+      setAntMediaStatus(antMediaResponse.data);
     } catch (error: any) {
       console.error('Error loading stats:', error);
       toast.error('Failed to load server stats');
@@ -160,6 +178,81 @@ export function AdminServers() {
           </button>
           <h1 className="text-3xl font-bold text-gray-900">Media Server Infrastructure</h1>
           <p className="mt-2 text-gray-600">Monitor and scale your streaming infrastructure</p>
+        </div>
+
+        {/* Ant Media Server Status Card */}
+        <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">Ant Media Server</h2>
+            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">Primary RTMP Relay</span>
+          </div>
+
+          {antMediaStatus ? (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* Status */}
+              <div className="flex items-center gap-3">
+                <div className={`w-4 h-4 rounded-full ${antMediaStatus.healthy ? 'bg-green-500' : antMediaStatus.configured ? 'bg-red-500' : 'bg-yellow-500'}`} />
+                <div>
+                  <div className="text-sm font-medium text-gray-900">
+                    {antMediaStatus.healthy ? 'Online' : antMediaStatus.configured ? 'Offline' : 'Not Configured'}
+                  </div>
+                  <div className="text-xs text-gray-500">Status</div>
+                </div>
+              </div>
+
+              {/* URL */}
+              <div>
+                <div className="text-sm font-medium text-gray-900 truncate" title={antMediaStatus.url || 'N/A'}>
+                  {antMediaStatus.url || 'Not configured'}
+                </div>
+                <div className="text-xs text-gray-500">Server URL</div>
+              </div>
+
+              {/* App Name */}
+              <div>
+                <div className="text-sm font-medium text-gray-900">
+                  {antMediaStatus.appName || 'N/A'}
+                </div>
+                <div className="text-xs text-gray-500">App Name</div>
+              </div>
+
+              {/* Stats */}
+              <div>
+                {antMediaStatus.stats ? (
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{antMediaStatus.stats.broadcastCount}</div>
+                      <div className="text-xs text-gray-500">Active Broadcasts</div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{antMediaStatus.stats.totalViewers}</div>
+                      <div className="text-xs text-gray-500">Viewers</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500">Stats unavailable</div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-gray-500">Loading Ant Media status...</div>
+          )}
+
+          {antMediaStatus && !antMediaStatus.configured && (
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800">
+                <strong>Setup Required:</strong> Set <code className="bg-yellow-100 px-1 rounded">ANT_MEDIA_SERVER_URL</code> and <code className="bg-yellow-100 px-1 rounded">ANT_MEDIA_APP_NAME</code> environment variables in your backend.
+              </p>
+            </div>
+          )}
+
+          {antMediaStatus && antMediaStatus.configured && !antMediaStatus.healthy && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-800">
+                <strong>Connection Failed:</strong> {antMediaStatus.message}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Scaling Recommendation Alert */}

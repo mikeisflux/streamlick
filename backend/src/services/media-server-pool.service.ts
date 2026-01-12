@@ -48,8 +48,10 @@ class MediaServerPool {
     const serversEnv = process.env.MEDIA_SERVERS || '';
 
     // If no servers configured, start with empty pool
+    // Note: This is for the horizontal scaling pool. Ant Media Server (ANT_MEDIA_SERVER_URL)
+    // handles RTMP relay separately and doesn't need to be in this pool.
     if (!serversEnv || serversEnv.trim() === '') {
-      logger.warn('No media servers configured in MEDIA_SERVERS environment variable. Pool starting empty. Add servers via admin panel or set MEDIA_SERVERS environment variable.');
+      logger.info('Media server pool starting empty (MEDIA_SERVERS env not set). This is normal if using Ant Media Server for RTMP relay.');
       return;
     }
 
