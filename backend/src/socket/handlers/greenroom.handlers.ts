@@ -130,4 +130,17 @@ export function registerGreenroomHandlers(socket: Socket, io: SocketServer): voi
       socket.leave(`greenroom:${broadcastId}`);
     }
   });
+
+  // Host requests a specific guest to reconnect (when connection freezes)
+  socket.on('request-guest-reconnect', ({ participantId, guestSocketId }) => {
+    if (!guestSocketId) {
+      logger.warn('[Greenroom] request-guest-reconnect missing guestSocketId');
+      return;
+    }
+
+    logger.info(`[Greenroom] Host requesting guest ${participantId} to reconnect (socket: ${guestSocketId})`);
+
+    // Send directly to the guest's socket
+    io.to(guestSocketId).emit('resend-stream-offer');
+  });
 }

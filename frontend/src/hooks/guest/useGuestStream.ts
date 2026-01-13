@@ -117,6 +117,9 @@ export function useGuestStream({
       };
 
       // Handle connection state
+      // Track auto-reconnect state to prevent multiple reconnect attempts
+      let autoReconnectScheduled = false;
+
       pc.onconnectionstatechange = () => {
         console.log('[GuestStream] Connection state:', pc.connectionState, '(ICE:', pc.iceConnectionState, ')');
 
@@ -124,18 +127,33 @@ export function useGuestStream({
         if (pc.connectionState === 'connected') {
           console.log('[GuestStream] WebRTC connected!');
           guestStreamConnectedRef.current = true;
+          autoReconnectScheduled = false;
           if (guestStreamRetryTimeoutRef.current) {
             clearTimeout(guestStreamRetryTimeoutRef.current);
             guestStreamRetryTimeoutRef.current = null;
           }
         }
 
-        // If connection failed or disconnected, try to reconnect once
-        // Backend will trigger resend-stream-offer if host rejoins
+        // If connection failed or disconnected, automatically try to reconnect
         if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-          console.log('[GuestStream] Connection lost, will reconnect on next resend-stream-offer event');
+          console.log('[GuestStream] Connection lost, scheduling auto-reconnect...');
           guestStreamAnswerReceivedRef.current = false;
           guestStreamConnectedRef.current = false;
+
+          // Auto-reconnect after 5 seconds if not already scheduled
+          if (!autoReconnectScheduled) {
+            autoReconnectScheduled = true;
+            setTimeout(() => {
+              // Only reconnect if still disconnected/failed and component is still mounted
+              if (!guestStreamConnectedRef.current && hasJoined && broadcastId && localStream) {
+                const currentState = guestStreamPcRef.current?.connectionState;
+                if (currentState === 'disconnected' || currentState === 'failed' || !guestStreamPcRef.current) {
+                  console.log('[GuestStream] Auto-reconnecting after connection loss...');
+                  setupGuestStream(true);
+                }
+              }
+            }, 5000);
+          }
         }
       };
 
@@ -242,18 +260,30 @@ export function useGuestStream({
     const handleResendStreamOffer = () => {
       console.log('[GuestStream] Host requested stream offer resend');
 
-      // If already connected, ignore to prevent flickering
-      if (guestStreamConnectedRef.current && guestStreamPcRef.current) {
+      // Check current connection state
+      if (guestStreamPcRef.current) {
         const state = guestStreamPcRef.current.connectionState;
-        if (state === 'connected') {
+        const iceState = guestStreamPcRef.current.iceConnectionState;
+
+        // If truly connected and working, ignore to prevent flickering
+        if (state === 'connected' && guestStreamConnectedRef.current) {
           console.log(
             '[GuestStream] Already connected with active stream, ignoring resend request to prevent flickering'
           );
           return;
         }
+
+        // If connection is frozen (disconnected/failed), force a new connection
+        if (state === 'disconnected' || state === 'failed' || iceState === 'disconnected' || iceState === 'failed') {
+          console.log('[GuestStream] Connection frozen (state:', state, ', ice:', iceState, '), forcing new connection');
+          // Close the old frozen connection
+          guestStreamPcRef.current.close();
+          guestStreamPcRef.current = null;
+          guestStreamConnectedRef.current = false;
+        }
       }
 
-      console.log('[GuestStream] Not connected, proceeding with resend...');
+      console.log('[GuestStream] Proceeding with resend...');
       guestStreamAnswerReceivedRef.current = false;
       guestStreamRetryCountRef.current = 0;
 
@@ -262,7 +292,8 @@ export function useGuestStream({
         guestStreamRetryTimeoutRef.current = null;
       }
 
-      sendOfferWithRetry();
+      // Force create a new connection
+      setupGuestStream(true);
 
       // Re-emit join-greenroom to ensure host gets the notification
       if (broadcastId) {

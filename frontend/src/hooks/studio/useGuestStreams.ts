@@ -101,6 +101,7 @@ export function useGuestStreams(
     // Handle connection state changes
     // Track disconnected timeout to avoid premature stream removal
     let disconnectedTimeout: NodeJS.Timeout | null = null;
+    let reconnectAttempted = false;
 
     pc.onconnectionstatechange = () => {
       console.log('[GuestStreams] Connection state for', participantId, ':', pc.connectionState);
@@ -113,24 +114,54 @@ export function useGuestStreams(
 
       if (pc.connectionState === 'disconnected') {
         // IMPORTANT: 'disconnected' can be temporary - ICE may reconnect
-        // Wait 5 seconds before removing the stream to allow recovery
+        // Wait 5 seconds, then request guest to reconnect
         console.log('[GuestStreams] Connection disconnected, waiting 5s for recovery...');
         disconnectedTimeout = setTimeout(() => {
           // Check if still disconnected (might have recovered)
-          if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-            console.log('[GuestStreams] Connection did not recover, removing stream');
+          if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            if (!reconnectAttempted) {
+              // Ask guest to reconnect instead of just removing the stream
+              console.log('[GuestStreams] Connection did not recover, requesting guest to reconnect');
+              reconnectAttempted = true;
+              socketService.emit('request-guest-reconnect', { participantId, guestSocketId });
+              // Give guest 10 more seconds to reconnect
+              disconnectedTimeout = setTimeout(() => {
+                if (pc.connectionState !== 'connected') {
+                  console.log('[GuestStreams] Guest did not reconnect, removing stream');
+                  connectionsRef.current.delete(participantId);
+                  onStreamRemoved(participantId);
+                }
+              }, 10000);
+            }
+          } else if (pc.connectionState === 'closed') {
             connectionsRef.current.delete(participantId);
             onStreamRemoved(participantId);
           } else {
             console.log('[GuestStreams] Connection recovered to:', pc.connectionState);
+            reconnectAttempted = false;
           }
         }, 5000);
-      } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-        // These are terminal states - remove immediately
+      } else if (pc.connectionState === 'failed') {
+        // Failed state - try to request reconnection before removing
+        if (!reconnectAttempted) {
+          console.log('[GuestStreams] Connection failed, requesting guest to reconnect');
+          reconnectAttempted = true;
+          socketService.emit('request-guest-reconnect', { participantId, guestSocketId });
+          // Give guest 10 seconds to reconnect
+          disconnectedTimeout = setTimeout(() => {
+            if (pc.connectionState !== 'connected') {
+              console.log('[GuestStreams] Guest did not reconnect after failure, removing stream');
+              connectionsRef.current.delete(participantId);
+              onStreamRemoved(participantId);
+            }
+          }, 10000);
+        }
+      } else if (pc.connectionState === 'closed') {
         connectionsRef.current.delete(participantId);
         onStreamRemoved(participantId);
       } else if (pc.connectionState === 'connected') {
         console.log('[GuestStreams] Connection established successfully for', participantId);
+        reconnectAttempted = false;
       }
     };
 

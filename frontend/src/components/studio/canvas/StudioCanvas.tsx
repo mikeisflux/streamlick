@@ -480,6 +480,26 @@ export function StudioCanvas({
             ctx.clip();
             ctx.drawImage(avatarImageRef.current!, avatarX, avatarY, size, size);
             ctx.restore();
+          } else if (p.type === 'remote' && p.videoEnabled) {
+            // FALLBACK: Remote participant with video enabled but no cache yet
+            // Try to draw directly from video if available, otherwise dark placeholder
+            if (videoReady && p.video) {
+              try {
+                ctx.drawImage(p.video, pos.x, pos.y, pos.width, pos.height);
+              } catch {
+                ctx.fillStyle = '#1a1a1a';
+                ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+              }
+            } else {
+              // Waiting for video - draw dark placeholder with "Connecting..." text
+              ctx.fillStyle = '#1a1a1a';
+              ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+              ctx.fillStyle = '#666666';
+              ctx.font = '16px Inter, system-ui, sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('Connecting...', pos.x + pos.width / 2, pos.y + pos.height / 2);
+            }
           }
 
           ctx.restore();

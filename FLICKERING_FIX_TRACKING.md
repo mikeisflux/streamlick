@@ -480,3 +480,54 @@ Connection established - no further polling
 **Status:** APPLIED
 
 ---
+
+### Change 17: Canvas Fallback Drawing for Remote Participants
+**File:** `frontend/src/components/studio/canvas/StudioCanvas.tsx`
+**Lines:** ~483-500
+
+**Problem:** When cache draw failed for remote participants, nothing was drawn (showing background color), causing flickering.
+
+**Fix:** Added else-if branch to handle remote participants when cache is not available:
+```javascript
+} else if (p.type === 'remote' && p.videoEnabled) {
+  // Try to draw directly from video if available
+  if (videoReady && p.video) {
+    ctx.drawImage(p.video, ...);
+  } else {
+    // Draw "Connecting..." placeholder
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(...);
+    ctx.fillText('Connecting...', ...);
+  }
+}
+```
+
+**Status:** APPLIED
+
+---
+
+### Change 18: Auto-Reconnect for Frozen Connections
+**Files:**
+- `frontend/src/hooks/studio/useGuestStreams.ts`
+- `frontend/src/hooks/guest/useGuestStream.ts`
+- `backend/src/socket/handlers/greenroom.handlers.ts`
+
+**Problem:** WebRTC connections would freeze after running fine for a while. No mechanism existed to recover frozen connections.
+
+**Fix - Three-part solution:**
+
+1. **Host side (useGuestStreams.ts):** When connection goes to 'disconnected' or 'failed', instead of just removing the stream:
+   - Wait 5 seconds for natural recovery
+   - If still disconnected, emit `request-guest-reconnect` to ask guest to reconnect
+   - Wait 10 more seconds for guest to reconnect before removing stream
+
+2. **Backend (greenroom.handlers.ts):** Added handler for `request-guest-reconnect`:
+   - Sends `resend-stream-offer` directly to the specific guest socket
+
+3. **Guest side (useGuestStream.ts):**
+   - When receiving `resend-stream-offer` with frozen connection, force close old connection and create new one
+   - Auto-reconnect: When connection fails/disconnects, automatically attempt reconnection after 5 seconds
+
+**Status:** APPLIED
+
+---
