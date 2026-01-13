@@ -108,6 +108,11 @@ export function registerGreenroomHandlers(socket: Socket, io: SocketServer): voi
         hostId: userId,
       });
 
+      // Tell existing guests to resend their stream offers (event-driven, not polling)
+      // This handles the case where guests joined before the host
+      logger.info(`[Greenroom] Host entered, telling guests to resend stream offers for broadcast ${broadcastId}`);
+      socket.to(`greenroom:${broadcastId}`).emit('resend-stream-offer');
+
       socket.emit('greenroom-joined', { broadcastId, isHost: true });
     } catch (error) {
       logger.error('Host enter greenroom error:', error);

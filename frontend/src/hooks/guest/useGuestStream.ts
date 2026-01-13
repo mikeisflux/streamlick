@@ -2,19 +2,17 @@
  * useGuestStream Hook
  *
  * Handles sending the guest's camera/mic to the host via WebRTC P2P.
- * - Creates peer connection and sends stream offer
+ * - Creates peer connection and sends stream offer on join
  * - Handles WebRTC offer/answer/ICE candidate exchange
- * - Active polling to ensure connection (never gives up)
- * - Handles host reconnection requests
+ * - Event-driven: backend triggers resend when host joins (no polling)
  */
 
 import { useEffect, useRef } from 'react';
 import { socketService } from '../../services/socket.service';
 import { ICE_SERVERS } from '../../utils/webrtc';
 
-const GUEST_STREAM_MAX_RETRIES = 5;
-const GUEST_STREAM_RETRY_DELAY = 5000; // 5 seconds - give more time for ICE negotiation
-const ACTIVE_POLLING_INTERVAL = 8000; // 8 seconds - less aggressive polling
+const GUEST_STREAM_MAX_RETRIES = 3;
+const GUEST_STREAM_RETRY_DELAY = 3000; // 3 seconds between retries
 
 interface UseGuestStreamOptions {
   hasJoined: boolean;
@@ -34,7 +32,6 @@ export function useGuestStream({
   const guestStreamRetryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const guestStreamRetryCountRef = useRef(0);
   const guestStreamConnectedRef = useRef(false);
-  const activePollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   // Queue for ICE candidates generated before we have the host socket ID
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
@@ -184,38 +181,10 @@ export function useGuestStream({
           console.log('[GuestStream] No answer received, retrying...');
           sendOfferWithRetry();
         } else if (!guestStreamAnswerReceivedRef.current) {
-          console.log('[GuestStream] Initial burst complete, switching to active polling mode...');
-          startActivePolling();
+          // Stop retrying - backend will trigger resend when host joins
+          console.log('[GuestStream] Max retries reached, waiting for host to trigger resend...');
         }
       }, GUEST_STREAM_RETRY_DELAY);
-    };
-
-    // Active polling - continuously search for host until connected
-    const startActivePolling = () => {
-      if (guestStreamConnectedRef.current) return;
-      if (activePollingIntervalRef.current) return;
-
-      console.log('[GuestStream] Starting active polling - will keep searching for host...');
-
-      // Send an offer immediately (setupGuestStream has guards to prevent closing active connections)
-      console.log('[GuestStream] Active poll: attempting initial connection...');
-      setupGuestStream();
-
-      // Set up continuous polling
-      activePollingIntervalRef.current = setInterval(() => {
-        if (guestStreamConnectedRef.current) {
-          console.log('[GuestStream] Active poll: connected! Stopping polling.');
-          if (activePollingIntervalRef.current) {
-            clearInterval(activePollingIntervalRef.current);
-            activePollingIntervalRef.current = null;
-          }
-          return;
-        }
-
-        // setupGuestStream has guards to prevent closing connections in progress
-        console.log('[GuestStream] Active poll: checking connection...');
-        setupGuestStream();
-      }, ACTIVE_POLLING_INTERVAL);
     };
 
     // Handle answer from host
@@ -300,11 +269,6 @@ export function useGuestStream({
         guestStreamRetryTimeoutRef.current = null;
       }
 
-      if (activePollingIntervalRef.current) {
-        clearInterval(activePollingIntervalRef.current);
-        activePollingIntervalRef.current = null;
-      }
-
       sendOfferWithRetry();
 
       // Re-emit join-greenroom to ensure host gets the notification
@@ -328,10 +292,6 @@ export function useGuestStream({
       if (guestStreamRetryTimeoutRef.current) {
         clearTimeout(guestStreamRetryTimeoutRef.current);
         guestStreamRetryTimeoutRef.current = null;
-      }
-      if (activePollingIntervalRef.current) {
-        clearInterval(activePollingIntervalRef.current);
-        activePollingIntervalRef.current = null;
       }
       guestStreamConnectedRef.current = false;
 

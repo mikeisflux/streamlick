@@ -24,14 +24,6 @@ interface UseParticipantsProps {
   showChatOnStream: boolean;
 }
 
-// Combined polling interval in milliseconds (5 seconds)
-// This polls for participants AND requests streams in one operation
-// IMPORTANT: Increased from 3s to 5s to reduce connection churn and flickering
-const POLL_INTERVAL = 5000;
-
-// Debounce interval for stream requests
-const STREAM_REQUEST_DEBOUNCE = 5000; // Request streams every 5 seconds max (reduced from 10s for faster initial connection)
-
 export function useParticipants({ broadcastId, showChatOnStream }: UseParticipantsProps) {
   const [remoteParticipants, setRemoteParticipants] = useState<Map<string, RemoteParticipant>>(new Map());
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -45,140 +37,72 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
     linkedin: 0,
   });
 
-  // Track known participant IDs to detect new joins
+  // Track known participant IDs to prevent duplicate toasts
   const knownParticipantIdsRef = useRef<Set<string>>(new Set());
+  const initialFetchDoneRef = useRef<boolean>(false);
 
-  // BEST PRACTICE FIX: Move global state into refs to prevent cross-instance pollution
-  // Previously these were module-level variables, causing state to leak between component instances
-  const lastStreamRequestTimeRef = useRef<number>(0);
-  const previousParticipantIdsRef = useRef<Set<string>>(new Set());
-  const isFirstPollRef = useRef<boolean>(true);
-
-  // HTTP polling for greenroom participants - this is the PRIMARY mechanism
-  // Socket events are supplementary for real-time updates
-  // IMPORTANT: This polling NEVER stops - it continuously:
-  //   1. Polls for new participants every 3 seconds
-  //   2. Requests streams from ANY participant without video
-  //   This ensures we always pick up new guests and retry failed connections
+  // ONE-TIME initial fetch on mount to catch guests that joined before host
+  // After this, ALL updates come through socket events - NO POLLING
   useEffect(() => {
-    if (!broadcastId) return;
+    if (!broadcastId || initialFetchDoneRef.current) return;
 
     let isMounted = true;
 
-    const pollParticipants = async () => {
+    const fetchInitialParticipants = async () => {
       try {
         const response = await api.get(`/broadcasts/${broadcastId}/greenroom-participants`);
         if (!isMounted) return;
 
         const { participants } = response.data as { participants: Array<{ id: string; name: string; role: string; audioEnabled: boolean; videoEnabled: boolean }> };
 
-        // Detect new participants that we haven't seen before
-        const currentIds = new Set(participants.map(p => p.id));
-        const newParticipants = participants.filter(p => !knownParticipantIdsRef.current.has(p.id));
-        const trulyNewParticipants = participants.filter(p => !previousParticipantIdsRef.current.has(p.id));
+        console.log('[useParticipants] Initial fetch: found', participants.length, 'participants');
 
-        // Show toast for new participants
-        for (const p of newParticipants) {
-          console.log('[useParticipants] Poll detected new participant:', p.name);
-          toast.success(`${p.name || 'A guest'} joined the greenroom`);
+        // Add all to known IDs to prevent duplicate toasts from socket events
+        for (const p of participants) {
+          knownParticipantIdsRef.current.add(p.id);
         }
 
-        // Update known IDs
-        knownParticipantIdsRef.current = currentIds;
-
-        // If there are truly new participants (not seen in previous polls), request streams immediately
-        // This ensures new guests get their streams requested right away, not after the debounce period
-        if (trulyNewParticipants.length > 0) {
-          console.log('[useParticipants] New participants detected, requesting streams immediately:', trulyNewParticipants.map(p => p.name));
-          // Small delay to allow guest to set up their WebRTC connection first
-          setTimeout(() => {
-            socketService.emit('request-guest-streams');
-            lastStreamRequestTimeRef.current = Date.now();
-          }, 1000);
-        }
-
-        // Update previous participant IDs for next poll
-        previousParticipantIdsRef.current = currentIds;
-
-        // Update state - merge with existing to preserve streams
-        // Track if we need to request streams (outside the setter)
-        let shouldRequestStreams = false;
-        let participantsWithoutStreams: string[] = [];
-
+        // Set initial state
         setRemoteParticipants((prev) => {
           const updated = new Map<string, RemoteParticipant>();
 
-          // Add all participants from the poll
           for (const p of participants) {
             const existing = prev.get(p.id);
-            const hasStream = existing?.stream || null;
-            // Check if this participant needs a stream (only if they're on stage = 'guest' role)
-            // CRITICAL: Preserve existing 'guest' role if already on stage
-            // Don't let poll reset role to 'backstage' - that causes video element deletion and flickering
-            const apiRole = (p.role || 'backstage') as 'host' | 'guest' | 'backstage';
-            const role = existing?.role === 'guest' ? 'guest' : apiRole;
-            if (!hasStream && p.videoEnabled && role === 'guest') {
-              shouldRequestStreams = true;
-              participantsWithoutStreams.push(p.name || p.id);
-            }
             updated.set(p.id, {
               id: p.id,
               name: p.name,
-              stream: hasStream, // Preserve existing stream
+              stream: existing?.stream || null,
               audioEnabled: p.audioEnabled,
               videoEnabled: p.videoEnabled,
-              role,
+              role: (p.role || 'backstage') as 'host' | 'guest' | 'backstage',
             });
           }
 
           return updated;
         });
 
-        // COMBINED POLL: Request streams if any participant is missing one
-        // On first poll (page load/reload), always request streams immediately
-        // After that, debounce to prevent constant reconnection causing flickering
-        const now = Date.now();
-        const isFirstPoll = isFirstPollRef.current;
-
-        if (isFirstPoll && participants.length > 0) {
-          // First poll after page load - request streams for ALL participants regardless of role
-          // This ensures we reconnect to existing on-stage guests after host reload
-          console.log('[useParticipants] First poll: requesting streams for all', participants.length, 'participants');
-          socketService.emit('request-guest-streams');
-          lastStreamRequestTimeRef.current = now;
-          isFirstPollRef.current = false;
-        } else if (shouldRequestStreams && (now - lastStreamRequestTimeRef.current) > STREAM_REQUEST_DEBOUNCE) {
-          console.log('[useParticipants] Poll: requesting streams for participants without video:', participantsWithoutStreams);
-          socketService.emit('request-guest-streams');
-          lastStreamRequestTimeRef.current = now;
-        } else if (shouldRequestStreams) {
-          console.log('[useParticipants] Poll: skipping stream request (debounce), participants without video:', participantsWithoutStreams);
-        }
+        initialFetchDoneRef.current = true;
+        // NOTE: Guests automatically send their stream offer when joining
+        // No active requesting needed - fully event-driven
       } catch (error) {
         // Don't log 401/403 errors as they're expected when not authenticated
         if ((error as any)?.response?.status !== 401 && (error as any)?.response?.status !== 403) {
-          console.error('[useParticipants] Poll error:', error);
+          console.error('[useParticipants] Initial fetch error:', error);
         }
       }
     };
 
-    // Initial poll immediately
-    pollParticipants();
-
-    // Set up polling interval
-    const pollInterval = setInterval(pollParticipants, POLL_INTERVAL);
+    fetchInitialParticipants();
 
     return () => {
       isMounted = false;
-      clearInterval(pollInterval);
     };
   }, [broadcastId]);
 
-  // Socket event handlers (supplementary to polling for real-time updates)
-  // Polling is the PRIMARY mechanism, socket events provide faster updates when they work
+  // Socket event handlers - PRIMARY mechanism for all participant updates
+  // Fully event-driven: no polling, no active requesting
   useEffect(() => {
     // Handle initial state sync from server when host joins
-    // Note: Polling will also pick these up, but socket sync is faster on initial load
     const handleParticipantsSync = ({ participants }: { participants: Array<{ id: string; name: string; role: string; audioEnabled: boolean; videoEnabled: boolean }> }) => {
       console.log('[useParticipants] Received participants-sync with', participants.length, 'participants');
 
@@ -348,13 +272,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
             ...participant,
             role,
           });
-
-          // CRITICAL: If promoting to live but participant has no stream, request it immediately
-          // This ensures the guest appears on canvas as soon as possible
-          if (role === 'guest' && !participant.stream) {
-            console.log('[useParticipants] Participant promoted to live but has no stream, requesting immediately');
-            socketService.emit('request-guest-streams');
-          }
+          // NOTE: Guest stream should already be established - no active requesting
         }
         return updated;
       });
@@ -419,17 +337,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
   // Participant management actions
   const handlePromoteToLive = useCallback((participantId: string) => {
     socketService.emit('promote-to-live', { participantId });
-
-    // Immediately request streams when promoting - don't wait for the response
-    // This ensures the guest's stream is requested in parallel with the promote
-    setRemoteParticipants((prev) => {
-      const participant = prev.get(participantId);
-      if (participant && !participant.stream) {
-        console.log('[useParticipants] Promoting participant without stream, requesting immediately');
-        socketService.emit('request-guest-streams');
-      }
-      return prev; // Return unchanged - just using this to access state
-    });
+    // NOTE: Guest stream should already be established - no active requesting
   }, []);
 
   const handleDemoteToBackstage = useCallback((participantId: string) => {

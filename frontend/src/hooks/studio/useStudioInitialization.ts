@@ -136,18 +136,9 @@ export function useStudioInitialization({
         // Also join greenroom room to receive greenroom participant events
         socketService.emit('host-enter-greenroom', { broadcastId });
 
-        // Request existing guests to resend their stream offers
-        // This handles the case where guests joined before the host connected
-        // Do this multiple times with increasing delays to handle WebRTC setup timing
-        setTimeout(() => {
-          console.log('[Studio Init] Requesting existing guests to resend stream offers (1s)');
-          socketService.emit('request-guest-streams');
-        }, 1000);
-
-        setTimeout(() => {
-          console.log('[Studio Init] Requesting existing guests to resend stream offers (3s)');
-          socketService.emit('request-guest-streams');
-        }, 3000);
+        // NOTE: Guest streams are fully event-driven
+        // Guests automatically send their stream offer when joining
+        // No active requesting needed - this prevents flickering from connection resets
 
         // Set initialized flag BEFORE setting loading to false (atomic state update)
         isInitializedRef.current = true;
