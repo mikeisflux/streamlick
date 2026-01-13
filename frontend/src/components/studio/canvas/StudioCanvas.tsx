@@ -210,8 +210,8 @@ export function StudioCanvas({
   const participantCanvasCacheRef = useRef<Map<string, { canvas: OffscreenCanvas | HTMLCanvasElement; ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D; lastFrameTime: number }>>(new Map());
   const participantAudioAddedRef = useRef<Set<string>>(new Set());
 
-  // Use extracted media hook
-  const { backgroundImageRef, logoImageRef, overlayImageRef, avatarImageRef, videoClipRef } = useCanvasMedia();
+  // Use extracted media hook - get both refs (for canvas) and URLs (for HTML preview)
+  const { backgroundImageRef, logoImageRef, overlayImageRef, avatarImageRef, videoClipRef, streamBackground, streamLogo, streamOverlay } = useCanvasMedia();
 
   // Detect if local user is speaking
   const isLocalSpeaking = useAudioLevel(rawStream || localStream, audioEnabled);
@@ -994,7 +994,18 @@ export function StudioCanvas({
       />
 
       {/* HTML Video Preview Layer - This is what the user sees (no flickering) */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0 overflow-hidden" style={{ borderRadius: 'inherit' }}>
+        {/* Background image */}
+        {streamBackground && (
+          <img
+            src={streamBackground}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ zIndex: 0 }}
+          />
+        )}
+
+        {/* Participant videos */}
         {previewPositions.map((p) => (
           <HTMLPreviewVideo
             key={p.id}
@@ -1009,6 +1020,7 @@ export function StudioCanvas({
               top: p.y,
               width: p.width,
               height: p.height,
+              zIndex: 1,
             }}
           />
         ))}
@@ -1031,8 +1043,180 @@ export function StudioCanvas({
               top: containerDimensions.height * 0.12,
               width: containerDimensions.width,
               height: containerDimensions.height * 0.88,
+              zIndex: 2,
             }}
           />
+        )}
+
+        {/* Overlay image (transparent overlay on top of videos) */}
+        {streamOverlay && (
+          <img
+            src={streamOverlay}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+            style={{ zIndex: 10 }}
+          />
+        )}
+
+        {/* Logo */}
+        {streamLogo && (
+          <img
+            src={streamLogo}
+            alt=""
+            className="absolute"
+            style={{
+              top: containerDimensions.height * (20 / 1080),
+              left: containerDimensions.width * (20 / 1920),
+              width: containerDimensions.width * (150 / 1920),
+              height: containerDimensions.height * (150 / 1080),
+              objectFit: 'contain',
+              zIndex: 11,
+            }}
+          />
+        )}
+
+        {/* Banners */}
+        {banners.filter(b => b.visible).map((banner) => {
+          const canvasWidth = orientation === 'portrait' ? 1080 : 1920;
+          const canvasHeight = orientation === 'portrait' ? 1920 : 1080;
+          const scaleX = containerDimensions.width / canvasWidth;
+          const scaleY = containerDimensions.height / canvasHeight;
+          const bannerHeight = 80 * scaleY;
+          const bannerWidth = (banner.type === 'lower-third' ? 400 : canvasWidth * 0.8) * scaleX;
+
+          let x = 0, y = 0;
+          switch (banner.position) {
+            case 'top-left': x = 20 * scaleX; y = 100 * scaleY; break;
+            case 'top-center': x = (containerDimensions.width - bannerWidth) / 2; y = 100 * scaleY; break;
+            case 'top-right': x = containerDimensions.width - bannerWidth - 20 * scaleX; y = 100 * scaleY; break;
+            case 'bottom-left': x = 20 * scaleX; y = containerDimensions.height - bannerHeight - 20 * scaleY; break;
+            case 'bottom-center': x = (containerDimensions.width - bannerWidth) / 2; y = containerDimensions.height - bannerHeight - 20 * scaleY; break;
+            case 'bottom-right': x = containerDimensions.width - bannerWidth - 20 * scaleX; y = containerDimensions.height - bannerHeight - 20 * scaleY; break;
+          }
+
+          return (
+            <div
+              key={banner.id}
+              className="absolute"
+              style={{
+                left: x,
+                top: y,
+                width: bannerWidth,
+                height: bannerHeight,
+                backgroundColor: banner.backgroundColor || 'rgba(0, 0, 0, 0.7)',
+                zIndex: 15,
+                padding: `${10 * scaleY}px ${15 * scaleX}px`,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+              }}
+            >
+              <div
+                style={{
+                  color: banner.textColor || '#ffffff',
+                  fontSize: `${24 * scaleY}px`,
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {banner.title}
+              </div>
+              {banner.subtitle && (
+                <div
+                  style={{
+                    color: banner.textColor || '#ffffff',
+                    fontSize: `${18 * scaleY}px`,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    marginTop: `${4 * scaleY}px`,
+                  }}
+                >
+                  {banner.subtitle}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Captions */}
+        {captionsEnabled && currentCaption && (
+          <div
+            className="absolute left-1/2 transform -translate-x-1/2"
+            style={{
+              bottom: containerDimensions.height * (80 / 1080),
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              padding: `${15 * (containerDimensions.height / 1080)}px`,
+              maxWidth: containerDimensions.width - 40,
+              zIndex: 16,
+            }}
+          >
+            <span
+              style={{
+                color: '#ffffff',
+                fontSize: `${32 * (containerDimensions.height / 1080)}px`,
+                fontWeight: 'bold',
+              }}
+            >
+              {currentCaption.text}
+            </span>
+          </div>
+        )}
+
+        {/* Chat overlay */}
+        {showChatOnStream && chatMessages.length > 0 && (
+          <div
+            className="absolute"
+            style={{
+              left: chatOverlayPosition.x * (containerDimensions.width / 1920),
+              top: chatOverlayPosition.y * (containerDimensions.height / 1080),
+              width: chatOverlaySize.width * (containerDimensions.width / 1920),
+              height: chatOverlaySize.height * (containerDimensions.height / 1080),
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              zIndex: 17,
+              padding: '10px',
+              overflow: 'hidden',
+            }}
+          >
+            {chatMessages.slice(-Math.floor((chatOverlaySize.height - 20) / 40)).map((msg, i) => (
+              <div key={i} style={{ marginBottom: '8px' }}>
+                <span style={{ color: '#4a9eff', fontWeight: 'bold', fontSize: '14px' }}>{msg.author}: </span>
+                <span style={{ color: '#ffffff', fontSize: '14px' }}>{msg.message}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Displayed comment */}
+        {displayedComment && (
+          <div
+            className="absolute"
+            style={{
+              right: 20 * (containerDimensions.width / 1920),
+              top: 200 * (containerDimensions.height / 1080),
+              width: 400 * (containerDimensions.width / 1920),
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              zIndex: 18,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: 8 * (containerDimensions.height / 1080),
+                backgroundColor: {
+                  youtube: '#FF0000', facebook: '#1877F2', twitch: '#9146FF',
+                  linkedin: '#0A66C2', x: '#000000', rumble: '#85C742'
+                }[displayedComment.platform] || '#666666',
+              }}
+            />
+            <div style={{ padding: '10px' }}>
+              <div style={{ color: '#ffffff', fontWeight: 'bold', fontSize: '16px' }}>{displayedComment.authorName}</div>
+              <div style={{ color: '#cccccc', fontSize: '14px', marginTop: '8px' }}>{displayedComment.message}</div>
+              <div style={{ color: '#888888', fontSize: '12px', marginTop: '8px' }}>{displayedComment.platform.toUpperCase()}</div>
+            </div>
+          </div>
         )}
       </div>
 

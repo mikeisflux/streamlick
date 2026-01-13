@@ -288,5 +288,9 @@ export function useCanvasMedia() {
     avatarImageRef,
     videoClipRef,
     getMediaRefs,
+    // URL states for HTML preview layer
+    streamBackground,
+    streamLogo,
+    streamOverlay,
   };
 }
