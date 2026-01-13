@@ -12,7 +12,6 @@ class AudioMixerService {
   private connectedElements: Map<HTMLMediaElement, string> = new Map();
   private currentMasterVolume: number = 1.0;
   private mutedStreams: Set<string> = new Set(); // Track which streams are muted
-  private dummyAudioElement: HTMLAudioElement | null = null; // Chrome workaround
 
   /**
    * Initialize the audio mixer with high-quality 192kbps equivalent settings
@@ -28,18 +27,10 @@ class AudioMixerService {
       sampleRate: 48000,
     });
 
-    // Create destination node
+    // Create destination node for mixing audio to send via WebRTC
     this.destination = this.audioContext.createMediaStreamDestination();
 
-    // CHROME WORKAROUND: Create a muted audio element attached to the output stream
-    // This fixes a Chrome bug where Web Audio API with WebRTC streams stops working
-    // See: https://blog.twoseven.xyz/chrome-webrtc-remote-volume/
-    this.dummyAudioElement = document.createElement('audio');
-    this.dummyAudioElement.muted = true;
-    this.dummyAudioElement.srcObject = this.destination.stream;
-    this.dummyAudioElement.play().catch(() => {});
-
-    console.log('[AudioMixer] Initialized with Chrome workaround (muted audio element)');
+    console.log('[AudioMixer] Initialized');
   }
 
   /**
@@ -244,13 +235,6 @@ class AudioMixerService {
    * Stop and cleanup the audio mixer
    */
   stop(): void {
-    // Clean up dummy audio element (Chrome workaround)
-    if (this.dummyAudioElement) {
-      this.dummyAudioElement.pause();
-      this.dummyAudioElement.srcObject = null;
-      this.dummyAudioElement = null;
-    }
-
     // Disconnect all sources and gain nodes
     this.sources.forEach((source) => {
       source.disconnect();
