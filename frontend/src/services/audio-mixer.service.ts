@@ -11,7 +11,6 @@ class AudioMixerService {
   private gainNodes: Map<string, GainNode> = new Map();
   private connectedElements: Map<HTMLMediaElement, string> = new Map();
   private currentMasterVolume: number = 1.0;
-  private mutedStreams: Set<string> = new Set(); // Track which streams are muted
 
   /**
    * Initialize the audio mixer with high-quality 192kbps equivalent settings
@@ -27,24 +26,17 @@ class AudioMixerService {
       sampleRate: 48000,
     });
 
-    // Create destination node for mixing audio to send via WebRTC
+    // Create destination node
     this.destination = this.audioContext.createMediaStreamDestination();
-
-    console.log('[AudioMixer] Initialized');
   }
 
   /**
    * Add an audio stream to the mix
-   * @param id - Unique identifier for the stream
-   * @param stream - The MediaStream to add
-   * @param playLocally - If true, also play through local speakers (for remote participants).
-   *                      Set to false for local microphone to prevent feedback.
    */
-  addStream(id: string, stream: MediaStream, playLocally: boolean = true): void {
+  addStream(id: string, stream: MediaStream): void {
     console.log('[AudioMixer] addStream called:', id, {
       initialized: !!this.audioContext && !!this.destination,
       contextState: this.audioContext?.state,
-      playLocally,
       streamTracks: stream.getTracks().map(t => ({
         kind: t.kind,
         id: t.id,
@@ -70,15 +62,10 @@ class AudioMixerService {
     const gainNode = this.audioContext.createGain();
     gainNode.gain.value = this.currentMasterVolume;
 
-    // Connect: source -> gain -> destination(s)
+    // Connect: source -> gain -> BOTH destinations (broadcast AND speakers)
     source.connect(gainNode);
-    gainNode.connect(this.destination);  // Always connect to broadcast output
-
-    // Only connect to speakers if playLocally is true (for remote participants)
-    // Don't connect local microphone to speakers - causes feedback and mute issues
-    if (playLocally) {
-      gainNode.connect(this.audioContext.destination);  // For local speakers
-    }
+    gainNode.connect(this.destination);  // For broadcast output
+    gainNode.connect(this.audioContext.destination);  // For local speakers (host can hear guests)
 
     // Store source and gain node
     this.sources.set(id, source);
@@ -86,7 +73,6 @@ class AudioMixerService {
 
     console.log('[AudioMixer] Stream added successfully:', id, {
       totalStreams: this.sources.size,
-      playLocally,
       allStreamIds: Array.from(this.sources.keys()),
     });
   }
@@ -158,9 +144,6 @@ class AudioMixerService {
       this.gainNodes.delete(id);
     }
 
-    // Remove from muted set
-    this.mutedStreams.delete(id);
-
     // Clean up element tracking
     for (const [element, elementId] of this.connectedElements.entries()) {
       if (elementId === id) {
@@ -190,37 +173,6 @@ class AudioMixerService {
   }
 
   /**
-   * Mute a specific stream (sets gain to 0)
-   */
-  muteStream(id: string): void {
-    const gainNode = this.gainNodes.get(id);
-    if (gainNode) {
-      gainNode.gain.value = 0;
-      this.mutedStreams.add(id);
-      console.log('[AudioMixer] Muted stream:', id);
-    }
-  }
-
-  /**
-   * Unmute a specific stream (restores to master volume)
-   */
-  unmuteStream(id: string): void {
-    const gainNode = this.gainNodes.get(id);
-    if (gainNode) {
-      gainNode.gain.value = this.currentMasterVolume;
-      this.mutedStreams.delete(id);
-      console.log('[AudioMixer] Unmuted stream:', id);
-    }
-  }
-
-  /**
-   * Check if a stream is muted
-   */
-  isStreamMuted(id: string): boolean {
-    return this.mutedStreams.has(id);
-  }
-
-  /**
    * Get the mixed output stream
    */
   getOutputStream(): MediaStream | null {
@@ -245,9 +197,6 @@ class AudioMixerService {
       gainNode.disconnect();
     });
     this.gainNodes.clear();
-
-    // Clear muted streams tracking
-    this.mutedStreams.clear();
 
     // Close audio context
     if (this.audioContext && this.audioContext.state !== 'closed') {
@@ -274,12 +223,9 @@ class AudioMixerService {
     // Store for future streams
     this.currentMasterVolume = clampedVolume;
 
-    // Apply to all existing streams (but preserve muted state)
+    // Apply to all existing streams
     this.gainNodes.forEach((gainNode, id) => {
-      // Don't change volume on muted streams - they should stay at 0
-      if (!this.mutedStreams.has(id)) {
-        gainNode.gain.value = clampedVolume;
-      }
+      gainNode.gain.value = clampedVolume;
     });
   }
 

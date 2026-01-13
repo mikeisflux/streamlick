@@ -107,12 +107,11 @@ export function useMedia() {
           videoEnabled: processedStream.getVideoTracks()[0]?.enabled,
         });
 
-        // CRITICAL: Initialize audio mixer and add microphone for broadcast
+        // CRITICAL: Initialize audio mixer and add microphone for monitor mode
         // This ensures all participants hear the microphone audio when WebRTC starts
-        // playLocally=false because we don't want the host to hear their own mic (causes feedback)
         audioMixerService.initialize();
-        audioMixerService.addStream('local-microphone', new MediaStream([processedAudioTrack]), false);
-        logger.info('[useMedia] Microphone added to audio mixer (broadcast only, not local speakers)');
+        audioMixerService.addStream('local-microphone', new MediaStream([processedAudioTrack]));
+        logger.info('[useMedia] Microphone added to audio mixer for monitor mode');
 
         localStreamRef.current = processedStream;
         setLocalStream(processedStream);
@@ -194,19 +193,9 @@ export function useMedia() {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
       console.log('[useMedia] audioTrack:', !!audioTrack, 'enabled:', audioTrack?.enabled);
       if (audioTrack) {
-        const newEnabled = !audioTrack.enabled;
-        audioTrack.enabled = newEnabled;
-        setAudioEnabled(newEnabled);
-
-        // Also control the gain node in the audio mixer to prevent audio graph issues
-        // Use gain-based muting which doesn't affect other streams in the mixer
-        if (newEnabled) {
-          audioMixerService.unmuteStream('local-microphone');
-        } else {
-          audioMixerService.muteStream('local-microphone');
-        }
-
-        console.log('[useMedia] Audio toggled to:', newEnabled);
+        audioTrack.enabled = !audioTrack.enabled;
+        setAudioEnabled(audioTrack.enabled);
+        console.log('[useMedia] Audio toggled to:', audioTrack.enabled);
       }
     } else {
       console.warn('[useMedia] toggleAudio: No local stream available');
