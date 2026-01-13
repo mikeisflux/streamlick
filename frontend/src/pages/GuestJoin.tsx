@@ -13,12 +13,10 @@ import { webrtcService } from '../services/webrtc.service';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
-// Hooks
+// Hooks - removed P2P hooks (usePreviewStream, useGuestStream) in favor of Ant Media SFU
 import {
   useDeviceEnumeration,
   useStatusListeners,
-  usePreviewStream,
-  useGuestStream,
   useGreenroomChat,
 } from '../hooks/guest';
 
@@ -72,18 +70,8 @@ export function GuestJoin() {
     onStatusChange: setGuestStatus,
   });
 
-  // Preview stream hook - receive host's broadcast
-  const { broadcastStream } = usePreviewStream({
-    hasJoined,
-    broadcastId: broadcastInfo?.id,
-  });
-
-  // Guest stream hook - send our camera to host
-  useGuestStream({
-    hasJoined,
-    broadcastId: broadcastInfo?.id,
-    localStream,
-  });
+  // NOTE: P2P hooks (usePreviewStream, useGuestStream) removed in favor of Ant Media SFU
+  // Guest now publishes/subscribes via webrtcService.joinRoom()
 
   // Greenroom chat hook
   const {
@@ -92,6 +80,37 @@ export function GuestJoin() {
     publicChatMessages,
     sendPrivateChat,
   } = useGreenroomChat({ hasJoined });
+
+  // State for host's broadcast stream (received from Ant Media SFU)
+  const [broadcastStream, setBroadcastStream] = useState<MediaStream | null>(null);
+
+  // Set up Ant Media remote stream callback to receive host's broadcast
+  useEffect(() => {
+    if (!hasJoined) return;
+
+    const handleRemoteStream = (streamId: string, stream: MediaStream) => {
+      console.log('[GuestJoin] Received remote stream from Ant Media:', streamId, {
+        audioTracks: stream.getAudioTracks().length,
+        videoTracks: stream.getVideoTracks().length,
+      });
+      // The host's stream - set as broadcast stream for preview
+      setBroadcastStream(stream);
+    };
+
+    const handleParticipantLeft = (streamId: string) => {
+      console.log('[GuestJoin] Participant left:', streamId);
+      // If it was the host's stream, clear it
+      setBroadcastStream(null);
+    };
+
+    webrtcService.setRemoteStreamCallback(handleRemoteStream);
+    webrtcService.setParticipantLeftCallback(handleParticipantLeft);
+
+    return () => {
+      webrtcService.setRemoteStreamCallback(() => {});
+      webrtcService.setParticipantLeftCallback(() => {});
+    };
+  }, [hasJoined]);
 
   // Load invite on mount
   useEffect(() => {
@@ -156,7 +175,7 @@ export function GuestJoin() {
       socketService.connect(undefined, token);
       socketService.joinStudio(broadcastInfo.id, participant.id);
 
-      // Initialize WebRTC
+      // Initialize WebRTC connection to Ant Media SFU
       try {
         await webrtcService.initialize(broadcastInfo.id);
       } catch (error) {
@@ -164,35 +183,18 @@ export function GuestJoin() {
         throw new Error('Failed to initialize WebRTC connection');
       }
 
-      try {
-        await webrtcService.createSendTransport();
-      } catch (error) {
-        console.error('Failed to create send transport:', error);
-        throw new Error('Failed to create media transport');
-      }
-
-      // Produce media
+      // Join room and publish local stream via Ant Media SFU
+      // This handles both sending our stream and receiving other participants' streams
       if (localStream) {
-        const videoTrack = localStream.getVideoTracks()[0];
-        const audioTrack = localStream.getAudioTracks()[0];
-
-        if (videoTrack) {
-          try {
-            await webrtcService.produceMedia(videoTrack);
-          } catch (error) {
-            console.error('Failed to produce video:', error);
-            toast.error('Failed to send video - continuing with audio only');
-          }
+        try {
+          await webrtcService.joinRoom(localStream);
+          console.log('[GuestJoin] Joined Ant Media room with local stream');
+        } catch (error) {
+          console.error('Failed to join room:', error);
+          throw new Error('Failed to join media room');
         }
-
-        if (audioTrack) {
-          try {
-            await webrtcService.produceMedia(audioTrack);
-          } catch (error) {
-            console.error('Failed to produce audio:', error);
-            toast.error('Failed to send audio - continuing with video only');
-          }
-        }
+      } else {
+        console.warn('[GuestJoin] No local stream available when joining');
       }
 
       // Join greenroom
@@ -228,8 +230,19 @@ export function GuestJoin() {
   const handleToggleScreenShare = async () => {
     try {
       if (isScreenSharing) {
+        // Stop screen share - restore camera track
         stopScreenShare();
         setIsScreenSharing(false);
+
+        // Restore camera video track on the WebRTC connection
+        const cameraTrack = localStream?.getVideoTracks()[0];
+        if (cameraTrack) {
+          try {
+            await webrtcService.replaceVideoTrack(cameraTrack);
+          } catch (error) {
+            console.error('Failed to restore camera track:', error);
+          }
+        }
         toast.success('Screen sharing stopped');
       } else {
         const stream = await startScreenShare();
@@ -238,18 +251,22 @@ export function GuestJoin() {
           toast.success('Screen sharing started');
 
           // Handle user stopping screen share via browser UI
-          stream.getVideoTracks()[0].onended = () => {
+          const screenTrack = stream.getVideoTracks()[0];
+          screenTrack.onended = () => {
             setIsScreenSharing(false);
             stopScreenShare();
+            // Restore camera track
+            const cameraTrack = localStream?.getVideoTracks()[0];
+            if (cameraTrack) {
+              webrtcService.replaceVideoTrack(cameraTrack).catch(console.error);
+            }
           };
 
-          // Produce screen share track via WebRTC
-          const screenTrack = stream.getVideoTracks()[0];
+          // Replace camera track with screen share track on WebRTC connection
           if (screenTrack) {
             try {
-              // Note: Currently the WebRTC service treats all video the same
-              // Future enhancement: distinguish screen share from camera
-              await webrtcService.produceMedia(screenTrack);
+              await webrtcService.replaceVideoTrack(screenTrack);
+              console.log('[GuestJoin] Replaced camera with screen share');
             } catch (error) {
               console.error('Failed to share screen via WebRTC:', error);
               toast.error('Failed to share screen');

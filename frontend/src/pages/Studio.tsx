@@ -44,8 +44,9 @@ import {
   useAutoMuteDuringVideos,
   useStudioHandlers,
   usePreviewStream,
-  useGuestStreams,
+  // NOTE: useGuestStreams (P2P) removed - now using Ant Media SFU via webrtcService
 } from '../hooks/studio';
+import { webrtcService } from '../services/webrtc.service';
 import { useCanvasSettings } from '../hooks/studio/useCanvasSettings';
 import { socketService } from '../services/socket.service';
 
@@ -256,12 +257,14 @@ export function Studio() {
     setRemoteParticipants,
   } = useParticipants({ broadcastId, showChatOnStream });
 
-  // P2P Guest Streams - receive video from guests directly
-  useGuestStreams(
-    broadcastId,
-    // onStreamReceived - update participant's stream
-    useCallback((participantId: string, stream: MediaStream) => {
-      console.log('[Studio] Received stream from guest:', participantId, {
+  // Ant Media SFU Guest Streams - receive video from guests via SFU
+  // NOTE: Replaced P2P useGuestStreams with Ant Media SFU
+  useEffect(() => {
+    if (!broadcastId) return;
+
+    // Set up callback to receive guest streams from Ant Media
+    const handleRemoteStream = (streamId: string, stream: MediaStream) => {
+      console.log('[Studio] Received stream from Ant Media SFU:', streamId, {
         streamId: stream.id,
         tracks: stream.getTracks().map(t => ({
           kind: t.kind,
@@ -273,9 +276,29 @@ export function Studio() {
         audioTracks: stream.getAudioTracks().length,
         videoTracks: stream.getVideoTracks().length,
       });
+
+      // Try to match stream to a participant
+      // The streamId from Ant Media should map to participant ID
       setRemoteParticipants((prev: Map<string, any>) => {
         const updated = new Map(prev);
-        const participant = updated.get(participantId);
+
+        // First try to find participant by exact ID match
+        let participantId = streamId;
+        let participant = updated.get(participantId);
+
+        // If no exact match, try to find by iterating (stream ID might differ from participant ID)
+        if (!participant) {
+          // Look for any participant without a stream
+          for (const [id, p] of updated.entries()) {
+            if (!p.stream) {
+              participantId = id;
+              participant = p;
+              console.log('[Studio] Matched stream to participant without stream:', id);
+              break;
+            }
+          }
+        }
+
         if (participant) {
           console.log('[Studio] Updating participant stream:', participantId, {
             hadStream: !!participant.stream,
@@ -284,24 +307,40 @@ export function Studio() {
           });
           updated.set(participantId, { ...participant, stream });
         } else {
-          console.warn('[Studio] No participant found to update stream:', participantId);
+          console.warn('[Studio] No participant found to update stream:', streamId);
+          // Store the stream for later matching when participant joins
+          // For now, create a temporary entry
         }
+
         return updated;
       });
-    }, [setRemoteParticipants]),
-    // onStreamRemoved - clear participant's stream
-    useCallback((participantId: string) => {
-      console.log('[Studio] Stream removed from guest:', participantId);
+    };
+
+    const handleParticipantLeft = (streamId: string) => {
+      console.log('[Studio] Stream removed from Ant Media:', streamId);
       setRemoteParticipants((prev: Map<string, any>) => {
         const updated = new Map(prev);
-        const participant = updated.get(participantId);
-        if (participant) {
-          updated.set(participantId, { ...participant, stream: null });
+        // Try to find participant by stream ID
+        for (const [id, p] of updated.entries()) {
+          if (p.stream?.id === streamId) {
+            updated.set(id, { ...p, stream: null });
+            break;
+          }
         }
         return updated;
       });
-    }, [setRemoteParticipants])
-  );
+    };
+
+    webrtcService.setRemoteStreamCallback(handleRemoteStream);
+    webrtcService.setParticipantLeftCallback(handleParticipantLeft);
+
+    console.log('[Studio] Set up Ant Media SFU stream callbacks for broadcast:', broadcastId);
+
+    return () => {
+      webrtcService.setRemoteStreamCallback(() => {});
+      webrtcService.setParticipantLeftCallback(() => {});
+    };
+  }, [broadcastId, setRemoteParticipants]);
 
   // Broadcast
   const {

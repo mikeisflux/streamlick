@@ -2,6 +2,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { webrtcService } from '../../services/webrtc.service';
 import { audioMixerService } from '../../services/audio-mixer.service';
+import { canvasStreamService } from '../../services/canvas-stream.service';
 import toast from 'react-hot-toast';
 
 export function useWebRTC(broadcastId: string | undefined, localStream: MediaStream | null) {
@@ -9,45 +10,62 @@ export function useWebRTC(broadcastId: string | undefined, localStream: MediaStr
   const isInitializedRef = useRef(false);
 
   const initializeWebRTC = useCallback(async () => {
-    if (!broadcastId || !localStream) return;
+    if (!broadcastId) return;
 
     setIsInitializing(true);
     try {
-      // Initialize WebRTC device
+      // Initialize WebRTC connection to Ant Media SFU
       await webrtcService.initialize(broadcastId);
 
-      // Create send transport
-      await webrtcService.createSendTransport();
+      // Get the canvas output stream (composited video) for publishing to Ant Media
+      // This is what guests will see in their preview
+      let publishStream: MediaStream | null = canvasStreamService.getOutputStream();
 
-      // Produce video track from local stream (camera)
-      const videoTrack = localStream.getVideoTracks()[0];
-
-      if (videoTrack) {
-        await webrtcService.produceMedia(videoTrack);
+      if (!publishStream) {
+        // Canvas not ready yet - use local stream temporarily
+        // The canvas stream will be published when it becomes available
+        console.log('[useWebRTC] Canvas stream not ready, using local stream');
+        publishStream = localStream;
       }
 
-      // CRITICAL: For monitor mode, use audio mixer output instead of raw microphone
-      // This ensures ALL participants hear ALL audio sources:
-      // - Microphone (already in mixer)
-      // - Video audio from MediaLibrary (already in mixer)
-      // - Music and other audio sources (already in mixer)
-      const audioMixerOutputStream = audioMixerService.getOutputStream();
+      if (publishStream) {
+        // Create combined stream with canvas video + audio mixer output
+        const audioMixerOutputStream = audioMixerService.getOutputStream();
+        const combinedTracks: MediaStreamTrack[] = [];
 
-      if (audioMixerOutputStream) {
-        const audioTrack = audioMixerOutputStream.getAudioTracks()[0];
-        if (audioTrack) {
-          await webrtcService.produceMedia(audioTrack);
-          console.log('[useWebRTC] Sending audio mixer output to WebRTC (monitor mode enabled)');
-        } else {
-          console.warn('[useWebRTC] No audio track in mixer output stream');
+        // Add video track from canvas (or local stream if canvas not ready)
+        const videoTrack = publishStream.getVideoTracks()[0];
+        if (videoTrack) {
+          combinedTracks.push(videoTrack);
         }
+
+        // Add audio track from audio mixer (all audio sources combined)
+        if (audioMixerOutputStream) {
+          const audioTrack = audioMixerOutputStream.getAudioTracks()[0];
+          if (audioTrack) {
+            combinedTracks.push(audioTrack);
+            console.log('[useWebRTC] Added audio mixer output to Ant Media stream');
+          }
+        } else if (localStream) {
+          // Fallback to raw microphone if mixer not initialized
+          const audioTrack = localStream.getAudioTracks()[0];
+          if (audioTrack) {
+            combinedTracks.push(audioTrack);
+            console.warn('[useWebRTC] Audio mixer not ready, using raw microphone');
+          }
+        }
+
+        const combinedStream = new MediaStream(combinedTracks);
+        console.log('[useWebRTC] Joining Ant Media room with combined stream:', {
+          videoTracks: combinedStream.getVideoTracks().length,
+          audioTracks: combinedStream.getAudioTracks().length,
+        });
+
+        // Join the Ant Media conference room
+        // This publishes our stream and allows us to receive guest streams
+        await webrtcService.joinRoom(combinedStream);
       } else {
-        console.warn('[useWebRTC] Audio mixer not initialized, falling back to local stream audio');
-        // Fallback to raw microphone if mixer not initialized
-        const audioTrack = localStream.getAudioTracks()[0];
-        if (audioTrack) {
-          await webrtcService.produceMedia(audioTrack);
-        }
+        console.warn('[useWebRTC] No stream available to publish');
       }
 
       isInitializedRef.current = true;
