@@ -12,7 +12,7 @@ class AudioMixerService {
   private connectedElements: Map<HTMLMediaElement, string> = new Map();
   private currentMasterVolume: number = 1.0;
   private mutedStreams: Set<string> = new Set(); // Track which streams are muted
-  private heartbeatOscillator: OscillatorNode | null = null; // Keep audio graph alive
+  private heartbeatSource: ConstantSourceNode | null = null; // Keep audio graph alive with DC signal
 
   /**
    * Initialize the audio mixer with high-quality 192kbps equivalent settings
@@ -31,15 +31,14 @@ class AudioMixerService {
     // Create destination node
     this.destination = this.audioContext.createMediaStreamDestination();
 
-    // Create a silent "heartbeat" oscillator to keep the audio graph alive
+    // Create a silent DC source to keep the audio graph alive
     // This prevents WebRTC streams from becoming inactive when all sources are muted
-    this.heartbeatOscillator = this.audioContext.createOscillator();
-    const heartbeatGain = this.audioContext.createGain();
-    heartbeatGain.gain.value = 0.0001; // Essentially silent but keeps graph active
-    this.heartbeatOscillator.connect(heartbeatGain);
-    heartbeatGain.connect(this.destination);
-    this.heartbeatOscillator.start();
-    console.log('[AudioMixer] Initialized with heartbeat oscillator to keep audio graph alive');
+    // ConstantSourceNode with offset 0 produces complete silence but keeps the graph active
+    this.heartbeatSource = this.audioContext.createConstantSource();
+    this.heartbeatSource.offset.value = 0; // Complete silence (DC at 0)
+    this.heartbeatSource.connect(this.destination);
+    this.heartbeatSource.start();
+    console.log('[AudioMixer] Initialized with silent DC source to keep audio graph alive');
   }
 
   /**
@@ -233,11 +232,11 @@ class AudioMixerService {
    * Stop and cleanup the audio mixer
    */
   stop(): void {
-    // Stop heartbeat oscillator
-    if (this.heartbeatOscillator) {
-      this.heartbeatOscillator.stop();
-      this.heartbeatOscillator.disconnect();
-      this.heartbeatOscillator = null;
+    // Stop heartbeat source
+    if (this.heartbeatSource) {
+      this.heartbeatSource.stop();
+      this.heartbeatSource.disconnect();
+      this.heartbeatSource = null;
     }
 
     // Disconnect all sources and gain nodes
