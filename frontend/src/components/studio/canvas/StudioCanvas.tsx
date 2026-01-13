@@ -96,6 +96,7 @@ function HTMLPreviewVideo({
   videoEnabled,
   isSpeaking,
   isLocal,
+  avatarUrl,
   style,
 }: {
   participantId: string;
@@ -104,6 +105,7 @@ function HTMLPreviewVideo({
   videoEnabled: boolean;
   isSpeaking: boolean;
   isLocal: boolean;
+  avatarUrl?: string | null;
   style: React.CSSProperties;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -120,6 +122,9 @@ function HTMLPreviewVideo({
       }
     }
   }, [stream, videoEnabled]);
+
+  // Determine what to show when video is off
+  const showAvatar = !videoEnabled && isLocal && avatarUrl;
 
   return (
     <div
@@ -138,6 +143,25 @@ function HTMLPreviewVideo({
           className="w-full h-full object-cover"
           style={{ transform: isLocal ? 'scaleX(-1)' : 'none' }}
         />
+      ) : showAvatar ? (
+        <div className="w-full h-full flex items-center justify-center bg-gray-800">
+          <div
+            className="rounded-full overflow-hidden"
+            style={{
+              width: '50%',
+              height: 'auto',
+              aspectRatio: '1',
+              maxWidth: '200px',
+              maxHeight: '200px',
+            }}
+          >
+            <img
+              src={avatarUrl}
+              alt={name}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        </div>
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-gray-800">
           <div className="w-16 h-16 rounded-full bg-gray-600 flex items-center justify-center">
@@ -211,7 +235,7 @@ export function StudioCanvas({
   const participantAudioAddedRef = useRef<Set<string>>(new Set());
 
   // Use extracted media hook - get both refs (for canvas) and URLs (for HTML preview)
-  const { backgroundImageRef, logoImageRef, overlayImageRef, avatarImageRef, videoClipRef, streamBackground, streamLogo, streamOverlay } = useCanvasMedia();
+  const { backgroundImageRef, logoImageRef, overlayImageRef, avatarImageRef, videoClipRef, streamBackground, streamLogo, streamOverlay, streamAvatar } = useCanvasMedia();
 
   // Detect if local user is speaking
   const isLocalSpeaking = useAudioLevel(rawStream || localStream, audioEnabled);
@@ -1015,6 +1039,7 @@ export function StudioCanvas({
             videoEnabled={p.videoEnabled}
             isSpeaking={p.isSpeaking}
             isLocal={p.isLocal}
+            avatarUrl={p.isLocal ? streamAvatar : undefined}
             style={{
               left: p.x,
               top: p.y,

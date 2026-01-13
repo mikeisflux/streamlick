@@ -21,6 +21,7 @@ export function useCanvasMedia() {
   const [streamBackground, setStreamBackground] = useState<string | null>(null);
   const [streamLogo, setStreamLogo] = useState<string | null>(null);
   const [streamOverlay, setStreamOverlay] = useState<string | null>(null);
+  const [streamAvatar, setStreamAvatar] = useState<string | null>(null);
 
   // Refs for loaded images (for canvas rendering)
   const backgroundImageRef = useRef<HTMLImageElement | null>(null);
@@ -176,21 +177,50 @@ export function useCanvasMedia() {
 
   // Load avatar image
   useEffect(() => {
-    const avatarUrl = localStorage.getItem('selectedAvatar');
-    if (!avatarUrl) {
-      avatarImageRef.current = null;
-      return;
-    }
+    const loadAvatar = () => {
+      const avatarUrl = localStorage.getItem('selectedAvatar');
+      if (!avatarUrl) {
+        avatarImageRef.current = null;
+        setStreamAvatar(null);
+        return;
+      }
 
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      avatarImageRef.current = img;
+      setStreamAvatar(avatarUrl);
+
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        avatarImageRef.current = img;
+      };
+      img.onerror = () => {
+        avatarImageRef.current = null;
+      };
+      img.src = avatarUrl;
     };
-    img.onerror = () => {
-      avatarImageRef.current = null;
-    };
-    img.src = avatarUrl;
+
+    loadAvatar();
+
+    // Listen for avatar updates
+    const handleAvatarUpdated = ((e: CustomEvent) => {
+      const url = e.detail?.url || null;
+      setStreamAvatar(url);
+      if (url) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          avatarImageRef.current = img;
+        };
+        img.onerror = () => {
+          avatarImageRef.current = null;
+        };
+        img.src = url;
+      } else {
+        avatarImageRef.current = null;
+      }
+    }) as EventListener;
+
+    window.addEventListener('avatarUpdated', handleAvatarUpdated);
+    return () => window.removeEventListener('avatarUpdated', handleAvatarUpdated);
   }, []);
 
   // Video clip playback handling
@@ -292,5 +322,6 @@ export function useCanvasMedia() {
     streamBackground,
     streamLogo,
     streamOverlay,
+    streamAvatar,
   };
 }
