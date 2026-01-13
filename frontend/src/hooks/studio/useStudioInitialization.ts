@@ -93,12 +93,24 @@ export function useStudioInitialization({
         const broadcastData = await broadcastService.getById(broadcastId);
         if (!isMounted) return;
         setBroadcast(broadcastData);
+
         // Load destinations (connected destinations only)
         const destResponse = await api.get('/destinations');
         if (!isMounted) return;
         const connectedDestinations = destResponse.data;
         setDestinations(connectedDestinations);
-        // NOTE: Do NOT auto-select destinations - user chooses per broadcast via Destinations panel
+
+        // Pre-select destinations from studioConfig if no localStorage selection exists
+        if (selectedDestinations.length === 0 && broadcastData.studioConfig?.selectedDestinations) {
+          const preSelectedIds = broadcastData.studioConfig.selectedDestinations as string[];
+          const validDestinationIds = new Set(connectedDestinations.map((d: any) => d.id));
+          const validPreSelected = preSelectedIds.filter(id => validDestinationIds.has(id));
+
+          if (validPreSelected.length > 0) {
+            console.log('[Studio Init] Pre-selecting destinations from studioConfig:', validPreSelected);
+            setSelectedDestinations(validPreSelected);
+          }
+        }
 
         // CRITICAL FIX: Validate selectedDestinations against actual available destinations
         // Remove any stale/invalid destination IDs from localStorage
