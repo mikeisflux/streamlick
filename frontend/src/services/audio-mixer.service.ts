@@ -12,7 +12,7 @@ class AudioMixerService {
   private connectedElements: Map<HTMLMediaElement, string> = new Map();
   private currentMasterVolume: number = 1.0;
   private mutedStreams: Set<string> = new Set(); // Track which streams are muted
-  private heartbeatSource: ConstantSourceNode | null = null; // Keep audio graph alive with DC signal
+  private dummyAudioElement: HTMLAudioElement | null = null; // Chrome workaround
 
   /**
    * Initialize the audio mixer with high-quality 192kbps equivalent settings
@@ -31,23 +31,29 @@ class AudioMixerService {
     // Create destination node
     this.destination = this.audioContext.createMediaStreamDestination();
 
-    // Create a silent DC source to keep the audio graph alive
-    // This prevents WebRTC streams from becoming inactive when all sources are muted
-    // ConstantSourceNode with offset 0 produces complete silence but keeps the graph active
-    this.heartbeatSource = this.audioContext.createConstantSource();
-    this.heartbeatSource.offset.value = 0; // Complete silence (DC at 0)
-    this.heartbeatSource.connect(this.destination);
-    this.heartbeatSource.start();
-    console.log('[AudioMixer] Initialized with silent DC source to keep audio graph alive');
+    // CHROME WORKAROUND: Create a muted audio element attached to the output stream
+    // This fixes a Chrome bug where Web Audio API with WebRTC streams stops working
+    // See: https://blog.twoseven.xyz/chrome-webrtc-remote-volume/
+    this.dummyAudioElement = document.createElement('audio');
+    this.dummyAudioElement.muted = true;
+    this.dummyAudioElement.srcObject = this.destination.stream;
+    this.dummyAudioElement.play().catch(() => {});
+
+    console.log('[AudioMixer] Initialized with Chrome workaround (muted audio element)');
   }
 
   /**
    * Add an audio stream to the mix
+   * @param id - Unique identifier for the stream
+   * @param stream - The MediaStream to add
+   * @param playLocally - If true, also play through local speakers (for remote participants).
+   *                      Set to false for local microphone to prevent feedback.
    */
-  addStream(id: string, stream: MediaStream): void {
+  addStream(id: string, stream: MediaStream, playLocally: boolean = true): void {
     console.log('[AudioMixer] addStream called:', id, {
       initialized: !!this.audioContext && !!this.destination,
       contextState: this.audioContext?.state,
+      playLocally,
       streamTracks: stream.getTracks().map(t => ({
         kind: t.kind,
         id: t.id,
@@ -73,10 +79,15 @@ class AudioMixerService {
     const gainNode = this.audioContext.createGain();
     gainNode.gain.value = this.currentMasterVolume;
 
-    // Connect: source -> gain -> BOTH destinations (broadcast AND speakers)
+    // Connect: source -> gain -> destination(s)
     source.connect(gainNode);
-    gainNode.connect(this.destination);  // For broadcast output
-    gainNode.connect(this.audioContext.destination);  // For local speakers (host can hear guests)
+    gainNode.connect(this.destination);  // Always connect to broadcast output
+
+    // Only connect to speakers if playLocally is true (for remote participants)
+    // Don't connect local microphone to speakers - causes feedback and mute issues
+    if (playLocally) {
+      gainNode.connect(this.audioContext.destination);  // For local speakers
+    }
 
     // Store source and gain node
     this.sources.set(id, source);
@@ -84,6 +95,7 @@ class AudioMixerService {
 
     console.log('[AudioMixer] Stream added successfully:', id, {
       totalStreams: this.sources.size,
+      playLocally,
       allStreamIds: Array.from(this.sources.keys()),
     });
   }
@@ -232,11 +244,11 @@ class AudioMixerService {
    * Stop and cleanup the audio mixer
    */
   stop(): void {
-    // Stop heartbeat source
-    if (this.heartbeatSource) {
-      this.heartbeatSource.stop();
-      this.heartbeatSource.disconnect();
-      this.heartbeatSource = null;
+    // Clean up dummy audio element (Chrome workaround)
+    if (this.dummyAudioElement) {
+      this.dummyAudioElement.pause();
+      this.dummyAudioElement.srcObject = null;
+      this.dummyAudioElement = null;
     }
 
     // Disconnect all sources and gain nodes

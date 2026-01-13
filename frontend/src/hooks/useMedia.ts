@@ -107,11 +107,12 @@ export function useMedia() {
           videoEnabled: processedStream.getVideoTracks()[0]?.enabled,
         });
 
-        // CRITICAL: Initialize audio mixer and add microphone for monitor mode
+        // CRITICAL: Initialize audio mixer and add microphone for broadcast
         // This ensures all participants hear the microphone audio when WebRTC starts
+        // playLocally=false because we don't want the host to hear their own mic (causes feedback)
         audioMixerService.initialize();
-        audioMixerService.addStream('local-microphone', new MediaStream([processedAudioTrack]));
-        logger.info('[useMedia] Microphone added to audio mixer for monitor mode');
+        audioMixerService.addStream('local-microphone', new MediaStream([processedAudioTrack]), false);
+        logger.info('[useMedia] Microphone added to audio mixer (broadcast only, not local speakers)');
 
         localStreamRef.current = processedStream;
         setLocalStream(processedStream);
