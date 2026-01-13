@@ -188,22 +188,32 @@ export function useMedia() {
   }, []); // No dependencies - uses ref
 
   const toggleAudio = useCallback(() => {
+    console.log('[useMedia] toggleAudio called, stream:', !!localStreamRef.current);
     if (localStreamRef.current) {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
+      console.log('[useMedia] audioTrack:', !!audioTrack, 'enabled:', audioTrack?.enabled);
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         setAudioEnabled(audioTrack.enabled);
+        console.log('[useMedia] Audio toggled to:', audioTrack.enabled);
       }
+    } else {
+      console.warn('[useMedia] toggleAudio: No local stream available');
     }
   }, []); // No dependencies - uses ref
 
   const toggleVideo = useCallback(() => {
+    console.log('[useMedia] toggleVideo called, stream:', !!localStreamRef.current);
     if (localStreamRef.current) {
       const videoTrack = localStreamRef.current.getVideoTracks()[0];
+      console.log('[useMedia] videoTrack:', !!videoTrack, 'enabled:', videoTrack?.enabled);
       if (videoTrack) {
         videoTrack.enabled = !videoTrack.enabled;
         setVideoEnabled(videoTrack.enabled);
+        console.log('[useMedia] Video toggled to:', videoTrack.enabled);
       }
+    } else {
+      console.warn('[useMedia] toggleVideo: No local stream available');
     }
   }, []); // No dependencies - uses ref
 

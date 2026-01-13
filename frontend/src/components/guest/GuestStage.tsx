@@ -369,7 +369,10 @@ export function GuestStage({
           <div className="flex items-center gap-2">
             {/* Microphone */}
             <button
-              onClick={onToggleAudio}
+              onClick={() => {
+                console.log('[GuestStage] Mic button clicked, calling onToggleAudio');
+                onToggleAudio();
+              }}
               className={`flex items-center gap-1 px-3 py-2 rounded-lg transition-colors ${
                 audioEnabled
                   ? 'bg-gray-100 hover:bg-gray-200 text-gray-700'
@@ -386,14 +389,14 @@ export function GuestStage({
                   </>
                 )}
               </svg>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
             </button>
 
             {/* Camera */}
             <button
-              onClick={onToggleVideo}
+              onClick={() => {
+                console.log('[GuestStage] Camera button clicked, calling onToggleVideo');
+                onToggleVideo();
+              }}
               className={`flex items-center gap-1 px-3 py-2 rounded-lg transition-colors ${
                 videoEnabled
                   ? 'bg-gray-100 hover:bg-gray-200 text-gray-700'
@@ -409,9 +412,6 @@ export function GuestStage({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18" />
                   </>
                 )}
-              </svg>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
 

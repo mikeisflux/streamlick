@@ -19,6 +19,11 @@ import logger from '../utils/logger';
 const ANT_MEDIA_SERVER_URL = import.meta.env.VITE_ANT_MEDIA_SERVER_URL || 'https://media.streamlick.com:5443';
 const ANT_MEDIA_APP_NAME = import.meta.env.VITE_ANT_MEDIA_APP_NAME || 'StreamLick';
 
+// TURN Server configuration for NAT traversal (required for remote guests behind firewalls)
+const TURN_SERVER_URL = import.meta.env.VITE_TURN_SERVER_URL;
+const TURN_SERVER_USERNAME = import.meta.env.VITE_TURN_SERVER_USERNAME;
+const TURN_SERVER_CREDENTIAL = import.meta.env.VITE_TURN_SERVER_CREDENTIAL;
+
 interface ConnectionState {
   state: 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed';
   lastCheck: number;
@@ -51,11 +56,36 @@ class WebRTCService {
   private onRemoteStream: RemoteStreamCallback | null = null;
   private onParticipantLeft: ParticipantLeftCallback | null = null;
 
-  // ICE servers
-  private iceServers: RTCIceServer[] = [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-  ];
+  // ICE servers - build dynamically based on configuration
+  private iceServers: RTCIceServer[] = (() => {
+    const servers: RTCIceServer[] = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ];
+
+    // Add TURN server if configured (required for guests behind restrictive NATs/firewalls)
+    if (TURN_SERVER_URL && TURN_SERVER_USERNAME && TURN_SERVER_CREDENTIAL) {
+      servers.push({
+        urls: TURN_SERVER_URL,
+        username: TURN_SERVER_USERNAME,
+        credential: TURN_SERVER_CREDENTIAL,
+      });
+      // Also add TURNS (TLS) variant if it's a turn: URL
+      if (TURN_SERVER_URL.startsWith('turn:')) {
+        const turnsUrl = TURN_SERVER_URL.replace('turn:', 'turns:').replace(':3478', ':5349');
+        servers.push({
+          urls: turnsUrl,
+          username: TURN_SERVER_USERNAME,
+          credential: TURN_SERVER_CREDENTIAL,
+        });
+      }
+      logger.info('[WebRTC-SFU] TURN server configured:', TURN_SERVER_URL);
+    } else {
+      logger.warn('[WebRTC-SFU] No TURN server configured - remote guests may have connection issues');
+    }
+
+    return servers;
+  })();
 
   /**
    * Initialize WebRTC for a broadcast room
