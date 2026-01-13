@@ -47,9 +47,8 @@ export function DashboardLayout({ children, title, subtitle, actions }: Dashboar
       ),
     },
     {
-      path: '/settings',
+      path: '/destinations',
       label: 'Destinations',
-      settingsTab: 'destinations',
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
@@ -59,7 +58,6 @@ export function DashboardLayout({ children, title, subtitle, actions }: Dashboar
     {
       path: '/members',
       label: 'Members',
-      disabled: true,
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -90,9 +88,9 @@ export function DashboardLayout({ children, title, subtitle, actions }: Dashboar
     },
   ];
 
-  const handleNavClick = (item: typeof navItems[0]) => {
+  const handleNavClick = (item: { path: string; label: string; icon: React.ReactNode; disabled?: boolean; settingsTab?: string }) => {
     if (item.disabled) {
-      toast('Members feature coming soon!', { icon: '🚧' });
+      toast('Feature coming soon!', { icon: '🚧' });
       return;
     }
     if (item.settingsTab) {
@@ -133,10 +131,8 @@ export function DashboardLayout({ children, title, subtitle, actions }: Dashboar
               key={item.path + item.label}
               onClick={() => handleNavClick(item)}
               className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg mt-1 transition-colors ${
-                isActive(item.path) && !item.settingsTab
+                isActive(item.path)
                   ? 'text-primary-600 bg-primary-50'
-                  : item.disabled
-                  ? 'text-gray-400 hover:bg-gray-100 cursor-not-allowed'
                   : 'text-gray-700 hover:bg-gray-100'
               }`}
             >

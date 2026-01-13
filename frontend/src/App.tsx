@@ -31,6 +31,8 @@ import { DataDeletion } from './pages/DataDeletion';
 import { FAQ } from './pages/FAQ';
 import { Analytics } from './pages/Analytics';
 import { OAuthSuccess } from './pages/OAuthSuccess';
+import { Destinations } from './pages/Destinations';
+import { Members } from './pages/Members';
 import { useEffect } from 'react';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -118,6 +120,22 @@ function App() {
           element={
             <PrivateRoute>
               <Analytics />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/destinations"
+          element={
+            <PrivateRoute>
+              <Destinations />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/members"
+          element={
+            <PrivateRoute>
+              <Members />
             </PrivateRoute>
           }
         />
