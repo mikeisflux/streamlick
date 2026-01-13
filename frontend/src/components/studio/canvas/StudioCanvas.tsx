@@ -402,48 +402,25 @@ export function StudioCanvas({
 
         const cornerRadius = 16;
 
-        // Helper to get/create cache
-        const getCache = (id: string, w: number, h: number) => {
-          let cache = participantCanvasCacheRef.current.get(id);
-          if (!cache || Math.abs(cache.canvas.width - w) > 10 || Math.abs(cache.canvas.height - h) > 10) {
-            const newCanvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(Math.round(w), Math.round(h)) : (() => { const c = document.createElement('canvas'); c.width = Math.round(w); c.height = Math.round(h); return c; })();
-            const newCtx = newCanvas.getContext('2d');
-            if (newCtx) {
-              cache = { canvas: newCanvas, ctx: newCtx, lastFrameTime: 0 };
-              participantCanvasCacheRef.current.set(id, cache);
-            }
-          }
-          return cache;
-        };
-
         // DEBUG: Track flicker issues - log only when state changes
         const debugStateRef = (window as any).__flickerDebug = (window as any).__flickerDebug || {};
 
-        // Draw participants
+        // Draw participants - SIMPLIFIED: Draw directly from video, no cache
         allParticipants.forEach((p, i) => {
           if (i >= positions.length) return;
           const pos = positions[i];
 
-          // CRITICAL FIX: Use readyState >= 2 (HAVE_CURRENT_DATA) instead of >= 3
-          // readyState 2 is sufficient to draw the current frame
+          // Check if video is ready to draw
           const videoReady = p.video && p.video.readyState >= 2 && p.video.videoWidth > 0 && p.video.videoHeight > 0;
-
-          const cache = getCache(p.id, pos.width, pos.height);
-          const hasCachedFrame = cache && cache.lastFrameTime > 0;
 
           // DEBUG: Log state changes for remote participants
           if (p.type === 'remote') {
             const debugKey = `${p.id}_state`;
             const currentState = JSON.stringify({
               videoEnabled: p.videoEnabled,
-              hasVideo: !!p.video,
               videoReady,
               readyState: p.video?.readyState,
               videoWidth: p.video?.videoWidth,
-              videoHeight: p.video?.videoHeight,
-              hasSrcObject: !!p.video?.srcObject,
-              hasCache: !!cache,
-              cacheLastFrame: cache?.lastFrameTime || 0,
             });
             if (debugStateRef[debugKey] !== currentState) {
               console.log(`[FLICKER DEBUG] ${p.id.substring(0, 8)}:`, JSON.parse(currentState));
@@ -451,7 +428,6 @@ export function StudioCanvas({
             }
           }
 
-          // SIMPLIFIED: Always try to update cache if video is ready, always draw from cache if available
           const shouldDrawAvatar = !p.videoEnabled && p.type === 'local' && avatarImageRef.current;
 
           ctx.save();
@@ -459,17 +435,14 @@ export function StudioCanvas({
           ctx.roundRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
           ctx.clip();
 
-          // CRITICAL: Update cache FIRST, then check if we can draw from it
-          // This prevents the first frame from being dark
-          if (p.videoEnabled && videoReady && cache) {
-            try { cache.ctx.drawImage(p.video!, 0, 0, cache.canvas.width, cache.canvas.height); cache.lastFrameTime = now; } catch {}
-          }
-
-          // Now check if we can draw from cache (including if we just updated it)
-          const canDrawFromCache = p.videoEnabled && cache && cache.lastFrameTime > 0;
-
-          if (canDrawFromCache) {
-            try { ctx.drawImage(cache.canvas, pos.x, pos.y, pos.width, pos.height); } catch { ctx.fillStyle = '#1a1a1a'; ctx.fillRect(pos.x, pos.y, pos.width, pos.height); }
+          // Draw directly from video element (no cache) - simpler and more reliable
+          if (p.videoEnabled && videoReady) {
+            try {
+              ctx.drawImage(p.video!, pos.x, pos.y, pos.width, pos.height);
+            } catch {
+              ctx.fillStyle = '#1a1a1a';
+              ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+            }
           } else if (shouldDrawAvatar) {
             const size = Math.min(pos.width, pos.height) * 0.5;
             const avatarX = pos.x + (pos.width - size) / 2;
@@ -480,25 +453,14 @@ export function StudioCanvas({
             ctx.clip();
             ctx.drawImage(avatarImageRef.current!, avatarX, avatarY, size, size);
             ctx.restore();
-          } else if (p.type === 'remote' && p.videoEnabled) {
-            // FALLBACK: Remote participant with video enabled but no cache yet
-            // Try to draw directly from video if available, otherwise dark placeholder
-            if (videoReady && p.video) {
-              try {
-                ctx.drawImage(p.video, pos.x, pos.y, pos.width, pos.height);
-              } catch {
-                ctx.fillStyle = '#1a1a1a';
-                ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
-              }
-            } else {
-              // Waiting for video - draw dark placeholder with "Connecting..." text
-              ctx.fillStyle = '#1a1a1a';
+          } else if (p.type === 'remote') {
+            // Remote participant waiting for video - draw placeholder
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+            if (!p.videoEnabled) {
+              // Video disabled - show darker background
+              ctx.fillStyle = '#111';
               ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
-              ctx.fillStyle = '#666666';
-              ctx.font = '16px Inter, system-ui, sans-serif';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillText('Connecting...', pos.x + pos.width / 2, pos.y + pos.height / 2);
             }
           }
 

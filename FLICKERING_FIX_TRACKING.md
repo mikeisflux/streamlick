@@ -531,3 +531,64 @@ Connection established - no further polling
 **Status:** APPLIED
 
 ---
+
+### Diagnosis Session: January 13, 2026
+
+**Reported Issues:**
+1. Guest side video is completely clear (no flickering)
+2. Host stage (canvas) has NON-STOP FAST flickering
+3. Guest connection freezes after ~2 minutes
+
+**Analysis:**
+- Since guest side is clear, the WebRTC stream itself is stable
+- The flickering is 100% a canvas rendering issue on the host side
+- The cache system was designed to prevent flickering but may be CAUSING it
+
+**Root Cause Identified:**
+The cache system in StudioCanvas.tsx was causing issues:
+1. Cache recreated when position dimensions change (line 408 had `> 10` pixel threshold)
+2. When cache is recreated, `lastFrameTime` resets to 0
+3. This causes `canDrawFromCache` to be false for that frame
+4. Frame drops to fallback/placeholder, causing visual flicker
+5. If positions fluctuate slightly each frame, this compounds
+
+**Change 19: Remove Cache System - Draw Directly from Video**
+**File:** `frontend/src/components/studio/canvas/StudioCanvas.tsx`
+
+**Fix:** Simplified the rendering to draw directly from the video element without the cache intermediary:
+```javascript
+// OLD: Cache-based (causing flicker)
+if (p.videoEnabled && videoReady && cache) {
+  cache.ctx.drawImage(p.video!, 0, 0, cache.canvas.width, cache.canvas.height);
+}
+if (canDrawFromCache) {
+  ctx.drawImage(cache.canvas, ...);
+}
+
+// NEW: Direct draw (simpler, matches preview tiles which don't flicker)
+if (p.videoEnabled && videoReady) {
+  ctx.drawImage(p.video!, pos.x, pos.y, pos.width, pos.height);
+}
+```
+
+**Rationale:**
+- Preview tiles use direct `<video>` elements and DON'T flicker
+- The cache was supposed to help but introduced complexity and failure modes
+- Direct drawImage from video is the simplest, most reliable approach
+
+**Status:** TESTING
+
+---
+
+### Freezing Issue (~2 minutes)
+
+**Possible Causes:**
+1. WebRTC ICE connection timing out
+2. Auto-reconnect not triggering properly
+3. Video track ending without notification
+
+**Added (Change 18):** Auto-reconnect mechanism, but needs verification it's actually working.
+
+**Status:** INVESTIGATING
+
+---
