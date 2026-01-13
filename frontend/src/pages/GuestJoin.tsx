@@ -62,6 +62,7 @@ export function GuestJoin() {
     selectedVideoDevice,
     setSelectedAudioDevice,
     setSelectedVideoDevice,
+    refreshDevices,
   } = useDeviceEnumeration();
 
   // Status listeners hook
@@ -108,8 +109,15 @@ export function GuestJoin() {
       }
     };
 
+    const initCamera = async () => {
+      await startCamera();
+      // Re-enumerate devices after camera permission is granted
+      // This ensures device labels are available (browsers only show labels after permission)
+      await refreshDevices();
+    };
+
     loadInvite();
-    startCamera();
+    initCamera();
   }, [token]);
 
   // Cleanup on unmount

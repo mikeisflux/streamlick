@@ -18,6 +18,7 @@ import { compositorService } from '../../services/compositor.service';
 import { canvasStreamService } from '../../services/canvas-stream.service';
 import { recordingService } from '../../services/recording.service';
 import { broadcastOutputService, BroadcastDestination } from '../../services/broadcast-output.service';
+import { audioMixerService } from '../../services/audio-mixer.service';
 import { useStudioStore } from '../../store/studioStore';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
@@ -164,13 +165,39 @@ export function useBroadcast({
     }
 
     try {
-      // Get canvas stream from StudioCanvas
-      const compositeStream = canvasStreamService.getOutputStream();
-      if (!compositeStream) {
+      // Get canvas stream from StudioCanvas (video only)
+      const canvasStream = canvasStreamService.getOutputStream();
+      if (!canvasStream) {
         throw new Error('No canvas stream available - please ensure you are on stage');
       }
 
-      // Initialize broadcast output with canvas stream
+      // Initialize audio mixer if not already done
+      audioMixerService.initialize();
+
+      // Get mixed audio output (includes host + all guests)
+      const audioOutputStream = audioMixerService.getOutputStream();
+
+      // Combine canvas video with mixed audio
+      let compositeStream: MediaStream;
+      if (audioOutputStream) {
+        const audioTrack = audioOutputStream.getAudioTracks()[0];
+        if (audioTrack) {
+          const combined = canvasStreamService.combineWithAudio(audioTrack);
+          compositeStream = combined || canvasStream;
+          console.log('[useBroadcast] Combined stream with audio:', {
+            videoTracks: compositeStream.getVideoTracks().length,
+            audioTracks: compositeStream.getAudioTracks().length,
+          });
+        } else {
+          console.warn('[useBroadcast] No audio track available from mixer');
+          compositeStream = canvasStream;
+        }
+      } else {
+        console.warn('[useBroadcast] Audio mixer has no output stream');
+        compositeStream = canvasStream;
+      }
+
+      // Initialize broadcast output with combined video+audio stream
       broadcastOutputService.initialize(compositeStream);
 
       // Prepare destination settings for backend
