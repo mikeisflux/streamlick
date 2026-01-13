@@ -32,11 +32,9 @@ logging:
   level: info
   pion_level: warn
 
-# TURN server (built-in)
+# TURN server (disabled - using external coturn)
 turn:
-  enabled: true
-  udp_port: 3478
-  tls_port: 5349
+  enabled: false
 
 # Webhooks (optional - for backend notifications)
 # webhook:

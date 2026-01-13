@@ -32,6 +32,12 @@ const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL || 'wss://media.streamlick.
 const LIVEKIT_API_KEY = import.meta.env.VITE_LIVEKIT_API_KEY || 'devkey';
 const LIVEKIT_API_SECRET = import.meta.env.VITE_LIVEKIT_API_SECRET || 'secret';
 
+// External TURN server configuration
+const TURN_URL = import.meta.env.VITE_TURN_URL || 'turn:turn.streamlick.com:3478';
+const TURN_TLS_URL = import.meta.env.VITE_TURN_TLS_URL || 'turns:turn.streamlick.com:5349';
+const TURN_USERNAME = import.meta.env.VITE_TURN_USERNAME || 'streamlick';
+const TURN_PASSWORD = import.meta.env.VITE_TURN_PASSWORD || 'changeme';
+
 interface ConnectionState {
   state: 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed';
   lastCheck: number;
@@ -65,12 +71,27 @@ class WebRTCService {
     this.participantId = `participant_${Date.now()}`;
     this.closed = false;
 
-    // Create LiveKit room instance
+    // Create LiveKit room instance with external TURN server
     this.room = new Room({
       adaptiveStream: true,
       dynacast: true,
       videoCaptureDefaults: {
         resolution: VideoPresets.h720.resolution,
+      },
+      // Configure ICE servers to use external TURN
+      rtcConfig: {
+        iceServers: [
+          // STUN server (Google's public STUN)
+          { urls: 'stun:stun.l.google.com:19302' },
+          // Your coturn TURN server
+          {
+            urls: [TURN_URL, TURN_TLS_URL],
+            username: TURN_USERNAME,
+            credential: TURN_PASSWORD,
+          },
+        ],
+        // Prefer relay for more reliable connections through NAT
+        iceTransportPolicy: 'all',
       },
     });
 
