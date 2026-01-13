@@ -371,27 +371,11 @@ export function StudioCanvas({
         }
 
         onStageRemote.forEach(p => {
-          let video = remoteVideoElementsRef.current.get(p.id);
-          if (!video && p.stream) {
-            video = document.createElement('video');
-            video.autoplay = true;
-            video.playsInline = true;
-            video.muted = true;
-            video.srcObject = p.stream;
-            video.play().catch(() => {});
-            remoteVideoElementsRef.current.set(p.id, video);
-
-            if (p.audioEnabled) {
-              const audioTrack = p.stream.getAudioTracks()[0];
-              if (audioTrack) {
-                try {
-                  audioMixerService.addStream(`participant-${p.id}`, new MediaStream([audioTrack]));
-                  participantAudioAddedRef.current.add(p.id);
-                } catch {}
-              }
-            }
+          // Get existing video element - creation is handled by useEffect
+          const video = remoteVideoElementsRef.current.get(p.id);
+          if (video) {
+            allParticipants.push({ type: 'remote', id: p.id, video, participant: p, videoEnabled: p.videoEnabled });
           }
-          if (video) allParticipants.push({ type: 'remote', id: p.id, video, participant: p, videoEnabled: p.videoEnabled });
         });
 
         // Calculate positions
@@ -413,18 +397,28 @@ export function StudioCanvas({
           // Check if video is ready to draw
           const videoReady = p.video && p.video.readyState >= 2 && p.video.videoWidth > 0 && p.video.videoHeight > 0;
 
-          // DEBUG: Log state changes for remote participants
+          // DEBUG: Log state changes AND when we skip drawing
           if (p.type === 'remote') {
             const debugKey = `${p.id}_state`;
+            const willDraw = p.videoEnabled && videoReady;
             const currentState = JSON.stringify({
               videoEnabled: p.videoEnabled,
               videoReady,
+              willDraw,
               readyState: p.video?.readyState,
               videoWidth: p.video?.videoWidth,
             });
             if (debugStateRef[debugKey] !== currentState) {
               console.log(`[FLICKER DEBUG] ${p.id.substring(0, 8)}:`, JSON.parse(currentState));
               debugStateRef[debugKey] = currentState;
+            }
+            // Log every frame where we DON'T draw video (limited to once per second)
+            if (!willDraw) {
+              const skipKey = `${p.id}_skipCount`;
+              debugStateRef[skipKey] = (debugStateRef[skipKey] || 0) + 1;
+              if (debugStateRef[skipKey] % 30 === 1) {
+                console.log(`[FLICKER] NOT drawing ${p.id.substring(0, 8)} - videoEnabled:${p.videoEnabled} videoReady:${videoReady} (skipped ${debugStateRef[skipKey]} frames)`);
+              }
             }
           }
 
