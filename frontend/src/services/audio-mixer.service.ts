@@ -173,6 +173,28 @@ class AudioMixerService {
   }
 
   /**
+   * Mute a specific stream (sets gain to 0)
+   */
+  muteStream(id: string): void {
+    const gainNode = this.gainNodes.get(id);
+    if (gainNode) {
+      gainNode.gain.value = 0;
+      console.log('[AudioMixer] Muted stream:', id);
+    }
+  }
+
+  /**
+   * Unmute a specific stream (restores to master volume)
+   */
+  unmuteStream(id: string): void {
+    const gainNode = this.gainNodes.get(id);
+    if (gainNode) {
+      gainNode.gain.value = this.currentMasterVolume;
+      console.log('[AudioMixer] Unmuted stream:', id);
+    }
+  }
+
+  /**
    * Get the mixed output stream
    */
   getOutputStream(): MediaStream | null {

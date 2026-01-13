@@ -193,9 +193,19 @@ export function useMedia() {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
       console.log('[useMedia] audioTrack:', !!audioTrack, 'enabled:', audioTrack?.enabled);
       if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setAudioEnabled(audioTrack.enabled);
-        console.log('[useMedia] Audio toggled to:', audioTrack.enabled);
+        const newEnabled = !audioTrack.enabled;
+        audioTrack.enabled = newEnabled;
+        setAudioEnabled(newEnabled);
+
+        // Also control the gain node in the audio mixer to prevent audio graph issues
+        // Use gain-based muting which doesn't affect other streams in the mixer
+        if (newEnabled) {
+          audioMixerService.unmuteStream('local-microphone');
+        } else {
+          audioMixerService.muteStream('local-microphone');
+        }
+
+        console.log('[useMedia] Audio toggled to:', newEnabled);
       }
     } else {
       console.warn('[useMedia] toggleAudio: No local stream available');
