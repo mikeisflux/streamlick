@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import { Button } from '../Button';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 
@@ -11,11 +10,26 @@ interface Asset {
   createdAt: string;
 }
 
+interface BrandColors {
+  primary: string;
+  secondary: string;
+  accent: string;
+  text: string;
+}
+
+type AssetType = 'logo' | 'overlay' | 'background' | 'banner';
+
 export function BrandingSettings() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [uploadType, setUploadType] = useState<'logo' | 'overlay' | 'background'>('logo');
+  const [uploadType, setUploadType] = useState<AssetType>('logo');
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [brandColors, setBrandColors] = useState<BrandColors>({
+    primary: '#6366f1',
+    secondary: '#8b5cf6',
+    accent: '#22c55e',
+    text: '#ffffff',
+  });
 
   useEffect(() => {
     loadAssets();
@@ -26,7 +40,8 @@ export function BrandingSettings() {
       const response = await api.get('/assets');
       setAssets(response.data);
     } catch (error) {
-      toast.error('Failed to load assets');
+      // Silently fail - assets may not exist yet
+      setAssets([]);
     } finally {
       setIsLoading(false);
     }
@@ -46,91 +61,195 @@ export function BrandingSettings() {
 
   const filterByType = (type: string) => assets.filter((a) => a.type === type);
 
+  const openUploadModal = (type: AssetType) => {
+    setUploadType(type);
+    setShowUploadModal(true);
+  };
+
+  const handleColorChange = (key: keyof BrandColors, value: string) => {
+    setBrandColors(prev => ({ ...prev, [key]: value }));
+  };
+
+  const saveColors = async () => {
+    try {
+      await api.post('/settings/brand-colors', brandColors);
+      toast.success('Brand colors saved');
+    } catch (error) {
+      toast.error('Failed to save colors');
+    }
+  };
+
+  const assetCategories = [
+    {
+      type: 'logo' as AssetType,
+      title: 'Logos',
+      description: 'Upload your logo to display on your stream',
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      ),
+      acceptFormats: 'PNG, JPG, SVG, GIF',
+      gridCols: 'grid-cols-2 md:grid-cols-4 lg:grid-cols-6',
+    },
+    {
+      type: 'overlay' as AssetType,
+      title: 'Overlays',
+      description: 'Add visual overlays like borders, lower thirds, and frames',
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+        </svg>
+      ),
+      acceptFormats: 'PNG with transparency',
+      gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+    },
+    {
+      type: 'background' as AssetType,
+      title: 'Backgrounds',
+      description: 'Set custom backgrounds for your stream scenes',
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+        </svg>
+      ),
+      acceptFormats: 'PNG, JPG, MP4, WEBM',
+      gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+    },
+    {
+      type: 'banner' as AssetType,
+      title: 'Banners',
+      description: 'Create ticker banners and announcement graphics',
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+        </svg>
+      ),
+      acceptFormats: 'PNG, JPG, GIF',
+      gridCols: 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3',
+    },
+  ];
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
+      {/* Header */}
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Branding & Assets</h2>
-        <p className="text-gray-600">Upload logos, overlays, and backgrounds for your streams</p>
+        <h2 className="text-xl font-semibold text-gray-900">Branding</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          Customize your stream's visual identity with logos, overlays, and colors
+        </p>
       </div>
 
-      {/* Logos Section */}
-      <div>
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Logos</h3>
-          <Button
-            size="sm"
-            onClick={() => {
-              setUploadType('logo');
-              setShowUploadModal(true);
-            }}
-          >
-            + Upload Logo
-          </Button>
+      {/* Brand Colors Section */}
+      <div className="bg-gray-50 rounded-xl p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
+            <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="font-medium text-gray-900">Brand Colors</h3>
+            <p className="text-sm text-gray-500">Set your brand's color palette for overlays and text</p>
+          </div>
         </div>
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {filterByType('logo').map((asset) => (
-            <AssetCard key={asset.id} asset={asset} onDelete={handleDelete} />
-          ))}
-          {filterByType('logo').length === 0 && (
-            <div className="col-span-full text-center py-8 bg-gray-50 rounded-lg">
-              <p className="text-gray-500">No logos uploaded yet</p>
+          {[
+            { key: 'primary', label: 'Primary' },
+            { key: 'secondary', label: 'Secondary' },
+            { key: 'accent', label: 'Accent' },
+            { key: 'text', label: 'Text' },
+          ].map(({ key, label }) => (
+            <div key={key} className="bg-white rounded-lg p-4 shadow-sm">
+              <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <input
+                    type="color"
+                    value={brandColors[key as keyof BrandColors]}
+                    onChange={(e) => handleColorChange(key as keyof BrandColors, e.target.value)}
+                    className="w-10 h-10 rounded-lg cursor-pointer border-0 p-0"
+                  />
+                </div>
+                <input
+                  type="text"
+                  value={brandColors[key as keyof BrandColors]}
+                  onChange={(e) => handleColorChange(key as keyof BrandColors, e.target.value)}
+                  className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent uppercase"
+                />
+              </div>
             </div>
-          )}
+          ))}
         </div>
-      </div>
 
-      {/* Overlays Section */}
-      <div>
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Overlays</h3>
-          <Button
-            size="sm"
-            onClick={() => {
-              setUploadType('overlay');
-              setShowUploadModal(true);
-            }}
+        <div className="mt-4 flex justify-end">
+          <button
+            onClick={saveColors}
+            className="px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors"
           >
-            + Upload Overlay
-          </Button>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {filterByType('overlay').map((asset) => (
-            <AssetCard key={asset.id} asset={asset} onDelete={handleDelete} />
-          ))}
-          {filterByType('overlay').length === 0 && (
-            <div className="col-span-full text-center py-8 bg-gray-50 rounded-lg">
-              <p className="text-gray-500">No overlays uploaded yet</p>
-            </div>
-          )}
+            Save Colors
+          </button>
         </div>
       </div>
 
-      {/* Backgrounds Section */}
-      <div>
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Backgrounds</h3>
-          <Button
-            size="sm"
-            onClick={() => {
-              setUploadType('background');
-              setShowUploadModal(true);
-            }}
-          >
-            + Upload Background
-          </Button>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {filterByType('background').map((asset) => (
-            <AssetCard key={asset.id} asset={asset} onDelete={handleDelete} />
-          ))}
-          {filterByType('background').length === 0 && (
-            <div className="col-span-full text-center py-8 bg-gray-50 rounded-lg">
-              <p className="text-gray-500">No backgrounds uploaded yet</p>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Asset Categories */}
+      {assetCategories.map((category) => {
+        const categoryAssets = filterByType(category.type);
 
+        return (
+          <div key={category.type} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            {/* Category Header */}
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-600">
+                  {category.icon}
+                </div>
+                <div>
+                  <h3 className="font-medium text-gray-900">{category.title}</h3>
+                  <p className="text-sm text-gray-500">{category.description}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => openUploadModal(category.type)}
+                className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Upload
+              </button>
+            </div>
+
+            {/* Assets Grid */}
+            <div className="p-6">
+              {categoryAssets.length > 0 ? (
+                <div className={`grid gap-4 ${category.gridCols}`}>
+                  {categoryAssets.map((asset) => (
+                    <AssetCard key={asset.id} asset={asset} onDelete={handleDelete} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  type={category.type}
+                  acceptFormats={category.acceptFormats}
+                  onUpload={() => openUploadModal(category.type)}
+                />
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Upload Modal */}
       {showUploadModal && (
         <UploadAssetModal
           type={uploadType}
@@ -151,30 +270,113 @@ interface AssetCardProps {
 }
 
 function AssetCard({ asset, onDelete }: AssetCardProps) {
+  const [showMenu, setShowMenu] = useState(false);
+
   return (
-    <div className="relative group">
-      <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden">
+    <div className="group relative bg-gray-50 rounded-lg overflow-hidden border border-gray-200 hover:border-gray-300 transition-colors">
+      {/* Preview */}
+      <div className="aspect-video bg-gray-900 flex items-center justify-center">
         <img
           src={asset.fileUrl}
           alt={asset.name}
-          className="w-full h-full object-cover"
+          className="max-w-full max-h-full object-contain"
         />
       </div>
-      <div className="mt-2">
-        <p className="text-sm font-medium text-gray-900 truncate">{asset.name}</p>
+
+      {/* Info */}
+      <div className="p-3 flex items-center justify-between">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-gray-900 truncate">{asset.name}</p>
+          <p className="text-xs text-gray-500">
+            {new Date(asset.createdAt).toLocaleDateString()}
+          </p>
+        </div>
+
+        {/* Menu Button */}
+        <div className="relative">
+          <button
+            onClick={() => setShowMenu(!showMenu)}
+            className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
+          >
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+            </svg>
+          </button>
+
+          {showMenu && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
+              <div className="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                <button
+                  onClick={() => {
+                    window.open(asset.fileUrl, '_blank');
+                    setShowMenu(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  View full size
+                </button>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(asset.fileUrl);
+                    toast.success('URL copied');
+                    setShowMenu(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  Copy URL
+                </button>
+                <hr className="my-1 border-gray-100" />
+                <button
+                  onClick={() => {
+                    onDelete(asset.id);
+                    setShowMenu(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                >
+                  Delete
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
-      <button
-        onClick={() => onDelete(asset.id)}
-        className="absolute top-2 right-2 bg-red-600 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-      >
-        🗑️
+    </div>
+  );
+}
+
+interface EmptyStateProps {
+  type: AssetType;
+  acceptFormats: string;
+  onUpload: () => void;
+}
+
+function EmptyState({ type, acceptFormats, onUpload }: EmptyStateProps) {
+  return (
+    <div
+      onClick={onUpload}
+      className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center hover:border-gray-300 hover:bg-gray-50 transition-colors cursor-pointer"
+    >
+      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+        <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+        </svg>
+      </div>
+      <p className="text-sm font-medium text-gray-900 mb-1">
+        No {type}s uploaded yet
+      </p>
+      <p className="text-xs text-gray-500 mb-4">
+        Accepted formats: {acceptFormats}
+      </p>
+      <button className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors">
+        Upload {type}
       </button>
     </div>
   );
 }
 
 interface UploadAssetModalProps {
-  type: 'logo' | 'overlay' | 'background';
+  type: AssetType;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -184,6 +386,37 @@ function UploadAssetModal({ type, onClose, onSuccess }: UploadAssetModalProps) {
   const [fileUrl, setFileUrl] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadMethod, setUploadMethod] = useState<'file' | 'url'>('file');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const droppedFile = e.dataTransfer.files[0];
+    if (droppedFile && droppedFile.type.startsWith('image/')) {
+      setFile(droppedFile);
+      if (!name) setName(droppedFile.name.replace(/\.[^/.]+$/, ''));
+    }
+  }, [name]);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+      if (!name) setName(selectedFile.name.replace(/\.[^/.]+$/, ''));
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,11 +428,11 @@ function UploadAssetModal({ type, onClose, onSuccess }: UploadAssetModalProps) {
       await api.post('/assets/upload', {
         type,
         name: name || file?.name || 'Untitled',
-        fileUrl: fileUrl || (file ? URL.createObjectURL(file) : ''),
+        fileUrl: uploadMethod === 'url' ? fileUrl : (file ? URL.createObjectURL(file) : ''),
         mimeType: file?.type,
         fileSizeBytes: file?.size,
       });
-      toast.success(`${type} uploaded successfully`);
+      toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} uploaded successfully`);
       onSuccess();
     } catch (error) {
       toast.error(`Failed to upload ${type}`);
@@ -208,82 +441,191 @@ function UploadAssetModal({ type, onClose, onSuccess }: UploadAssetModalProps) {
     }
   };
 
+  const typeLabels: Record<AssetType, { title: string; description: string }> = {
+    logo: {
+      title: 'Upload Logo',
+      description: 'Add your logo to display on your stream',
+    },
+    overlay: {
+      title: 'Upload Overlay',
+      description: 'Add overlays like borders and lower thirds',
+    },
+    background: {
+      title: 'Upload Background',
+      description: 'Add custom backgrounds for your scenes',
+    },
+    banner: {
+      title: 'Upload Banner',
+      description: 'Add ticker banners and announcements',
+    },
+  };
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-md w-full p-6">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-gray-900 capitalize">Upload {type}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            ✕
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl max-w-lg w-full shadow-2xl">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">{typeLabels[type].title}</h3>
+            <p className="text-sm text-gray-500">{typeLabels[type].description}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* Name Input */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Name</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={`My ${type}`}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
             />
           </div>
 
+          {/* Upload Method Toggle */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Upload Method
-            </label>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="uploadMethod"
-                  value="file"
-                  defaultChecked
-                  className="text-primary-600"
-                />
-                <span>Upload File</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="uploadMethod"
-                  value="url"
-                  className="text-primary-600"
-                />
-                <span>Use URL</span>
-              </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Source</label>
+            <div className="flex bg-gray-100 rounded-lg p-1">
+              <button
+                type="button"
+                onClick={() => setUploadMethod('file')}
+                className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+                  uploadMethod === 'file'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Upload File
+              </button>
+              <button
+                type="button"
+                onClick={() => setUploadMethod('url')}
+                className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+                  uploadMethod === 'url'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                From URL
+              </button>
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              File or URL
-            </label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-            />
-            <p className="text-xs text-gray-500 mt-1">Or</p>
-            <input
-              type="url"
-              value={fileUrl}
-              onChange={(e) => setFileUrl(e.target.value)}
-              placeholder="https://example.com/image.png"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent mt-2"
-            />
-          </div>
+          {/* File Upload or URL Input */}
+          {uploadMethod === 'file' ? (
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                  isDragging
+                    ? 'border-primary-500 bg-primary-50'
+                    : file
+                    ? 'border-green-300 bg-green-50'
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {file ? (
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                      <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-medium text-gray-900">{file.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {(file.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900 mb-1">
+                      Drop your file here or click to browse
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      PNG, JPG, SVG, GIF, MP4, WEBM up to 50MB
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Image URL</label>
+              <input
+                type="url"
+                value={fileUrl}
+                onChange={(e) => setFileUrl(e.target.value)}
+                placeholder="https://example.com/image.png"
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+              />
+              {fileUrl && (
+                <div className="mt-3 p-2 bg-gray-50 rounded-lg">
+                  <img
+                    src={fileUrl}
+                    alt="Preview"
+                    className="max-h-32 mx-auto rounded"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
-          <div className="flex gap-2 pt-4">
-            <Button type="button" variant="ghost" onClick={onClose} className="flex-1">
+          {/* Actions */}
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+            >
               Cancel
-            </Button>
-            <Button type="submit" disabled={isLoading || (!file && !fileUrl)} className="flex-1">
-              {isLoading ? 'Uploading...' : 'Upload'}
-            </Button>
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading || (uploadMethod === 'file' ? !file : !fileUrl)}
+              className="flex-1 px-4 py-2.5 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Uploading...
+                </span>
+              ) : (
+                'Upload'
+              )}
+            </button>
           </div>
         </form>
       </div>
