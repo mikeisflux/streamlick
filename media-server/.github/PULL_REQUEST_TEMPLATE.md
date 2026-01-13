@@ -1,1 +1,0 @@
-https://github.com/ant-media/Ant-Media-Server/issues/{__Enter issue number__}

@@ -1,38 +1,40 @@
 /**
- * WebRTC Service - SFU Mode for Multi-Guest
+ * WebRTC Service - LiveKit SFU Mode for Multi-Guest
  *
- * This service handles WebRTC connections for multi-guest scenarios ONLY.
- * It connects to an SFU (Ant Media Server in conference mode) to distribute
- * participant tracks to all guests.
+ * This service handles WebRTC connections for multi-guest scenarios using LiveKit.
+ * LiveKit provides a production-ready SFU with room/conference support.
  *
  * IMPORTANT: This is NOT used for streaming output!
  * Streaming is handled by broadcast-output.service.ts using WHIP/RTMP-relay.
  *
  * Architecture:
- * - Each participant publishes their camera/mic to the SFU
- * - SFU distributes all tracks to all participants
+ * - Each participant publishes their camera/mic to LiveKit
+ * - LiveKit distributes all tracks to all participants
  * - Each browser composites locally using StudioCanvas
  * - Canvas output goes directly to platforms via WHIP or RTMP relay
  */
+import {
+  Room,
+  RoomEvent,
+  RemoteParticipant,
+  RemoteTrackPublication,
+  RemoteTrack,
+  Track,
+  LocalParticipant,
+  ConnectionState as LKConnectionState,
+  VideoPresets,
+  RoomOptions,
+} from 'livekit-client';
 import logger from '../utils/logger';
 
-const ANT_MEDIA_SERVER_URL = import.meta.env.VITE_ANT_MEDIA_SERVER_URL || 'https://media.streamlick.com:5443';
-const ANT_MEDIA_APP_NAME = import.meta.env.VITE_ANT_MEDIA_APP_NAME || 'StreamLick';
-
-// TURN Server configuration for NAT traversal (required for remote guests behind firewalls)
-const TURN_SERVER_URL = import.meta.env.VITE_TURN_SERVER_URL;
-const TURN_SERVER_USERNAME = import.meta.env.VITE_TURN_SERVER_USERNAME;
-const TURN_SERVER_CREDENTIAL = import.meta.env.VITE_TURN_SERVER_CREDENTIAL;
+// LiveKit server configuration
+const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL || 'wss://media.streamlick.com:7880';
+const LIVEKIT_API_KEY = import.meta.env.VITE_LIVEKIT_API_KEY || 'devkey';
+const LIVEKIT_API_SECRET = import.meta.env.VITE_LIVEKIT_API_SECRET || 'secret';
 
 interface ConnectionState {
   state: 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed';
   lastCheck: number;
-}
-
-interface RemoteParticipant {
-  odId: string;
-  streamId: string;
-  stream: MediaStream;
 }
 
 type ConnectionCallback = (state: ConnectionState) => void;
@@ -40,8 +42,7 @@ type RemoteStreamCallback = (participantId: string, stream: MediaStream) => void
 type ParticipantLeftCallback = (participantId: string) => void;
 
 class WebRTCService {
-  private webSocket: WebSocket | null = null;
-  private peerConnection: RTCPeerConnection | null = null;
+  private room: Room | null = null;
   private roomId: string | null = null;
   private participantId: string | null = null;
   private localStream: MediaStream | null = null;
@@ -56,37 +57,6 @@ class WebRTCService {
   private onRemoteStream: RemoteStreamCallback | null = null;
   private onParticipantLeft: ParticipantLeftCallback | null = null;
 
-  // ICE servers - build dynamically based on configuration
-  private iceServers: RTCIceServer[] = (() => {
-    const servers: RTCIceServer[] = [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-    ];
-
-    // Add TURN server if configured (required for guests behind restrictive NATs/firewalls)
-    if (TURN_SERVER_URL && TURN_SERVER_USERNAME && TURN_SERVER_CREDENTIAL) {
-      servers.push({
-        urls: TURN_SERVER_URL,
-        username: TURN_SERVER_USERNAME,
-        credential: TURN_SERVER_CREDENTIAL,
-      });
-      // Also add TURNS (TLS) variant if it's a turn: URL
-      if (TURN_SERVER_URL.startsWith('turn:')) {
-        const turnsUrl = TURN_SERVER_URL.replace('turn:', 'turns:').replace(':3478', ':5349');
-        servers.push({
-          urls: turnsUrl,
-          username: TURN_SERVER_USERNAME,
-          credential: TURN_SERVER_CREDENTIAL,
-        });
-      }
-      logger.info('[WebRTC-SFU] TURN server configured:', TURN_SERVER_URL);
-    } else {
-      logger.warn('[WebRTC-SFU] No TURN server configured - remote guests may have connection issues');
-    }
-
-    return servers;
-  })();
-
   /**
    * Initialize WebRTC for a broadcast room
    */
@@ -95,113 +65,128 @@ class WebRTCService {
     this.participantId = `participant_${Date.now()}`;
     this.closed = false;
 
-    await this.connectWebSocket();
-    logger.info('[WebRTC-SFU] Initialized for room:', broadcastId);
+    // Create LiveKit room instance
+    this.room = new Room({
+      adaptiveStream: true,
+      dynacast: true,
+      videoCaptureDefaults: {
+        resolution: VideoPresets.h720.resolution,
+      },
+    });
+
+    this.setupRoomEventHandlers();
+
+    logger.info('[WebRTC-LiveKit] Initialized for room:', broadcastId);
   }
 
   /**
-   * Connect to Ant Media WebSocket for conference mode
+   * Set up LiveKit room event handlers
    */
-  private connectWebSocket(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const wsUrl = `${ANT_MEDIA_SERVER_URL.replace('https://', 'wss://').replace('http://', 'ws://')}/${ANT_MEDIA_APP_NAME}/websocket`;
+  private setupRoomEventHandlers(): void {
+    if (!this.room) return;
 
-      logger.info('[WebRTC-SFU] Connecting to:', wsUrl);
+    // Connection state changes
+    this.room.on(RoomEvent.ConnectionStateChanged, (state: LKConnectionState) => {
+      logger.info('[WebRTC-LiveKit] Connection state:', state);
 
-      this.webSocket = new WebSocket(wsUrl);
+      switch (state) {
+        case LKConnectionState.Connecting:
+          this.connectionState = { state: 'connecting', lastCheck: Date.now() };
+          break;
+        case LKConnectionState.Connected:
+          this.connectionState = { state: 'connected', lastCheck: Date.now() };
+          break;
+        case LKConnectionState.Disconnected:
+          this.connectionState = { state: 'disconnected', lastCheck: Date.now() };
+          break;
+        case LKConnectionState.Reconnecting:
+          this.connectionState = { state: 'connecting', lastCheck: Date.now() };
+          break;
+      }
 
-      const timeout = setTimeout(() => {
-        if (this.webSocket?.readyState !== WebSocket.OPEN) {
-          this.webSocket?.close();
-          reject(new Error('WebSocket connection timeout'));
-        }
-      }, 10000);
+      this.onConnectionChange?.(this.connectionState);
+    });
 
-      this.webSocket.onopen = () => {
-        clearTimeout(timeout);
-        this.connectionState = { state: 'connecting', lastCheck: Date.now() };
-        this.onConnectionChange?.(this.connectionState);
-        logger.info('[WebRTC-SFU] WebSocket connected');
-        resolve();
-      };
+    // Remote participant connected
+    this.room.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
+      logger.info('[WebRTC-LiveKit] Participant connected:', participant.identity);
+      this.handleParticipantConnected(participant);
+    });
 
-      this.webSocket.onclose = () => {
-        logger.warn('[WebRTC-SFU] WebSocket closed');
-        this.connectionState = { state: 'disconnected', lastCheck: Date.now() };
-        this.onConnectionChange?.(this.connectionState);
-      };
+    // Remote participant disconnected
+    this.room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
+      logger.info('[WebRTC-LiveKit] Participant disconnected:', participant.identity);
+      this.remoteStreams.delete(participant.identity);
+      this.onParticipantLeft?.(participant.identity);
+    });
 
-      this.webSocket.onerror = (error) => {
-        clearTimeout(timeout);
-        logger.error('[WebRTC-SFU] WebSocket error:', error);
-        reject(error);
-      };
+    // Track subscribed - when we receive a remote track
+    this.room.on(
+      RoomEvent.TrackSubscribed,
+      (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+        logger.info('[WebRTC-LiveKit] Track subscribed:', track.kind, 'from', participant.identity);
+        this.handleTrackSubscribed(track, participant);
+      }
+    );
 
-      this.webSocket.onmessage = (event) => this.handleMessage(event);
+    // Track unsubscribed
+    this.room.on(
+      RoomEvent.TrackUnsubscribed,
+      (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+        logger.info('[WebRTC-LiveKit] Track unsubscribed:', track.kind, 'from', participant.identity);
+      }
+    );
+
+    // Disconnected
+    this.room.on(RoomEvent.Disconnected, () => {
+      logger.warn('[WebRTC-LiveKit] Disconnected from room');
+      this.connectionState = { state: 'disconnected', lastCheck: Date.now() };
+      this.onConnectionChange?.(this.connectionState);
     });
   }
 
   /**
-   * Handle WebSocket messages
+   * Handle when a participant connects - subscribe to their tracks
    */
-  private async handleMessage(event: MessageEvent): Promise<void> {
-    try {
-      const message = JSON.parse(event.data);
-      // Log ALL messages from Ant Media for debugging
-      console.log('[WebRTC-SFU] Received message:', message.command, message);
-
-      switch (message.command) {
-        case 'start':
-          await this.handleStart();
-          break;
-
-        case 'takeConfiguration':
-          await this.handleConfiguration(message);
-          break;
-
-        case 'takeCandidate':
-          await this.handleCandidate(message);
-          break;
-
-        case 'notification':
-          this.handleNotification(message);
-          break;
-
-        case 'streamJoined':
-          logger.info('[WebRTC-SFU] Stream joined:', message.streamId);
-          // Subscribe to the new stream
-          if (message.streamId && message.streamId !== this.participantId) {
-            console.log('[WebRTC-SFU] Subscribing to new stream:', message.streamId);
-            this.playStream(message.streamId);
-          }
-          break;
-
-        case 'streamLeaved':
-          this.handleStreamLeft(message.streamId);
-          break;
-
-        case 'joinedTheRoom':
-          logger.info('[WebRTC-SFU] Joined room:', message.room, 'Existing streams:', message.streams);
-          this.connectionState = { state: 'connected', lastCheck: Date.now() };
-          this.onConnectionChange?.(this.connectionState);
-
-          // Subscribe to existing streams in the room
-          if (message.streams && Array.isArray(message.streams)) {
-            for (const streamId of message.streams) {
-              if (streamId !== this.participantId) {
-                console.log('[WebRTC-SFU] Subscribing to existing stream:', streamId);
-                this.playStream(streamId);
-              }
-            }
-          }
-          break;
-
-        case 'error':
-          logger.error('[WebRTC-SFU] Server error:', message.definition);
-          break;
+  private handleParticipantConnected(participant: RemoteParticipant): void {
+    // Handle existing tracks
+    participant.trackPublications.forEach((publication) => {
+      if (publication.track && publication.isSubscribed) {
+        this.handleTrackSubscribed(publication.track as RemoteTrack, participant);
       }
-    } catch (error) {
-      logger.error('[WebRTC-SFU] Error handling message:', error);
+    });
+  }
+
+  /**
+   * Handle when we subscribe to a remote track
+   */
+  private handleTrackSubscribed(track: RemoteTrack, participant: RemoteParticipant): void {
+    // Get or create MediaStream for this participant
+    let stream = this.remoteStreams.get(participant.identity);
+    if (!stream) {
+      stream = new MediaStream();
+      this.remoteStreams.set(participant.identity, stream);
+    }
+
+    // Add the track to the stream
+    const mediaTrack = track.mediaStreamTrack;
+    if (mediaTrack) {
+      // Remove existing track of same kind
+      stream.getTracks().forEach((t) => {
+        if (t.kind === mediaTrack.kind) {
+          stream!.removeTrack(t);
+        }
+      });
+      stream.addTrack(mediaTrack);
+
+      logger.info('[WebRTC-LiveKit] Added track to stream:', {
+        participantId: participant.identity,
+        trackKind: mediaTrack.kind,
+        streamTracks: stream.getTracks().length,
+      });
+
+      // Notify callback
+      this.onRemoteStream?.(participant.identity, stream);
     }
   }
 
@@ -211,207 +196,120 @@ class WebRTCService {
   async joinRoom(localStream: MediaStream): Promise<void> {
     this.localStream = localStream;
 
-    if (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) {
-      throw new Error('WebSocket not connected');
+    if (!this.room) {
+      throw new Error('Room not initialized');
     }
 
-    // Try joinRoom for conference mode first
-    // If Ant Media doesn't respond, it might not be configured for conference mode
-    this.sendMessage({
-      command: 'joinRoom',
-      room: this.roomId,
-      streamId: this.participantId,
-    });
+    // Generate a token for this participant
+    // In production, this should come from your backend
+    const token = await this.getToken(this.roomId!, this.participantId!);
 
-    // Also try publish command as fallback (for LiveApp mode)
-    // This tells Ant Media we want to publish a stream
-    setTimeout(() => {
-      if (this.connectionState.state !== 'connected') {
-        console.log('[WebRTC-SFU] joinRoom not responded, trying publish command...');
-        this.sendMessage({
-          command: 'publish',
-          streamId: this.participantId,
-          token: '',
-          video: true,
-          audio: true,
+    // Connect to LiveKit
+    await this.room.connect(LIVEKIT_URL, token);
+
+    logger.info('[WebRTC-LiveKit] Connected to room:', this.roomId);
+
+    // Publish local tracks
+    if (localStream) {
+      const videoTrack = localStream.getVideoTracks()[0];
+      const audioTrack = localStream.getAudioTracks()[0];
+
+      if (videoTrack) {
+        await this.room.localParticipant.publishTrack(videoTrack, {
+          name: 'camera',
+          simulcast: true,
+          videoEncoding: {
+            maxBitrate: 1_500_000,
+            maxFramerate: 30,
+          },
         });
+        logger.info('[WebRTC-LiveKit] Published video track');
       }
-    }, 2000);
-  }
 
-  /**
-   * Handle start - create peer connection and add tracks
-   */
-  private async handleStart(): Promise<void> {
-    this.createPeerConnection();
-
-    if (this.localStream) {
-      this.localStream.getTracks().forEach(track => {
-        this.peerConnection!.addTrack(track, this.localStream!);
-      });
+      if (audioTrack) {
+        await this.room.localParticipant.publishTrack(audioTrack, {
+          name: 'microphone',
+        });
+        logger.info('[WebRTC-LiveKit] Published audio track');
+      }
     }
 
-    // Create offer
-    const offer = await this.peerConnection!.createOffer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: true,
+    // Handle existing participants
+    this.room.remoteParticipants.forEach((participant) => {
+      this.handleParticipantConnected(participant);
     });
 
-    await this.peerConnection!.setLocalDescription(offer);
-
-    this.sendMessage({
-      command: 'takeConfiguration',
-      streamId: this.participantId,
-      type: 'offer',
-      sdp: offer.sdp,
-    });
+    this.connectionState = { state: 'connected', lastCheck: Date.now() };
+    this.onConnectionChange?.(this.connectionState);
   }
 
   /**
-   * Handle SDP configuration
+   * Get LiveKit token
+   * In production, this should call your backend API
+   * For now, we'll generate it client-side (NOT secure for production)
    */
-  private async handleConfiguration(message: any): Promise<void> {
-    if (!this.peerConnection) {
-      this.createPeerConnection();
-    }
-
-    if (message.type === 'offer') {
-      await this.peerConnection!.setRemoteDescription({
-        type: 'offer',
-        sdp: message.sdp,
-      });
-
-      const answer = await this.peerConnection!.createAnswer();
-      await this.peerConnection!.setLocalDescription(answer);
-
-      this.sendMessage({
-        command: 'takeConfiguration',
-        streamId: this.participantId,
-        type: 'answer',
-        sdp: answer.sdp,
-      });
-    } else if (message.type === 'answer') {
-      await this.peerConnection!.setRemoteDescription({
-        type: 'answer',
-        sdp: message.sdp,
-      });
-    }
-  }
-
-  /**
-   * Handle ICE candidate
-   */
-  private async handleCandidate(message: any): Promise<void> {
-    if (!this.peerConnection) return;
-
+  private async getToken(roomName: string, participantName: string): Promise<string> {
+    // Try to get token from backend first
     try {
-      await this.peerConnection.addIceCandidate(new RTCIceCandidate({
-        candidate: message.candidate,
-        sdpMLineIndex: message.label,
-        sdpMid: message.id,
-      }));
+      const response = await fetch('/api/livekit/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomName, participantName }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.token;
+      }
     } catch (error) {
-      logger.error('[WebRTC-SFU] Error adding ICE candidate:', error);
+      logger.warn('[WebRTC-LiveKit] Could not get token from backend, using fallback');
     }
+
+    // Fallback: Generate token client-side (for development only)
+    // This requires the livekit-server-sdk which we'll need to add
+    // For now, we'll use a simple JWT approach
+    return this.generateDevToken(roomName, participantName);
   }
 
   /**
-   * Handle notifications
+   * Generate a development token (NOT for production!)
    */
-  private handleNotification(message: any): void {
-    logger.info('[WebRTC-SFU] Notification:', message.definition);
-  }
+  private generateDevToken(roomName: string, participantName: string): string {
+    // This is a simplified token for development
+    // In production, tokens should be generated server-side
+    const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+    const now = Math.floor(Date.now() / 1000);
+    const payload = btoa(
+      JSON.stringify({
+        exp: now + 86400, // 24 hours
+        iss: LIVEKIT_API_KEY,
+        nbf: now,
+        sub: participantName,
+        video: {
+          roomJoin: true,
+          room: roomName,
+          canPublish: true,
+          canSubscribe: true,
+          canPublishData: true,
+        },
+        metadata: '',
+        name: participantName,
+      })
+    );
 
-  /**
-   * Handle stream left
-   */
-  private handleStreamLeft(streamId: string): void {
-    this.remoteStreams.delete(streamId);
-    this.onParticipantLeft?.(streamId);
-    logger.info('[WebRTC-SFU] Stream left:', streamId);
-  }
+    // Note: This signature won't be valid without proper HMAC-SHA256
+    // The backend endpoint should handle proper token generation
+    const signature = btoa('dev-signature');
 
-  /**
-   * Create peer connection
-   */
-  private createPeerConnection(): void {
-    this.peerConnection = new RTCPeerConnection({
-      iceServers: this.iceServers,
-      iceCandidatePoolSize: 10,
-    });
-
-    // ICE candidates
-    this.peerConnection.onicecandidate = (event) => {
-      if (event.candidate) {
-        this.sendMessage({
-          command: 'takeCandidate',
-          streamId: this.participantId,
-          label: event.candidate.sdpMLineIndex,
-          id: event.candidate.sdpMid,
-          candidate: event.candidate.candidate,
-        });
-      }
-    };
-
-    // Connection state
-    this.peerConnection.onconnectionstatechange = () => {
-      const state = this.peerConnection?.connectionState;
-      logger.info('[WebRTC-SFU] Connection state:', state);
-
-      if (state === 'connected') {
-        this.connectionState = { state: 'connected', lastCheck: Date.now() };
-      } else if (state === 'disconnected' || state === 'failed') {
-        this.connectionState = { state: state as any, lastCheck: Date.now() };
-      }
-
-      this.onConnectionChange?.(this.connectionState);
-    };
-
-    // Remote tracks
-    this.peerConnection.ontrack = (event) => {
-      logger.info('[WebRTC-SFU] Received remote track:', event.track.kind);
-
-      if (event.streams && event.streams[0]) {
-        const stream = event.streams[0];
-        this.remoteStreams.set(stream.id, stream);
-        this.onRemoteStream?.(stream.id, stream);
-      }
-    };
-  }
-
-  /**
-   * Send message via WebSocket
-   */
-  private sendMessage(message: any): void {
-    if (this.webSocket?.readyState === WebSocket.OPEN) {
-      console.log('[WebRTC-SFU] Sending message:', message.command, message);
-      this.webSocket.send(JSON.stringify(message));
-    } else {
-      console.error('[WebRTC-SFU] Cannot send message - WebSocket not open:', message.command);
-    }
-  }
-
-  /**
-   * Subscribe to a remote stream (Ant Media play command)
-   */
-  private playStream(streamId: string): void {
-    console.log('[WebRTC-SFU] Sending play command for stream:', streamId);
-    this.sendMessage({
-      command: 'play',
-      streamId: streamId,
-      room: this.roomId,
-    });
+    return `${header}.${payload}.${signature}`;
   }
 
   /**
    * Leave room
    */
   async leaveRoom(): Promise<void> {
-    if (this.roomId) {
-      this.sendMessage({
-        command: 'leaveFromRoom',
-        room: this.roomId,
-      });
+    if (this.room) {
+      await this.room.disconnect();
     }
   }
 
@@ -424,14 +322,8 @@ class WebRTCService {
 
     await this.leaveRoom();
 
-    if (this.peerConnection) {
-      this.peerConnection.close();
-      this.peerConnection = null;
-    }
-
-    if (this.webSocket) {
-      this.webSocket.close();
-      this.webSocket = null;
+    if (this.room) {
+      this.room = null;
     }
 
     this.localStream = null;
@@ -440,7 +332,7 @@ class WebRTCService {
     this.participantId = null;
 
     this.connectionState = { state: 'new', lastCheck: Date.now() };
-    logger.info('[WebRTC-SFU] Closed');
+    logger.info('[WebRTC-LiveKit] Closed');
   }
 
   /**
@@ -479,7 +371,7 @@ class WebRTCService {
     return this.connectionState.state === 'connected';
   }
 
-  // Legacy compatibility methods (for existing code)
+  // Legacy compatibility methods
   async createSendTransport(): Promise<void> {
     // No-op - handled in joinRoom
   }
@@ -489,7 +381,6 @@ class WebRTCService {
   }
 
   async produceMedia(track: MediaStreamTrack): Promise<string> {
-    // For compatibility - actual publishing happens in joinRoom
     return this.participantId || 'unknown';
   }
 
@@ -506,39 +397,48 @@ class WebRTCService {
   }
 
   startStatsMonitoring(): void {
-    // TODO: Implement stats monitoring
+    // TODO: Implement stats monitoring with LiveKit
   }
 
   stopStatsMonitoring(): void {
     // No-op
   }
 
-  /**
-   * Close a producer (legacy compatibility)
-   */
   closeProducer(producerId: string): void {
-    // In SFU mode, we don't have individual producers to close
-    // The track will be removed when we leave the room
-    logger.info('[WebRTC-SFU] closeProducer called (no-op in SFU mode):', producerId);
+    logger.info('[WebRTC-LiveKit] closeProducer called:', producerId);
   }
 
   /**
-   * Replace video track (legacy compatibility)
+   * Replace video track
    */
   async replaceVideoTrack(newTrack: MediaStreamTrack): Promise<void> {
-    if (!this.peerConnection) {
-      logger.warn('[WebRTC-SFU] No peer connection to replace track');
+    if (!this.room) {
+      logger.warn('[WebRTC-LiveKit] No room to replace track');
       return;
     }
 
-    const senders = this.peerConnection.getSenders();
-    const videoSender = senders.find(s => s.track?.kind === 'video');
+    const localParticipant = this.room.localParticipant;
 
-    if (videoSender) {
-      await videoSender.replaceTrack(newTrack);
-      logger.info('[WebRTC-SFU] Video track replaced');
+    // Find existing video publication
+    const videoPub = Array.from(localParticipant.trackPublications.values()).find(
+      (pub) => pub.track?.kind === Track.Kind.Video
+    );
+
+    if (videoPub && videoPub.track) {
+      // Unpublish old track and publish new one
+      await localParticipant.unpublishTrack(videoPub.track);
+      await localParticipant.publishTrack(newTrack, {
+        name: 'camera',
+        simulcast: true,
+      });
+      logger.info('[WebRTC-LiveKit] Video track replaced');
     } else {
-      logger.warn('[WebRTC-SFU] No video sender found to replace track');
+      // Just publish the new track
+      await localParticipant.publishTrack(newTrack, {
+        name: 'camera',
+        simulcast: true,
+      });
+      logger.info('[WebRTC-LiveKit] Video track published');
     }
   }
 }

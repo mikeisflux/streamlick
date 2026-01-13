@@ -35,6 +35,7 @@ import pageContentRoutes from './api/page-content.routes';
 import emailsRoutes from './api/emails.routes';
 import commentsRoutes from './api/comments.routes';
 import dailyRoutes, { initializeDailyService } from './api/daily.routes';
+import livekitRoutes from './api/livekit.routes';
 
 import initializeSocket from './socket';
 import logger from './utils/logger';
@@ -200,6 +201,7 @@ app.use('/api/branding', publicBrandingRouter); // Public branding endpoint
 app.use('/api/token-warnings', tokenWarningsRoutes);
 app.use('/api/page-content', pageContentRoutes); // Public endpoint for getting page content
 app.use('/api/daily', dailyRoutes); // Daily.co integration routes
+app.use('/api/livekit', livekitRoutes); // LiveKit SFU token generation
 app.use('/api/emails', emailsRoutes); // Email management routes
 app.use('/api/comments', commentsRoutes); // Comment posting routes
 

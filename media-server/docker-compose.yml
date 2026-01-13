@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: livekit-server
+    restart: unless-stopped
+    ports:
+      - "7880:7880"    # WebSocket/HTTP
+      - "7881:7881"    # RTC over TCP
+      - "50000-50100:50000-50100/udp"  # WebRTC UDP ports
+    environment:
+      - LIVEKIT_KEYS=devkey: secret
+    volumes:
+      - ./livekit.yaml:/livekit.yaml
+    command: --config /livekit.yaml
+
+  # Redis for multi-node deployment (optional for single node)
+  redis:
+    image: redis:7-alpine
+    container_name: livekit-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # Egress service for recording/streaming (optional)
+  egress:
+    image: livekit/egress:latest
+    container_name: livekit-egress
+    restart: unless-stopped
+    environment:
+      - EGRESS_CONFIG_FILE=/egress.yaml
+    volumes:
+      - ./egress.yaml:/egress.yaml
+      - /tmp/recordings:/recordings
+    cap_add:
+      - SYS_ADMIN
+    depends_on:
+      - livekit
+      - redis
+
+volumes:
+  redis_data:
