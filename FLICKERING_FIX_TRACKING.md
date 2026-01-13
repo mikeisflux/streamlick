@@ -442,3 +442,41 @@ VITE_TURN_SERVER_CREDENTIAL=your-password
 **Status:** APPLIED
 
 ---
+
+### Change 16: Remove All Polling - Event-Driven WebRTC
+**Files:**
+- `frontend/src/hooks/studio/useParticipants.ts`
+- `frontend/src/hooks/studio/useStudioInitialization.ts`
+- `frontend/src/hooks/guest/useGuestStream.ts`
+- `backend/src/socket/handlers/greenroom.handlers.ts`
+
+**Problem:** Constant `request-guest-streams` polling every 5 seconds was causing guests to resend their WebRTC offers, which reset connections and triggered adaptive bitrate to restart from low quality. This caused:
+- Video resolution cycling (800 → 1200 → 1600 → 1200)
+- Guest video flickering on the host's stage canvas
+- Server logs showing repeated "Host requesting all guests to resend stream offers"
+
+**Root Cause:**
+1. `useParticipants.ts` polled HTTP API every 5 seconds
+2. Each poll emitted `request-guest-streams` if any guest lacked a stream
+3. Backend sent `resend-stream-offer` to all guests
+4. Guests re-created connections even when working ones existed
+5. New connections started adaptive bitrate from low quality
+
+**Fix - Event-Driven Architecture:**
+1. **Removed HTTP polling** from `useParticipants.ts` - only initial fetch on mount
+2. **Removed all `request-guest-streams` emissions** from frontend components
+3. **Removed active polling** from `useGuestStream.ts` on guest side
+4. **Added backend event** in `greenroom.handlers.ts` - when host enters greenroom, backend tells existing guests to resend offers (one-time)
+
+**New Flow:**
+```
+Guest joins → auto-sends stream offer
+Host joins → backend emits resend-stream-offer (one-time)
+Guest receives resend → sends offer (if not already connected)
+Host receives offer → creates connection
+Connection established - no further polling
+```
+
+**Status:** APPLIED
+
+---
