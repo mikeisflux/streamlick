@@ -32,7 +32,8 @@ public class CommunityLicenceService implements ILicenceService{
 	
 	@Override
 	public String getLicenseType() {
-		return LICENCE_TYPE_COMMUNITY;
+		// StreamLick: Enterprise features unlocked
+		return LICENCE_TYPE_STANDARD;
 	}
 
 }

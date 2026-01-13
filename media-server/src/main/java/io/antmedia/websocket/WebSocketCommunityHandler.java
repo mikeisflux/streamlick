@@ -153,7 +153,61 @@ public class WebSocketCommunityHandler {
 			else if (cmd.equals(WebSocketConstants.PING_COMMAND)) {
 				sendPongMessage(session);
 			}
-			else if (cmd.equals(WebSocketConstants.GET_STREAM_INFO_COMMAND) || cmd.equals(WebSocketConstants.PLAY_COMMAND)) 
+			else if (cmd.equals(WebSocketConstants.JOIN_ROOM_COMMAND)) {
+				// Conference mode - join a room
+				String room = (String) jsonObject.get(WebSocketConstants.ROOM);
+				if (room == null) {
+					room = (String) jsonObject.get(WebSocketConstants.MAIN_TRACK);
+				}
+				if (room == null || room.isEmpty()) {
+					sendNoRoomSpecifiedError(session);
+					return;
+				}
+
+				// Store room info in session
+				session.getUserProperties().put(WebSocketConstants.ATTR_ROOM_NAME, room);
+				session.getUserProperties().put(WebSocketConstants.ATTR_STREAM_NAME, streamId);
+
+				// Get existing streams in room from datastore
+				Map<String, String> streamIdNameMap = new HashMap<>();
+				Broadcast roomBroadcast = appAdaptor.getDataStore().get(room);
+				if (roomBroadcast != null && roomBroadcast.getSubTrackStreamIds() != null) {
+					for (String subStreamId : roomBroadcast.getSubTrackStreamIds()) {
+						Broadcast subBroadcast = appAdaptor.getDataStore().get(subStreamId);
+						if (subBroadcast != null &&
+							IAntMediaStreamHandler.BROADCAST_STATUS_BROADCASTING.equals(subBroadcast.getStatus())) {
+							streamIdNameMap.put(subStreamId, subBroadcast.getName() != null ? subBroadcast.getName() : subStreamId);
+						}
+					}
+				}
+
+				// Send joined room response with existing streams
+				sendJoinedRoomMessage(room, streamId, streamIdNameMap, new HashMap<>());
+
+				// Also start the WebRTC publish for this stream
+				boolean enableVideo = jsonObject.containsKey(WebSocketConstants.VIDEO) ? (boolean) jsonObject.get(WebSocketConstants.VIDEO) : true;
+				startRTMPAdaptor(session, streamId, enableVideo);
+
+				logger.info("Stream {} joined room {}", streamId, room);
+			}
+			else if (cmd.equals(WebSocketConstants.LEAVE_THE_ROOM)) {
+				// Leave conference room
+				String room = (String) session.getUserProperties().get(WebSocketConstants.ATTR_ROOM_NAME);
+				RTMPAdaptor connectionContext = (RTMPAdaptor) session.getUserProperties().get(session.getId());
+				if (connectionContext != null) {
+					connectionContext.stop();
+				}
+				logger.info("Stream {} left room {}", streamId, room);
+			}
+			else if (cmd.equals(WebSocketConstants.PLAY_COMMAND)) {
+				// Play a stream - for conference mode, subscribe to another participant
+				String room = (String) jsonObject.get(WebSocketConstants.ROOM);
+				logger.info("Play command for stream {} in room {}", streamId, room);
+				// In community edition, we'll handle this via RTMP relay
+				// For now, just acknowledge
+				sendNotFoundJSON(streamId, session);
+			}
+			else if (cmd.equals(WebSocketConstants.GET_STREAM_INFO_COMMAND))
 			{
 				sendNotFoundJSON(streamId, session);
 			}
@@ -300,6 +354,14 @@ public class WebSocketCommunityHandler {
 		JSONObject jsonResponse = new JSONObject();
 		jsonResponse.put(WebSocketConstants.COMMAND, WebSocketConstants.ERROR_COMMAND);
 		jsonResponse.put(WebSocketConstants.DEFINITION, WebSocketConstants.NO_STREAM_ID_SPECIFIED);
+		sendMessage(jsonResponse, session);
+	}
+
+	@SuppressWarnings("unchecked")
+	public  void sendNoRoomSpecifiedError(Session session)  {
+		JSONObject jsonResponse = new JSONObject();
+		jsonResponse.put(WebSocketConstants.COMMAND, WebSocketConstants.ERROR_COMMAND);
+		jsonResponse.put(WebSocketConstants.DEFINITION, WebSocketConstants.NO_ROOM_SPECIFIED);
 		sendMessage(jsonResponse, session);
 	}
 	
