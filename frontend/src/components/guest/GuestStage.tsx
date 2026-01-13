@@ -5,7 +5,7 @@
  * Shows the broadcast preview, their self-video thumbnail, and controls.
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import toast from 'react-hot-toast';
 
 interface Participant {
@@ -63,73 +63,6 @@ export function GuestStage({
   const [chatMessage, setChatMessage] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const broadcastVideoRef = useRef<HTMLVideoElement>(null);
-  const selfVideoRef = useRef<HTMLVideoElement>(null);
-
-  // Set up broadcast stream video
-  useEffect(() => {
-    const video = broadcastVideoRef.current;
-    if (!video) return;
-
-    if (broadcastStream) {
-      console.log('[GuestStage] Setting broadcast stream:', {
-        streamId: broadcastStream.id,
-        videoTracks: broadcastStream.getVideoTracks().length,
-        audioTracks: broadcastStream.getAudioTracks().length,
-        active: broadcastStream.active,
-      });
-
-      // Always set srcObject fresh to handle track changes
-      video.srcObject = broadcastStream;
-      video.volume = streamVolume;
-
-      const playVideo = () => {
-        video.play().catch((err) => {
-          console.warn('[GuestStage] Play failed:', err);
-        });
-      };
-
-      // Listen for when video can play
-      video.addEventListener('canplay', playVideo);
-      video.addEventListener('loadedmetadata', () => {
-        console.log('[GuestStage] Broadcast video metadata loaded');
-      });
-
-      // Try to play immediately
-      playVideo();
-
-      return () => {
-        video.removeEventListener('canplay', playVideo);
-      };
-    } else {
-      video.srcObject = null;
-    }
-  }, [broadcastStream, streamVolume]);
-
-  // Set up self video preview
-  useEffect(() => {
-    const video = selfVideoRef.current;
-    if (!video) return;
-
-    if (localStream) {
-      console.log('[GuestStage] Setting self stream:', {
-        streamId: localStream.id,
-        videoTracks: localStream.getVideoTracks().length,
-      });
-
-      video.srcObject = localStream;
-      video.play().catch(() => {});
-    } else {
-      video.srcObject = null;
-    }
-  }, [localStream]);
-
-  // Update volume when changed
-  useEffect(() => {
-    if (broadcastVideoRef.current) {
-      broadcastVideoRef.current.volume = streamVolume;
-    }
-  }, [streamVolume]);
 
   const handleSendChat = () => {
     if (chatMessage.trim()) {
@@ -181,9 +114,15 @@ export function GuestStage({
             <div className="w-full max-w-5xl aspect-video bg-black rounded-lg overflow-hidden shadow-lg relative">
               {broadcastStream ? (
                 <video
-                  ref={broadcastVideoRef}
                   autoPlay
                   playsInline
+                  ref={(el) => {
+                    if (el && el.srcObject !== broadcastStream) {
+                      el.srcObject = broadcastStream;
+                      el.volume = streamVolume;
+                      el.play().catch((err) => console.warn('[GuestStage] Play failed:', err));
+                    }
+                  }}
                   className="w-full h-full object-contain"
                 />
               ) : (
@@ -204,10 +143,15 @@ export function GuestStage({
               <div className="w-40 h-24 bg-gray-800 rounded-lg overflow-hidden border-2 border-primary-500">
                 {localStream ? (
                   <video
-                    ref={selfVideoRef}
                     autoPlay
                     playsInline
                     muted
+                    ref={(el) => {
+                      if (el && el.srcObject !== localStream) {
+                        el.srcObject = localStream;
+                        el.play().catch(() => {});
+                      }
+                    }}
                     className="w-full h-full object-cover"
                     style={{ transform: 'scaleX(-1)' }}
                   />
