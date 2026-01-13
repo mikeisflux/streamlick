@@ -140,7 +140,7 @@ router.get('/:broadcastId/ban-check/:participantId', async (req: Request, res: R
 });
 
 /**
- * Get greenroom participants for a broadcast (for polling)
+ * Get greenroom participants for a broadcast (initial fetch only)
  * GET /api/broadcasts/:broadcastId/greenroom-participants
  */
 router.get('/:broadcastId/greenroom-participants', authMiddleware, async (req: Request, res: Response) => {

@@ -106,12 +106,12 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
     const handleParticipantsSync = ({ participants }: { participants: Array<{ id: string; name: string; role: string; audioEnabled: boolean; videoEnabled: boolean }> }) => {
       console.log('[useParticipants] Received participants-sync with', participants.length, 'participants');
 
-      // Update knownParticipantIdsRef to prevent duplicate toasts from polling
+      // Update knownParticipantIdsRef to prevent duplicate toasts
       for (const p of participants) {
         knownParticipantIdsRef.current.add(p.id);
       }
 
-      // Don't show toast here - polling will handle notifications
+      // Don't show toast here - initial fetch handles notifications
       setRemoteParticipants((prev) => {
         const updated = new Map(prev);
         for (const p of participants) {
@@ -134,7 +134,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
     };
 
     const handleParticipantJoined = async ({ participantId }: any) => {
-      // Only show toast if we haven't seen this participant yet (from polling)
+      // Only show toast if we haven't seen this participant yet
       if (!knownParticipantIdsRef.current.has(participantId)) {
         toast.success('A participant joined');
         knownParticipantIdsRef.current.add(participantId);
@@ -159,7 +159,7 @@ export function useParticipants({ broadcastId, showChatOnStream }: UseParticipan
     // IMPORTANT: Greenroom participants start as 'backstage' and become 'guest' when promoted
     // This allows the "Add to Stage" button to actually do something (promote backstage -> guest)
     const handleGreenroomParticipantJoined = ({ participantId, name }: any) => {
-      // Only show toast if we haven't seen this participant yet (from polling)
+      // Only show toast if we haven't seen this participant yet
       if (!knownParticipantIdsRef.current.has(participantId)) {
         console.log('[useParticipants] Socket: new greenroom participant', name);
         toast.success(`${name || 'A guest'} joined the greenroom`);

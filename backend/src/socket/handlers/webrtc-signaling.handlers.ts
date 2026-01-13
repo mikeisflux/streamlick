@@ -126,21 +126,8 @@ export function registerWebRTCSignalingHandlers(socket: Socket, io: SocketServer
     });
   });
 
-  // Host requests all guests to resend their stream offers
-  socket.on('request-guest-streams', () => {
-    const { broadcastId } = socket.data;
-
-    if (!broadcastId) {
-      return socket.emit('error', { message: 'Missing broadcast ID' });
-    }
-
-    logger.info(`[GuestStream] Host requesting all guests to resend stream offers for broadcast ${broadcastId}`);
-
-    // Emit to BOTH broadcast and greenroom rooms to reach all guests
-    // Guests join greenroom:${broadcastId}, not broadcast:${broadcastId}
-    socket.to(`broadcast:${broadcastId}`).emit('resend-stream-offer');
-    socket.to(`greenroom:${broadcastId}`).emit('resend-stream-offer');
-  });
+  // NOTE: request-guest-streams was removed - now event-driven via greenroom.handlers.ts
+  // When host enters greenroom, backend automatically tells guests to resend offers
 
   // ============================================
   // Generic WebRTC Signaling (fallback)
