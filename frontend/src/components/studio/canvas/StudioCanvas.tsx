@@ -88,6 +88,89 @@ interface StudioCanvasProps {
   orientation?: 'landscape' | 'portrait';
 }
 
+// HTML Preview Video Component - renders a single participant using native HTML video
+function HTMLPreviewVideo({
+  participantId,
+  stream,
+  name,
+  videoEnabled,
+  isSpeaking,
+  isLocal,
+  style,
+}: {
+  participantId: string;
+  stream: MediaStream | null;
+  name: string;
+  videoEnabled: boolean;
+  isSpeaking: boolean;
+  isLocal: boolean;
+  style: React.CSSProperties;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (stream && videoEnabled) {
+      // Only set srcObject if it's different or null
+      if (video.srcObject !== stream) {
+        video.srcObject = stream;
+        video.play().catch(() => {});
+      }
+    }
+  }, [stream, videoEnabled]);
+
+  return (
+    <div
+      className="absolute overflow-hidden rounded-2xl"
+      style={{
+        ...style,
+        backgroundColor: '#1a1a1a',
+      }}
+    >
+      {videoEnabled && stream ? (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-full h-full object-cover"
+          style={{ transform: isLocal ? 'scaleX(-1)' : 'none' }}
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center bg-gray-800">
+          <div className="w-16 h-16 rounded-full bg-gray-600 flex items-center justify-center">
+            <span className="text-xl text-white font-semibold">
+              {name.charAt(0).toUpperCase()}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Name tag */}
+      <div
+        className={`absolute bottom-2 left-2 px-3 py-1.5 rounded-full text-sm font-semibold text-white transition-colors ${
+          isSpeaking ? 'bg-green-500' : 'bg-black/70'
+        }`}
+      >
+        {name}
+      </div>
+
+      {/* Speaking indicator ring */}
+      {isSpeaking && (
+        <div
+          className="absolute inset-0 rounded-2xl pointer-events-none"
+          style={{
+            border: '3px solid #22c55e',
+            boxShadow: '0 0 20px rgba(34, 197, 94, 0.5)',
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 export function StudioCanvas({
   localStream,
   rawStream,
@@ -160,6 +243,20 @@ export function StudioCanvas({
   const [speakingParticipants, setSpeakingParticipants] = useState<Set<string>>(new Set());
   const speakingParticipantsRef = useRef<Set<string>>(new Set());
 
+  // HTML Preview state - positions for HTML video elements
+  const [previewPositions, setPreviewPositions] = useState<Array<{
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    name: string;
+    videoEnabled: boolean;
+    isLocal: boolean;
+    isSpeaking: boolean;
+  }>>([]);
+  const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 });
+
   // Update refs when props change
   useEffect(() => {
     isLocalUserOnStageRef.current = isLocalUserOnStage;
@@ -207,6 +304,97 @@ export function StudioCanvas({
       window.removeEventListener('bannersUpdated', handleBannersUpdated);
     };
   }, []);
+
+  // Track container size for HTML preview scaling
+  useEffect(() => {
+    const updateSize = () => {
+      if (containerRef.current) {
+        setContainerDimensions({
+          width: containerRef.current.offsetWidth,
+          height: containerRef.current.offsetHeight,
+        });
+      }
+    };
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    // Also update on orientation change
+    const resizeObserver = new ResizeObserver(updateSize);
+    if (containerRef.current) resizeObserver.observe(containerRef.current);
+    return () => {
+      window.removeEventListener('resize', updateSize);
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  // Update HTML preview positions when participants or layout changes
+  useEffect(() => {
+    const canvasWidth = orientation === 'portrait' ? 1080 : 1920;
+    const canvasHeight = orientation === 'portrait' ? 1920 : 1080;
+    const scaleX = containerDimensions.width / canvasWidth;
+    const scaleY = containerDimensions.height / canvasHeight;
+
+    // Collect participants
+    const participants: Array<{
+      id: string;
+      name: string;
+      stream: MediaStream | null;
+      videoEnabled: boolean;
+      isLocal: boolean;
+    }> = [];
+
+    if (isLocalUserOnStage && localStream) {
+      participants.push({
+        id: 'local',
+        name: 'You',
+        stream: localStream,
+        videoEnabled,
+        isLocal: true,
+      });
+    }
+
+    remoteParticipants.forEach((p, id) => {
+      if (p.role === 'guest' && id !== 'screen-share') {
+        participants.push({
+          id,
+          name: p.name || 'Guest',
+          stream: p.stream,
+          videoEnabled: p.videoEnabled,
+          isLocal: false,
+        });
+      }
+    });
+
+    // Calculate positions
+    const positions = calculateParticipantPositions(
+      canvasWidth,
+      canvasHeight,
+      participants.length,
+      selectedLayout,
+      isSharingScreen
+    );
+
+    // Scale positions to container and create preview data
+    const previewData = participants.map((p, i) => {
+      const pos = positions[i] || { x: 0, y: 0, width: 0, height: 0 };
+      return {
+        id: p.id,
+        x: pos.x * scaleX,
+        y: pos.y * scaleY,
+        width: pos.width * scaleX,
+        height: pos.height * scaleY,
+        name: p.name,
+        videoEnabled: p.videoEnabled,
+        isLocal: p.isLocal,
+        isSpeaking: p.isLocal ? isLocalSpeaking : speakingParticipants.has(p.id),
+      };
+    });
+
+    setPreviewPositions(previewData);
+  }, [
+    isLocalUserOnStage, localStream, videoEnabled, remoteParticipants,
+    selectedLayout, isSharingScreen, orientation, containerDimensions,
+    isLocalSpeaking, speakingParticipants
+  ]);
 
   // Monitor audio levels for remote participants
   // CRITICAL: Use a ref to persist audio contexts across re-renders
@@ -779,6 +967,12 @@ export function StudioCanvas({
 
   const aspectRatio = orientation === 'portrait' ? '9 / 16' : '16 / 9';
 
+  // Get participant streams for HTML preview
+  const getParticipantStream = (id: string): MediaStream | null => {
+    if (id === 'local') return localStream;
+    return remoteParticipants.get(id)?.stream || null;
+  };
+
   return (
     <div
       ref={containerRef}
@@ -790,15 +984,57 @@ export function StudioCanvas({
         backgroundColor,
         border: editMode ? '4px solid #8B5CF6' : 'none',
         boxSizing: 'border-box',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        overflow: 'hidden',
       }}
     >
+      {/* Hidden canvas for output stream capture */}
       <canvas
         ref={canvasRef}
-        style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
+        style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}
       />
+
+      {/* HTML Video Preview Layer - This is what the user sees (no flickering) */}
+      <div className="absolute inset-0">
+        {previewPositions.map((p) => (
+          <HTMLPreviewVideo
+            key={p.id}
+            participantId={p.id}
+            stream={getParticipantStream(p.id)}
+            name={p.name}
+            videoEnabled={p.videoEnabled}
+            isSpeaking={p.isSpeaking}
+            isLocal={p.isLocal}
+            style={{
+              left: p.x,
+              top: p.y,
+              width: p.width,
+              height: p.height,
+            }}
+          />
+        ))}
+
+        {/* Screen share overlay */}
+        {isSharingScreen && screenShareStream && (
+          <video
+            autoPlay
+            playsInline
+            muted
+            ref={(el) => {
+              if (el && el.srcObject !== screenShareStream) {
+                el.srcObject = screenShareStream;
+                el.play().catch(() => {});
+              }
+            }}
+            className="absolute bg-black rounded-lg"
+            style={{
+              left: 0,
+              top: containerDimensions.height * 0.12,
+              width: containerDimensions.width,
+              height: containerDimensions.height * 0.88,
+            }}
+          />
+        )}
+      </div>
 
       <button
         onClick={handleFullscreen}
@@ -824,6 +1060,7 @@ export function StudioCanvas({
         </div>
       </div>
 
+      {/* Hidden video elements for canvas rendering */}
       {localStream && isLocalUserOnStage && (
         <video ref={mainVideoRef} autoPlay playsInline muted style={{ display: 'none' }} />
       )}
