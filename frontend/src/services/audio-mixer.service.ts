@@ -32,11 +32,16 @@ class AudioMixerService {
 
   /**
    * Add an audio stream to the mix
+   * @param id - Unique identifier for the stream
+   * @param stream - The MediaStream to add
+   * @param playLocally - If true, also play through local speakers. Default true.
+   *                      Set to false for local microphone to prevent feedback.
    */
-  addStream(id: string, stream: MediaStream): void {
+  addStream(id: string, stream: MediaStream, playLocally: boolean = true): void {
     console.log('[AudioMixer] addStream called:', id, {
       initialized: !!this.audioContext && !!this.destination,
       contextState: this.audioContext?.state,
+      playLocally,
       streamTracks: stream.getTracks().map(t => ({
         kind: t.kind,
         id: t.id,
@@ -62,10 +67,15 @@ class AudioMixerService {
     const gainNode = this.audioContext.createGain();
     gainNode.gain.value = this.currentMasterVolume;
 
-    // Connect: source -> gain -> BOTH destinations (broadcast AND speakers)
+    // Connect: source -> gain -> destination(s)
     source.connect(gainNode);
-    gainNode.connect(this.destination);  // For broadcast output
-    gainNode.connect(this.audioContext.destination);  // For local speakers (host can hear guests)
+    gainNode.connect(this.destination);  // Always connect to broadcast output
+
+    // Only connect to speakers if playLocally is true
+    // Local microphone should NOT go to speakers (causes feedback)
+    if (playLocally) {
+      gainNode.connect(this.audioContext.destination);  // For local speakers
+    }
 
     // Store source and gain node
     this.sources.set(id, source);
@@ -73,6 +83,7 @@ class AudioMixerService {
 
     console.log('[AudioMixer] Stream added successfully:', id, {
       totalStreams: this.sources.size,
+      playLocally,
       allStreamIds: Array.from(this.sources.keys()),
     });
   }

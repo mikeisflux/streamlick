@@ -82,8 +82,9 @@ export function useMediaDevices() {
 
       // CRITICAL: Update audio mixer with new microphone for monitor mode
       // Remove old microphone and add new one so WebRTC sends updated audio
+      // playLocally=false because host should NOT hear their own mic through speakers
       audioMixerService.removeStream('local-microphone');
-      audioMixerService.addStream('local-microphone', new MediaStream([processedAudioTrack]));
+      audioMixerService.addStream('local-microphone', new MediaStream([processedAudioTrack]), false);
 
       // Clean up: stop the raw audio track since we're using the processed one
       newAudioTrack.stop();
