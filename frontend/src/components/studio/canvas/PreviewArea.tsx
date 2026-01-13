@@ -447,8 +447,8 @@ export function PreviewArea({
           </div>
         ))}
 
-        {/* Invite Tile - shows when no backstage or greenroom participants */}
-        {backstageParticipants.length === 0 && greenroomParticipants.length === 0 && !screenShareStream && onInviteGuests && (
+        {/* Invite Tile - always visible so host can invite multiple guests */}
+        {onInviteGuests && (
           <div className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
             <button
               onClick={onInviteGuests}
