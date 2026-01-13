@@ -29,6 +29,11 @@ interface ChatMessage {
   timestamp: number;
 }
 
+interface DeviceInfo {
+  deviceId: string;
+  label: string;
+}
+
 interface GuestGreenroomProps {
   broadcastTitle: string;
   guestName: string;
@@ -42,11 +47,17 @@ interface GuestGreenroomProps {
   participants: Map<string, Participant>;
   privateChatMessages: ChatMessage[];
   publicChatMessages: ChatMessage[];
+  audioDevices?: DeviceInfo[];
+  videoDevices?: DeviceInfo[];
+  selectedAudioDevice?: string;
+  selectedVideoDevice?: string;
   onToggleAudio: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare?: () => void;
   onVolumeChange: (volume: number) => void;
   onSendPrivateMessage: (message: string) => void;
+  onAudioDeviceChange?: (deviceId: string) => void;
+  onVideoDeviceChange?: (deviceId: string) => void;
   onLeave?: () => void;
 }
 
@@ -63,11 +74,17 @@ export function GuestGreenroom({
   participants,
   privateChatMessages,
   publicChatMessages,
+  audioDevices = [],
+  videoDevices = [],
+  selectedAudioDevice,
+  selectedVideoDevice,
   onToggleAudio,
   onToggleVideo,
   onToggleScreenShare,
   onVolumeChange,
   onSendPrivateMessage,
+  onAudioDeviceChange,
+  onVideoDeviceChange,
   onLeave,
 }: GuestGreenroomProps) {
   // When LIVE, show the GuestStage component
@@ -84,11 +101,17 @@ export function GuestGreenroom({
         isScreenSharing={isScreenSharing}
         participants={participants}
         privateChatMessages={privateChatMessages}
+        audioDevices={audioDevices}
+        videoDevices={videoDevices}
+        selectedAudioDevice={selectedAudioDevice}
+        selectedVideoDevice={selectedVideoDevice}
         onToggleAudio={onToggleAudio}
         onToggleVideo={onToggleVideo}
         onToggleScreenShare={onToggleScreenShare}
         onVolumeChange={onVolumeChange}
         onSendPrivateMessage={onSendPrivateMessage}
+        onAudioDeviceChange={onAudioDeviceChange}
+        onVideoDeviceChange={onVideoDeviceChange}
         onLeave={onLeave}
       />
     );

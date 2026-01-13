@@ -355,11 +355,17 @@ export function GuestJoin() {
         participants={greenroomParticipants}
         privateChatMessages={privateChatMessages}
         publicChatMessages={publicChatMessages}
+        audioDevices={audioDevices}
+        videoDevices={videoDevices}
+        selectedAudioDevice={selectedAudioDevice}
+        selectedVideoDevice={selectedVideoDevice}
         onToggleAudio={toggleAudio}
         onToggleVideo={toggleVideo}
         onToggleScreenShare={handleToggleScreenShare}
         onVolumeChange={setStreamVolume}
         onSendPrivateMessage={handleSendPrivateMessage}
+        onAudioDeviceChange={setSelectedAudioDevice}
+        onVideoDeviceChange={setSelectedVideoDevice}
         onLeave={handleLeave}
       />
     );

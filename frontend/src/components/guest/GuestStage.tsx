@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import toast from 'react-hot-toast';
+import { GuestSettingsModal } from './GuestSettingsModal';
 
 interface Participant {
   id: string;
@@ -22,6 +23,11 @@ interface ChatMessage {
   timestamp: number;
 }
 
+interface DeviceInfo {
+  deviceId: string;
+  label: string;
+}
+
 interface GuestStageProps {
   broadcastTitle: string;
   guestName: string;
@@ -33,11 +39,17 @@ interface GuestStageProps {
   isScreenSharing?: boolean;
   participants: Map<string, Participant>;
   privateChatMessages: ChatMessage[];
+  audioDevices?: DeviceInfo[];
+  videoDevices?: DeviceInfo[];
+  selectedAudioDevice?: string;
+  selectedVideoDevice?: string;
   onToggleAudio: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare?: () => void;
   onVolumeChange: (volume: number) => void;
   onSendPrivateMessage: (message: string) => void;
+  onAudioDeviceChange?: (deviceId: string) => void;
+  onVideoDeviceChange?: (deviceId: string) => void;
   onLeave?: () => void;
 }
 
@@ -52,17 +64,25 @@ export function GuestStage({
   isScreenSharing = false,
   participants,
   privateChatMessages,
+  audioDevices = [],
+  videoDevices = [],
+  selectedAudioDevice,
+  selectedVideoDevice,
   onToggleAudio,
   onToggleVideo,
   onToggleScreenShare,
   onVolumeChange,
   onSendPrivateMessage,
+  onAudioDeviceChange,
+  onVideoDeviceChange,
   onLeave,
 }: GuestStageProps) {
   const [activeTab, setActiveTab] = useState<'private' | 'comments' | 'recording'>('private');
   const [chatMessage, setChatMessage] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showMicDropdown, setShowMicDropdown] = useState(false);
+  const [showCameraDropdown, setShowCameraDropdown] = useState(false);
 
   const handleSendChat = () => {
     if (chatMessage.trim()) {
@@ -367,53 +387,171 @@ export function GuestStage({
         <div className="flex items-center justify-between max-w-6xl mx-auto">
           {/* Left Controls */}
           <div className="flex items-center gap-2">
-            {/* Microphone */}
-            <button
-              onClick={() => {
-                console.log('[GuestStage] Mic button clicked, calling onToggleAudio');
-                onToggleAudio();
-              }}
-              className={`flex items-center gap-1 px-3 py-2 rounded-lg transition-colors ${
-                audioEnabled
-                  ? 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                  : 'bg-red-100 text-red-600'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                {audioEnabled ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                ) : (
-                  <>
+            {/* Microphone with Dropdown */}
+            <div className="relative flex">
+              <button
+                onClick={() => {
+                  console.log('[GuestStage] Mic button clicked, calling onToggleAudio');
+                  onToggleAudio();
+                }}
+                className={`flex items-center gap-1 px-3 py-2 rounded-l-lg transition-colors ${
+                  audioEnabled
+                    ? 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                    : 'bg-red-100 text-red-600'
+                }`}
+                title={audioEnabled ? 'Mute microphone' : 'Unmute microphone'}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {audioEnabled ? (
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18" />
-                  </>
-                )}
-              </svg>
-            </button>
+                  ) : (
+                    <>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18" />
+                    </>
+                  )}
+                </svg>
+              </button>
+              <button
+                onClick={() => {
+                  setShowMicDropdown(!showMicDropdown);
+                  setShowCameraDropdown(false);
+                }}
+                className={`px-1 py-2 rounded-r-lg border-l transition-colors ${
+                  audioEnabled
+                    ? 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-200'
+                    : 'bg-red-100 text-red-600 border-red-200'
+                }`}
+                title="Select microphone"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
 
-            {/* Camera */}
-            <button
-              onClick={() => {
-                console.log('[GuestStage] Camera button clicked, calling onToggleVideo');
-                onToggleVideo();
-              }}
-              className={`flex items-center gap-1 px-3 py-2 rounded-lg transition-colors ${
-                videoEnabled
-                  ? 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                  : 'bg-red-100 text-red-600'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                {videoEnabled ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                ) : (
-                  <>
+              {/* Mic Dropdown */}
+              {showMicDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowMicDropdown(false)} />
+                  <div className="absolute bottom-full left-0 mb-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
+                    <div className="p-2 border-b border-gray-100">
+                      <span className="text-xs font-medium text-gray-500 uppercase">Select Microphone</span>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      {audioDevices.length > 0 ? (
+                        audioDevices.map((device) => (
+                          <button
+                            key={device.deviceId}
+                            onClick={() => {
+                              onAudioDeviceChange?.(device.deviceId);
+                              setShowMicDropdown(false);
+                            }}
+                            className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
+                              selectedAudioDevice === device.deviceId ? 'bg-primary-50 text-primary-700' : 'text-gray-700'
+                            }`}
+                          >
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                            </svg>
+                            <span className="truncate">{device.label || `Microphone ${device.deviceId.slice(0, 8)}`}</span>
+                            {selectedAudioDevice === device.deviceId && (
+                              <svg className="w-4 h-4 text-primary-600 ml-auto" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-4 text-sm text-gray-500 text-center">No microphones found</div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Camera with Dropdown */}
+            <div className="relative flex">
+              <button
+                onClick={() => {
+                  console.log('[GuestStage] Camera button clicked, calling onToggleVideo');
+                  onToggleVideo();
+                }}
+                className={`flex items-center gap-1 px-3 py-2 rounded-l-lg transition-colors ${
+                  videoEnabled
+                    ? 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                    : 'bg-red-100 text-red-600'
+                }`}
+                title={videoEnabled ? 'Turn off camera' : 'Turn on camera'}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {videoEnabled ? (
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18" />
-                  </>
-                )}
-              </svg>
-            </button>
+                  ) : (
+                    <>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l18 18" />
+                    </>
+                  )}
+                </svg>
+              </button>
+              <button
+                onClick={() => {
+                  setShowCameraDropdown(!showCameraDropdown);
+                  setShowMicDropdown(false);
+                }}
+                className={`px-1 py-2 rounded-r-lg border-l transition-colors ${
+                  videoEnabled
+                    ? 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-200'
+                    : 'bg-red-100 text-red-600 border-red-200'
+                }`}
+                title="Select camera"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {/* Camera Dropdown */}
+              {showCameraDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowCameraDropdown(false)} />
+                  <div className="absolute bottom-full left-0 mb-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
+                    <div className="p-2 border-b border-gray-100">
+                      <span className="text-xs font-medium text-gray-500 uppercase">Select Camera</span>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      {videoDevices.length > 0 ? (
+                        videoDevices.map((device) => (
+                          <button
+                            key={device.deviceId}
+                            onClick={() => {
+                              onVideoDeviceChange?.(device.deviceId);
+                              setShowCameraDropdown(false);
+                            }}
+                            className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
+                              selectedVideoDevice === device.deviceId ? 'bg-primary-50 text-primary-700' : 'text-gray-700'
+                            }`}
+                          >
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            <span className="truncate">{device.label || `Camera ${device.deviceId.slice(0, 8)}`}</span>
+                            {selectedVideoDevice === device.deviceId && (
+                              <svg className="w-4 h-4 text-primary-600 ml-auto" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-4 text-sm text-gray-500 text-center">No cameras found</div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
 
             {/* Screen Share */}
             <button

@@ -598,9 +598,6 @@ export function StudioCanvas({
 
         const cornerRadius = 16;
 
-        // DEBUG: Track flicker issues - log only when state changes
-        const debugStateRef = (window as any).__flickerDebug = (window as any).__flickerDebug || {};
-
         // Draw participants - SIMPLIFIED: Draw directly from video, no cache
         allParticipants.forEach((p, i) => {
           if (i >= positions.length) return;
@@ -608,31 +605,6 @@ export function StudioCanvas({
 
           // Check if video is ready to draw
           const videoReady = p.video && p.video.readyState >= 2 && p.video.videoWidth > 0 && p.video.videoHeight > 0;
-
-          // DEBUG: Log state changes AND when we skip drawing
-          if (p.type === 'remote') {
-            const debugKey = `${p.id}_state`;
-            const willDraw = p.videoEnabled && videoReady;
-            const currentState = JSON.stringify({
-              videoEnabled: p.videoEnabled,
-              videoReady,
-              willDraw,
-              readyState: p.video?.readyState,
-              videoWidth: p.video?.videoWidth,
-            });
-            if (debugStateRef[debugKey] !== currentState) {
-              console.log(`[FLICKER DEBUG] ${p.id.substring(0, 8)}:`, JSON.parse(currentState));
-              debugStateRef[debugKey] = currentState;
-            }
-            // Log every frame where we DON'T draw video (limited to once per second)
-            if (!willDraw) {
-              const skipKey = `${p.id}_skipCount`;
-              debugStateRef[skipKey] = (debugStateRef[skipKey] || 0) + 1;
-              if (debugStateRef[skipKey] % 30 === 1) {
-                console.log(`[FLICKER] NOT drawing ${p.id.substring(0, 8)} - videoEnabled:${p.videoEnabled} videoReady:${videoReady} (skipped ${debugStateRef[skipKey]} frames)`);
-              }
-            }
-          }
 
           const shouldDrawAvatar = !p.videoEnabled && p.type === 'local' && avatarImageRef.current;
 

@@ -14,3 +14,5 @@ export { GuestSystemCheck } from './GuestSystemCheck';
 export { GuestGreenroomHeader } from './GuestGreenroomHeader';
 export { GuestJoinLobby } from './GuestJoinLobby';
 export { GuestGreenroom } from './GuestGreenroom';
+export { GuestStage } from './GuestStage';
+export { GuestSettingsModal } from './GuestSettingsModal';
