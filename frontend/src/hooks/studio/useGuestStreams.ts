@@ -79,6 +79,18 @@ export function useGuestStreams(
     pc.ontrack = (event) => {
       console.log('[GuestStreams] Received track from guest:', participantId, event.track.kind);
 
+      // Monitor track for issues that can cause freezing
+      const track = event.track;
+      track.onended = () => {
+        console.log('[GuestStreams] Track ended from guest:', participantId, track.kind, '- may cause freeze!');
+      };
+      track.onmute = () => {
+        console.log('[GuestStreams] Track muted from guest:', participantId, track.kind);
+      };
+      track.onunmute = () => {
+        console.log('[GuestStreams] Track unmuted from guest:', participantId, track.kind);
+      };
+
       if (event.streams && event.streams[0]) {
         const stream = event.streams[0];
         connection.stream = stream;

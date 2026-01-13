@@ -82,10 +82,21 @@ export function useGuestStream({
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
       guestStreamPcRef.current = pc;
 
-      // Add local tracks
+      // Add local tracks and monitor for track ending
       localStream.getTracks().forEach((track) => {
         pc.addTrack(track, localStream);
         console.log('[GuestStream] Added track:', track.kind);
+
+        // Monitor track ending - this can cause "frozen" video
+        track.onended = () => {
+          console.log('[GuestStream] Track ended:', track.kind, '- this may cause freeze!');
+        };
+        track.onmute = () => {
+          console.log('[GuestStream] Track muted:', track.kind);
+        };
+        track.onunmute = () => {
+          console.log('[GuestStream] Track unmuted:', track.kind);
+        };
       });
 
       // Handle ICE candidates
@@ -106,9 +117,14 @@ export function useGuestStream({
         }
       };
 
-      // Handle ICE connection state for debugging
+      // Handle ICE connection state - ICE can fail even when connection state is "connected"
       pc.oniceconnectionstatechange = () => {
         console.log('[GuestStream] ICE connection state:', pc.iceConnectionState);
+
+        // ICE disconnected/failed often precedes connection state change
+        if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+          console.log('[GuestStream] ICE connection issue detected - may need to reconnect');
+        }
       };
 
       // Handle ICE gathering state
