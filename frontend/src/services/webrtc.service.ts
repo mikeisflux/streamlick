@@ -215,12 +215,28 @@ class WebRTCService {
       throw new Error('WebSocket not connected');
     }
 
-    // Join the conference room
+    // Try joinRoom for conference mode first
+    // If Ant Media doesn't respond, it might not be configured for conference mode
     this.sendMessage({
       command: 'joinRoom',
       room: this.roomId,
       streamId: this.participantId,
     });
+
+    // Also try publish command as fallback (for LiveApp mode)
+    // This tells Ant Media we want to publish a stream
+    setTimeout(() => {
+      if (this.connectionState.state !== 'connected') {
+        console.log('[WebRTC-SFU] joinRoom not responded, trying publish command...');
+        this.sendMessage({
+          command: 'publish',
+          streamId: this.participantId,
+          token: '',
+          video: true,
+          audio: true,
+        });
+      }
+    }, 2000);
   }
 
   /**
@@ -368,7 +384,10 @@ class WebRTCService {
    */
   private sendMessage(message: any): void {
     if (this.webSocket?.readyState === WebSocket.OPEN) {
+      console.log('[WebRTC-SFU] Sending message:', message.command, message);
       this.webSocket.send(JSON.stringify(message));
+    } else {
+      console.error('[WebRTC-SFU] Cannot send message - WebSocket not open:', message.command);
     }
   }
 
