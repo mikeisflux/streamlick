@@ -764,7 +764,7 @@ export function Dashboard() {
                 </button>
               </div>
             ) : (
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="bg-white rounded-lg border border-gray-200">
                 {/* Table Header */}
                 <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wider">
                   <div className="col-span-4">Studio name</div>
@@ -842,7 +842,9 @@ export function Dashboard() {
 
                         {/* Dropdown Menu */}
                         {activeMenu === broadcast.id && (
-                          <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setActiveMenu(null)} />
+                            <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
                             <button
                               onClick={() => {
                                 navigator.clipboard.writeText(`${window.location.origin}/guest/${broadcast.id}`);
@@ -888,6 +890,7 @@ export function Dashboard() {
                               Delete studio
                             </button>
                           </div>
+                          </>
                         )}
                       </div>
                     </div>
