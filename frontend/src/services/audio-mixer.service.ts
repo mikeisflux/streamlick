@@ -34,7 +34,21 @@ class AudioMixerService {
    * Add an audio stream to the mix
    */
   addStream(id: string, stream: MediaStream): void {
+    console.log('[AudioMixer] addStream called:', id, {
+      initialized: !!this.audioContext && !!this.destination,
+      contextState: this.audioContext?.state,
+      streamTracks: stream.getTracks().map(t => ({
+        kind: t.kind,
+        id: t.id,
+        enabled: t.enabled,
+        muted: t.muted,
+        readyState: t.readyState,
+      })),
+      existingStreams: Array.from(this.sources.keys()),
+    });
+
     if (!this.audioContext || !this.destination) {
+      console.error('[AudioMixer] Not initialized! Cannot add stream:', id);
       throw new Error('Audio mixer not initialized');
     }
 
@@ -55,6 +69,11 @@ class AudioMixerService {
     // Store source and gain node
     this.sources.set(id, source);
     this.gainNodes.set(id, gainNode);
+
+    console.log('[AudioMixer] Stream added successfully:', id, {
+      totalStreams: this.sources.size,
+      allStreamIds: Array.from(this.sources.keys()),
+    });
   }
 
   /**

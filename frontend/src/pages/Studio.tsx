@@ -261,12 +261,30 @@ export function Studio() {
     broadcastId,
     // onStreamReceived - update participant's stream
     useCallback((participantId: string, stream: MediaStream) => {
-      console.log('[Studio] Received stream from guest:', participantId);
+      console.log('[Studio] Received stream from guest:', participantId, {
+        streamId: stream.id,
+        tracks: stream.getTracks().map(t => ({
+          kind: t.kind,
+          id: t.id,
+          enabled: t.enabled,
+          muted: t.muted,
+          readyState: t.readyState,
+        })),
+        audioTracks: stream.getAudioTracks().length,
+        videoTracks: stream.getVideoTracks().length,
+      });
       setRemoteParticipants((prev: Map<string, any>) => {
         const updated = new Map(prev);
         const participant = updated.get(participantId);
         if (participant) {
+          console.log('[Studio] Updating participant stream:', participantId, {
+            hadStream: !!participant.stream,
+            audioEnabled: participant.audioEnabled,
+            videoEnabled: participant.videoEnabled,
+          });
           updated.set(participantId, { ...participant, stream });
+        } else {
+          console.warn('[Studio] No participant found to update stream:', participantId);
         }
         return updated;
       });

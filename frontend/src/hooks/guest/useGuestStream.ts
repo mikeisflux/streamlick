@@ -83,9 +83,34 @@ export function useGuestStream({
       guestStreamPcRef.current = pc;
 
       // Add local tracks and monitor for track ending
+      console.log('[GuestStream] Local stream tracks:', {
+        total: localStream.getTracks().length,
+        audio: localStream.getAudioTracks().length,
+        video: localStream.getVideoTracks().length,
+        audioDetails: localStream.getAudioTracks().map(t => ({
+          id: t.id,
+          enabled: t.enabled,
+          muted: t.muted,
+          readyState: t.readyState,
+          label: t.label,
+        })),
+        videoDetails: localStream.getVideoTracks().map(t => ({
+          id: t.id,
+          enabled: t.enabled,
+          muted: t.muted,
+          readyState: t.readyState,
+          label: t.label,
+        })),
+      });
+
       localStream.getTracks().forEach((track) => {
         pc.addTrack(track, localStream);
-        console.log('[GuestStream] Added track:', track.kind);
+        console.log('[GuestStream] Added track:', track.kind, {
+          id: track.id,
+          enabled: track.enabled,
+          muted: track.muted,
+          readyState: track.readyState,
+        });
 
         // Monitor track ending - this can cause "frozen" video
         track.onended = () => {

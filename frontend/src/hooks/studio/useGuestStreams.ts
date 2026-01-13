@@ -77,7 +77,19 @@ export function useGuestStreams(
 
     // Handle incoming tracks from guest
     pc.ontrack = (event) => {
-      console.log('[GuestStreams] Received track from guest:', participantId, event.track.kind);
+      console.log('[GuestStreams] Received track from guest:', participantId, event.track.kind, {
+        id: event.track.id,
+        enabled: event.track.enabled,
+        muted: event.track.muted,
+        readyState: event.track.readyState,
+        label: event.track.label,
+        streamsCount: event.streams?.length || 0,
+        streamTracks: event.streams?.[0]?.getTracks().map(t => ({
+          kind: t.kind,
+          id: t.id,
+          enabled: t.enabled,
+        })),
+      });
 
       // Monitor track for issues that can cause freezing
       const track = event.track;
@@ -95,8 +107,23 @@ export function useGuestStreams(
         const stream = event.streams[0];
         connection.stream = stream;
 
+        console.log('[GuestStreams] Stream received from guest:', participantId, {
+          streamId: stream.id,
+          tracks: stream.getTracks().map(t => ({
+            kind: t.kind,
+            id: t.id,
+            enabled: t.enabled,
+            muted: t.muted,
+            readyState: t.readyState,
+          })),
+          audioTracks: stream.getAudioTracks().length,
+          videoTracks: stream.getVideoTracks().length,
+        });
+
         // Notify parent component about the new stream
         onStreamReceived(participantId, stream);
+      } else {
+        console.warn('[GuestStreams] Track received without stream:', participantId, event.track.kind);
       }
     };
 

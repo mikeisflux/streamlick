@@ -901,14 +901,36 @@ export function StudioCanvas({
       const p = remoteParticipants.get(id);
       if (!p?.stream || p.role !== 'guest' || id === 'screen-share') return;
 
-      if (!participantAudioAddedRef.current.has(id) && p.audioEnabled) {
+      // Check if we need to add audio to mixer
+      const alreadyAdded = participantAudioAddedRef.current.has(id);
+      console.log('[StudioCanvas] Checking participant audio:', id, {
+        alreadyAdded,
+        audioEnabled: p.audioEnabled,
+        hasStream: !!p.stream,
+        audioTracksInStream: p.stream?.getAudioTracks().length,
+      });
+
+      if (!alreadyAdded && p.audioEnabled) {
         const audioTrack = p.stream.getAudioTracks()[0];
+        console.log('[StudioCanvas] Audio track for participant:', id, {
+          hasAudioTrack: !!audioTrack,
+          trackEnabled: audioTrack?.enabled,
+          trackMuted: audioTrack?.muted,
+          trackReadyState: audioTrack?.readyState,
+        });
         if (audioTrack) {
           try {
             audioMixerService.addStream(`participant-${id}`, new MediaStream([audioTrack]));
             participantAudioAddedRef.current.add(id);
-          } catch {}
+            console.log('[StudioCanvas] Added participant audio to mixer:', id);
+          } catch (err) {
+            console.error('[StudioCanvas] Failed to add participant audio to mixer:', id, err);
+          }
+        } else {
+          console.warn('[StudioCanvas] No audio track found for participant:', id);
         }
+      } else if (!alreadyAdded && !p.audioEnabled) {
+        console.log('[StudioCanvas] Skipping audio add - audioEnabled is false:', id);
       }
 
       if (remoteVideoElementsRef.current.has(id)) {
