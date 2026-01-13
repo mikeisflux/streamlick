@@ -229,6 +229,19 @@ export function Studio() {
   // WebRTC
   const { isInitializing, initializeWebRTC } = useWebRTC(broadcastId, localStream);
 
+  // Auto-initialize WebRTC when studio loads (so we can receive guest streams in greenroom)
+  const webrtcInitializedRef = useRef(false);
+  useEffect(() => {
+    if (!broadcastId || !localStream || webrtcInitializedRef.current || isInitializing) return;
+
+    console.log('[Studio] Auto-initializing WebRTC for Ant Media SFU...');
+    webrtcInitializedRef.current = true;
+    initializeWebRTC().catch((error) => {
+      console.error('[Studio] Failed to auto-initialize WebRTC:', error);
+      webrtcInitializedRef.current = false; // Allow retry
+    });
+  }, [broadcastId, localStream, initializeWebRTC, isInitializing]);
+
   // Chat overlay
   const {
     showChatOnStream,
