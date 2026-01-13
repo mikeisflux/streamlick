@@ -147,7 +147,8 @@ class WebRTCService {
   private async handleMessage(event: MessageEvent): Promise<void> {
     try {
       const message = JSON.parse(event.data);
-      logger.debug('[WebRTC-SFU] Received:', message.command);
+      // Log ALL messages from Ant Media for debugging
+      console.log('[WebRTC-SFU] Received message:', message.command, message);
 
       switch (message.command) {
         case 'start':
@@ -168,6 +169,11 @@ class WebRTCService {
 
         case 'streamJoined':
           logger.info('[WebRTC-SFU] Stream joined:', message.streamId);
+          // Subscribe to the new stream
+          if (message.streamId && message.streamId !== this.participantId) {
+            console.log('[WebRTC-SFU] Subscribing to new stream:', message.streamId);
+            this.playStream(message.streamId);
+          }
           break;
 
         case 'streamLeaved':
@@ -175,9 +181,19 @@ class WebRTCService {
           break;
 
         case 'joinedTheRoom':
-          logger.info('[WebRTC-SFU] Joined room:', message.room);
+          logger.info('[WebRTC-SFU] Joined room:', message.room, 'Existing streams:', message.streams);
           this.connectionState = { state: 'connected', lastCheck: Date.now() };
           this.onConnectionChange?.(this.connectionState);
+
+          // Subscribe to existing streams in the room
+          if (message.streams && Array.isArray(message.streams)) {
+            for (const streamId of message.streams) {
+              if (streamId !== this.participantId) {
+                console.log('[WebRTC-SFU] Subscribing to existing stream:', streamId);
+                this.playStream(streamId);
+              }
+            }
+          }
           break;
 
         case 'error':
@@ -354,6 +370,18 @@ class WebRTCService {
     if (this.webSocket?.readyState === WebSocket.OPEN) {
       this.webSocket.send(JSON.stringify(message));
     }
+  }
+
+  /**
+   * Subscribe to a remote stream (Ant Media play command)
+   */
+  private playStream(streamId: string): void {
+    console.log('[WebRTC-SFU] Sending play command for stream:', streamId);
+    this.sendMessage({
+      command: 'play',
+      streamId: streamId,
+      room: this.roomId,
+    });
   }
 
   /**
