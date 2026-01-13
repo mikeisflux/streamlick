@@ -120,29 +120,22 @@ export function useGuestStream({
       pc.onconnectionstatechange = () => {
         console.log('[GuestStream] Connection state:', pc.connectionState, '(ICE:', pc.iceConnectionState, ')');
 
-        // Track when fully connected - stop polling
+        // Track when fully connected
         if (pc.connectionState === 'connected') {
-          console.log('[GuestStream] WebRTC connected! Stopping active polling.');
+          console.log('[GuestStream] WebRTC connected!');
           guestStreamConnectedRef.current = true;
-          if (activePollingIntervalRef.current) {
-            clearInterval(activePollingIntervalRef.current);
-            activePollingIntervalRef.current = null;
-          }
           if (guestStreamRetryTimeoutRef.current) {
             clearTimeout(guestStreamRetryTimeoutRef.current);
             guestStreamRetryTimeoutRef.current = null;
           }
         }
 
-        // If connection failed or disconnected, restart active polling
+        // If connection failed or disconnected, try to reconnect once
+        // Backend will trigger resend-stream-offer if host rejoins
         if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-          console.log('[GuestStream] Connection lost, restarting active polling...');
+          console.log('[GuestStream] Connection lost, will reconnect on next resend-stream-offer event');
           guestStreamAnswerReceivedRef.current = false;
           guestStreamConnectedRef.current = false;
-          guestStreamRetryCountRef.current = 0;
-          guestStreamRetryTimeoutRef.current = setTimeout(() => {
-            startActivePolling();
-          }, 2000);
         }
       };
 
