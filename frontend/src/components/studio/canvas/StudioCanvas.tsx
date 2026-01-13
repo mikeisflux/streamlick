@@ -1256,7 +1256,11 @@ export function StudioCanvas({
           <div className="text-white text-sm font-medium">Volume</div>
           <div className="flex items-center gap-3">
             <span className="text-white text-xs">0</span>
-            <input type="range" min="0" max="100" value={volume} onChange={e => setVolume(parseInt(e.target.value))} className="w-32 h-2" />
+            <input type="range" min="0" max="100" value={volume} onChange={e => {
+              const newVolume = parseInt(e.target.value);
+              setVolume(newVolume);
+              audioMixerService.setMasterVolume(newVolume / 100);
+            }} className="w-32 h-2" />
             <span className="text-white text-xs">100</span>
           </div>
           <div className="text-white text-sm">{volume}%</div>

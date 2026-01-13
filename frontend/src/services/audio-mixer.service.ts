@@ -62,9 +62,10 @@ class AudioMixerService {
     const gainNode = this.audioContext.createGain();
     gainNode.gain.value = this.currentMasterVolume;
 
-    // Connect: source -> gain -> destination
+    // Connect: source -> gain -> BOTH destinations (broadcast AND speakers)
     source.connect(gainNode);
-    gainNode.connect(this.destination);
+    gainNode.connect(this.destination);  // For broadcast output
+    gainNode.connect(this.audioContext.destination);  // For local speakers (host can hear guests)
 
     // Store source and gain node
     this.sources.set(id, source);

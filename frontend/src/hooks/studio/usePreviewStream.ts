@@ -11,6 +11,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { socketService } from '../../services/socket.service';
 import { canvasStreamService } from '../../services/canvas-stream.service';
+import { audioMixerService } from '../../services/audio-mixer.service';
 import { ICE_SERVERS } from '../../utils/webrtc';
 
 interface PeerConnection {
@@ -53,6 +54,20 @@ export function usePreviewStream(broadcastId: string | undefined) {
       console.warn('[PreviewStream] No video track in canvas stream');
     }
 
+    // Add audio track from the audio mixer (so guests can hear the host and other audio)
+    const audioStream = audioMixerService.getOutputStream();
+    if (audioStream) {
+      const audioTrack = audioStream.getAudioTracks()[0];
+      if (audioTrack) {
+        pc.addTrack(audioTrack, audioStream);
+        console.log('[PreviewStream] Added audio track to peer connection');
+      } else {
+        console.warn('[PreviewStream] No audio track in audio mixer output');
+      }
+    } else {
+      console.warn('[PreviewStream] Audio mixer output not available');
+    }
+
     // Handle ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate) {
@@ -72,6 +87,27 @@ export function usePreviewStream(broadcastId: string | undefined) {
         pc.close();
       }
     };
+
+    // Handle ICE connection state changes (detects issues earlier than connection state)
+    pc.oniceconnectionstatechange = () => {
+      console.log('[PreviewStream] ICE connection state:', pc.iceConnectionState, 'for guest:', guestSocketId);
+      if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+        console.log('[PreviewStream] ICE connection issue detected for guest:', guestSocketId);
+      }
+    };
+
+    // Monitor video track for ending (prevents frozen video)
+    if (videoTrack) {
+      videoTrack.onended = () => {
+        console.log('[PreviewStream] Video track ended for guest:', guestSocketId, '- this may cause freeze!');
+        // The canvas track may have been replaced - close and let guest reconnect
+        const connection = peerConnectionsRef.current.get(guestSocketId);
+        if (connection) {
+          peerConnectionsRef.current.delete(guestSocketId);
+          connection.pc.close();
+        }
+      };
+    }
 
     // Store the peer connection
     peerConnectionsRef.current.set(guestSocketId, { pc, guestSocketId });
