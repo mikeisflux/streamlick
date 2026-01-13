@@ -41,12 +41,18 @@ export function GuestJoin() {
   // Media hook
   const {
     localStream,
+    screenStream,
     audioEnabled,
     videoEnabled,
     startCamera,
+    startScreenShare,
+    stopScreenShare,
     toggleAudio,
     toggleVideo,
   } = useMedia();
+
+  // Screen sharing state
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
 
   // Device enumeration hook
   const {
@@ -210,6 +216,83 @@ export function GuestJoin() {
     }
   };
 
+  // Screen share handler
+  const handleToggleScreenShare = async () => {
+    try {
+      if (isScreenSharing) {
+        stopScreenShare();
+        setIsScreenSharing(false);
+        toast.success('Screen sharing stopped');
+      } else {
+        const stream = await startScreenShare();
+        if (stream) {
+          setIsScreenSharing(true);
+          toast.success('Screen sharing started');
+
+          // Handle user stopping screen share via browser UI
+          stream.getVideoTracks()[0].onended = () => {
+            setIsScreenSharing(false);
+            stopScreenShare();
+          };
+
+          // Produce screen share track via WebRTC
+          const screenTrack = stream.getVideoTracks()[0];
+          if (screenTrack) {
+            try {
+              // Note: Currently the WebRTC service treats all video the same
+              // Future enhancement: distinguish screen share from camera
+              await webrtcService.produceMedia(screenTrack);
+            } catch (error) {
+              console.error('Failed to share screen via WebRTC:', error);
+              toast.error('Failed to share screen');
+              stopScreenShare();
+              setIsScreenSharing(false);
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      if (error?.name !== 'NotAllowedError') {
+        console.error('Screen share error:', error);
+        toast.error('Failed to share screen');
+      }
+      setIsScreenSharing(false);
+    }
+  };
+
+  // Leave handler with proper cleanup
+  const handleLeave = async () => {
+    if (window.confirm('Are you sure you want to leave the show?')) {
+      try {
+        // Stop screen sharing if active
+        if (isScreenSharing) {
+          stopScreenShare();
+          setIsScreenSharing(false);
+        }
+
+        // Leave studio via socket
+        socketService.leaveStudio();
+        socketService.disconnect();
+
+        // Close WebRTC connections
+        await webrtcService.close();
+
+        // Reset state
+        setHasJoined(false);
+        setGuestStatus('greenroom');
+
+        toast.success('You have left the show');
+
+        // Redirect to home or show a "left" message
+        window.location.href = '/';
+      } catch (error) {
+        console.error('Error leaving broadcast:', error);
+        // Force reload as fallback
+        window.location.reload();
+      }
+    }
+  };
+
   // Loading state
   if (isLoading) {
     return (
@@ -260,13 +343,16 @@ export function GuestJoin() {
         streamVolume={streamVolume}
         audioEnabled={audioEnabled}
         videoEnabled={videoEnabled}
+        isScreenSharing={isScreenSharing}
         participants={greenroomParticipants}
         privateChatMessages={privateChatMessages}
         publicChatMessages={publicChatMessages}
         onToggleAudio={toggleAudio}
         onToggleVideo={toggleVideo}
+        onToggleScreenShare={handleToggleScreenShare}
         onVolumeChange={setStreamVolume}
         onSendPrivateMessage={handleSendPrivateMessage}
+        onLeave={handleLeave}
       />
     );
   }

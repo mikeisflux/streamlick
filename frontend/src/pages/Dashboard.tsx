@@ -45,7 +45,15 @@ interface CreateModalProps {
   isOpen: boolean;
   onClose: () => void;
   type: 'live' | 'recording' | 'webinar';
-  onSubmit: (data: { title: string; isReusable: boolean; destinations: string[]; source: 'studio' | 'prerecorded' }) => void;
+  onSubmit: (data: {
+    title: string;
+    isReusable: boolean;
+    destinations: string[];
+    source: 'studio' | 'prerecorded';
+    type: 'live' | 'recording' | 'webinar';
+    localRecordings?: boolean;
+    recordingType?: 'audio-video' | 'audio-only';
+  }) => void;
 }
 
 function CreateModal({ isOpen, onClose, type, onSubmit }: CreateModalProps) {
@@ -68,6 +76,9 @@ function CreateModal({ isOpen, onClose, type, onSubmit }: CreateModalProps) {
       isReusable,
       destinations: selectedDestinations,
       source,
+      type,
+      localRecordings,
+      recordingType,
     });
     onClose();
   };
@@ -431,6 +442,16 @@ function CreateModal({ isOpen, onClose, type, onSubmit }: CreateModalProps) {
             </div>
           </div>
         </div>
+
+        {/* Footer */}
+        <div className="p-6 pt-0">
+          <button
+            onClick={handleSubmit}
+            className="w-full py-3 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors"
+          >
+            Create live stream
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -481,12 +502,29 @@ export function Dashboard() {
     setCreateModal({ isOpen: true, type });
   };
 
-  const handleCreateSubmit = async (data: { title: string; isReusable: boolean; destinations: string[]; source: 'studio' | 'prerecorded' }) => {
+  const handleCreateSubmit = async (data: {
+    title: string;
+    isReusable: boolean;
+    destinations: string[];
+    source: 'studio' | 'prerecorded';
+    type: 'live' | 'recording' | 'webinar';
+    localRecordings?: boolean;
+    recordingType?: 'audio-video' | 'audio-only';
+  }) => {
     try {
       const broadcast = await broadcastService.create({
         title: data.title,
         description: '',
+        studioConfig: {
+          broadcastType: data.type,
+          source: data.source,
+          isReusable: data.isReusable,
+          selectedDestinations: data.destinations,
+          localRecordings: data.localRecordings ?? true,
+          recordingType: data.recordingType ?? 'audio-video',
+        },
       });
+      toast.success(`${data.type === 'live' ? 'Live stream' : data.type === 'recording' ? 'Recording' : 'Webinar'} created!`);
       navigate(`/studio/${broadcast.id}`);
     } catch (error) {
       toast.error('Failed to create broadcast');
@@ -577,6 +615,7 @@ export function Dashboard() {
           </button>
 
           <button
+            onClick={() => toast('Members feature coming soon!', { icon: '🚧' })}
             className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg mt-1"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

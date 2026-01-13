@@ -13,7 +13,7 @@ export interface Broadcast {
   userId: string;
   title: string;
   description?: string;
-  status: 'scheduled' | 'live' | 'ended' | 'recording';
+  status: 'scheduled' | 'countdown' | 'live' | 'ended' | 'recording' | 'error';
   scheduledAt?: string;
   startedAt?: string;
   endedAt?: string;
@@ -24,9 +24,18 @@ export interface Broadcast {
 }
 
 export interface StudioConfig {
-  layout: LayoutConfig;
+  layout?: LayoutConfig;
   branding?: BrandingConfig;
   overlays?: OverlayConfig[];
+  // Create modal options
+  broadcastType?: 'live' | 'recording' | 'webinar';
+  source?: 'studio' | 'prerecorded';
+  isReusable?: boolean;
+  selectedDestinations?: string[];
+  localRecordings?: boolean;
+  recordingType?: 'audio-video' | 'audio-only';
+  // Allow additional properties for flexibility
+  [key: string]: unknown;
 }
 
 export interface LayoutConfig {
