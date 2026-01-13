@@ -11,6 +11,8 @@ class AudioMixerService {
   private gainNodes: Map<string, GainNode> = new Map();
   private connectedElements: Map<HTMLMediaElement, string> = new Map();
   private currentMasterVolume: number = 1.0;
+  private mutedStreams: Set<string> = new Set(); // Track which streams are muted
+  private heartbeatOscillator: OscillatorNode | null = null; // Keep audio graph alive
 
   /**
    * Initialize the audio mixer with high-quality 192kbps equivalent settings
@@ -28,6 +30,16 @@ class AudioMixerService {
 
     // Create destination node
     this.destination = this.audioContext.createMediaStreamDestination();
+
+    // Create a silent "heartbeat" oscillator to keep the audio graph alive
+    // This prevents WebRTC streams from becoming inactive when all sources are muted
+    this.heartbeatOscillator = this.audioContext.createOscillator();
+    const heartbeatGain = this.audioContext.createGain();
+    heartbeatGain.gain.value = 0.0001; // Essentially silent but keeps graph active
+    this.heartbeatOscillator.connect(heartbeatGain);
+    heartbeatGain.connect(this.destination);
+    this.heartbeatOscillator.start();
+    console.log('[AudioMixer] Initialized with heartbeat oscillator to keep audio graph alive');
   }
 
   /**
@@ -144,6 +156,9 @@ class AudioMixerService {
       this.gainNodes.delete(id);
     }
 
+    // Remove from muted set
+    this.mutedStreams.delete(id);
+
     // Clean up element tracking
     for (const [element, elementId] of this.connectedElements.entries()) {
       if (elementId === id) {
@@ -179,6 +194,7 @@ class AudioMixerService {
     const gainNode = this.gainNodes.get(id);
     if (gainNode) {
       gainNode.gain.value = 0;
+      this.mutedStreams.add(id);
       console.log('[AudioMixer] Muted stream:', id);
     }
   }
@@ -190,8 +206,16 @@ class AudioMixerService {
     const gainNode = this.gainNodes.get(id);
     if (gainNode) {
       gainNode.gain.value = this.currentMasterVolume;
+      this.mutedStreams.delete(id);
       console.log('[AudioMixer] Unmuted stream:', id);
     }
+  }
+
+  /**
+   * Check if a stream is muted
+   */
+  isStreamMuted(id: string): boolean {
+    return this.mutedStreams.has(id);
   }
 
   /**
@@ -209,6 +233,13 @@ class AudioMixerService {
    * Stop and cleanup the audio mixer
    */
   stop(): void {
+    // Stop heartbeat oscillator
+    if (this.heartbeatOscillator) {
+      this.heartbeatOscillator.stop();
+      this.heartbeatOscillator.disconnect();
+      this.heartbeatOscillator = null;
+    }
+
     // Disconnect all sources and gain nodes
     this.sources.forEach((source) => {
       source.disconnect();
@@ -219,6 +250,9 @@ class AudioMixerService {
       gainNode.disconnect();
     });
     this.gainNodes.clear();
+
+    // Clear muted streams tracking
+    this.mutedStreams.clear();
 
     // Close audio context
     if (this.audioContext && this.audioContext.state !== 'closed') {
@@ -245,9 +279,12 @@ class AudioMixerService {
     // Store for future streams
     this.currentMasterVolume = clampedVolume;
 
-    // Apply to all existing streams
+    // Apply to all existing streams (but preserve muted state)
     this.gainNodes.forEach((gainNode, id) => {
-      gainNode.gain.value = clampedVolume;
+      // Don't change volume on muted streams - they should stay at 0
+      if (!this.mutedStreams.has(id)) {
+        gainNode.gain.value = clampedVolume;
+      }
     });
   }
 
