@@ -131,6 +131,41 @@ Initial connection failed: v1 RTC path not found. Consider upgrading your LiveKi
 
 ---
 
+### Issue #7: Guest Stream Not Received by Host - Race Condition
+**Status**: ✅ FIXED
+**Date**: 2026-01-14
+**Symptom**: Host sees participant in sync (from database) but receives no tracks from LiveKit. Guest console shows `[GuestJoin] No local stream available when joining`.
+
+**Root Cause**:
+Guest tried to join LiveKit BEFORE `localStream` was ready:
+1. `handleJoin()` called
+2. `webrtcService.initialize()` → WebRTC ready
+3. `webrtcService.joinRoom(localStream)` → **FAILED because localStream was null**
+4. `useMedia` finally produces stream → **Too late!**
+
+**Fix Applied** (`GuestJoin.tsx`):
+- Added `hasPublishedRef` to track if we've successfully published to LiveKit
+- Added `useEffect` that watches for `localStream` and calls `joinRoom()` when it becomes available (if not already joined)
+- Reset `hasPublishedRef` on leave to allow re-joining
+
+```javascript
+// Join LiveKit when localStream becomes available (handles race condition)
+useEffect(() => {
+  if (!hasJoined || !localStream || hasPublishedRef.current) return;
+
+  const publishToLiveKit = async () => {
+    await webrtcService.joinRoom(localStream);
+    hasPublishedRef.current = true;
+  };
+
+  publishToLiveKit();
+}, [hasJoined, localStream]);
+```
+
+**Commit**: `287b4c7` - Fix race condition: guest joins LiveKit before stream ready
+
+---
+
 ## Audio Configuration (Verified Working)
 
 | Source | Destination | Config |
@@ -149,6 +184,8 @@ Initial connection failed: v1 RTC path not found. Consider upgrading your LiveKi
 2. `2ed5403` - Fix architecture: publish individual camera to LiveKit, not composite
 3. `4594d8a` - Fix frozen video: detect track changes within same MediaStream
 4. `635b790` - Fix frozen video in greenroom preview tiles
+5. `00b8aae` - Add progress report and Claude Code instructions
+6. `287b4c7` - Fix race condition: guest joins LiveKit before stream ready
 
 ---
 
@@ -156,11 +193,15 @@ Initial connection failed: v1 RTC path not found. Consider upgrading your LiveKi
 
 ### Frontend
 - `frontend/src/services/webrtc.service.ts` - Participant ID parameter
-- `frontend/src/pages/GuestJoin.tsx` - Pass participant UUID to WebRTC
+- `frontend/src/pages/GuestJoin.tsx` - Pass participant UUID, fix race condition with hasPublishedRef
 - `frontend/src/hooks/studio/useWebRTC.ts` - Accept participantId, publish raw camera
 - `frontend/src/pages/Studio.tsx` - Pass host ID, handle pending streams
 - `frontend/src/components/studio/canvas/StudioCanvas.tsx` - Track detection for video updates
-- `frontend/src/components/studio/canvas/PreviewArea.tsx` - PreviewVideo component
+- `frontend/src/components/studio/canvas/PreviewArea.tsx` - PreviewVideo component, debug logging
+
+### Documentation
+- `PROGRESS_REPORT.md` - This file, tracks all issues and fixes
+- `CLAUDE.md` - Standard procedures for Claude Code sessions
 
 ---
 
