@@ -72,27 +72,12 @@ class WebRTCService {
     this.participantId = `participant_${Date.now()}`;
     this.closed = false;
 
-    // Create LiveKit room instance with external TURN server
+    // Create LiveKit room instance
     this.room = new Room({
       adaptiveStream: true,
       dynacast: true,
       videoCaptureDefaults: {
         resolution: VideoPresets.h720.resolution,
-      },
-      // Configure ICE servers to use external TURN
-      rtcConfig: {
-        iceServers: [
-          // STUN server (Google's public STUN)
-          { urls: 'stun:stun.l.google.com:19302' },
-          // Your coturn TURN server
-          {
-            urls: [TURN_URL, TURN_TLS_URL],
-            username: TURN_USERNAME,
-            credential: TURN_PASSWORD,
-          },
-        ],
-        // Prefer relay for more reliable connections through NAT
-        iceTransportPolicy: 'all',
       },
     });
 
@@ -226,8 +211,20 @@ class WebRTCService {
     // In production, this should come from your backend
     const token = await this.getToken(this.roomId!, this.participantId!);
 
-    // Connect to LiveKit
-    await this.room.connect(LIVEKIT_URL, token);
+    // Connect to LiveKit with external TURN server
+    await this.room.connect(LIVEKIT_URL, token, {
+      rtcConfig: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          {
+            urls: [TURN_URL, TURN_TLS_URL],
+            username: TURN_USERNAME,
+            credential: TURN_PASSWORD,
+          },
+        ],
+        iceTransportPolicy: 'all',
+      },
+    });
 
     logger.info('[WebRTC-LiveKit] Connected to room:', this.roomId);
 
