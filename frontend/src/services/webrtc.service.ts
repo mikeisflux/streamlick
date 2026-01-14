@@ -28,7 +28,7 @@ import {
 import logger from '../utils/logger';
 
 // LiveKit server configuration
-const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL || 'wss://media.streamlick.com:7880';
+const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL || 'wss://media.streamlick.com';
 const LIVEKIT_API_KEY = import.meta.env.VITE_LIVEKIT_API_KEY || 'devkey';
 const LIVEKIT_API_SECRET = import.meta.env.VITE_LIVEKIT_API_SECRET || 'secret';
 
