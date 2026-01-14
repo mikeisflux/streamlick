@@ -166,6 +166,34 @@ useEffect(() => {
 
 ---
 
+### Issue #8: Frozen Video in PreviewArea Guest Tiles
+**Status**: ✅ FIXED
+**Date**: 2026-01-14
+**Symptom**: Guest video preview tile at bottom of host's studio shows frozen frame. Console shows `[PreviewVideo] Updating video source` but video doesn't play.
+
+**Root Cause**:
+The PreviewVideo component had several issues:
+1. `video.play().catch(() => {})` silently swallowed play failures
+2. No monitoring of track state (enabled/muted/readyState)
+3. No recovery mechanism for stalled or unexpectedly paused videos
+4. Browser autoplay policies could silently fail
+
+**Fix Applied** (`PreviewArea.tsx`):
+- Added `attemptPlay()` helper with detailed track state logging
+- Added retry logic (500ms delay) when play() fails
+- Added event listeners for video element events:
+  - `stalled`: Attempts recovery when video stalls
+  - `pause`: Auto-resumes if video is unexpectedly paused
+  - `canplay`: Ensures playback when video becomes ready
+- Force re-assigns srcObject on retry to reset video element state
+
+**Files Modified**:
+- `frontend/src/components/studio/canvas/PreviewArea.tsx`
+
+**Commit**: `77248ee` - Fix frozen video in guest preview tiles
+
+---
+
 ## Audio Configuration (Verified Working)
 
 | Source | Destination | Config |
