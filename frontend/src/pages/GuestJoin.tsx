@@ -132,7 +132,8 @@ export function GuestJoin() {
     };
 
     const initCamera = async () => {
-      await startCamera();
+      // Start with front camera (user) by default for mobile
+      await startCamera({ facingMode: 'user' });
       // Re-enumerate devices after camera permission is granted
       // This ensures device labels are available (browsers only show labels after permission)
       await refreshDevices();
@@ -141,6 +142,33 @@ export function GuestJoin() {
     loadInvite();
     initCamera();
   }, [token]);
+
+  // Handle camera/mic device selection changes
+  useEffect(() => {
+    if (!selectedVideoDevice && !selectedAudioDevice) return;
+    // Only switch if we already have a stream (don't trigger on initial load)
+    if (!localStream) return;
+
+    const switchDevices = async () => {
+      console.log('[GuestJoin] Switching devices:', { selectedVideoDevice, selectedAudioDevice });
+      await startCamera({
+        videoDeviceId: selectedVideoDevice || undefined,
+        audioDeviceId: selectedAudioDevice || undefined,
+      });
+    };
+
+    switchDevices();
+  }, [selectedVideoDevice, selectedAudioDevice]);
+
+  // Helper to flip camera (mobile)
+  const [currentFacingMode, setCurrentFacingMode] = useState<'user' | 'environment'>('user');
+  const flipCamera = async () => {
+    const newMode = currentFacingMode === 'user' ? 'environment' : 'user';
+    console.log('[GuestJoin] Flipping camera to:', newMode);
+    await startCamera({ facingMode: newMode });
+    setCurrentFacingMode(newMode);
+    await refreshDevices();
+  };
 
   // Cleanup on unmount
   useEffect(() => {
@@ -433,6 +461,7 @@ export function GuestJoin() {
       onToggleVideo={toggleVideo}
       onAudioDeviceChange={setSelectedAudioDevice}
       onVideoDeviceChange={setSelectedVideoDevice}
+      onFlipCamera={flipCamera}
     />
   );
 }

@@ -26,6 +26,7 @@ interface GuestJoinLobbyProps {
   onToggleVideo: () => void;
   onAudioDeviceChange: (deviceId: string) => void;
   onVideoDeviceChange: (deviceId: string) => void;
+  onFlipCamera?: () => void;
 }
 
 export function GuestJoinLobby({
@@ -45,7 +46,10 @@ export function GuestJoinLobby({
   onToggleVideo,
   onAudioDeviceChange,
   onVideoDeviceChange,
+  onFlipCamera,
 }: GuestJoinLobbyProps) {
+  // Detect if device is likely mobile (has touch support)
+  const isMobileDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   const [showDeviceSelectors, setShowDeviceSelectors] = useState(false);
 
   return (
@@ -81,7 +85,7 @@ export function GuestJoinLobby({
         </div>
 
         {/* Controls */}
-        <div className="flex justify-center gap-3 mb-6">
+        <div className="flex justify-center gap-3 mb-6 flex-wrap">
           <button
             onClick={onToggleAudio}
             className={`flex items-center gap-2 px-5 py-3 rounded-lg font-medium transition-all shadow-md ${
@@ -106,6 +110,17 @@ export function GuestJoinLobby({
             <span className="text-xl">{videoEnabled ? '📹' : '📵'}</span>
             <span className="text-sm">{videoEnabled ? 'Stop Video' : 'Start Video'}</span>
           </button>
+          {/* Flip Camera button - shown on mobile devices */}
+          {isMobileDevice && onFlipCamera && (
+            <button
+              onClick={onFlipCamera}
+              className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium transition-all shadow-md bg-gray-100 hover:bg-gray-200 text-gray-900"
+              title="Flip camera"
+            >
+              <span className="text-xl">🔄</span>
+              <span className="text-sm">Flip</span>
+            </button>
+          )}
           <button
             onClick={() => setShowDeviceSelectors(!showDeviceSelectors)}
             className="flex items-center gap-2 px-5 py-3 rounded-lg font-medium transition-all shadow-md bg-gray-100 hover:bg-gray-200 text-gray-900"

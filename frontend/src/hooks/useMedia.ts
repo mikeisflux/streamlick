@@ -24,8 +24,22 @@ export function useMedia() {
     screenStreamRef.current = screenStream;
   }, [screenStream]);
 
-  const startCamera = useCallback(async () => {
+  const startCamera = useCallback(async (options?: {
+    videoDeviceId?: string;
+    audioDeviceId?: string;
+    facingMode?: 'user' | 'environment';
+  }) => {
     try {
+      // Stop existing stream if switching devices
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (rawStreamRef.current) {
+        rawStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      audioMixerService.removeStream('local-microphone');
+      audioProcessorService.stop();
+
       // Get all audio devices and select MICROPHONE, not system audio
       const devices = await navigator.mediaDevices.enumerateDevices();
       const audioInputs = devices.filter(d => d.kind === 'audioinput');
@@ -43,15 +57,27 @@ export function useMedia() {
         );
       });
 
-      const micDeviceId = microphones.length > 0 ? microphones[0].deviceId : undefined;
-      console.log('[useMedia] Using microphone:', microphones[0]?.label || 'default');
+      // Use provided audioDeviceId, or fall back to first microphone
+      const micDeviceId = options?.audioDeviceId || (microphones.length > 0 ? microphones[0].deviceId : undefined);
+      console.log('[useMedia] Using microphone:', microphones.find(m => m.deviceId === micDeviceId)?.label || 'default');
+
+      // Build video constraints - support deviceId or facingMode (for mobile)
+      let videoConstraints: MediaTrackConstraints = {
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30 },
+      };
+
+      if (options?.videoDeviceId) {
+        videoConstraints.deviceId = { exact: options.videoDeviceId };
+        console.log('[useMedia] Using video device by ID:', options.videoDeviceId);
+      } else if (options?.facingMode) {
+        videoConstraints.facingMode = { ideal: options.facingMode };
+        console.log('[useMedia] Using video facingMode:', options.facingMode);
+      }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30 },
-        },
+        video: videoConstraints,
         audio: micDeviceId ? {
           deviceId: { exact: micDeviceId },
           echoCancellation: { ideal: true },
