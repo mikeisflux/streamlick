@@ -130,12 +130,12 @@ TURN_TLS_KEY=/etc/letsencrypt/live/turn.yourdomain.com/privkey.pem
 After your TURN server is running, update your Streamlick frontend `.env`:
 
 ```
-VITE_TURN_SERVER_URL=turn:turn.yourdomain.com:3478
-VITE_TURN_SERVER_USERNAME=streamlick
-VITE_TURN_SERVER_CREDENTIAL=your-password
+VITE_TURN_URL=turn:turn.yourdomain.com:3478
+VITE_TURN_USERNAME=streamlick
+VITE_TURN_PASSWORD=your-password
 
 # For TLS (recommended):
-VITE_TURN_SERVER_URL=turns:turn.yourdomain.com:5349
+VITE_TURN_TLS_URL=turns:turn.yourdomain.com:5349
 ```
 
 ## Testing

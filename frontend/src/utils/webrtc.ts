@@ -14,17 +14,25 @@ function getIceServers(): RTCIceServer[] {
   ];
 
   // Add TURN server if configured (required for symmetric NAT traversal)
-  const turnUrl = import.meta.env.VITE_TURN_SERVER_URL;
-  const turnUsername = import.meta.env.VITE_TURN_SERVER_USERNAME;
-  const turnCredential = import.meta.env.VITE_TURN_SERVER_CREDENTIAL;
+  // Environment variables match webrtc.service.ts
+  const turnUrl = import.meta.env.VITE_TURN_URL;
+  const turnTlsUrl = import.meta.env.VITE_TURN_TLS_URL;
+  const turnUsername = import.meta.env.VITE_TURN_USERNAME;
+  const turnPassword = import.meta.env.VITE_TURN_PASSWORD;
 
-  if (turnUrl && turnUsername && turnCredential) {
+  if (turnUrl && turnUsername && turnPassword) {
+    // Build TURN URLs array - include TLS if configured
+    const turnUrls = [turnUrl];
+    if (turnTlsUrl) {
+      turnUrls.push(turnTlsUrl);
+    }
+
     servers.push({
-      urls: turnUrl,
+      urls: turnUrls,
       username: turnUsername,
-      credential: turnCredential,
+      credential: turnPassword,
     });
-    console.log('[WebRTC] TURN server configured:', turnUrl);
+    console.log('[WebRTC] TURN server configured:', turnUrls);
   } else if (turnUrl) {
     // TURN URL without credentials (some services don't need them)
     servers.push({ urls: turnUrl });
@@ -32,7 +40,7 @@ function getIceServers(): RTCIceServer[] {
   } else {
     console.warn(
       '[WebRTC] No TURN server configured. Guests behind symmetric NATs may not be able to connect. ' +
-        'Set VITE_TURN_SERVER_URL, VITE_TURN_SERVER_USERNAME, and VITE_TURN_SERVER_CREDENTIAL in .env'
+        'Set VITE_TURN_URL, VITE_TURN_USERNAME, and VITE_TURN_PASSWORD in .env'
     );
   }
 
