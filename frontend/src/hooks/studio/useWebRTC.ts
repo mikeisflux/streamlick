@@ -5,7 +5,11 @@ import { audioMixerService } from '../../services/audio-mixer.service';
 import { canvasStreamService } from '../../services/canvas-stream.service';
 import toast from 'react-hot-toast';
 
-export function useWebRTC(broadcastId: string | undefined, localStream: MediaStream | null) {
+export function useWebRTC(
+  broadcastId: string | undefined,
+  localStream: MediaStream | null,
+  participantId?: string
+) {
   const [isInitializing, setIsInitializing] = useState(false);
   const isInitializedRef = useRef(false);
 
@@ -14,10 +18,11 @@ export function useWebRTC(broadcastId: string | undefined, localStream: MediaStr
 
     setIsInitializing(true);
     try {
-      // Initialize WebRTC connection to Ant Media SFU
-      await webrtcService.initialize(broadcastId);
+      // Initialize WebRTC connection to LiveKit SFU with participant ID
+      // This ensures the LiveKit participant.identity matches our database ID
+      await webrtcService.initialize(broadcastId, participantId);
 
-      // Get the canvas output stream (composited video) for publishing to Ant Media
+      // Get the canvas output stream (composited video) for publishing to LiveKit
       // This is what guests will see in their preview
       let publishStream: MediaStream | null = canvasStreamService.getOutputStream();
 
@@ -44,7 +49,7 @@ export function useWebRTC(broadcastId: string | undefined, localStream: MediaStr
           const audioTrack = audioMixerOutputStream.getAudioTracks()[0];
           if (audioTrack) {
             combinedTracks.push(audioTrack);
-            console.log('[useWebRTC] Added audio mixer output to Ant Media stream');
+            console.log('[useWebRTC] Added audio mixer output to LiveKit stream');
           }
         } else if (localStream) {
           // Fallback to raw microphone if mixer not initialized
@@ -56,12 +61,12 @@ export function useWebRTC(broadcastId: string | undefined, localStream: MediaStr
         }
 
         const combinedStream = new MediaStream(combinedTracks);
-        console.log('[useWebRTC] Joining Ant Media room with combined stream:', {
+        console.log('[useWebRTC] Joining LiveKit room with combined stream:', {
           videoTracks: combinedStream.getVideoTracks().length,
           audioTracks: combinedStream.getAudioTracks().length,
         });
 
-        // Join the Ant Media conference room
+        // Join the LiveKit conference room
         // This publishes our stream and allows us to receive guest streams
         await webrtcService.joinRoom(combinedStream);
       } else {
@@ -76,7 +81,7 @@ export function useWebRTC(broadcastId: string | undefined, localStream: MediaStr
     } finally {
       setIsInitializing(false);
     }
-  }, [broadcastId, localStream]);
+  }, [broadcastId, localStream, participantId]);
 
   // Cleanup WebRTC on unmount
   useEffect(() => {

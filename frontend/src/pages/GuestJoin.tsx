@@ -13,7 +13,7 @@ import { webrtcService } from '../services/webrtc.service';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
-// Hooks - removed P2P hooks (usePreviewStream, useGuestStream) in favor of Ant Media SFU
+// Hooks - removed P2P hooks (usePreviewStream, useGuestStream) in favor of LiveKit SFU
 import {
   useDeviceEnumeration,
   useStatusListeners,
@@ -70,7 +70,7 @@ export function GuestJoin() {
     onStatusChange: setGuestStatus,
   });
 
-  // NOTE: P2P hooks (usePreviewStream, useGuestStream) removed in favor of Ant Media SFU
+  // NOTE: P2P hooks (usePreviewStream, useGuestStream) removed in favor of LiveKit SFU
   // Guest now publishes/subscribes via webrtcService.joinRoom()
 
   // Greenroom chat hook
@@ -81,15 +81,15 @@ export function GuestJoin() {
     sendPrivateChat,
   } = useGreenroomChat({ hasJoined });
 
-  // State for host's broadcast stream (received from Ant Media SFU)
+  // State for host's broadcast stream (received from LiveKit SFU)
   const [broadcastStream, setBroadcastStream] = useState<MediaStream | null>(null);
 
-  // Set up Ant Media remote stream callback to receive host's broadcast
+  // Set up LiveKit remote stream callback to receive host's broadcast
   useEffect(() => {
     if (!hasJoined) return;
 
     const handleRemoteStream = (streamId: string, stream: MediaStream) => {
-      console.log('[GuestJoin] Received remote stream from Ant Media:', streamId, {
+      console.log('[GuestJoin] Received remote stream from LiveKit:', streamId, {
         audioTracks: stream.getAudioTracks().length,
         videoTracks: stream.getVideoTracks().length,
       });
@@ -175,20 +175,21 @@ export function GuestJoin() {
       socketService.connect(undefined, token);
       socketService.joinStudio(broadcastInfo.id, participant.id);
 
-      // Initialize WebRTC connection to Ant Media SFU
+      // Initialize WebRTC connection to LiveKit SFU with StreamLick participant ID
+      // This ensures the LiveKit participant.identity matches our database ID
       try {
-        await webrtcService.initialize(broadcastInfo.id);
+        await webrtcService.initialize(broadcastInfo.id, participant.id);
       } catch (error) {
         console.error('Failed to initialize WebRTC:', error);
         throw new Error('Failed to initialize WebRTC connection');
       }
 
-      // Join room and publish local stream via Ant Media SFU
+      // Join room and publish local stream via LiveKit SFU
       // This handles both sending our stream and receiving other participants' streams
       if (localStream) {
         try {
           await webrtcService.joinRoom(localStream);
-          console.log('[GuestJoin] Joined Ant Media room with local stream');
+          console.log('[GuestJoin] Joined LiveKit room with local stream');
         } catch (error) {
           console.error('Failed to join room:', error);
           throw new Error('Failed to join media room');

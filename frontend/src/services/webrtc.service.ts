@@ -69,10 +69,13 @@ class WebRTCService {
 
   /**
    * Initialize WebRTC for a broadcast room
+   * @param broadcastId - The broadcast/room ID
+   * @param participantId - Optional StreamLick participant ID (uses timestamp-based ID if not provided)
    */
-  async initialize(broadcastId: string): Promise<void> {
+  async initialize(broadcastId: string, participantId?: string): Promise<void> {
     this.roomId = broadcastId;
-    this.participantId = `participant_${Date.now()}`;
+    // Use provided StreamLick participant ID or generate a fallback
+    this.participantId = participantId || `participant_${Date.now()}`;
     this.closed = false;
 
     // Create LiveKit room instance

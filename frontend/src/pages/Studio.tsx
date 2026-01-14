@@ -44,7 +44,7 @@ import {
   useAutoMuteDuringVideos,
   useStudioHandlers,
   usePreviewStream,
-  // NOTE: useGuestStreams (P2P) removed - now using Ant Media SFU via webrtcService
+  // NOTE: useGuestStreams (P2P) removed - now using LiveKit SFU via webrtcService
 } from '../hooks/studio';
 import { webrtcService } from '../services/webrtc.service';
 import { useCanvasSettings } from '../hooks/studio/useCanvasSettings';
@@ -226,15 +226,15 @@ export function Studio() {
 
   const { sidebarVideoRef } = useSidebarVideoSync(localStream);
 
-  // WebRTC
-  const { isInitializing, initializeWebRTC } = useWebRTC(broadcastId, localStream);
+  // WebRTC - pass host's user ID as participant ID for LiveKit identity matching
+  const { isInitializing, initializeWebRTC } = useWebRTC(broadcastId, localStream, user?.id);
 
   // Auto-initialize WebRTC when studio loads (so we can receive guest streams in greenroom)
   const webrtcInitializedRef = useRef(false);
   useEffect(() => {
     if (!broadcastId || !localStream || webrtcInitializedRef.current || isInitializing) return;
 
-    console.log('[Studio] Auto-initializing WebRTC for Ant Media SFU...');
+    console.log('[Studio] Auto-initializing WebRTC for LiveKit SFU...');
     webrtcInitializedRef.current = true;
     initializeWebRTC().catch((error) => {
       console.error('[Studio] Failed to auto-initialize WebRTC:', error);
@@ -270,14 +270,17 @@ export function Studio() {
     setRemoteParticipants,
   } = useParticipants({ broadcastId, showChatOnStream });
 
-  // Ant Media SFU Guest Streams - receive video from guests via SFU
-  // NOTE: Replaced P2P useGuestStreams with Ant Media SFU
+  // Pending streams - stored when stream arrives before participant data
+  const pendingStreamsRef = useRef<Map<string, MediaStream>>(new Map());
+
+  // LiveKit SFU Guest Streams - receive video from guests via SFU
+  // NOTE: Replaced P2P useGuestStreams with LiveKit SFU
   useEffect(() => {
     if (!broadcastId) return;
 
-    // Set up callback to receive guest streams from Ant Media
+    // Set up callback to receive guest streams from LiveKit
     const handleRemoteStream = (streamId: string, stream: MediaStream) => {
-      console.log('[Studio] Received stream from Ant Media SFU:', streamId, {
+      console.log('[Studio] Received stream from LiveKit SFU:', streamId, {
         streamId: stream.id,
         tracks: stream.getTracks().map(t => ({
           kind: t.kind,
@@ -290,39 +293,26 @@ export function Studio() {
         videoTracks: stream.getVideoTracks().length,
       });
 
-      // Try to match stream to a participant
-      // The streamId from Ant Media should map to participant ID
+      // Now that we pass StreamLick participant ID to LiveKit, streamId should match
       setRemoteParticipants((prev: Map<string, any>) => {
         const updated = new Map(prev);
 
-        // First try to find participant by exact ID match
+        // First try to find participant by exact ID match (should work with our fix)
         let participantId = streamId;
         let participant = updated.get(participantId);
 
-        // If no exact match, try to find by iterating (stream ID might differ from participant ID)
-        if (!participant) {
-          // Look for any participant without a stream
-          for (const [id, p] of updated.entries()) {
-            if (!p.stream) {
-              participantId = id;
-              participant = p;
-              console.log('[Studio] Matched stream to participant without stream:', id);
-              break;
-            }
-          }
-        }
-
         if (participant) {
-          console.log('[Studio] Updating participant stream:', participantId, {
+          console.log('[Studio] Matched stream to participant by ID:', participantId, {
             hadStream: !!participant.stream,
             audioEnabled: participant.audioEnabled,
             videoEnabled: participant.videoEnabled,
           });
           updated.set(participantId, { ...participant, stream });
         } else {
-          console.warn('[Studio] No participant found to update stream:', streamId);
-          // Store the stream for later matching when participant joins
-          // For now, create a temporary entry
+          // Race condition: stream arrived before participant data from socket
+          // Store as pending and it will be attached when participant joins
+          console.log('[Studio] Stream arrived before participant, storing as pending:', streamId);
+          pendingStreamsRef.current.set(streamId, stream);
         }
 
         return updated;
@@ -330,15 +320,16 @@ export function Studio() {
     };
 
     const handleParticipantLeft = (streamId: string) => {
-      console.log('[Studio] Stream removed from Ant Media:', streamId);
+      console.log('[Studio] Stream removed from LiveKit:', streamId);
+      // Remove from pending if it was there
+      pendingStreamsRef.current.delete(streamId);
+
       setRemoteParticipants((prev: Map<string, any>) => {
         const updated = new Map(prev);
-        // Try to find participant by stream ID
-        for (const [id, p] of updated.entries()) {
-          if (p.stream?.id === streamId) {
-            updated.set(id, { ...p, stream: null });
-            break;
-          }
+        // Find participant by ID (since streamId is now participantId)
+        const participant = updated.get(streamId);
+        if (participant) {
+          updated.set(streamId, { ...participant, stream: null });
         }
         return updated;
       });
@@ -347,13 +338,35 @@ export function Studio() {
     webrtcService.setRemoteStreamCallback(handleRemoteStream);
     webrtcService.setParticipantLeftCallback(handleParticipantLeft);
 
-    console.log('[Studio] Set up Ant Media SFU stream callbacks for broadcast:', broadcastId);
+    console.log('[Studio] Set up LiveKit SFU stream callbacks for broadcast:', broadcastId);
 
     return () => {
       webrtcService.setRemoteStreamCallback(() => {});
       webrtcService.setParticipantLeftCallback(() => {});
     };
   }, [broadcastId, setRemoteParticipants]);
+
+  // Attach pending streams when participants join
+  // This handles the race condition where stream arrives before socket participant event
+  useEffect(() => {
+    if (pendingStreamsRef.current.size === 0) return;
+
+    setRemoteParticipants((prev: Map<string, any>) => {
+      let updated: Map<string, any> | null = null;
+
+      for (const [participantId, stream] of pendingStreamsRef.current.entries()) {
+        const participant = prev.get(participantId);
+        if (participant && !participant.stream) {
+          console.log('[Studio] Attaching pending stream to participant:', participantId);
+          if (!updated) updated = new Map(prev);
+          updated.set(participantId, { ...participant, stream });
+          pendingStreamsRef.current.delete(participantId);
+        }
+      }
+
+      return updated || prev;
+    });
+  }, [remoteParticipants, setRemoteParticipants]);
 
   // Broadcast
   const {
