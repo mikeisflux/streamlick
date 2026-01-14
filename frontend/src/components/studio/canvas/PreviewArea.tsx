@@ -330,10 +330,8 @@ export function PreviewArea({
         )}
 
         {/* Backstage Participants */}
-        {console.log('[PreviewArea] backstageParticipants:', backstageParticipants.map(p => ({ id: p.id, name: p.name, role: p.role, hasStream: !!p.stream, videoEnabled: p.videoEnabled })))}
         {backstageParticipants.map((participant) => {
           const isOnStage = participant.role === 'guest';
-          console.log('[PreviewArea] Rendering participant:', participant.id, { hasStream: !!participant.stream, role: participant.role, videoEnabled: participant.videoEnabled });
           return (
           <div key={participant.id} className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
             <div className={`relative bg-black rounded overflow-hidden h-full border-2 group ${isOnStage ? 'border-blue-500' : 'border-yellow-500'}`}>
