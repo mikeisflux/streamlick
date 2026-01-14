@@ -5,7 +5,7 @@
  * Uses modular hooks and components for cleaner code organization.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMedia } from '../hooks/useMedia';
 import { socketService } from '../services/socket.service';
@@ -51,6 +51,9 @@ export function GuestJoin() {
 
   // Screen sharing state
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+
+  // Track if we've successfully published to LiveKit
+  const hasPublishedRef = useRef(false);
 
   // Device enumeration hook
   const {
@@ -152,6 +155,25 @@ export function GuestJoin() {
     };
   }, [hasJoined]);
 
+  // Join LiveKit when localStream becomes available (handles race condition)
+  // If we joined before the stream was ready, this will publish once it's available
+  useEffect(() => {
+    if (!hasJoined || !localStream || hasPublishedRef.current) return;
+
+    const publishToLiveKit = async () => {
+      try {
+        console.log('[GuestJoin] localStream now available, joining LiveKit room');
+        await webrtcService.joinRoom(localStream);
+        hasPublishedRef.current = true;
+        console.log('[GuestJoin] Successfully published to LiveKit');
+      } catch (error) {
+        console.error('[GuestJoin] Failed to publish to LiveKit:', error);
+      }
+    };
+
+    publishToLiveKit();
+  }, [hasJoined, localStream]);
+
   // Join handler
   const handleJoin = async () => {
     if (!guestName.trim()) {
@@ -189,13 +211,15 @@ export function GuestJoin() {
       if (localStream) {
         try {
           await webrtcService.joinRoom(localStream);
+          hasPublishedRef.current = true;
           console.log('[GuestJoin] Joined LiveKit room with local stream');
         } catch (error) {
           console.error('Failed to join room:', error);
           throw new Error('Failed to join media room');
         }
       } else {
-        console.warn('[GuestJoin] No local stream available when joining');
+        // Stream not ready yet - the useEffect will handle publishing when it becomes available
+        console.warn('[GuestJoin] No local stream available when joining - will publish when ready');
       }
 
       // Join greenroom
@@ -306,6 +330,7 @@ export function GuestJoin() {
         // Reset state
         setHasJoined(false);
         setGuestStatus('greenroom');
+        hasPublishedRef.current = false;
 
         toast.success('You have left the show');
 
