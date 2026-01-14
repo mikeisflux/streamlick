@@ -21,6 +21,7 @@ import {
   RemoteTrack,
   Track,
   LocalParticipant,
+  LocalTrackPublication,
   ConnectionState as LKConnectionState,
   VideoPresets,
   RoomOptions,
@@ -171,7 +172,7 @@ class WebRTCService {
    */
   private handleParticipantConnected(participant: RemoteParticipant): void {
     // Handle existing tracks
-    participant.trackPublications.forEach((publication) => {
+    participant.trackPublications.forEach((publication: RemoteTrackPublication) => {
       if (publication.track && publication.isSubscribed) {
         this.handleTrackSubscribed(publication.track as RemoteTrack, participant);
       }
@@ -256,7 +257,7 @@ class WebRTCService {
     }
 
     // Handle existing participants
-    this.room.remoteParticipants.forEach((participant) => {
+    this.room.remoteParticipants.forEach((participant: RemoteParticipant) => {
       this.handleParticipantConnected(participant);
     });
 
@@ -442,10 +443,10 @@ class WebRTCService {
 
     // Find existing video publication
     const videoPub = Array.from(localParticipant.trackPublications.values()).find(
-      (pub) => pub.track?.kind === Track.Kind.Video
-    );
+      (pub: LocalTrackPublication) => pub.track?.kind === Track.Kind.Video
+    ) as LocalTrackPublication | undefined;
 
-    if (videoPub && videoPub.track) {
+    if (videoPub?.track) {
       // Unpublish old track and publish new one
       await localParticipant.unpublishTrack(videoPub.track);
       await localParticipant.publishTrack(newTrack, {
