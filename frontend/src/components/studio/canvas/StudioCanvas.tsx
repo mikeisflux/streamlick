@@ -109,19 +109,69 @@ function HTMLPreviewVideo({
   style: React.CSSProperties;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const lastTrackIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
     if (stream && videoEnabled) {
-      // Only set srcObject if it's different or null
-      if (video.srcObject !== stream) {
+      // Get current video track ID to detect track changes within the same stream
+      const videoTrack = stream.getVideoTracks()[0];
+      const currentTrackId = videoTrack?.id || null;
+
+      // Update srcObject if stream changed OR if the video track inside changed
+      const streamChanged = video.srcObject !== stream;
+      const trackChanged = currentTrackId !== lastTrackIdRef.current;
+
+      if (streamChanged || trackChanged) {
+        console.log('[HTMLPreviewVideo] Updating video source:', {
+          participantId,
+          streamChanged,
+          trackChanged,
+          oldTrackId: lastTrackIdRef.current,
+          newTrackId: currentTrackId,
+        });
         video.srcObject = stream;
+        lastTrackIdRef.current = currentTrackId;
         video.play().catch(() => {});
       }
     }
-  }, [stream, videoEnabled]);
+  }, [stream, videoEnabled, participantId]);
+
+  // Also listen for track changes on the stream itself
+  useEffect(() => {
+    if (!stream) return;
+
+    const handleTrackChange = () => {
+      const video = videoRef.current;
+      if (!video) return;
+
+      const videoTrack = stream.getVideoTracks()[0];
+      const currentTrackId = videoTrack?.id || null;
+
+      if (currentTrackId !== lastTrackIdRef.current) {
+        console.log('[HTMLPreviewVideo] Track changed via event:', {
+          participantId,
+          oldTrackId: lastTrackIdRef.current,
+          newTrackId: currentTrackId,
+        });
+        // Force re-assign srcObject to pick up the new track
+        video.srcObject = null;
+        video.srcObject = stream;
+        lastTrackIdRef.current = currentTrackId;
+        video.play().catch(() => {});
+      }
+    };
+
+    stream.addEventListener('addtrack', handleTrackChange);
+    stream.addEventListener('removetrack', handleTrackChange);
+
+    return () => {
+      stream.removeEventListener('addtrack', handleTrackChange);
+      stream.removeEventListener('removetrack', handleTrackChange);
+    };
+  }, [stream, participantId]);
 
   // Determine what to show when video is off
   const showAvatar = !videoEnabled && isLocal && avatarUrl;
@@ -231,6 +281,7 @@ export function StudioCanvas({
   const animationFrameRef = useRef<number | null>(null);
   const outputStreamRef = useRef<MediaStream | null>(null);
   const remoteVideoElementsRef = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const remoteTrackIdsRef = useRef<Map<string, string>>(new Map()); // Track video track IDs for change detection
   const participantCanvasCacheRef = useRef<Map<string, { canvas: OffscreenCanvas | HTMLCanvasElement; ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D; lastFrameTime: number }>>(new Map());
   const participantAudioAddedRef = useRef<Set<string>>(new Set());
 
@@ -905,17 +956,35 @@ export function StudioCanvas({
         console.log('[StudioCanvas] Skipping audio add - audioEnabled is false:', id);
       }
 
+      // Get current video track ID to detect track changes
+      const currentTrack = p.stream.getVideoTracks()[0];
+      const currentTrackId = currentTrack?.id || null;
+      const lastTrackId = remoteTrackIdsRef.current.get(id);
+
       if (remoteVideoElementsRef.current.has(id)) {
         const video = remoteVideoElementsRef.current.get(id)!;
-        // CRITICAL: Never touch srcObject if video is already working or has an active stream
-        // This prevents flickering from ANY kind of update
+
+        // Check if the video track has changed (even if stream object is same)
+        if (currentTrackId && currentTrackId !== lastTrackId) {
+          console.log('[StudioCanvas] Video track changed for participant:', id, {
+            oldTrackId: lastTrackId,
+            newTrackId: currentTrackId,
+          });
+          // Force re-assign srcObject to pick up the new track
+          video.srcObject = null;
+          video.srcObject = p.stream;
+          remoteTrackIdsRef.current.set(id, currentTrackId);
+          video.play().catch(() => {});
+          return;
+        }
+
+        // If track hasn't changed, check if video is working
         const hasValidVideo = video.videoWidth > 0 && video.videoHeight > 0;
         const hasSrcObject = video.srcObject !== null;
         const isPlaying = video.readyState >= 2 && !video.paused;
 
-        // If video has a srcObject and is playing (or at least has data), leave it completely alone
+        // If video has a srcObject and is playing (or at least has data), leave it alone
         if (hasSrcObject && (isPlaying || hasValidVideo)) {
-          // Video is working - don't touch anything
           if (video.paused) video.play().catch(() => {});
           return;
         }
@@ -923,6 +992,7 @@ export function StudioCanvas({
         // Only set srcObject if we don't have one at all
         if (!hasSrcObject && p.stream) {
           video.srcObject = p.stream;
+          if (currentTrackId) remoteTrackIdsRef.current.set(id, currentTrackId);
           video.play().catch(() => {});
         }
         return;
@@ -933,6 +1003,7 @@ export function StudioCanvas({
       video.playsInline = true;
       video.muted = true;
       video.srcObject = p.stream;
+      if (currentTrackId) remoteTrackIdsRef.current.set(id, currentTrackId);
       video.play().catch(() => {});
       remoteVideoElementsRef.current.set(id, video);
     });
@@ -943,6 +1014,7 @@ export function StudioCanvas({
       if (!currentIds.includes(id) || (p && p.role !== 'guest')) {
         remoteVideoElementsRef.current.get(id)?.srcObject && (remoteVideoElementsRef.current.get(id)!.srcObject = null);
         remoteVideoElementsRef.current.delete(id);
+        remoteTrackIdsRef.current.delete(id);
         if (participantAudioAddedRef.current.has(id)) {
           audioMixerService.removeStream(`participant-${id}`);
           participantAudioAddedRef.current.delete(id);
@@ -971,6 +1043,7 @@ export function StudioCanvas({
     return () => {
       remoteVideoElementsRef.current.forEach(v => { v.srcObject = null; });
       remoteVideoElementsRef.current.clear();
+      remoteTrackIdsRef.current.clear();
       participantAudioAddedRef.current.forEach(id => audioMixerService.removeStream(`participant-${id}`));
       participantAudioAddedRef.current.clear();
       participantCanvasCacheRef.current.clear();
