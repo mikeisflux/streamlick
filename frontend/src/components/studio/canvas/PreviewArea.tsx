@@ -11,6 +11,111 @@ interface RemoteParticipant {
   status?: 'greenroom' | 'backstage' | 'live';
 }
 
+// PreviewVideo component - properly handles stream and track changes
+function PreviewVideo({
+  participantId,
+  stream,
+  videoEnabled,
+}: {
+  participantId: string;
+  stream: MediaStream | null;
+  videoEnabled: boolean;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const lastTrackIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (stream && videoEnabled) {
+      // Get current video track ID to detect track changes within the same stream
+      const videoTrack = stream.getVideoTracks()[0];
+      const currentTrackId = videoTrack?.id || null;
+
+      // Update srcObject if stream changed OR if the video track inside changed
+      const streamChanged = video.srcObject !== stream;
+      const trackChanged = currentTrackId !== lastTrackIdRef.current;
+
+      if (streamChanged || trackChanged) {
+        console.log('[PreviewVideo] Updating video source:', {
+          participantId,
+          streamChanged,
+          trackChanged,
+          oldTrackId: lastTrackIdRef.current,
+          newTrackId: currentTrackId,
+        });
+        video.srcObject = stream;
+        lastTrackIdRef.current = currentTrackId;
+        video.play().catch(() => {});
+      }
+    } else if (video.srcObject) {
+      // Clear srcObject when video is disabled or no stream
+      video.srcObject = null;
+      lastTrackIdRef.current = null;
+    }
+  }, [stream, videoEnabled, participantId]);
+
+  // Also listen for track changes on the stream itself
+  useEffect(() => {
+    if (!stream) return;
+
+    const handleTrackChange = () => {
+      const video = videoRef.current;
+      if (!video) return;
+
+      const videoTrack = stream.getVideoTracks()[0];
+      const currentTrackId = videoTrack?.id || null;
+
+      if (currentTrackId !== lastTrackIdRef.current) {
+        console.log('[PreviewVideo] Track changed via event:', {
+          participantId,
+          oldTrackId: lastTrackIdRef.current,
+          newTrackId: currentTrackId,
+        });
+        // Force re-assign srcObject to pick up the new track
+        video.srcObject = null;
+        video.srcObject = stream;
+        lastTrackIdRef.current = currentTrackId;
+        video.play().catch(() => {});
+      }
+    };
+
+    stream.addEventListener('addtrack', handleTrackChange);
+    stream.addEventListener('removetrack', handleTrackChange);
+
+    return () => {
+      stream.removeEventListener('addtrack', handleTrackChange);
+      stream.removeEventListener('removetrack', handleTrackChange);
+    };
+  }, [stream, participantId]);
+
+  if (!stream || !videoEnabled) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-gray-900">
+        <svg className="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+          />
+        </svg>
+      </div>
+    );
+  }
+
+  return (
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      muted
+      className="w-full h-full object-cover"
+    />
+  );
+}
+
 interface PreviewAreaProps {
   localStream: MediaStream | null;
   rawStream: MediaStream | null; // Raw audio before noise gate - for audio level detection
@@ -230,31 +335,11 @@ export function PreviewArea({
           return (
           <div key={participant.id} className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
             <div className={`relative bg-black rounded overflow-hidden h-full border-2 group ${isOnStage ? 'border-blue-500' : 'border-yellow-500'}`}>
-              {participant.stream && participant.videoEnabled ? (
-                <video
-                  autoPlay
-                  playsInline
-                  muted
-                  ref={(el) => {
-                    // Only set srcObject if it's different to prevent flickering
-                    if (el && participant.stream && el.srcObject !== participant.stream) {
-                      el.srcObject = participant.stream;
-                    }
-                  }}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gray-900">
-                  <svg className="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                    />
-                  </svg>
-                </div>
-              )}
+              <PreviewVideo
+                participantId={participant.id}
+                stream={participant.stream}
+                videoEnabled={participant.videoEnabled}
+              />
 
               {/* Red X Button for Kick/Ban */}
               {(onKickParticipant || onBanParticipant) && (
@@ -348,31 +433,11 @@ export function PreviewArea({
         {greenroomParticipants.map((participant) => (
           <div key={participant.id} className="flex-shrink-0" style={{ width: '160px', height: '90px' }}>
             <div className="relative bg-black rounded overflow-hidden h-full border-2 border-green-500 group">
-              {participant.stream && participant.videoEnabled ? (
-                <video
-                  autoPlay
-                  playsInline
-                  muted
-                  ref={(el) => {
-                    // Only set srcObject if it's different to prevent flickering
-                    if (el && participant.stream && el.srcObject !== participant.stream) {
-                      el.srcObject = participant.stream;
-                    }
-                  }}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gray-900">
-                  <svg className="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                    />
-                  </svg>
-                </div>
-              )}
+              <PreviewVideo
+                participantId={participant.id}
+                stream={participant.stream}
+                videoEnabled={participant.videoEnabled}
+              />
 
               {/* Red X Button for Kick/Ban */}
               {(onKickParticipant || onBanParticipant) && (
