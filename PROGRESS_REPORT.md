@@ -194,6 +194,33 @@ The PreviewVideo component had several issues:
 
 ---
 
+### Issue #9: Mobile Camera Shows Black Screen / No Front/Back Selection
+**Status**: ✅ FIXED
+**Date**: 2026-01-14
+**Symptom**: Mobile guest joining shows black screen, only one camera option in device selector (should have front/back).
+
+**Root Cause**:
+1. `startCamera()` in `useMedia.ts` didn't accept any device selection parameters
+2. No `facingMode` support for mobile devices (front: `user`, back: `environment`)
+3. Couldn't switch cameras after initial selection
+
+**Fix Applied**:
+- `useMedia.ts`: Added `options` parameter with `videoDeviceId`, `audioDeviceId`, and `facingMode`
+- `useMedia.ts`: Properly stops existing streams when switching devices
+- `GuestJoin.tsx`: Starts with front camera (`facingMode: 'user'`) by default
+- `GuestJoin.tsx`: Added `flipCamera()` function to toggle between front/back
+- `GuestJoin.tsx`: Added useEffect to handle device selection changes
+- `GuestJoinLobby.tsx`: Added "Flip" button visible on mobile devices
+
+**Files Modified**:
+- `frontend/src/hooks/useMedia.ts`
+- `frontend/src/pages/GuestJoin.tsx`
+- `frontend/src/components/guest/GuestJoinLobby.tsx`
+
+**Commit**: `deb0b96` - Add mobile camera support with facingMode and flip button
+
+---
+
 ## Audio Configuration (Verified Working)
 
 | Source | Destination | Config |
