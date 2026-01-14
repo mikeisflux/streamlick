@@ -231,8 +231,47 @@ The PreviewVideo component had several issues:
 
 ---
 
+### Issue #10: TURN Server Configuration Issues
+**Status**: 🔧 IN PROGRESS
+**Date**: 2026-01-14
+**Symptom**: Mobile guests may fail to connect or have frozen video due to NAT traversal failures.
+
+**Root Cause**:
+Multiple configuration issues identified on TURN server (`turn-1`):
+1. **TLS port 5349 not listening** - coturn config has `tls-listening-port=5349` but no SSL certificates configured
+2. **Password mismatch** - Server has `Str3aml1ck_TURN_2026!xK9m` but code defaulted to `changeme`
+3. **Environment variable name mismatch** - `.env.example` used different names than `webrtc.service.ts`
+
+**TURN Server Status** (178.156.222.91):
+- Port 3478 (TCP/UDP): ✅ Listening
+- Port 5349 (TLS): ❌ Not listening (no SSL certs)
+- External IP: ✅ Correctly configured
+- Username: `streamlick`
+- Password: `Str3aml1ck_TURN_2026!xK9m`
+
+**Fix Applied**:
+- `webrtc.service.ts`:
+  - Made TLS URL optional (only used if configured)
+  - Improved ICE server configuration with proper logging
+  - Added multiple STUN servers for redundancy
+  - Only adds TURN if password is set
+- `.env.example`: Updated with correct variable names
+
+**Environment Variables** (set in production `.env`):
+```
+VITE_TURN_URL=turn:turn.streamlick.com:3478
+VITE_TURN_USERNAME=streamlick
+VITE_TURN_PASSWORD=Str3aml1ck_TURN_2026!xK9m
+```
+
+**TODO**:
+- [ ] Set TURN password in production frontend `.env`
+- [ ] Consider adding TLS certificates to TURN server for better security
+
+---
+
 ## Current Branch
-`claude/merge-webcam-participant-id-2INUk`
+`claude/fix-previewarea-typescript-qp6Tf`
 
 ## Commits in This Session
 1. `00342e9` - Fix participant ID mismatch and race condition for LiveKit streams
@@ -279,6 +318,8 @@ The PreviewVideo component had several issues:
 ---
 
 ## Next Steps / TODO
+- [ ] Set TURN password in production frontend `.env`
+- [ ] Consider adding TLS certificates to TURN server for better security
 - [ ] Investigate LiveKit initial connection failure (nginx config?)
 - [ ] Test promotion from greenroom to stage
 - [ ] Test multiple guests simultaneously

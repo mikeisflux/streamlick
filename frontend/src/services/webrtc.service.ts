@@ -37,10 +37,14 @@ const LIVEKIT_API_KEY = import.meta.env.VITE_LIVEKIT_API_KEY || 'devkey';
 const LIVEKIT_API_SECRET = import.meta.env.VITE_LIVEKIT_API_SECRET || 'secret';
 
 // External TURN server configuration
+// IMPORTANT: Set these in your .env file for production
+// VITE_TURN_URL=turn:turn.streamlick.com:3478
+// VITE_TURN_USERNAME=streamlick
+// VITE_TURN_PASSWORD=your-secure-password
 const TURN_URL = import.meta.env.VITE_TURN_URL || 'turn:turn.streamlick.com:3478';
-const TURN_TLS_URL = import.meta.env.VITE_TURN_TLS_URL || 'turns:turn.streamlick.com:5349';
+const TURN_TLS_URL = import.meta.env.VITE_TURN_TLS_URL; // Only use if TLS is configured on TURN server
 const TURN_USERNAME = import.meta.env.VITE_TURN_USERNAME || 'streamlick';
-const TURN_PASSWORD = import.meta.env.VITE_TURN_PASSWORD || 'changeme';
+const TURN_PASSWORD = import.meta.env.VITE_TURN_PASSWORD || '';
 
 interface ConnectionState {
   state: 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed';
@@ -217,17 +221,34 @@ class WebRTCService {
     // In production, this should come from your backend
     const token = await this.getToken(this.roomId!, this.participantId!);
 
+    // Build TURN URLs array - only include TLS if configured
+    const turnUrls = [TURN_URL];
+    if (TURN_TLS_URL) {
+      turnUrls.push(TURN_TLS_URL);
+    }
+
+    // Build ICE servers config
+    const iceServers: RTCIceServer[] = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ];
+
+    // Only add TURN server if credentials are configured
+    if (TURN_PASSWORD) {
+      iceServers.push({
+        urls: turnUrls,
+        username: TURN_USERNAME,
+        credential: TURN_PASSWORD,
+      });
+      logger.info('[WebRTC-LiveKit] TURN server configured:', { urls: turnUrls, username: TURN_USERNAME });
+    } else {
+      logger.warn('[WebRTC-LiveKit] TURN server NOT configured - set VITE_TURN_PASSWORD in .env');
+    }
+
     // Connect to LiveKit with external TURN server
     await this.room.connect(LIVEKIT_URL, token, {
       rtcConfig: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          {
-            urls: [TURN_URL, TURN_TLS_URL],
-            username: TURN_USERNAME,
-            credential: TURN_PASSWORD,
-          },
-        ],
+        iceServers,
         iceTransportPolicy: 'all',
       },
     });
