@@ -23,6 +23,47 @@ function PreviewVideo({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastTrackIdRef = useRef<string | null>(null);
+  const playRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Helper to attempt playing video with retry logic
+  const attemptPlay = (video: HTMLVideoElement, reason: string) => {
+    // Clear any pending retry
+    if (playRetryTimeoutRef.current) {
+      clearTimeout(playRetryTimeoutRef.current);
+      playRetryTimeoutRef.current = null;
+    }
+
+    const videoTrack = stream?.getVideoTracks()[0];
+    console.log('[PreviewVideo] Attempting play:', {
+      participantId,
+      reason,
+      trackId: videoTrack?.id,
+      trackEnabled: videoTrack?.enabled,
+      trackMuted: videoTrack?.muted,
+      trackReadyState: videoTrack?.readyState,
+      videoPaused: video.paused,
+      videoReadyState: video.readyState,
+    });
+
+    video.play()
+      .then(() => {
+        console.log('[PreviewVideo] Play succeeded:', { participantId });
+      })
+      .catch((err) => {
+        console.warn('[PreviewVideo] Play failed, will retry:', { participantId, error: err.message });
+        // Retry after a short delay
+        playRetryTimeoutRef.current = setTimeout(() => {
+          if (videoRef.current && stream) {
+            // Force re-assign srcObject before retry
+            videoRef.current.srcObject = null;
+            videoRef.current.srcObject = stream;
+            videoRef.current.play().catch((e) => {
+              console.error('[PreviewVideo] Retry play failed:', { participantId, error: e.message });
+            });
+          }
+        }, 500);
+      });
+  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -47,16 +88,22 @@ function PreviewVideo({
         });
         video.srcObject = stream;
         lastTrackIdRef.current = currentTrackId;
-        video.play().catch(() => {});
+        attemptPlay(video, 'stream/track change');
       }
     } else if (video.srcObject) {
       // Clear srcObject when video is disabled or no stream
       video.srcObject = null;
       lastTrackIdRef.current = null;
     }
+
+    return () => {
+      if (playRetryTimeoutRef.current) {
+        clearTimeout(playRetryTimeoutRef.current);
+      }
+    };
   }, [stream, videoEnabled, participantId]);
 
-  // Also listen for track changes on the stream itself
+  // Listen for track changes on the stream itself
   useEffect(() => {
     if (!stream) return;
 
@@ -77,7 +124,7 @@ function PreviewVideo({
         video.srcObject = null;
         video.srcObject = stream;
         lastTrackIdRef.current = currentTrackId;
-        video.play().catch(() => {});
+        attemptPlay(video, 'track event');
       }
     };
 
@@ -89,6 +136,43 @@ function PreviewVideo({
       stream.removeEventListener('removetrack', handleTrackChange);
     };
   }, [stream, participantId]);
+
+  // Monitor for stalled/paused video and attempt recovery
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !stream || !videoEnabled) return;
+
+    const handleStalled = () => {
+      console.warn('[PreviewVideo] Video stalled, attempting recovery:', { participantId });
+      attemptPlay(video, 'stalled event');
+    };
+
+    const handlePause = () => {
+      // Only auto-resume if we have a valid stream
+      if (stream && stream.getVideoTracks().length > 0) {
+        console.warn('[PreviewVideo] Video paused unexpectedly, attempting resume:', { participantId });
+        attemptPlay(video, 'unexpected pause');
+      }
+    };
+
+    const handleCanPlay = () => {
+      // Ensure video is playing when it becomes ready
+      if (video.paused && stream) {
+        console.log('[PreviewVideo] Video can play, ensuring playback:', { participantId });
+        attemptPlay(video, 'canplay event');
+      }
+    };
+
+    video.addEventListener('stalled', handleStalled);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('canplay', handleCanPlay);
+
+    return () => {
+      video.removeEventListener('stalled', handleStalled);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('canplay', handleCanPlay);
+    };
+  }, [stream, videoEnabled, participantId]);
 
   if (!stream || !videoEnabled) {
     return (
