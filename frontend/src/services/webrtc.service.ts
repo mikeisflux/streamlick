@@ -28,6 +28,9 @@ import {
 } from 'livekit-client';
 import logger from '../utils/logger';
 
+// API configuration
+const API_URL = import.meta.env.VITE_API_URL || 'https://api.streamlick.com';
+
 // LiveKit server configuration
 const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL || 'wss://media.streamlick.com';
 const LIVEKIT_API_KEY = import.meta.env.VITE_LIVEKIT_API_KEY || 'devkey';
@@ -270,18 +273,23 @@ class WebRTCService {
   private async getToken(roomName: string, participantName: string): Promise<string> {
     // Try to get token from backend first
     try {
-      const response = await fetch('/api/livekit/token', {
+      const response = await fetch(`${API_URL}/api/livekit/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomName, participantName }),
+        credentials: 'include',
       });
 
       if (response.ok) {
         const data = await response.json();
+        logger.info('[WebRTC-LiveKit] Got token from backend');
         return data.token;
+      } else {
+        const errorText = await response.text();
+        logger.warn('[WebRTC-LiveKit] Backend token request failed:', response.status, errorText);
       }
     } catch (error) {
-      logger.warn('[WebRTC-LiveKit] Could not get token from backend, using fallback');
+      logger.warn('[WebRTC-LiveKit] Could not get token from backend, using fallback:', error);
     }
 
     // Fallback: Generate token client-side (for development only)
