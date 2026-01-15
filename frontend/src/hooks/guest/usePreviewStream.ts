@@ -73,8 +73,25 @@ export function usePreviewStream({
       // Handle incoming tracks
       pc.ontrack = (event) => {
         console.log('[PreviewStream] Received track:', event.track.kind);
+        // DEBUG: Log detailed track info
+        console.log('[PreviewStream] Track details:', {
+          trackId: event.track.id,
+          kind: event.track.kind,
+          label: event.track.label,
+          enabled: event.track.enabled,
+          muted: event.track.muted,
+          readyState: event.track.readyState,
+        });
         if (event.streams && event.streams[0]) {
-          setBroadcastStream(event.streams[0]);
+          const stream = event.streams[0];
+          // DEBUG: Log stream details
+          console.log('[PreviewStream] Stream details:', {
+            streamId: stream.id,
+            active: stream.active,
+            videoTracks: stream.getVideoTracks().length,
+            audioTracks: stream.getAudioTracks().length,
+          });
+          setBroadcastStream(stream);
         }
       };
 
@@ -88,10 +105,39 @@ export function usePreviewStream({
         }
       };
 
+      // DEBUG: Monitor WebRTC stats to verify frames are being received
+      let statsInterval: ReturnType<typeof setInterval> | null = null;
+
       // Handle connection state
       pc.onconnectionstatechange = () => {
         console.log('[PreviewStream] Connection state:', pc.connectionState);
+        if (pc.connectionState === 'connected') {
+          console.log('[PreviewStream] Preview stream connected successfully!');
+          // Start stats monitoring when connected
+          statsInterval = setInterval(async () => {
+            try {
+              const stats = await pc.getStats();
+              stats.forEach(report => {
+                if (report.type === 'inbound-rtp' && report.kind === 'video') {
+                  console.log('[PreviewStream] Video receive stats:', {
+                    framesReceived: report.framesReceived,
+                    framesDecoded: report.framesDecoded,
+                    bytesReceived: report.bytesReceived,
+                    packetsReceived: report.packetsReceived,
+                    packetsLost: report.packetsLost,
+                  });
+                }
+              });
+            } catch (e) {
+              // Ignore errors when connection is closed
+            }
+          }, 5000);
+        }
         if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+          if (statsInterval) {
+            clearInterval(statsInterval);
+            statsInterval = null;
+          }
           setBroadcastStream(null);
           offerReceivedRef.current = false;
           // Try to reconnect after a delay
@@ -103,6 +149,11 @@ export function usePreviewStream({
             }
           }, 2000);
         }
+      };
+
+      // Handle ICE connection state changes
+      pc.oniceconnectionstatechange = () => {
+        console.log('[PreviewStream] ICE connection state:', pc.iceConnectionState);
       };
 
       try {

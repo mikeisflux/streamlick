@@ -735,11 +735,32 @@ export function StudioCanvas({
     try {
       const canvasStream = canvas.captureStream(30);
       outputStreamRef.current = canvasStream;
+
+      // DEBUG: Log canvas stream details
+      const videoTrack = canvasStream.getVideoTracks()[0];
+      console.log('[StudioCanvas] Canvas stream captured:', {
+        streamId: canvasStream.id,
+        active: canvasStream.active,
+        videoTracks: canvasStream.getVideoTracks().length,
+        canvasWidth: canvas.width,
+        canvasHeight: canvas.height,
+        videoTrack: videoTrack ? {
+          id: videoTrack.id,
+          enabled: videoTrack.enabled,
+          muted: videoTrack.muted,
+          readyState: videoTrack.readyState,
+        } : null,
+      });
+
       canvasStreamService.setOutputStream(canvasStream);
-    } catch {}
+    } catch (err) {
+      console.error('[StudioCanvas] Failed to capture canvas stream:', err);
+    }
 
     let lastFrameTime = performance.now();
     const videoStableFrames = new Map<string, number>();
+    let frameCount = 0;
+    let lastDebugTime = performance.now();
 
     const render = () => {
       if (!ctx || !canvas) return;
@@ -749,6 +770,15 @@ export function StudioCanvas({
 
       if (elapsed >= 33) { // 30 FPS
         lastFrameTime = now - (elapsed % 33);
+        frameCount++;
+
+        // DEBUG: Log frame count every 5 seconds
+        if (now - lastDebugTime > 5000) {
+          const fps = Math.round(frameCount / ((now - lastDebugTime) / 1000));
+          console.log('[StudioCanvas] Render stats:', { frameCount, fps, elapsed: Math.round(now - lastDebugTime) + 'ms' });
+          frameCount = 0;
+          lastDebugTime = now;
+        }
 
         // Clear canvas
         ctx.fillStyle = backgroundColor;
@@ -1215,9 +1245,10 @@ export function StudioCanvas({
       }}
     >
       {/* Hidden canvas for output stream capture */}
+      {/* NOTE: opacity: 0.001 instead of 0 to ensure captureStream works on all browsers */}
       <canvas
         ref={canvasRef}
-        style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}
+        style={{ position: 'absolute', opacity: 0.001, pointerEvents: 'none' }}
       />
 
       {/* HTML Video Preview Layer - This is what the user sees (no flickering) */}

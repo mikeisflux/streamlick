@@ -36,6 +36,14 @@ export function usePreviewStream(broadcastId: string | undefined) {
   const createPeerConnectionForGuest = useCallback(async (guestId: string, guestSocketId: string, canvasStream: MediaStream) => {
     console.log('[PreviewStream] Creating peer connection for guest:', guestId, guestSocketId);
 
+    // DEBUG: Log detailed canvas stream info
+    console.log('[PreviewStream] Canvas stream details:', {
+      streamId: canvasStream.id,
+      active: canvasStream.active,
+      videoTracks: canvasStream.getVideoTracks().length,
+      audioTracks: canvasStream.getAudioTracks().length,
+    });
+
     // Check if we already have a connection for this guest
     if (peerConnectionsRef.current.has(guestSocketId)) {
       console.log('[PreviewStream] Already have connection for guest, skipping:', guestSocketId);
@@ -48,6 +56,15 @@ export function usePreviewStream(broadcastId: string | undefined) {
     // Add canvas video track to the peer connection
     const videoTrack = canvasStream.getVideoTracks()[0];
     if (videoTrack) {
+      // DEBUG: Log video track details
+      console.log('[PreviewStream] Video track details:', {
+        trackId: videoTrack.id,
+        kind: videoTrack.kind,
+        label: videoTrack.label,
+        enabled: videoTrack.enabled,
+        muted: videoTrack.muted,
+        readyState: videoTrack.readyState,
+      });
       pc.addTrack(videoTrack, canvasStream);
       console.log('[PreviewStream] Added video track to peer connection');
     } else {
@@ -78,16 +95,6 @@ export function usePreviewStream(broadcastId: string | undefined) {
       }
     };
 
-    // Handle connection state changes
-    pc.onconnectionstatechange = () => {
-      console.log('[PreviewStream] Connection state:', pc.connectionState, 'for guest:', guestSocketId);
-      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-        // Clean up this connection
-        peerConnectionsRef.current.delete(guestSocketId);
-        pc.close();
-      }
-    };
-
     // Handle ICE connection state changes (detects issues earlier than connection state)
     pc.oniceconnectionstatechange = () => {
       console.log('[PreviewStream] ICE connection state:', pc.iceConnectionState, 'for guest:', guestSocketId);
@@ -111,6 +118,35 @@ export function usePreviewStream(broadcastId: string | undefined) {
 
     // Store the peer connection
     peerConnectionsRef.current.set(guestSocketId, { pc, guestSocketId });
+
+    // DEBUG: Monitor WebRTC stats to verify frames are being sent
+    const statsInterval = setInterval(async () => {
+      try {
+        const stats = await pc.getStats();
+        stats.forEach(report => {
+          if (report.type === 'outbound-rtp' && report.kind === 'video') {
+            console.log('[PreviewStream] Video send stats for guest:', guestSocketId, {
+              framesSent: report.framesSent,
+              framesEncoded: report.framesEncoded,
+              bytesSent: report.bytesSent,
+              packetsSent: report.packetsSent,
+            });
+          }
+        });
+      } catch (e) {
+        // Ignore errors when connection is closed
+      }
+    }, 5000);
+
+    // Clean up stats interval when connection changes
+    pc.onconnectionstatechange = () => {
+      console.log('[PreviewStream] Connection state:', pc.connectionState, 'for guest:', guestSocketId);
+      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        clearInterval(statsInterval);
+        peerConnectionsRef.current.delete(guestSocketId);
+        pc.close();
+      }
+    };
 
     // Create and send offer
     try {

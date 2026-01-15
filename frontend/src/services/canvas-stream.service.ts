@@ -48,6 +48,20 @@ class CanvasStreamService {
       return null;
     }
 
+    // DEBUG: Log stream state when retrieved
+    const videoTrack = this.outputStream.getVideoTracks()[0];
+    console.log('[CanvasStreamService] getOutputStream called:', {
+      streamId: this.outputStream.id,
+      active: this.outputStream.active,
+      videoTracks: this.outputStream.getVideoTracks().length,
+      videoTrackState: videoTrack ? {
+        id: videoTrack.id,
+        enabled: videoTrack.enabled,
+        muted: videoTrack.muted,
+        readyState: videoTrack.readyState,
+      } : null,
+    });
+
     return this.outputStream;
   }
 
