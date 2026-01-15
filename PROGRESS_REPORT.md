@@ -316,6 +316,9 @@ The track is technically "subscribed" but `mediaStreamTrack.muted` is `true` bec
 - `9a8ab5e` - Fix GuestStreamPreview video freezing (host preview on guest screen)
 - `2826199` - Fix race condition: set callbacks before joinRoom in GuestJoin
 - `7b24691` - Fix play() interruption in GuestStreamPreview frame retry
+- `aeb299b` - Fix conflicting retry mechanisms in GuestStreamPreview
+- `51805c4` - Add muted attribute to GuestStreamPreview video for autoplay
+- `11352bd` - Add session persistence for guest page refresh
 
 ---
 
@@ -334,6 +337,9 @@ The track is technically "subscribed" but `mediaStreamTrack.muted` is `true` bec
 9. `f2bf2eb` - Update progress report with GuestStreamPreview fix and documentation
 10. `2826199` - Fix race condition: set callbacks before joinRoom in GuestJoin
 11. `7b24691` - Fix play() interruption in GuestStreamPreview frame retry
+12. `aeb299b` - Fix conflicting retry mechanisms in GuestStreamPreview
+13. `51805c4` - Add muted attribute to GuestStreamPreview video for autoplay
+14. `11352bd` - Add session persistence for guest page refresh
 
 ---
 
@@ -341,12 +347,12 @@ The track is technically "subscribed" but `mediaStreamTrack.muted` is `true` bec
 
 ### Frontend
 - `frontend/src/services/webrtc.service.ts` - Participant ID parameter, wait for track unmute
-- `frontend/src/pages/GuestJoin.tsx` - Pass participant UUID, fix race condition with hasPublishedRef, set callbacks before joinRoom
+- `frontend/src/pages/GuestJoin.tsx` - Pass participant UUID, fix race condition with hasPublishedRef, set callbacks before joinRoom, session persistence for refresh
 - `frontend/src/hooks/studio/useWebRTC.ts` - Accept participantId, publish raw camera
 - `frontend/src/pages/Studio.tsx` - Pass host ID, handle pending streams
 - `frontend/src/components/studio/canvas/StudioCanvas.tsx` - Track detection for video updates, frame retry
 - `frontend/src/components/studio/canvas/PreviewArea.tsx` - PreviewVideo component, debug logging, frame retry
-- `frontend/src/components/guest/GuestStreamPreview.tsx` - Track detection, frame retry (less aggressive)
+- `frontend/src/components/guest/GuestStreamPreview.tsx` - Track detection, frame retry (less aggressive), muted attribute for autoplay
 
 ### Documentation
 - `PROGRESS_REPORT.md` - This file, tracks all issues and fixes
