@@ -265,8 +265,48 @@ VITE_TURN_PASSWORD=Str3aml1ck_TURN_2026!xK9m
 ```
 
 **TODO**:
-- [ ] Set TURN password in production frontend `.env`
+- [x] Set TURN password in production frontend `.env` ✅ DONE
 - [ ] Consider adding TLS certificates to TURN server for better security
+
+---
+
+### Issue #11: Guest Video Freezes Immediately on Join
+**Status**: 🔧 FIX APPLIED (needs deploy)
+**Date**: 2026-01-15
+**Symptom**: Guest video in preview tiles and main canvas freezes the moment they join. Video shows one frame then stops.
+
+**Root Cause**:
+When a guest's track is first subscribed via LiveKit, ICE negotiation may still be in progress:
+```
+WARN: Failed to ping without candidate pairs. Connection is not possible yet.
+```
+The track is technically "subscribed" but `mediaStreamTrack.muted` is `true` because actual video data isn't flowing yet. The webrtc.service.ts was notifying the UI immediately, causing the video element to try playing a muted track.
+
+**Fix Applied**:
+1. **`webrtc.service.ts`** - Wait for track data before notifying:
+   - Check if `mediaStreamTrack.muted` is true on subscription
+   - If muted, wait for the `unmute` event before notifying the stream callback
+   - Added 2 second timeout fallback in case unmute never fires
+
+2. **`PreviewArea.tsx` & `StudioCanvas.tsx`** - Aggressive frame retry:
+   - Added useEffect that checks if video has actual frames (`videoWidth > 0`)
+   - Retries up to 10 times (5 seconds) by re-assigning srcObject
+   - Logs detailed state on each retry for debugging
+
+**New Console Logs to Watch**:
+```
+[WebRTC-LiveKit] Track is muted, waiting for unmute: {...}
+[WebRTC-LiveKit] Track unmuted, notifying callback: {...}
+[PreviewVideo] No video frames yet, retrying... {checkCount: 1, ...}
+[PreviewVideo] Video has frames: {videoWidth: 640, videoHeight: 480}
+```
+
+**Files Modified**:
+- `frontend/src/services/webrtc.service.ts`
+- `frontend/src/components/studio/canvas/PreviewArea.tsx`
+- `frontend/src/components/studio/canvas/StudioCanvas.tsx`
+
+**Deployment Required**: Rebuild and deploy frontend for fix to take effect.
 
 ---
 

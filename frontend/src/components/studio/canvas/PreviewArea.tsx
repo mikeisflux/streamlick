@@ -174,6 +174,55 @@ function PreviewVideo({
     };
   }, [stream, videoEnabled, participantId]);
 
+  // Monitor for frozen video (no frames) and attempt recovery
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !stream || !videoEnabled) return;
+
+    let checkCount = 0;
+    const maxChecks = 10; // Check for 5 seconds (500ms * 10)
+
+    const checkForFrames = () => {
+      if (!video || !stream) return;
+
+      checkCount++;
+      const hasFrames = video.videoWidth > 0 && video.videoHeight > 0;
+      const isPlaying = !video.paused && video.readyState >= 2;
+
+      if (!hasFrames && checkCount <= maxChecks) {
+        console.log('[PreviewVideo] No video frames yet, retrying...', {
+          participantId,
+          checkCount,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          readyState: video.readyState,
+          paused: video.paused,
+        });
+
+        // Force re-assign srcObject to reset video element
+        video.srcObject = null;
+        video.srcObject = stream;
+        attemptPlay(video, `frame check retry ${checkCount}`);
+
+        // Schedule next check
+        setTimeout(checkForFrames, 500);
+      } else if (hasFrames) {
+        console.log('[PreviewVideo] Video has frames:', {
+          participantId,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+        });
+      }
+    };
+
+    // Start checking after initial setup (give it a moment)
+    const timeoutId = setTimeout(checkForFrames, 500);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [stream, videoEnabled, participantId]);
+
   if (!stream || !videoEnabled) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-gray-900">

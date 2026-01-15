@@ -261,6 +261,54 @@ function HTMLPreviewVideo({
     };
   }, [stream, videoEnabled, participantId, isLocal]);
 
+  // Monitor for frozen video (no frames) and attempt recovery
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !stream || !videoEnabled) return;
+
+    let checkCount = 0;
+    const maxChecks = 10; // Check for 5 seconds (500ms * 10)
+
+    const checkForFrames = () => {
+      if (!video || !stream) return;
+
+      checkCount++;
+      const hasFrames = video.videoWidth > 0 && video.videoHeight > 0;
+
+      if (!hasFrames && checkCount <= maxChecks) {
+        console.log('[HTMLPreviewVideo] No video frames yet, retrying...', {
+          participantId,
+          checkCount,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          readyState: video.readyState,
+          paused: video.paused,
+        });
+
+        // Force re-assign srcObject to reset video element
+        video.srcObject = null;
+        video.srcObject = stream;
+        attemptPlay(video, `frame check retry ${checkCount}`);
+
+        // Schedule next check
+        setTimeout(checkForFrames, 500);
+      } else if (hasFrames) {
+        console.log('[HTMLPreviewVideo] Video has frames:', {
+          participantId,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+        });
+      }
+    };
+
+    // Start checking after initial setup (give it a moment)
+    const timeoutId = setTimeout(checkForFrames, 500);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [stream, videoEnabled, participantId]);
+
   // Determine what to show when video is off
   const showAvatar = !videoEnabled && isLocal && avatarUrl;
 

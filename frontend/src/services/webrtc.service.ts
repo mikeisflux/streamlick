@@ -199,11 +199,51 @@ class WebRTCService {
       logger.info('[WebRTC-LiveKit] Added track to stream:', {
         participantId: participant.identity,
         trackKind: mediaTrack.kind,
+        trackMuted: mediaTrack.muted,
+        trackReadyState: mediaTrack.readyState,
         streamTracks: stream.getTracks().length,
       });
 
-      // Notify callback
-      this.onRemoteStream?.(participant.identity, stream);
+      // If track is muted (no data flowing yet), wait for it to unmute before notifying
+      // This handles the race condition where ICE negotiation is still in progress
+      if (mediaTrack.muted) {
+        logger.info('[WebRTC-LiveKit] Track is muted, waiting for unmute:', {
+          participantId: participant.identity,
+          trackKind: mediaTrack.kind,
+        });
+
+        let notified = false;
+        const notifyOnce = () => {
+          if (notified) return;
+          notified = true;
+          mediaTrack.removeEventListener('unmute', handleUnmute);
+          this.onRemoteStream?.(participant.identity, stream!);
+        };
+
+        const handleUnmute = () => {
+          logger.info('[WebRTC-LiveKit] Track unmuted, notifying callback:', {
+            participantId: participant.identity,
+            trackKind: mediaTrack.kind,
+          });
+          notifyOnce();
+        };
+
+        mediaTrack.addEventListener('unmute', handleUnmute);
+
+        // Also set a timeout fallback in case unmute never fires
+        setTimeout(() => {
+          if (!notified) {
+            logger.warn('[WebRTC-LiveKit] Track still muted after timeout, notifying anyway:', {
+              participantId: participant.identity,
+              trackKind: mediaTrack.kind,
+            });
+            notifyOnce();
+          }
+        }, 2000);
+      } else {
+        // Track already has data, notify immediately
+        this.onRemoteStream?.(participant.identity, stream);
+      }
     }
   }
 
