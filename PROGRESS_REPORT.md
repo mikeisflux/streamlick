@@ -271,7 +271,7 @@ VITE_TURN_PASSWORD=Str3aml1ck_TURN_2026!xK9m
 ---
 
 ### Issue #11: Guest Video Freezes Immediately on Join
-**Status**: 🔧 FIX APPLIED (needs deploy)
+**Status**: ✅ FIXED
 **Date**: 2026-01-15
 **Symptom**: Guest video in preview tiles and main canvas freezes the moment they join. Video shows one frame then stops.
 
@@ -288,10 +288,12 @@ The track is technically "subscribed" but `mediaStreamTrack.muted` is `true` bec
    - If muted, wait for the `unmute` event before notifying the stream callback
    - Added 2 second timeout fallback in case unmute never fires
 
-2. **`PreviewArea.tsx` & `StudioCanvas.tsx`** - Aggressive frame retry:
+2. **`PreviewArea.tsx` & `StudioCanvas.tsx` & `GuestStreamPreview.tsx`** - Aggressive frame retry:
    - Added useEffect that checks if video has actual frames (`videoWidth > 0`)
    - Retries up to 10 times (5 seconds) by re-assigning srcObject
    - Logs detailed state on each retry for debugging
+   - Listens for track add/remove events on stream
+   - Handles stalled/pause/canplay events
 
 **New Console Logs to Watch**:
 ```
@@ -299,14 +301,19 @@ The track is technically "subscribed" but `mediaStreamTrack.muted` is `true` bec
 [WebRTC-LiveKit] Track unmuted, notifying callback: {...}
 [PreviewVideo] No video frames yet, retrying... {checkCount: 1, ...}
 [PreviewVideo] Video has frames: {videoWidth: 640, videoHeight: 480}
+[GuestStreamPreview] No video frames yet, retrying... {checkCount: 1, ...}
+[GuestStreamPreview] Video has frames: {...}
 ```
 
 **Files Modified**:
 - `frontend/src/services/webrtc.service.ts`
 - `frontend/src/components/studio/canvas/PreviewArea.tsx`
 - `frontend/src/components/studio/canvas/StudioCanvas.tsx`
+- `frontend/src/components/guest/GuestStreamPreview.tsx`
 
-**Deployment Required**: Rebuild and deploy frontend for fix to take effect.
+**Commits**:
+- `70fd5db` - Fix guest video freezing on initial join
+- `9a8ab5e` - Fix GuestStreamPreview video freezing (host preview on guest screen)
 
 ---
 
@@ -345,15 +352,31 @@ The track is technically "subscribed" but `mediaStreamTrack.muted` is `true` bec
 ```
 [HTMLPreviewVideo] Updating video source: {...}  // Main canvas video updates
 [PreviewVideo] Updating video source: {...}       // Preview tile video updates
+[GuestStreamPreview] Setting broadcast stream: {...}  // Host preview on guest page
 [StudioCanvas] Video track changed for participant: {...}  // Canvas render track changes
 [Studio] Matched stream to participant by ID: {...}  // Stream matching
 [Studio] Stream arrived before participant, storing as pending: {...}  // Race condition handling
+[WebRTC-LiveKit] Track is muted, waiting for unmute: {...}  // Track not ready yet
+[*] No video frames yet, retrying... {checkCount: N}  // Frame retry in progress
+[*] Video has frames: {videoWidth: X, videoHeight: Y}  // Video recovered
 ```
 
 ### Key Checks
 1. Participant ID should be UUID format (e.g., `d89a9d46-b329-4396-852d-6333dbaed2b3`)
 2. Track IDs should update when guest reconnects
 3. `hadStream: false` in logs means previous stream was cleared properly
+
+### Components with Video Frame Retry Pattern (DO NOT RE-IMPLEMENT)
+The following components already have the frame retry and track change detection fix:
+- `PreviewArea.tsx` → `PreviewVideo` component (backstage/greenroom tiles on host Studio)
+- `StudioCanvas.tsx` → `HTMLPreviewVideo` component (main canvas on host Studio)
+- `GuestStreamPreview.tsx` (host preview on guest greenroom page)
+
+If video freezing occurs in a NEW component, apply the same pattern:
+1. Track ID detection (`lastTrackIdRef`)
+2. Frame check retry loop (`checkForFrames` with `videoWidth > 0`)
+3. Stream event listeners (`addtrack`, `removetrack`)
+4. Video element events (`stalled`, `pause`, `canplay`)
 
 ---
 
