@@ -368,6 +368,24 @@ export function Studio() {
     });
   }, [remoteParticipants, setRemoteParticipants]);
 
+  // Sync host's audio mute state with Ant Media
+  // This ensures Ant Media is notified when host mutes/unmutes
+  // The track.enabled is already set by useMedia.toggleAudio(), this adds server notification
+  useEffect(() => {
+    if (!webrtcInitializedRef.current) return;
+
+    console.log('[Studio] Syncing audio mute state with Ant Media:', !audioEnabled);
+    webrtcService.muteAudio(!audioEnabled);
+  }, [audioEnabled]);
+
+  // Sync host's video mute state with Ant Media
+  useEffect(() => {
+    if (!webrtcInitializedRef.current) return;
+
+    console.log('[Studio] Syncing video mute state with Ant Media:', !videoEnabled);
+    webrtcService.muteVideo(!videoEnabled);
+  }, [videoEnabled]);
+
   // Broadcast
   const {
     isRecording,

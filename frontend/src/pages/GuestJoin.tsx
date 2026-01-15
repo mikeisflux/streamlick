@@ -128,6 +128,24 @@ export function GuestJoin() {
     };
   }, [hasJoined]);
 
+  // Sync audio mute state with Ant Media
+  // This ensures Ant Media is notified when guest mutes/unmutes
+  // The track.enabled is already set by useMedia.toggleAudio(), this adds server notification
+  useEffect(() => {
+    if (!hasJoined || !hasPublishedRef.current) return;
+
+    console.log('[GuestJoin] Syncing audio mute state with Ant Media:', !audioEnabled);
+    webrtcService.muteAudio(!audioEnabled);
+  }, [audioEnabled, hasJoined]);
+
+  // Sync video mute state with Ant Media
+  useEffect(() => {
+    if (!hasJoined || !hasPublishedRef.current) return;
+
+    console.log('[GuestJoin] Syncing video mute state with Ant Media:', !videoEnabled);
+    webrtcService.muteVideo(!videoEnabled);
+  }, [videoEnabled, hasJoined]);
+
   // Load invite on mount
   useEffect(() => {
     const loadInvite = async () => {

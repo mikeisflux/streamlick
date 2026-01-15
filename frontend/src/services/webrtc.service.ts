@@ -649,27 +649,37 @@ class WebRTCService {
 
   /**
    * Mute/unmute video
+   * This notifies Ant Media server about the mute state
+   * Note: track.enabled should also be set locally for immediate effect
    */
   muteVideo(muted: boolean): void {
     if (this.adaptor && this.streamId) {
+      logger.info('[WebRTC-AntMedia] muteVideo:', { muted, streamId: this.streamId });
       if (muted) {
         this.adaptor.turnOffLocalCamera(this.streamId);
       } else {
         this.adaptor.turnOnLocalCamera(this.streamId);
       }
+    } else {
+      logger.warn('[WebRTC-AntMedia] muteVideo called but adaptor not ready');
     }
   }
 
   /**
    * Mute/unmute audio
+   * This notifies Ant Media server about the mute state
+   * Note: track.enabled should also be set locally for immediate effect
    */
   muteAudio(muted: boolean): void {
     if (this.adaptor && this.streamId) {
+      logger.info('[WebRTC-AntMedia] muteAudio:', { muted, streamId: this.streamId });
       if (muted) {
         this.adaptor.muteLocalMic();
       } else {
         this.adaptor.unmuteLocalMic();
       }
+    } else {
+      logger.warn('[WebRTC-AntMedia] muteAudio called but adaptor not ready');
     }
   }
 

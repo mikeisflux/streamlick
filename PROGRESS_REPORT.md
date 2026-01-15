@@ -466,6 +466,44 @@ The P2P preview stream system was already implemented but not used:
 
 ---
 
+### Issue #14: Mute Buttons Not Synced with Ant Media Server
+**Status**: ✅ FIXED
+**Date**: 2026-01-15
+**Symptom**: Mute buttons only toggled `track.enabled` locally, but Ant Media server was not notified about mute state changes.
+
+**Root Cause**:
+The mute implementation in `useMedia.ts` correctly sets `track.enabled = false` to mute:
+- This stops sending audio/video data through the track
+- WebRTC transmission is muted locally
+- BUT Ant Media server wasn't explicitly notified via its API
+
+While `track.enabled = false` does stop transmission, Ant Media provides explicit mute APIs that should be called for proper server-side tracking.
+
+**Architecture**:
+Muting now uses a two-layer approach:
+1. **Local track**: `track.enabled = false` (immediate local muting via useMedia hook)
+2. **Ant Media notification**: `webrtcService.muteAudio()/muteVideo()` (server notification)
+
+**Fix Applied**:
+- `GuestJoin.tsx`: Added `useEffect` hooks to sync `audioEnabled` and `videoEnabled` with `webrtcService.muteAudio()` and `webrtcService.muteVideo()`
+- `Studio.tsx`: Same synchronization for host's mute state
+- `webrtc.service.ts`: Added logging to mute methods for debugging
+
+**Key Points**:
+- Host mute only affects host's mic/camera (not guests)
+- Guest mute only affects that guest's mic/camera
+- Muting does NOT disconnect streams - tracks remain in WebRTC connection
+- When unmuted, audio/video resumes without reconnection
+
+**Files Modified**:
+- `frontend/src/pages/GuestJoin.tsx`
+- `frontend/src/pages/Studio.tsx`
+- `frontend/src/services/webrtc.service.ts`
+
+**Commit**: `<pending>` - Sync mute state with Ant Media server
+
+---
+
 ## Next Steps / TODO
 - [ ] Set TURN password in production frontend `.env`
 - [ ] Consider adding TLS certificates to TURN server for better security
