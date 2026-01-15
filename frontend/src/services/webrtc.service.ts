@@ -604,6 +604,7 @@ class WebRTCService {
 
   /**
    * Replace video track
+   * Note: Ant Media's updateVideoTrack expects a MediaStream, not a MediaStreamTrack
    */
   async replaceVideoTrack(newTrack: MediaStreamTrack): Promise<void> {
     if (!this.adaptor || !this.streamId) {
@@ -622,8 +623,10 @@ class WebRTCService {
         this.localStream.addTrack(newTrack);
       }
 
-      // Replace track in adaptor
-      this.adaptor.updateVideoTrack(this.streamId, newTrack);
+      // Ant Media's updateVideoTrack expects a MediaStream, not a MediaStreamTrack
+      // Create a temporary stream containing the new track
+      const tempStream = new MediaStream([newTrack]);
+      this.adaptor.updateVideoTrack(tempStream, this.streamId, null);
       logger.info('[WebRTC-AntMedia] Video track replaced');
     } catch (error) {
       logger.error('[WebRTC-AntMedia] Error replacing video track:', error);
@@ -632,6 +635,7 @@ class WebRTCService {
 
   /**
    * Replace audio track
+   * Note: Ant Media's updateAudioTrack expects a MediaStream, not a MediaStreamTrack
    */
   async replaceAudioTrack(newTrack: MediaStreamTrack): Promise<void> {
     if (!this.adaptor || !this.streamId) {
@@ -650,8 +654,10 @@ class WebRTCService {
         this.localStream.addTrack(newTrack);
       }
 
-      // Replace track in adaptor
-      this.adaptor.updateAudioTrack(this.streamId, newTrack);
+      // Ant Media's updateAudioTrack expects a MediaStream, not a MediaStreamTrack
+      // Create a temporary stream containing the new track
+      const tempStream = new MediaStream([newTrack]);
+      this.adaptor.updateAudioTrack(tempStream, this.streamId, null);
       logger.info('[WebRTC-AntMedia] Audio track replaced');
     } catch (error) {
       logger.error('[WebRTC-AntMedia] Error replacing audio track:', error);
