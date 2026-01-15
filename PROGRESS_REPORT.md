@@ -431,10 +431,45 @@ If video freezing occurs in a NEW component, apply the same pattern:
 
 ---
 
+### Issue #13: Guest Greenroom LIVE Preview Shows Raw Camera Instead of Canvas
+**Status**: ✅ FIXED
+**Date**: 2026-01-15
+**Symptom**: When a guest enters the greenroom, the "LIVE" preview in the top-right shows only the host's raw webcam feed instead of the full composed canvas output (with all participants, overlays, backgrounds).
+
+**Root Cause**:
+When migrating from LiveKit to Ant Media SFU, the P2P canvas preview system was disabled:
+1. `GuestJoin.tsx` comment said "P2P hooks (usePreviewStream, useGuestStream) removed in favor of LiveKit SFU"
+2. The guest's `broadcastStream` was being set from `webrtcService.setRemoteStreamCallback`
+3. This gave the host's raw camera stream from Ant Media SFU, not the composed canvas
+
+**Architecture**:
+The system has TWO separate streaming mechanisms:
+1. **Ant Media SFU** - Individual participant camera/mic streams (for compositing)
+2. **P2P Canvas Preview** - Composed canvas output (for guest "LIVE" preview)
+
+The P2P preview stream system was already implemented but not used:
+- `hooks/studio/usePreviewStream.ts` - Host sends canvas via P2P to each guest
+- `hooks/guest/usePreviewStream.ts` - Guest receives canvas via P2P
+- Uses socket.io for signaling (`preview-stream-requested`, `preview-offer`, `preview-answer`, `preview-ice-candidate`)
+
+**Fix Applied**:
+- `GuestJoin.tsx`:
+  - Re-imported `usePreviewStream` from guest hooks
+  - Added `usePreviewStream` hook call to receive P2P canvas preview
+  - Removed `setBroadcastStream` calls from Ant Media callback (not needed for preview)
+  - Updated comments to clarify architecture
+
+**Files Modified**:
+- `frontend/src/pages/GuestJoin.tsx`
+
+**Commit**: `<pending>` - Re-enable P2P canvas preview for guest greenroom LIVE display
+
+---
+
 ## Next Steps / TODO
 - [ ] Set TURN password in production frontend `.env`
 - [ ] Consider adding TLS certificates to TURN server for better security
-- [ ] Investigate LiveKit initial connection failure (nginx config?)
+- [ ] Investigate initial WebRTC connection failure (Ant Media server config?)
 - [ ] Test promotion from greenroom to stage
 - [ ] Test multiple guests simultaneously
 - [ ] Verify RTMP output includes all participants correctly

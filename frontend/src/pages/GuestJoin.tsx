@@ -13,11 +13,13 @@ import { webrtcService } from '../services/webrtc.service';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
-// Hooks - removed P2P hooks (usePreviewStream, useGuestStream) in favor of LiveKit SFU
+// Hooks - useGuestStream removed in favor of Ant Media SFU
+// BUT usePreviewStream is KEPT for P2P canvas preview (composed output to guests)
 import {
   useDeviceEnumeration,
   useStatusListeners,
   useGreenroomChat,
+  usePreviewStream,
 } from '../hooks/guest';
 
 // Components
@@ -95,8 +97,9 @@ export function GuestJoin() {
     onStatusChange: setGuestStatus,
   });
 
-  // NOTE: P2P hooks (usePreviewStream, useGuestStream) removed in favor of LiveKit SFU
-  // Guest now publishes/subscribes via webrtcService.joinRoom()
+  // NOTE: useGuestStream (P2P camera) removed in favor of Ant Media SFU
+  // Guest publishes/subscribes camera via webrtcService.joinRoom()
+  // BUT usePreviewStream is used for the composed canvas preview (P2P from host)
 
   // Greenroom chat hook
   const {
@@ -106,10 +109,15 @@ export function GuestJoin() {
     sendPrivateChat,
   } = useGreenroomChat({ hasJoined });
 
-  // State for host's broadcast stream (received from LiveKit SFU)
-  const [broadcastStream, setBroadcastStream] = useState<MediaStream | null>(null);
+  // P2P preview stream hook - receives composed canvas output from host
+  // This shows the FULL broadcast preview (all participants, overlays, backgrounds)
+  // NOT the raw camera streams from Ant Media SFU
+  const { broadcastStream } = usePreviewStream({
+    hasJoined,
+    broadcastId: broadcastInfo?.id,
+  });
 
-  // Cleanup LiveKit callbacks when leaving
+  // Cleanup Ant Media callbacks when leaving
   // NOTE: Callbacks are set up in handleJoin BEFORE joinRoom to avoid race condition
   useEffect(() => {
     return () => {
@@ -258,16 +266,18 @@ export function GuestJoin() {
 
       // CRITICAL: Set up callbacks BEFORE joining room to avoid race condition
       // Tracks can arrive immediately after joinRoom() returns
+      // NOTE: These callbacks receive raw camera streams from other participants (via Ant Media SFU)
+      // The composed canvas preview comes separately via P2P (usePreviewStream hook)
       webrtcService.setRemoteStreamCallback((streamId: string, stream: MediaStream) => {
-        console.log('[GuestJoin] Received remote stream from LiveKit:', streamId, {
+        console.log('[GuestJoin] Received remote participant stream from Ant Media:', streamId, {
           audioTracks: stream.getAudioTracks().length,
           videoTracks: stream.getVideoTracks().length,
         });
-        setBroadcastStream(stream);
+        // Note: This is a raw participant camera stream, not the composed canvas preview
+        // The canvas preview is handled by the usePreviewStream P2P hook
       });
       webrtcService.setParticipantLeftCallback((streamId: string) => {
         console.log('[GuestJoin] Participant left:', streamId);
-        setBroadcastStream(null);
       });
 
       // Join room and publish local stream via LiveKit SFU
