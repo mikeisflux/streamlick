@@ -597,7 +597,7 @@ Analysis of logs revealed TWO distinct issues:
 - `frontend/src/components/studio/canvas/StudioCanvas.tsx` - Background tab fallback
 - `frontend/src/components/guest/GuestStreamPreview.tsx` - Resize event listener
 
-**Commit**: (pending)
+**Commit**: `b14af0e` - Fix guest LIVE preview black screen with two root cause fixes
 
 ---
 
