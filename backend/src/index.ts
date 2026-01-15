@@ -36,6 +36,7 @@ import emailsRoutes from './api/emails.routes';
 import commentsRoutes from './api/comments.routes';
 import dailyRoutes, { initializeDailyService } from './api/daily.routes';
 import livekitRoutes from './api/livekit.routes';
+import licenseRoutes from './api/license.routes';
 
 import initializeSocket from './socket';
 import logger from './utils/logger';
@@ -170,6 +171,10 @@ app.use('/uploads', (req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// License validation endpoint (public, no auth required)
+// Responds to: GET /?license=$LICENSE_KEY
+app.use('/', licenseRoutes);
 
 // API Routes
 app.use('/api/auth', authRoutes);
