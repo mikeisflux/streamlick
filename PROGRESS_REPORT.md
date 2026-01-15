@@ -625,7 +625,7 @@ Guests now transmit at different resolutions based on their status:
 
 | Status | Resolution | Frame Rate | Est. Bandwidth |
 |--------|------------|------------|----------------|
-| Greenroom | 480x270 | 15 fps | ~200-400 kbps |
+| Greenroom | 480x270 | 24 fps | ~300-500 kbps |
 | On Stage | 1280x720 | 30 fps | ~1.5-2.5 Mbps |
 
 **Implementation**:
@@ -643,7 +643,9 @@ Guests now transmit at different resolutions based on their status:
 - `frontend/src/hooks/useMedia.ts` - Resolution options
 - `frontend/src/pages/GuestJoin.tsx` - Adaptive resolution logic
 
-**Commit**: `aa21f2f` - Add adaptive resolution for greenroom vs stage bandwidth optimization
+**Commits**:
+- `aa21f2f` - Add adaptive resolution for greenroom vs stage bandwidth optimization
+- `1445d3b` - Increase greenroom framerate from 15fps to 24fps
 
 ---
 
@@ -661,21 +663,23 @@ Applied WebRTC encoding constraints via `RTCRtpSender.setParameters()`:
 |-----------|-------|--------|
 | `scaleResolutionDownBy` | 4 | 1920×1080 → 480×270 |
 | `maxBitrate` | 500 kbps | ~75% bandwidth reduction |
-| `maxFramerate` | 15 fps | 50% frame reduction |
+| `maxFramerate` | 24 fps | Smooth preview |
 
 **Implementation**:
 After creating the WebRTC offer, apply encoding parameters to the video sender:
 ```typescript
 params.encodings[0].scaleResolutionDownBy = 4;
 params.encodings[0].maxBitrate = 500000;
-params.encodings[0].maxFramerate = 15;
+params.encodings[0].maxFramerate = 24;
 await videoSender.setParameters(params);
 ```
 
 **Files Modified**:
 - `frontend/src/hooks/studio/usePreviewStream.ts`
 
-**Commit**: `3e06042` - Reduce P2P preview stream bandwidth to guests
+**Commits**:
+- `3e06042` - Reduce P2P preview stream bandwidth to guests
+- `1445d3b` - Increase greenroom framerate from 15fps to 24fps
 
 ---
 
