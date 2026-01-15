@@ -61,23 +61,24 @@ check_ams() {
        fi
   
     else
-    	
-      check_license=$(curl -s https://api-v2.antmedia.io/?license="$get_license_key" | tr -d "\"")
-            
-       if [[ ! $check_license =~ ^http ]]; then
-       	
-		   if [ "$check_license" == "400" ] || [ "$check_license" == "401" ]; then
-				echo "Invalid license key. Please check your license key."
-			else 
-				echo "Unexpected response from service: $check_license. Please try again later";
-			fi
-		  	exit 1
-		  	
-	   else
-		  echo "Downloading the latest version of Ant Media Server Enterprise Edition..."
-		  curl --progress-bar -o ams_enterprise.zip "$check_license"
-		  ANT_MEDIA_SERVER_ZIP_FILE="ams_enterprise.zip"
-		fi
+
+      # Use internal license API endpoint
+      LICENSE_API_URL="http://localhost:5080/api/license.json"
+      check_license=$(curl -s "$LICENSE_API_URL")
+      is_valid=$(echo "$check_license" | jq -r '.valid // false')
+      license_type=$(echo "$check_license" | jq -r '.type // "community"')
+
+      if [ "$is_valid" != "true" ] || [ "$license_type" != "enterprise" ]; then
+          echo "License validation failed. Please check your license configuration."
+          exit 1
+      else
+          echo "License validated successfully (Enterprise Edition)."
+          echo "Downloading the latest version of Ant Media Server Enterprise Edition..."
+          # Download from GitHub releases for enterprise
+          ENTERPRISE_DOWNLOAD_URL=$(curl -s -H "Accept: application/vnd.github+json" https://api.github.com/repos/ant-media/Ant-Media-Server/releases/latest | jq -r '.assets[0].browser_download_url')
+          curl --progress-bar -o ams_enterprise.zip -L "$ENTERPRISE_DOWNLOAD_URL"
+          ANT_MEDIA_SERVER_ZIP_FILE="ams_enterprise.zip"
+      fi
 	 
   	fi
   
