@@ -775,7 +775,13 @@ export function StudioCanvas({
         // DEBUG: Log frame count every 5 seconds
         if (now - lastDebugTime > 5000) {
           const fps = Math.round(frameCount / ((now - lastDebugTime) / 1000));
-          console.log('[StudioCanvas] Render stats:', { frameCount, fps, elapsed: Math.round(now - lastDebugTime) + 'ms' });
+          // Check canvas stream track state
+          const canvasStreamTrack = outputStreamRef.current?.getVideoTracks()[0];
+          console.log('[StudioCanvas] Render stats: frameCount=' + frameCount +
+            ', fps=' + fps +
+            ', canvasTrackState=' + (canvasStreamTrack ? canvasStreamTrack.readyState : 'no-track') +
+            ', canvasTrackMuted=' + (canvasStreamTrack ? canvasStreamTrack.muted : 'N/A') +
+            ', canvasTrackEnabled=' + (canvasStreamTrack ? canvasStreamTrack.enabled : 'N/A'));
           frameCount = 0;
           lastDebugTime = now;
         }

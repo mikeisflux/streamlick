@@ -36,13 +36,11 @@ export function usePreviewStream(broadcastId: string | undefined) {
   const createPeerConnectionForGuest = useCallback(async (guestId: string, guestSocketId: string, canvasStream: MediaStream) => {
     console.log('[PreviewStream] Creating peer connection for guest:', guestId, guestSocketId);
 
-    // DEBUG: Log detailed canvas stream info
-    console.log('[PreviewStream] Canvas stream details:', {
-      streamId: canvasStream.id,
-      active: canvasStream.active,
-      videoTracks: canvasStream.getVideoTracks().length,
-      audioTracks: canvasStream.getAudioTracks().length,
-    });
+    // DEBUG: Log detailed canvas stream info (explicit values)
+    console.log('[PreviewStream] Canvas stream details: streamId=' + canvasStream.id +
+      ', active=' + canvasStream.active +
+      ', videoTracks=' + canvasStream.getVideoTracks().length +
+      ', audioTracks=' + canvasStream.getAudioTracks().length);
 
     // Check if we already have a connection for this guest
     if (peerConnectionsRef.current.has(guestSocketId)) {
@@ -56,15 +54,13 @@ export function usePreviewStream(broadcastId: string | undefined) {
     // Add canvas video track to the peer connection
     const videoTrack = canvasStream.getVideoTracks()[0];
     if (videoTrack) {
-      // DEBUG: Log video track details
-      console.log('[PreviewStream] Video track details:', {
-        trackId: videoTrack.id,
-        kind: videoTrack.kind,
-        label: videoTrack.label,
-        enabled: videoTrack.enabled,
-        muted: videoTrack.muted,
-        readyState: videoTrack.readyState,
-      });
+      // DEBUG: Log video track details (explicit values)
+      console.log('[PreviewStream] Video track details: trackId=' + videoTrack.id +
+        ', kind=' + videoTrack.kind +
+        ', label=' + videoTrack.label +
+        ', enabled=' + videoTrack.enabled +
+        ', muted=' + videoTrack.muted +
+        ', readyState=' + videoTrack.readyState);
       pc.addTrack(videoTrack, canvasStream);
       console.log('[PreviewStream] Added video track to peer connection');
     } else {
@@ -125,12 +121,12 @@ export function usePreviewStream(broadcastId: string | undefined) {
         const stats = await pc.getStats();
         stats.forEach(report => {
           if (report.type === 'outbound-rtp' && report.kind === 'video') {
-            console.log('[PreviewStream] Video send stats for guest:', guestSocketId, {
-              framesSent: report.framesSent,
-              framesEncoded: report.framesEncoded,
-              bytesSent: report.bytesSent,
-              packetsSent: report.packetsSent,
-            });
+            // Log explicit values, not object reference
+            console.log('[PreviewStream] Video send stats: framesSent=' + report.framesSent +
+              ', framesEncoded=' + report.framesEncoded +
+              ', bytesSent=' + report.bytesSent +
+              ', packetsSent=' + report.packetsSent +
+              ', for guest=' + guestSocketId);
           }
         });
       } catch (e) {
