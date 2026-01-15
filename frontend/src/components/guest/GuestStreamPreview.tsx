@@ -134,19 +134,41 @@ export function GuestStreamPreview({
     };
 
     const handleLoadedMetadata = () => {
-      console.log('[GuestStreamPreview] Video metadata loaded');
+      // Log actual video dimensions and track settings
+      const videoTrack = stream?.getVideoTracks()[0];
+      const trackSettings = videoTrack?.getSettings();
+      console.log('[GuestStreamPreview] Video metadata loaded: videoWidth=' + video.videoWidth +
+        ', videoHeight=' + video.videoHeight +
+        ', trackWidth=' + (trackSettings?.width || 'N/A') +
+        ', trackHeight=' + (trackSettings?.height || 'N/A') +
+        ', trackReadyState=' + (videoTrack?.readyState || 'N/A'));
+    };
+
+    // CRITICAL: Listen for resize event - this fires when video dimensions become known
+    // For WebRTC streams, loadedmetadata may fire before any frames arrive (with 0x0 dimensions)
+    // The resize event fires when the first frame is decoded and dimensions are available
+    const handleResize = () => {
+      console.log('[GuestStreamPreview] Video resized: videoWidth=' + video.videoWidth +
+        ', videoHeight=' + video.videoHeight);
+      // If we now have valid dimensions, try playing
+      if (video.videoWidth > 0 && video.videoHeight > 0 && video.paused) {
+        console.log('[GuestStreamPreview] Video has dimensions after resize, attempting play');
+        video.play().catch(() => {});
+      }
     };
 
     video.addEventListener('stalled', handleStalled);
     video.addEventListener('pause', handlePause);
     video.addEventListener('canplay', handleCanPlay);
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('resize', handleResize);
 
     return () => {
       video.removeEventListener('stalled', handleStalled);
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('resize', handleResize);
     };
   }, [stream]);
 

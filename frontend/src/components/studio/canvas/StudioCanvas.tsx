@@ -762,6 +762,44 @@ export function StudioCanvas({
     let frameCount = 0;
     let lastDebugTime = performance.now();
 
+    // Background tab fallback: use setInterval when tab is hidden
+    // because requestAnimationFrame is throttled/paused in background tabs
+    let backgroundIntervalId: ReturnType<typeof setInterval> | null = null;
+    let isUsingBackgroundFallback = false;
+
+    const startBackgroundFallback = () => {
+      if (backgroundIntervalId) return;
+      isUsingBackgroundFallback = true;
+      console.log('[StudioCanvas] Tab hidden - switching to setInterval fallback (10 FPS)');
+      // Use 10 FPS in background to save resources while keeping stream alive
+      backgroundIntervalId = setInterval(() => {
+        render();
+      }, 100);
+    };
+
+    const stopBackgroundFallback = () => {
+      if (backgroundIntervalId) {
+        clearInterval(backgroundIntervalId);
+        backgroundIntervalId = null;
+      }
+      if (isUsingBackgroundFallback) {
+        isUsingBackgroundFallback = false;
+        console.log('[StudioCanvas] Tab visible - switching back to requestAnimationFrame');
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        startBackgroundFallback();
+      } else {
+        stopBackgroundFallback();
+        // Kick off rAF loop again
+        animationFrameRef.current = requestAnimationFrame(render);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     const render = () => {
       if (!ctx || !canvas) return;
 
@@ -1058,13 +1096,19 @@ export function StudioCanvas({
         }
       }
 
-      animationFrameRef.current = requestAnimationFrame(render);
+      // Only schedule next frame via rAF if not using background fallback
+      // (background fallback uses setInterval instead)
+      if (!isUsingBackgroundFallback) {
+        animationFrameRef.current = requestAnimationFrame(render);
+      }
     };
 
     render();
 
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      stopBackgroundFallback();
       canvasStreamService.setOutputStream(null);
       outputStreamRef.current = null;
     };

@@ -552,53 +552,52 @@ The mute sync useEffects ran on initial mount:
 
 ---
 
-### Issue #17: Guest LIVE Preview Shows Black (Investigation)
-**Status**: 🔧 INVESTIGATING
+### Issue #17: Guest LIVE Preview Shows Black
+**Status**: ✅ FIXED
 **Date**: 2026-01-15
-**Symptom**: Guest's LIVE preview (top-right) shows black screen. The WebRTC connection appears to establish, but video element shows no frames (videoWidth=0, videoHeight=0).
+**Symptom**: Guest's LIVE preview (top-right) shows black screen. The WebRTC connection is established and frames are being transmitted successfully, but the video element shows no frames (videoWidth=0, videoHeight=0).
 
-**Analysis**:
-The P2P preview stream flow is:
-1. Host: StudioCanvas captures canvas with `canvas.captureStream(30)`
-2. Host: Stream stored in `canvasStreamService`
-3. Guest: Requests preview via `request-preview-stream` socket event
-4. Host: Receives request, creates peer connection, adds canvas video track
-5. Host: Sends WebRTC offer to guest
-6. Guest: Receives offer, creates answer, receives track via `ontrack`
-7. Guest: Sets `broadcastStream` which is displayed in `GuestStreamPreview`
+**Root Causes**:
+Analysis of logs revealed TWO distinct issues:
 
-**Diagnostic Logging Added**:
-- `StudioCanvas.tsx`: Log canvas capture details (streamId, track state, canvas dimensions)
-- `StudioCanvas.tsx`: Frame counter every 5 seconds to verify render loop is running
-- `canvas-stream.service.ts`: Log stream state when retrieved
-- `hooks/studio/usePreviewStream.ts`: Log canvas stream and video track details when creating peer connection
-- `hooks/studio/usePreviewStream.ts`: WebRTC stats monitoring (framesSent, framesEncoded) every 5 seconds
-- `hooks/guest/usePreviewStream.ts`: Log received track and stream details
-- `hooks/guest/usePreviewStream.ts`: WebRTC stats monitoring (framesReceived, framesDecoded) every 5 seconds
+1. **Canvas render loop stops when host tab goes to background**
+   - `requestAnimationFrame` is throttled/paused when browser tab is not visible
+   - Host logs showed fps dropping from 30 → 2 → 0 when tab became hidden
+   - `framesSent` stopped increasing while connection remained open
+   - Guest received no new frames after host tab went to background
 
-**Potential Causes Being Investigated**:
-1. Canvas with `opacity: 0` might not capture frames (changed to `opacity: 0.001`)
-2. Canvas stream track might not have frames before being added to peer connection
-3. WebRTC transcoding issue with canvas streams
-4. Timing issue - request sent before canvas is ready
+2. **Video element dimensions never update from 0x0**
+   - WebRTC `framesReceived` and `framesDecoded` showed frames ARE being received
+   - But `video.videoWidth` and `video.videoHeight` remained 0
+   - The `loadedmetadata` event fires before any frames arrive (with 0x0 dimensions)
+   - Need to listen for `resize` event which fires when first frame is decoded
 
-**Console Logs to Watch**:
+**Fix Applied**:
+
+1. **Background tab rendering** (`StudioCanvas.tsx`):
+   - Added Page Visibility API listener (`visibilitychange` event)
+   - When tab is hidden, switch from `requestAnimationFrame` to `setInterval` (10 FPS)
+   - When tab is visible again, switch back to `requestAnimationFrame`
+   - This ensures canvas continues producing frames even when host minimizes browser
+
+2. **Video dimension detection** (`GuestStreamPreview.tsx`):
+   - Added `resize` event listener on video element
+   - `resize` fires when first frame is decoded and dimensions become available
+   - When resize fires with valid dimensions and video is paused, attempt play
+
+**Console Logs**:
 ```
-[StudioCanvas] Canvas stream captured: {...}        // Verify canvas capture works
-[StudioCanvas] Render stats: {frameCount, fps}      // Verify render loop is running
-[CanvasStreamService] getOutputStream called: {...}  // Verify stream is available
-[PreviewStream] Canvas stream details: {...}        // Host getting stream for P2P
-[PreviewStream] Video track details: {...}          // Track state when adding to PC
-[PreviewStream] Video send stats: {...}             // Frames being sent (host)
-[PreviewStream] Video receive stats: {...}          // Frames being received (guest)
-[PreviewStream] Track details: {...}                // Guest receiving track info
+[StudioCanvas] Tab hidden - switching to setInterval fallback (10 FPS)
+[StudioCanvas] Tab visible - switching back to requestAnimationFrame
+[GuestStreamPreview] Video resized: videoWidth=1920, videoHeight=1080
+[GuestStreamPreview] Video has dimensions after resize, attempting play
 ```
 
 **Files Modified**:
-- `frontend/src/components/studio/canvas/StudioCanvas.tsx` - Logging, opacity fix
-- `frontend/src/services/canvas-stream.service.ts` - Logging
-- `frontend/src/hooks/studio/usePreviewStream.ts` - Logging, stats monitoring
-- `frontend/src/hooks/guest/usePreviewStream.ts` - Logging, stats monitoring
+- `frontend/src/components/studio/canvas/StudioCanvas.tsx` - Background tab fallback
+- `frontend/src/components/guest/GuestStreamPreview.tsx` - Resize event listener
+
+**Commit**: (pending)
 
 ---
 
