@@ -558,7 +558,7 @@ The mute sync useEffects ran on initial mount:
 **Symptom**: Guest's LIVE preview (top-right) shows black screen. The WebRTC connection is established and frames are being transmitted successfully, but the video element shows no frames (videoWidth=0, videoHeight=0).
 
 **Root Causes**:
-Analysis of logs revealed TWO distinct issues:
+Analysis of logs revealed THREE distinct issues:
 
 1. **Canvas render loop stops when host tab goes to background**
    - `requestAnimationFrame` is throttled/paused when browser tab is not visible
@@ -571,6 +571,13 @@ Analysis of logs revealed TWO distinct issues:
    - But `video.videoWidth` and `video.videoHeight` remained 0
    - The `loadedmetadata` event fires before any frames arrive (with 0x0 dimensions)
    - Need to listen for `resize` event which fires when first frame is decoded
+
+3. **Audio track overwrites video track stream**
+   - WebRTC sends each track in its own MediaStream
+   - Video track arrives first: `{videoTracks: 1, audioTracks: 0}`
+   - Audio track arrives second: `{videoTracks: 0, audioTracks: 1}`
+   - `setBroadcastStream()` was called for both, so audio stream (with 0 video tracks) overwrote video stream
+   - GuestStreamPreview ended up with a stream containing only audio
 
 **Fix Applied**:
 
@@ -585,19 +592,26 @@ Analysis of logs revealed TWO distinct issues:
    - `resize` fires when first frame is decoded and dimensions become available
    - When resize fires with valid dimensions and video is paused, attempt play
 
+3. **Only set video stream** (`hooks/guest/usePreviewStream.ts`):
+   - Only call `setBroadcastStream()` when receiving VIDEO track
+   - Ignore audio track's stream to prevent overwriting video stream
+
 **Console Logs**:
 ```
 [StudioCanvas] Tab hidden - switching to setInterval fallback (10 FPS)
 [StudioCanvas] Tab visible - switching back to requestAnimationFrame
 [GuestStreamPreview] Video resized: videoWidth=1920, videoHeight=1080
-[GuestStreamPreview] Video has dimensions after resize, attempting play
+[PreviewStream] Setting video stream: streamId=xxx, videoTracks=1
 ```
 
 **Files Modified**:
 - `frontend/src/components/studio/canvas/StudioCanvas.tsx` - Background tab fallback
 - `frontend/src/components/guest/GuestStreamPreview.tsx` - Resize event listener
+- `frontend/src/hooks/guest/usePreviewStream.ts` - Only set video stream
 
-**Commit**: `b14af0e` - Fix guest LIVE preview black screen with two root cause fixes
+**Commits**:
+- `b14af0e` - Fix guest LIVE preview black screen with two root cause fixes
+- `be3332f` - Fix audio track overwriting video track in guest preview stream
 
 ---
 
