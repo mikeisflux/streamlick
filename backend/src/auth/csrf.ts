@@ -65,7 +65,7 @@ export function validateCsrfToken(req: Request, res: Response, next: NextFunctio
     '/oauth/',  // Exempt ALL OAuth routes (callback, disconnect, setup)
     '/broadcasts',  // Exempt ALL broadcast routes
     '/participants/join',  // Exempt guest join (guests don't have CSRF tokens)
-    '/livekit/token',  // Exempt LiveKit token generation
+    '/antmedia/',  // Exempt Ant Media routes (conference, webhooks)
   ];
 
   // Check both req.path and req.originalUrl to handle different mounting scenarios

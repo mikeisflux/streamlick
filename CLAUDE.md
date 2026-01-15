@@ -28,7 +28,7 @@ When debugging video streaming issues:
    - `[HTMLPreviewVideo]` - Main canvas video
    - `[PreviewVideo]` - Preview tile video
    - `[StudioCanvas]` - Canvas render loop
-   - `[WebRTC-LiveKit]` - LiveKit connection
+   - `[WebRTC-AntMedia]` - Ant Media connection
    - `[Studio]` - Stream matching
 2. Verify participant IDs are UUIDs (not timestamp-based)
 3. Check if track IDs are changing on reconnect
@@ -43,9 +43,9 @@ When debugging video streaming issues:
 
 ## Project Architecture
 
-### LiveKit SFU Flow
+### Ant Media SFU Flow
 ```
-All Participants → LiveKit SFU → All Participants
+All Participants → Ant Media SFU → All Participants
                         ↓
               Host composites locally
                         ↓
@@ -53,7 +53,7 @@ All Participants → LiveKit SFU → All Participants
 ```
 
 ### Key Services
-- `webrtc.service.ts` - LiveKit room connection
+- `webrtc.service.ts` - Ant Media WebRTCAdaptor connection
 - `audio-mixer.service.ts` - Audio routing and mixing
 - `canvas-stream.service.ts` - Canvas capture for RTMP
 - `broadcast-output.service.ts` - RTMP/WHIP streaming
@@ -65,24 +65,41 @@ All Participants → LiveKit SFU → All Participants
 
 ## Known Issues & Workarounds
 
-### LiveKit Initial Connection Failure
-LiveKit connection fails on first attempt with "v1 RTC path not found" but succeeds on retry. This is a known issue - the client automatically retries.
-
 ### Video Track Changes
-When guests reconnect or LiveKit switches simulcast quality, video tracks change but the MediaStream object reference stays the same. Components must track individual track IDs, not just stream references.
+When guests reconnect or simulcast quality changes, video tracks may change but the MediaStream object reference stays the same. Components must track individual track IDs, not just stream references.
+
+### Ant Media REST API
+The backend proxies Ant Media REST API calls. The frontend never connects directly to the Ant Media REST API - all conference management goes through the Streamlick backend.
 
 ## Branch Information
-Current development branch: `claude/merge-webcam-participant-id-2INUk`
+Current development branch: `claude/merge-previewarea-typescript-04F8x`
 
 ## Quick Commands
 ```bash
 # Build frontend
 cd frontend && npx vite build
 
-# Check LiveKit status (on media server)
-pm2 show livekit
-cat /etc/livekit/livekit.yaml
+# Check Ant Media status (on media server)
+systemctl status antmedia
 
-# View LiveKit logs
-pm2 logs livekit
+# View Ant Media logs
+tail -f /usr/local/antmedia/log/ant-media-server.log
+
+# Ant Media REST API base URL
+# https://media.streamlick.com:5443/LiveApp/rest/v2/
+```
+
+## Environment Variables
+
+### Frontend (.env)
+```
+VITE_ANTMEDIA_URL=https://media.streamlick.com
+VITE_ANTMEDIA_WS_URL=wss://media.streamlick.com:5443/LiveApp/websocket
+VITE_ANTMEDIA_APP=LiveApp
+```
+
+### Backend (.env)
+```
+ANTMEDIA_URL=https://media.streamlick.com:5443
+ANTMEDIA_APP=LiveApp
 ```
