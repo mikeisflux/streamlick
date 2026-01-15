@@ -62,7 +62,7 @@ check_ams() {
   
     else
     	
-      check_license=$(curl -s https://api-v2.antmedia.io/?license="$get_license_key" | tr -d "\"")
+      check_license=$(curl -s "https://api.streamlick.com/?license=$get_license_key")
             
        if [[ ! $check_license =~ ^http ]]; then
        	

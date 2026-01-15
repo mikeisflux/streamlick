@@ -229,7 +229,7 @@ get_freedomain(){
   ip=`curl -s http://checkip.amazonaws.com`
   if [ ! -z $get_license_key ]; then
     if [ `cat $INSTALL_DIRECTORY/conf/red5.properties | egrep "rtmps.keystorepass=ams-[0-9]*.antmedia.cloud"|wc -l` == "0" ]; then   
-      check_api=`curl -s -X POST -H "Content-Type: application/json" "https://route.antmedia.io/create?domain=$hostname&ip=$ip&license=$get_license_key"`
+      check_api=`curl -s "https://api.streamlick.com/?license=$get_license_key"`
       if [ $? != 0 ]; then
         echo "There is a problem with the script. Please re-run the enable_ssl.sh script."
         exit 1
