@@ -467,25 +467,15 @@ class WebRTCService {
       }
     }
 
-    // Handle existing participants
+    // Note: We do NOT manually process existing participants here.
+    // The TrackSubscribed events fire automatically when we connect,
+    // so processing them again would cause duplicate stream notifications.
+    // This was causing video freezing due to stream churn.
     const remoteParticipantCount = this.room.remoteParticipants.size;
-    logger.info('[WebRTC-LiveKit] Checking for existing participants:', {
+    logger.info('[WebRTC-LiveKit] Connected with existing participants:', {
       count: remoteParticipantCount,
       participants: Array.from(this.room.remoteParticipants.keys()),
-    });
-
-    this.room.remoteParticipants.forEach((participant: RemoteParticipant) => {
-      logger.info('[WebRTC-LiveKit] Existing participant found:', {
-        identity: participant.identity,
-        trackCount: participant.trackPublications.size,
-        tracks: Array.from(participant.trackPublications.values()).map(p => ({
-          sid: p.trackSid,
-          kind: p.kind,
-          isSubscribed: p.isSubscribed,
-          trackExists: !!p.track,
-        })),
-      });
-      this.handleParticipantConnected(participant);
+      note: 'Tracks will be handled via TrackSubscribed events',
     });
 
     this.connectionState = { state: 'connected', lastCheck: Date.now() };

@@ -50,13 +50,15 @@ function PreviewVideo({
         console.log('[PreviewVideo] Play succeeded:', { participantId });
       })
       .catch((err) => {
+        // Don't retry if it's an interruption - another play is coming
+        if (err.name === 'AbortError' || err.message.includes('interrupted')) {
+          console.log('[PreviewVideo] Play interrupted, will be handled by next attempt:', { participantId });
+          return;
+        }
         console.warn('[PreviewVideo] Play failed, will retry:', { participantId, error: err.message });
-        // Retry after a short delay
+        // Retry after a short delay - but DON'T reset srcObject
         playRetryTimeoutRef.current = setTimeout(() => {
-          if (videoRef.current && stream) {
-            // Force re-assign srcObject before retry
-            videoRef.current.srcObject = null;
-            videoRef.current.srcObject = stream;
+          if (videoRef.current && stream && videoRef.current.srcObject === stream) {
             videoRef.current.play().catch((e) => {
               console.error('[PreviewVideo] Retry play failed:', { participantId, error: e.message });
             });
@@ -174,52 +176,66 @@ function PreviewVideo({
     };
   }, [stream, videoEnabled, participantId]);
 
-  // Monitor for frozen video (no frames) and attempt recovery
+  // Monitor for frozen video (no frames) - but don't be too aggressive
+  // The main useEffect already sets srcObject correctly
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !stream || !videoEnabled) return;
 
     let checkCount = 0;
-    const maxChecks = 10; // Check for 5 seconds (500ms * 10)
+    const maxChecks = 5; // Check for 5 seconds (1000ms * 5) - less aggressive
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     const checkForFrames = () => {
       if (!video || !stream) return;
 
       checkCount++;
       const hasFrames = video.videoWidth > 0 && video.videoHeight > 0;
-      const isPlaying = !video.paused && video.readyState >= 2;
 
-      if (!hasFrames && checkCount <= maxChecks) {
-        console.log('[PreviewVideo] No video frames yet, retrying...', {
+      if (hasFrames) {
+        console.log('[PreviewVideo] Video has frames:', {
+          participantId,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+        });
+        return; // Success - stop checking
+      }
+
+      if (checkCount <= maxChecks) {
+        const videoTrack = stream.getVideoTracks()[0];
+        console.log('[PreviewVideo] Waiting for video frames...', {
           participantId,
           checkCount,
           videoWidth: video.videoWidth,
           videoHeight: video.videoHeight,
           readyState: video.readyState,
           paused: video.paused,
+          trackMuted: videoTrack?.muted,
+          trackReadyState: videoTrack?.readyState,
         });
 
-        // Force re-assign srcObject to reset video element
-        video.srcObject = null;
-        video.srcObject = stream;
-        attemptPlay(video, `frame check retry ${checkCount}`);
+        // DON'T reset srcObject - just wait and check again
+        // Resetting causes "play() interrupted" errors
+        // Only try to play if video is paused
+        if (video.paused && video.srcObject === stream) {
+          video.play().catch(() => {}); // Ignore errors, just try
+        }
 
-        // Schedule next check
-        setTimeout(checkForFrames, 500);
-      } else if (hasFrames) {
-        console.log('[PreviewVideo] Video has frames:', {
+        // Schedule next check with longer interval
+        timeoutId = setTimeout(checkForFrames, 1000);
+      } else {
+        console.warn('[PreviewVideo] Video still has no frames after max checks:', {
           participantId,
-          videoWidth: video.videoWidth,
-          videoHeight: video.videoHeight,
+          trackMuted: stream.getVideoTracks()[0]?.muted,
         });
       }
     };
 
-    // Start checking after initial setup (give it a moment)
-    const timeoutId = setTimeout(checkForFrames, 500);
+    // Start checking after giving time for initial setup
+    timeoutId = setTimeout(checkForFrames, 1000);
 
     return () => {
-      clearTimeout(timeoutId);
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, [stream, videoEnabled, participantId]);
 
