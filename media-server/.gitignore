@@ -1,6 +1,0 @@
-# LiveKit local data
-recordings/
-.env.local
-
-# Docker
-*.log
