@@ -462,7 +462,7 @@ The P2P preview stream system was already implemented but not used:
 **Files Modified**:
 - `frontend/src/pages/GuestJoin.tsx`
 
-**Commit**: `<pending>` - Re-enable P2P canvas preview for guest greenroom LIVE display
+**Commit**: `93e8789` - Re-enable P2P canvas preview for guest greenroom LIVE display
 
 ---
 
