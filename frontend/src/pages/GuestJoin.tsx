@@ -87,31 +87,14 @@ export function GuestJoin() {
   // State for host's broadcast stream (received from LiveKit SFU)
   const [broadcastStream, setBroadcastStream] = useState<MediaStream | null>(null);
 
-  // Set up LiveKit remote stream callback to receive host's broadcast
+  // Cleanup LiveKit callbacks when leaving
+  // NOTE: Callbacks are set up in handleJoin BEFORE joinRoom to avoid race condition
   useEffect(() => {
-    if (!hasJoined) return;
-
-    const handleRemoteStream = (streamId: string, stream: MediaStream) => {
-      console.log('[GuestJoin] Received remote stream from LiveKit:', streamId, {
-        audioTracks: stream.getAudioTracks().length,
-        videoTracks: stream.getVideoTracks().length,
-      });
-      // The host's stream - set as broadcast stream for preview
-      setBroadcastStream(stream);
-    };
-
-    const handleParticipantLeft = (streamId: string) => {
-      console.log('[GuestJoin] Participant left:', streamId);
-      // If it was the host's stream, clear it
-      setBroadcastStream(null);
-    };
-
-    webrtcService.setRemoteStreamCallback(handleRemoteStream);
-    webrtcService.setParticipantLeftCallback(handleParticipantLeft);
-
     return () => {
-      webrtcService.setRemoteStreamCallback(() => {});
-      webrtcService.setParticipantLeftCallback(() => {});
+      if (hasJoined) {
+        webrtcService.setRemoteStreamCallback(() => {});
+        webrtcService.setParticipantLeftCallback(() => {});
+      }
     };
   }, [hasJoined]);
 
@@ -233,6 +216,20 @@ export function GuestJoin() {
         console.error('Failed to initialize WebRTC:', error);
         throw new Error('Failed to initialize WebRTC connection');
       }
+
+      // CRITICAL: Set up callbacks BEFORE joining room to avoid race condition
+      // Tracks can arrive immediately after joinRoom() returns
+      webrtcService.setRemoteStreamCallback((streamId: string, stream: MediaStream) => {
+        console.log('[GuestJoin] Received remote stream from LiveKit:', streamId, {
+          audioTracks: stream.getAudioTracks().length,
+          videoTracks: stream.getVideoTracks().length,
+        });
+        setBroadcastStream(stream);
+      });
+      webrtcService.setParticipantLeftCallback((streamId: string) => {
+        console.log('[GuestJoin] Participant left:', streamId);
+        setBroadcastStream(null);
+      });
 
       // Join room and publish local stream via LiveKit SFU
       // This handles both sending our stream and receiving other participants' streams
