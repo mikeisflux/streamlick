@@ -209,10 +209,12 @@ export function GuestStreamPreview({
     };
   }, [stream]);
 
-  // Update volume
+  // Update volume - unmute when volume > 0 to allow autoplay to work initially
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.volume = volume;
+      // Only unmute if volume > 0 (muted attribute allows autoplay, then we unmute)
+      videoRef.current.muted = volume === 0;
     }
   }, [volume]);
 
@@ -225,6 +227,7 @@ export function GuestStreamPreview({
               ref={videoRef}
               autoPlay
               playsInline
+              muted
               className="w-full h-full object-cover"
             />
           ) : (
