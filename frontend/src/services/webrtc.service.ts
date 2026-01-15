@@ -145,10 +145,26 @@ class WebRTCService {
     this.room.on(
       RoomEvent.TrackSubscribed,
       (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
-        logger.info('[WebRTC-LiveKit] Track subscribed:', track.kind, 'from', participant.identity);
+        logger.info('[WebRTC-LiveKit] TrackSubscribed event fired:', {
+          trackKind: track.kind,
+          trackSid: track.sid,
+          participantId: participant.identity,
+          publicationTrackSid: publication.trackSid,
+          isSubscribed: publication.isSubscribed,
+        });
         this.handleTrackSubscribed(track, participant);
       }
     );
+
+    // Also log when tracks are published by remote participants
+    this.room.on(RoomEvent.TrackPublished, (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+      logger.info('[WebRTC-LiveKit] TrackPublished event (remote):', {
+        trackSid: publication.trackSid,
+        trackKind: publication.kind,
+        participantId: participant.identity,
+        isSubscribed: publication.isSubscribed,
+      });
+    });
 
     // Track unsubscribed
     this.room.on(
@@ -452,7 +468,23 @@ class WebRTCService {
     }
 
     // Handle existing participants
+    const remoteParticipantCount = this.room.remoteParticipants.size;
+    logger.info('[WebRTC-LiveKit] Checking for existing participants:', {
+      count: remoteParticipantCount,
+      participants: Array.from(this.room.remoteParticipants.keys()),
+    });
+
     this.room.remoteParticipants.forEach((participant: RemoteParticipant) => {
+      logger.info('[WebRTC-LiveKit] Existing participant found:', {
+        identity: participant.identity,
+        trackCount: participant.trackPublications.size,
+        tracks: Array.from(participant.trackPublications.values()).map(p => ({
+          sid: p.trackSid,
+          kind: p.kind,
+          isSubscribed: p.isSubscribed,
+          trackExists: !!p.track,
+        })),
+      });
       this.handleParticipantConnected(participant);
     });
 
