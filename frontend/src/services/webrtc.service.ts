@@ -199,6 +199,23 @@ class WebRTCService {
     const stream = new MediaStream([...existingTracks, mediaTrack]);
     this.remoteStreams.set(participant.identity, stream);
 
+    // Log video track settings for debugging
+    if (mediaTrack.kind === 'video') {
+      try {
+        const settings = mediaTrack.getSettings();
+        logger.info('[WebRTC-LiveKit] Video track settings:', {
+          participantId: participant.identity,
+          trackId: mediaTrack.id,
+          width: settings.width,
+          height: settings.height,
+          frameRate: settings.frameRate,
+          deviceId: settings.deviceId,
+        });
+      } catch (e) {
+        logger.warn('[WebRTC-LiveKit] Could not get track settings:', e);
+      }
+    }
+
     logger.info('[WebRTC-LiveKit] Created new stream with track:', {
       participantId: participant.identity,
       streamId: stream.id,
@@ -207,6 +224,15 @@ class WebRTCService {
       trackMuted: mediaTrack.muted,
       trackReadyState: mediaTrack.readyState,
       totalTracks: stream.getTracks().length,
+    });
+
+    // Monitor for track ending unexpectedly
+    mediaTrack.addEventListener('ended', () => {
+      logger.warn('[WebRTC-LiveKit] Track ended unexpectedly:', {
+        participantId: participant.identity,
+        trackKind: mediaTrack.kind,
+        trackId: mediaTrack.id,
+      });
     });
 
     // If track is muted (no data flowing yet), wait for it to unmute before notifying
