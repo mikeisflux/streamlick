@@ -368,22 +368,50 @@ export function Studio() {
     });
   }, [remoteParticipants, setRemoteParticipants]);
 
-  // Sync host's audio mute state with Ant Media
-  // This ensures Ant Media is notified when host mutes/unmutes
-  // The track.enabled is already set by useMedia.toggleAudio(), this adds server notification
+  // Track initial mute state to avoid calling mute API on mount
+  // Calling turnOnLocalCamera/unmuteLocalMic when already on can restart the stream
+  const initialMuteStateRef = useRef<{ audio: boolean | null; video: boolean | null }>({
+    audio: null,
+    video: null,
+  });
+
+  // Sync host's audio mute state with Ant Media - only on actual state CHANGES
+  // Skip initial sync since the stream is already set up correctly
   useEffect(() => {
     if (!webrtcInitializedRef.current) return;
 
-    console.log('[Studio] Syncing audio mute state with Ant Media:', !audioEnabled);
-    webrtcService.muteAudio(!audioEnabled);
+    // On first run, just record the initial state without calling the API
+    if (initialMuteStateRef.current.audio === null) {
+      initialMuteStateRef.current.audio = audioEnabled;
+      console.log('[Studio] Recording initial audio state:', audioEnabled);
+      return;
+    }
+
+    // Only call API if state actually changed
+    if (initialMuteStateRef.current.audio !== audioEnabled) {
+      console.log('[Studio] Audio state changed, syncing with Ant Media:', !audioEnabled);
+      webrtcService.muteAudio(!audioEnabled);
+      initialMuteStateRef.current.audio = audioEnabled;
+    }
   }, [audioEnabled]);
 
-  // Sync host's video mute state with Ant Media
+  // Sync host's video mute state with Ant Media - only on actual state CHANGES
   useEffect(() => {
     if (!webrtcInitializedRef.current) return;
 
-    console.log('[Studio] Syncing video mute state with Ant Media:', !videoEnabled);
-    webrtcService.muteVideo(!videoEnabled);
+    // On first run, just record the initial state without calling the API
+    if (initialMuteStateRef.current.video === null) {
+      initialMuteStateRef.current.video = videoEnabled;
+      console.log('[Studio] Recording initial video state:', videoEnabled);
+      return;
+    }
+
+    // Only call API if state actually changed
+    if (initialMuteStateRef.current.video !== videoEnabled) {
+      console.log('[Studio] Video state changed, syncing with Ant Media:', !videoEnabled);
+      webrtcService.muteVideo(!videoEnabled);
+      initialMuteStateRef.current.video = videoEnabled;
+    }
   }, [videoEnabled]);
 
   // Broadcast

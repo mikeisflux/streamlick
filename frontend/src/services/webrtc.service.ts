@@ -265,6 +265,17 @@ class WebRTCService {
         }
         break;
 
+      case 'subtrackAdded':
+        // New participant joined the conference room (Ant Media conference mode)
+        // This is the primary notification for new participants in SFU/MCU mode
+        logger.info('[WebRTC-AntMedia] Subtrack added (new participant):', obj);
+        if (obj.trackId && obj.trackId !== this.streamId) {
+          // Subscribe to the new participant's stream
+          logger.info('[WebRTC-AntMedia] Subscribing to new subtrack:', obj.trackId);
+          this.subscribeToStream(obj.trackId);
+        }
+        break;
+
       case 'streamLeaved':
         // Stream left the room
         logger.info('[WebRTC-AntMedia] Stream left:', obj);
