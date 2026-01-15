@@ -683,10 +683,37 @@ await videoSender.setParameters(params);
 
 ---
 
+### Issue #18: Guest Video Freezes on Stage Promotion
+**Status**: ✅ FIXED
+**Date**: 2026-01-15
+**Symptom**: Guest video freezes the second they are promoted to stage. Console shows:
+```
+[ERROR] [WebRTC-AntMedia] Error replacing video track: TypeError: t.getVideoTracks is not a function
+```
+
+**Root Cause**:
+When guest is promoted, `startCamera()` is called with higher resolution parameters, then `webrtcService.replaceVideoTrack(track)` is called. However, Ant Media's `updateVideoTrack()` method expects a `MediaStream`, not a `MediaStreamTrack`. The library internally calls `stream.getVideoTracks()` which fails on a track object.
+
+**Fix Applied**:
+- `webrtc.service.ts`: Wrap the track in a new `MediaStream` before passing to Ant Media:
+```typescript
+const tempStream = new MediaStream([newTrack]);
+this.adaptor.updateVideoTrack(tempStream, this.streamId, null);
+```
+- Same fix applied to `replaceAudioTrack()` for consistency
+
+**Files Modified**:
+- `frontend/src/services/webrtc.service.ts`
+
+**Commit**: `106e53d` - Fix video track replacement to use MediaStream for Ant Media
+
+---
+
 ## Next Steps / TODO
 - [ ] Set TURN password in production frontend `.env`
 - [ ] Consider adding TLS certificates to TURN server for better security
 - [ ] Investigate initial WebRTC connection failure (Ant Media server config?)
 - [x] Test promotion from greenroom to stage (resolution upgrade implemented)
+- [x] Fix video freeze on promotion (MediaStream wrapper for Ant Media)
 - [ ] Test multiple guests simultaneously
 - [ ] Verify RTMP output includes all participants correctly
