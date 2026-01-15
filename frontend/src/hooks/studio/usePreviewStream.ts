@@ -42,6 +42,19 @@ export function usePreviewStream(broadcastId: string | undefined) {
       ', videoTracks=' + canvasStream.getVideoTracks().length +
       ', audioTracks=' + canvasStream.getAudioTracks().length);
 
+    // DEBUG: Test if canvas stream produces frames by creating a test video element
+    const testVideo = document.createElement('video');
+    testVideo.srcObject = canvasStream;
+    testVideo.muted = true;
+    testVideo.play().then(() => {
+      setTimeout(() => {
+        console.log('[PreviewStream] Canvas stream test: videoWidth=' + testVideo.videoWidth +
+          ', videoHeight=' + testVideo.videoHeight +
+          ' (should be 1920x1080 or 1080x1920)');
+        testVideo.srcObject = null;
+      }, 500);
+    }).catch(e => console.error('[PreviewStream] Canvas stream test failed:', e));
+
     // Check if we already have a connection for this guest
     if (peerConnectionsRef.current.has(guestSocketId)) {
       console.log('[PreviewStream] Already have connection for guest, skipping:', guestSocketId);
