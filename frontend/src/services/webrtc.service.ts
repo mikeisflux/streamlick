@@ -178,72 +178,80 @@ class WebRTCService {
    * Handle when we subscribe to a remote track
    */
   private handleTrackSubscribed(track: RemoteTrack, participant: RemoteParticipant): void {
-    // Get or create MediaStream for this participant
-    let stream = this.remoteStreams.get(participant.identity);
-    if (!stream) {
-      stream = new MediaStream();
-      this.remoteStreams.set(participant.identity, stream);
-    }
-
-    // Add the track to the stream
     const mediaTrack = track.mediaStreamTrack;
-    if (mediaTrack) {
-      // Remove existing track of same kind
-      stream.getTracks().forEach((t) => {
-        if (t.kind === mediaTrack.kind) {
-          stream!.removeTrack(t);
+    if (!mediaTrack) return;
+
+    // Get existing stream to preserve other tracks
+    const existingStream = this.remoteStreams.get(participant.identity);
+
+    // Collect all current tracks (excluding any of the same kind we're replacing)
+    const existingTracks: MediaStreamTrack[] = [];
+    if (existingStream) {
+      existingStream.getTracks().forEach((t) => {
+        if (t.kind !== mediaTrack.kind) {
+          existingTracks.push(t);
         }
       });
-      stream.addTrack(mediaTrack);
+    }
 
-      logger.info('[WebRTC-LiveKit] Added track to stream:', {
+    // Create a NEW MediaStream with all tracks - this ensures React sees a new object
+    // This is critical because React compares object references to detect changes
+    const stream = new MediaStream([...existingTracks, mediaTrack]);
+    this.remoteStreams.set(participant.identity, stream);
+
+    logger.info('[WebRTC-LiveKit] Created new stream with track:', {
+      participantId: participant.identity,
+      streamId: stream.id,
+      trackKind: mediaTrack.kind,
+      trackId: mediaTrack.id,
+      trackMuted: mediaTrack.muted,
+      trackReadyState: mediaTrack.readyState,
+      totalTracks: stream.getTracks().length,
+    });
+
+    // If track is muted (no data flowing yet), wait for it to unmute before notifying
+    // This handles the race condition where ICE negotiation is still in progress
+    if (mediaTrack.muted) {
+      logger.info('[WebRTC-LiveKit] Track is muted, waiting for unmute:', {
         participantId: participant.identity,
         trackKind: mediaTrack.kind,
-        trackMuted: mediaTrack.muted,
-        trackReadyState: mediaTrack.readyState,
-        streamTracks: stream.getTracks().length,
       });
 
-      // If track is muted (no data flowing yet), wait for it to unmute before notifying
-      // This handles the race condition where ICE negotiation is still in progress
-      if (mediaTrack.muted) {
-        logger.info('[WebRTC-LiveKit] Track is muted, waiting for unmute:', {
+      let notified = false;
+      const notifyOnce = () => {
+        if (notified) return;
+        notified = true;
+        mediaTrack.removeEventListener('unmute', handleUnmute);
+        // Get the latest stream in case it was updated while waiting
+        const latestStream = this.remoteStreams.get(participant.identity);
+        if (latestStream) {
+          this.onRemoteStream?.(participant.identity, latestStream);
+        }
+      };
+
+      const handleUnmute = () => {
+        logger.info('[WebRTC-LiveKit] Track unmuted, notifying callback:', {
           participantId: participant.identity,
           trackKind: mediaTrack.kind,
         });
+        notifyOnce();
+      };
 
-        let notified = false;
-        const notifyOnce = () => {
-          if (notified) return;
-          notified = true;
-          mediaTrack.removeEventListener('unmute', handleUnmute);
-          this.onRemoteStream?.(participant.identity, stream!);
-        };
+      mediaTrack.addEventListener('unmute', handleUnmute);
 
-        const handleUnmute = () => {
-          logger.info('[WebRTC-LiveKit] Track unmuted, notifying callback:', {
+      // Also set a timeout fallback in case unmute never fires
+      setTimeout(() => {
+        if (!notified) {
+          logger.warn('[WebRTC-LiveKit] Track still muted after timeout, notifying anyway:', {
             participantId: participant.identity,
             trackKind: mediaTrack.kind,
           });
           notifyOnce();
-        };
-
-        mediaTrack.addEventListener('unmute', handleUnmute);
-
-        // Also set a timeout fallback in case unmute never fires
-        setTimeout(() => {
-          if (!notified) {
-            logger.warn('[WebRTC-LiveKit] Track still muted after timeout, notifying anyway:', {
-              participantId: participant.identity,
-              trackKind: mediaTrack.kind,
-            });
-            notifyOnce();
-          }
-        }, 2000);
-      } else {
-        // Track already has data, notify immediately
-        this.onRemoteStream?.(participant.identity, stream);
-      }
+        }
+      }, 2000);
+    } else {
+      // Track already has data, notify immediately with the new stream
+      this.onRemoteStream?.(participant.identity, stream);
     }
   }
 
