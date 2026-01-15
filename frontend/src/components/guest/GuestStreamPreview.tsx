@@ -18,42 +18,198 @@ export function GuestStreamPreview({
   onVolumeChange,
 }: GuestStreamPreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const lastTrackIdRef = useRef<string | null>(null);
+  const playRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Set stream to video element
+  // Helper to attempt playing video with retry logic
+  const attemptPlay = (video: HTMLVideoElement, reason: string) => {
+    if (playRetryTimeoutRef.current) {
+      clearTimeout(playRetryTimeoutRef.current);
+      playRetryTimeoutRef.current = null;
+    }
+
+    const videoTrack = stream?.getVideoTracks()[0];
+    console.log('[GuestStreamPreview] Attempting play:', {
+      reason,
+      trackId: videoTrack?.id,
+      trackEnabled: videoTrack?.enabled,
+      trackMuted: videoTrack?.muted,
+      trackReadyState: videoTrack?.readyState,
+      videoPaused: video.paused,
+      videoReadyState: video.readyState,
+    });
+
+    video.play()
+      .then(() => {
+        console.log('[GuestStreamPreview] Play succeeded');
+      })
+      .catch((err) => {
+        console.warn('[GuestStreamPreview] Play failed, will retry:', err.message);
+        playRetryTimeoutRef.current = setTimeout(() => {
+          if (videoRef.current && stream) {
+            videoRef.current.srcObject = null;
+            videoRef.current.srcObject = stream;
+            videoRef.current.play().catch((e) => {
+              console.error('[GuestStreamPreview] Retry play failed:', e.message);
+            });
+          }
+        }, 500);
+      });
+  };
+
+  // Set stream to video element with track change detection
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (stream) {
+      const videoTrack = stream.getVideoTracks()[0];
+      const currentTrackId = videoTrack?.id || null;
+
+      const streamChanged = video.srcObject !== stream;
+      const trackChanged = currentTrackId !== lastTrackIdRef.current;
+
+      if (streamChanged || trackChanged) {
+        console.log('[GuestStreamPreview] Setting broadcast stream:', {
+          streamId: stream.id,
+          videoTracks: stream.getVideoTracks().length,
+          audioTracks: stream.getAudioTracks().length,
+          active: stream.active,
+          streamChanged,
+          trackChanged,
+          oldTrackId: lastTrackIdRef.current,
+          newTrackId: currentTrackId,
+        });
+
+        video.srcObject = stream;
+        lastTrackIdRef.current = currentTrackId;
+        attemptPlay(video, 'stream/track change');
+      }
+    } else if (video.srcObject) {
+      video.srcObject = null;
+      lastTrackIdRef.current = null;
+    }
+
+    return () => {
+      if (playRetryTimeoutRef.current) {
+        clearTimeout(playRetryTimeoutRef.current);
+      }
+    };
+  }, [stream]);
+
+  // Listen for track changes on the stream
+  useEffect(() => {
+    if (!stream) return;
+
+    const handleTrackChange = () => {
+      const video = videoRef.current;
+      if (!video) return;
+
+      const videoTrack = stream.getVideoTracks()[0];
+      const currentTrackId = videoTrack?.id || null;
+
+      if (currentTrackId !== lastTrackIdRef.current) {
+        console.log('[GuestStreamPreview] Track changed via event:', {
+          oldTrackId: lastTrackIdRef.current,
+          newTrackId: currentTrackId,
+        });
+        video.srcObject = null;
+        video.srcObject = stream;
+        lastTrackIdRef.current = currentTrackId;
+        attemptPlay(video, 'track event');
+      }
+    };
+
+    stream.addEventListener('addtrack', handleTrackChange);
+    stream.addEventListener('removetrack', handleTrackChange);
+
+    return () => {
+      stream.removeEventListener('addtrack', handleTrackChange);
+      stream.removeEventListener('removetrack', handleTrackChange);
+    };
+  }, [stream]);
+
+  // Monitor for stalled/paused video
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !stream) return;
 
-    console.log('[GuestStreamPreview] Setting broadcast stream:', {
-      streamId: stream.id,
-      videoTracks: stream.getVideoTracks().length,
-      audioTracks: stream.getAudioTracks().length,
-      active: stream.active,
-    });
+    const handleStalled = () => {
+      console.warn('[GuestStreamPreview] Video stalled, attempting recovery');
+      attemptPlay(video, 'stalled event');
+    };
 
-    video.srcObject = stream;
+    const handlePause = () => {
+      if (stream && stream.getVideoTracks().length > 0) {
+        console.warn('[GuestStreamPreview] Video paused unexpectedly, attempting resume');
+        attemptPlay(video, 'unexpected pause');
+      }
+    };
+
+    const handleCanPlay = () => {
+      if (video.paused && stream) {
+        console.log('[GuestStreamPreview] Video can play, ensuring playback');
+        attemptPlay(video, 'canplay event');
+      }
+    };
 
     const handleLoadedMetadata = () => {
       console.log('[GuestStreamPreview] Video metadata loaded');
     };
 
-    const handleCanPlay = () => {
-      console.log('[GuestStreamPreview] Video can play');
-      video.play().catch((err) => {
-        console.warn('[GuestStreamPreview] Play on canplay failed:', err);
-      });
-    };
-
-    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('stalled', handleStalled);
+    video.addEventListener('pause', handlePause);
     video.addEventListener('canplay', handleCanPlay);
-
-    video.play().catch((err) => {
-      console.warn('[GuestStreamPreview] Auto-play failed:', err);
-    });
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
 
     return () => {
-      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('stalled', handleStalled);
+      video.removeEventListener('pause', handlePause);
       video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    };
+  }, [stream]);
+
+  // Monitor for frozen video (no frames) and attempt recovery
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !stream) return;
+
+    let checkCount = 0;
+    const maxChecks = 10;
+
+    const checkForFrames = () => {
+      if (!video || !stream) return;
+
+      checkCount++;
+      const hasFrames = video.videoWidth > 0 && video.videoHeight > 0;
+
+      if (!hasFrames && checkCount <= maxChecks) {
+        console.log('[GuestStreamPreview] No video frames yet, retrying...', {
+          checkCount,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          readyState: video.readyState,
+          paused: video.paused,
+        });
+
+        video.srcObject = null;
+        video.srcObject = stream;
+        attemptPlay(video, `frame check retry ${checkCount}`);
+
+        setTimeout(checkForFrames, 500);
+      } else if (hasFrames) {
+        console.log('[GuestStreamPreview] Video has frames:', {
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+        });
+      }
+    };
+
+    const timeoutId = setTimeout(checkForFrames, 500);
+
+    return () => {
+      clearTimeout(timeoutId);
     };
   }, [stream]);
 
