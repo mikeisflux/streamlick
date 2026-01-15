@@ -23,18 +23,40 @@ import {
 // Components
 import { GuestJoinLobby, GuestGreenroom, GuestStatus } from '../components/guest';
 
+// Storage key for persisting participant session
+const getSessionKey = (token: string) => `streamlick_guest_${token}`;
+
+interface StoredSession {
+  participantId: string;
+  guestName: string;
+  hasJoined: boolean;
+}
+
 export function GuestJoin() {
   const { token } = useParams<{ token: string }>();
 
-  // Core state
-  const [guestName, setGuestName] = useState('');
+  // Load stored session if exists
+  const storedSession = token ? (() => {
+    try {
+      const stored = sessionStorage.getItem(getSessionKey(token));
+      return stored ? JSON.parse(stored) as StoredSession : null;
+    } catch {
+      return null;
+    }
+  })() : null;
+
+  // Core state - restore from session if available
+  const [guestName, setGuestName] = useState(storedSession?.guestName || '');
   const [isJoining, setIsJoining] = useState(false);
   const [broadcastInfo, setBroadcastInfo] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasJoined, setHasJoined] = useState(false);
   const [guestStatus, setGuestStatus] = useState<GuestStatus>('greenroom');
-  const [myParticipantId, setMyParticipantId] = useState<string | null>(null);
+  const [myParticipantId, setMyParticipantId] = useState<string | null>(storedSession?.participantId || null);
   const [streamVolume, setStreamVolume] = useState(0.3);
+
+  // Track if we should auto-rejoin on load
+  const shouldAutoRejoin = storedSession?.hasJoined && storedSession?.guestName;
 
   // Media hook
   const {
@@ -125,6 +147,23 @@ export function GuestJoin() {
     loadInvite();
     initCamera();
   }, [token]);
+
+  // Auto-rejoin if we have a stored session (page refresh)
+  const autoRejoinAttempted = useRef(false);
+  useEffect(() => {
+    if (
+      shouldAutoRejoin &&
+      broadcastInfo &&
+      localStream &&
+      !hasJoined &&
+      !isJoining &&
+      !autoRejoinAttempted.current
+    ) {
+      autoRejoinAttempted.current = true;
+      console.log('[GuestJoin] Auto-rejoining from stored session');
+      handleJoin();
+    }
+  }, [shouldAutoRejoin, broadcastInfo, localStream, hasJoined, isJoining]);
 
   // Handle camera/mic device selection changes
   useEffect(() => {
@@ -251,6 +290,19 @@ export function GuestJoin() {
       socketService.emit('join-greenroom', { broadcastId: broadcastInfo.id });
 
       setHasJoined(true);
+
+      // Save session for page refresh persistence
+      try {
+        sessionStorage.setItem(getSessionKey(token!), JSON.stringify({
+          participantId: participant.id,
+          guestName,
+          hasJoined: true,
+        } as StoredSession));
+        console.log('[GuestJoin] Session saved for refresh persistence');
+      } catch (e) {
+        console.warn('[GuestJoin] Failed to save session:', e);
+      }
+
       toast.success('Joined successfully! Waiting for host...');
     } catch (error) {
       console.error('Failed to join broadcast:', error);
@@ -356,6 +408,15 @@ export function GuestJoin() {
         setHasJoined(false);
         setGuestStatus('greenroom');
         hasPublishedRef.current = false;
+
+        // Clear stored session so we don't auto-rejoin
+        if (token) {
+          try {
+            sessionStorage.removeItem(getSessionKey(token));
+          } catch (e) {
+            // Ignore
+          }
+        }
 
         toast.success('You have left the show');
 
