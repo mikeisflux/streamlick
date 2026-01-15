@@ -500,7 +500,7 @@ Muting now uses a two-layer approach:
 - `frontend/src/pages/Studio.tsx`
 - `frontend/src/services/webrtc.service.ts`
 
-**Commit**: `<pending>` - Sync mute state with Ant Media server
+**Commit**: `33e7bcc` - Sync mute state with Ant Media server
 
 ---
 
