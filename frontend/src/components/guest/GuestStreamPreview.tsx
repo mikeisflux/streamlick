@@ -193,9 +193,18 @@ export function GuestStreamPreview({
           paused: video.paused,
         });
 
-        video.srcObject = null;
-        video.srcObject = stream;
-        attemptPlay(video, `frame check retry ${checkCount}`);
+        // Only reset srcObject if video hasn't loaded at all after 3 seconds
+        // Otherwise just try to play - resetting srcObject interrupts loading
+        if (checkCount >= 6 && video.readyState === 0) {
+          console.log('[GuestStreamPreview] Video not loading, resetting srcObject');
+          video.srcObject = null;
+          video.srcObject = stream;
+        }
+
+        // Just try to play without resetting srcObject
+        if (video.paused) {
+          video.play().catch(() => {});
+        }
 
         setTimeout(checkForFrames, 500);
       } else if (hasFrames) {
