@@ -504,6 +504,54 @@ Muting now uses a two-layer approach:
 
 ---
 
+### Issue #15: Guest Stream Not Visible to Host After Late Join
+**Status**: ✅ FIXED
+**Date**: 2026-01-15
+**Symptom**: When a guest joins AFTER the host is already in the room, the host never receives their video stream. The guest's preview tile on the host's screen shows black.
+
+**Root Cause**:
+In Ant Media conference mode, when a new participant joins after the host:
+- Ant Media sends `subtrackAdded` callback (NOT `streamJoined`)
+- The `webrtc.service.ts` was NOT handling `subtrackAdded`
+- Therefore, the host never subscribed to the new participant's stream
+
+**Fix Applied**:
+- Added handler for `subtrackAdded` callback in `webrtc.service.ts`
+- When `subtrackAdded` is received with a `trackId` different from our own, subscribe to it
+- This ensures host receives streams from guests who join after them
+
+**Files Modified**:
+- `frontend/src/services/webrtc.service.ts`
+
+---
+
+### Issue #16: Black Video Caused by Mute Sync on Mount
+**Status**: ✅ FIXED
+**Date**: 2026-01-15
+**Symptom**: Guest and host video shows black screen shortly after joining. Camera restarts during connection setup.
+
+**Root Cause**:
+The mute sync useEffects ran on initial mount:
+1. When `hasJoined` became true, effects ran immediately
+2. With `audioEnabled=true`, called `webrtcService.muteAudio(false)` → `unmuteLocalMic()`
+3. With `videoEnabled=true`, called `webrtcService.muteVideo(false)` → `turnOnLocalCamera()`
+4. `turnOnLocalCamera()` RESTARTS the camera with `getUserMedia()` and replaces the track
+5. This disrupted the already-working stream
+
+**Fix Applied**:
+- Added `initialMuteStateRef` to track if initial state has been recorded
+- On first run (mount), only record the current state without calling API
+- Only call mute/unmute API on ACTUAL state changes (user clicks mute button)
+- Applied to both `GuestJoin.tsx` and `Studio.tsx`
+
+**Files Modified**:
+- `frontend/src/pages/GuestJoin.tsx`
+- `frontend/src/pages/Studio.tsx`
+
+**Commit**: `b67f7ed` - Fix stream subscription and mute sync issues
+
+---
+
 ## Next Steps / TODO
 - [ ] Set TURN password in production frontend `.env`
 - [ ] Consider adding TLS certificates to TURN server for better security
