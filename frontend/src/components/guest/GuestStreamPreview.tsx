@@ -19,15 +19,9 @@ export function GuestStreamPreview({
 }: GuestStreamPreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastTrackIdRef = useRef<string | null>(null);
-  const playRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Helper to attempt playing video with retry logic
+  // Helper to attempt playing video (no retry - let checkForFrames handle retries)
   const attemptPlay = (video: HTMLVideoElement, reason: string) => {
-    if (playRetryTimeoutRef.current) {
-      clearTimeout(playRetryTimeoutRef.current);
-      playRetryTimeoutRef.current = null;
-    }
-
     const videoTrack = stream?.getVideoTracks()[0];
     console.log('[GuestStreamPreview] Attempting play:', {
       reason,
@@ -44,16 +38,8 @@ export function GuestStreamPreview({
         console.log('[GuestStreamPreview] Play succeeded');
       })
       .catch((err) => {
-        console.warn('[GuestStreamPreview] Play failed, will retry:', err.message);
-        playRetryTimeoutRef.current = setTimeout(() => {
-          if (videoRef.current && stream) {
-            videoRef.current.srcObject = null;
-            videoRef.current.srcObject = stream;
-            videoRef.current.play().catch((e) => {
-              console.error('[GuestStreamPreview] Retry play failed:', e.message);
-            });
-          }
-        }, 500);
+        // Don't retry here - let checkForFrames handle retries to avoid conflicts
+        console.warn('[GuestStreamPreview] Play failed:', err.message);
       });
   };
 
@@ -89,12 +75,6 @@ export function GuestStreamPreview({
       video.srcObject = null;
       lastTrackIdRef.current = null;
     }
-
-    return () => {
-      if (playRetryTimeoutRef.current) {
-        clearTimeout(playRetryTimeoutRef.current);
-      }
-    };
   }, [stream]);
 
   // Listen for track changes on the stream
@@ -176,7 +156,8 @@ export function GuestStreamPreview({
     if (!video || !stream) return;
 
     let checkCount = 0;
-    const maxChecks = 10;
+    const maxChecks = 20; // Check for 10 seconds
+    let hasResetSrcObject = false; // Only reset once
 
     const checkForFrames = () => {
       if (!video || !stream) return;
@@ -185,24 +166,28 @@ export function GuestStreamPreview({
       const hasFrames = video.videoWidth > 0 && video.videoHeight > 0;
 
       if (!hasFrames && checkCount <= maxChecks) {
-        console.log('[GuestStreamPreview] No video frames yet, retrying...', {
-          checkCount,
+        console.log('[GuestStreamPreview] No video frames yet, check #' + checkCount, {
           videoWidth: video.videoWidth,
           videoHeight: video.videoHeight,
           readyState: video.readyState,
           paused: video.paused,
+          hasResetSrcObject,
         });
 
-        // Only reset srcObject if video hasn't loaded at all after 3 seconds
-        // Otherwise just try to play - resetting srcObject interrupts loading
-        if (checkCount >= 6 && video.readyState === 0) {
-          console.log('[GuestStreamPreview] Video not loading, resetting srcObject');
+        // Only reset srcObject ONCE after 5 seconds if video still hasn't loaded
+        if (checkCount === 10 && video.readyState === 0 && !hasResetSrcObject) {
+          console.log('[GuestStreamPreview] Video not loading after 5s, resetting srcObject once');
+          hasResetSrcObject = true;
           video.srcObject = null;
-          video.srcObject = stream;
-        }
-
-        // Just try to play without resetting srcObject
-        if (video.paused) {
+          // Small delay before re-assigning to let browser clean up
+          setTimeout(() => {
+            if (videoRef.current && stream) {
+              videoRef.current.srcObject = stream;
+              videoRef.current.play().catch(() => {});
+            }
+          }, 100);
+        } else if (video.paused) {
+          // Just try to play without resetting srcObject
           video.play().catch(() => {});
         }
 
@@ -212,6 +197,8 @@ export function GuestStreamPreview({
           videoWidth: video.videoWidth,
           videoHeight: video.videoHeight,
         });
+      } else {
+        console.warn('[GuestStreamPreview] Video still has no frames after max retries');
       }
     };
 
