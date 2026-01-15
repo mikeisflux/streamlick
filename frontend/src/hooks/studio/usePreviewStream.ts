@@ -17,6 +17,9 @@ import { ICE_SERVERS } from '../../utils/webrtc';
 interface PeerConnection {
   pc: RTCPeerConnection;
   guestSocketId: string;
+  guestId: string;
+  videoSender: RTCRtpSender | null;
+  isOnStage: boolean;
 }
 
 interface PendingRequest {
@@ -24,9 +27,51 @@ interface PendingRequest {
   guestSocketId: string;
 }
 
+// Encoding presets for preview stream quality
+const ENCODING_GREENROOM = {
+  scaleResolutionDownBy: 4, // 1920x1080 -> 480x270
+  maxBitrate: 500000, // 500 kbps
+  maxFramerate: 15,
+};
+
+const ENCODING_STAGE = {
+  scaleResolutionDownBy: 1, // Full resolution
+  maxBitrate: 2500000, // 2.5 Mbps
+  maxFramerate: 30,
+};
+
+// Helper to apply encoding parameters to a video sender
+async function applyEncodingParams(
+  videoSender: RTCRtpSender,
+  encoding: typeof ENCODING_GREENROOM,
+  guestId: string
+): Promise<boolean> {
+  try {
+    const params = videoSender.getParameters();
+    if (!params.encodings || params.encodings.length === 0) {
+      params.encodings = [{}];
+    }
+    params.encodings[0].scaleResolutionDownBy = encoding.scaleResolutionDownBy;
+    params.encodings[0].maxBitrate = encoding.maxBitrate;
+    params.encodings[0].maxFramerate = encoding.maxFramerate;
+    await videoSender.setParameters(params);
+    console.log('[PreviewStream] Applied encoding for guest ' + guestId + ':', {
+      scaleDown: encoding.scaleResolutionDownBy + 'x',
+      maxBitrate: encoding.maxBitrate / 1000 + 'kbps',
+      maxFps: encoding.maxFramerate,
+    });
+    return true;
+  } catch (e) {
+    console.warn('[PreviewStream] Could not apply encoding for guest ' + guestId + ':', e);
+    return false;
+  }
+}
+
 export function usePreviewStream(broadcastId: string | undefined) {
   // Map of guest socket IDs to their peer connections
   const peerConnectionsRef = useRef<Map<string, PeerConnection>>(new Map());
+  // Map of guest IDs to socket IDs for status change handling
+  const guestIdToSocketIdRef = useRef<Map<string, string>>(new Map());
   // Queue of pending preview requests waiting for canvas stream
   const pendingRequestsRef = useRef<PendingRequest[]>([]);
   // Track unsubscribe function for canvas stream ready callback
@@ -126,8 +171,16 @@ export function usePreviewStream(broadcastId: string | undefined) {
       };
     }
 
-    // Store the peer connection
-    peerConnectionsRef.current.set(guestSocketId, { pc, guestSocketId });
+    // Store the peer connection with all metadata
+    peerConnectionsRef.current.set(guestSocketId, {
+      pc,
+      guestSocketId,
+      guestId,
+      videoSender,
+      isOnStage: false, // Guests start in greenroom
+    });
+    // Also map guestId to socketId for status change lookups
+    guestIdToSocketIdRef.current.set(guestId, guestSocketId);
 
     // DEBUG: Monitor WebRTC stats to verify frames are being sent
     const statsInterval = setInterval(async () => {
@@ -154,6 +207,7 @@ export function usePreviewStream(broadcastId: string | undefined) {
       if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
         clearInterval(statsInterval);
         peerConnectionsRef.current.delete(guestSocketId);
+        guestIdToSocketIdRef.current.delete(guestId);
         pc.close();
       }
     };
@@ -163,23 +217,9 @@ export function usePreviewStream(broadcastId: string | undefined) {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      // Apply bandwidth constraints to reduce preview stream size
-      // Guest preview is small (300x170px), so we don't need full resolution
+      // Apply greenroom encoding (low quality) - will upgrade when promoted to stage
       if (videoSender) {
-        try {
-          const params = videoSender.getParameters();
-          if (!params.encodings || params.encodings.length === 0) {
-            params.encodings = [{}];
-          }
-          // Scale down by 4x (1920x1080 -> 480x270) and limit bitrate to 500kbps
-          params.encodings[0].scaleResolutionDownBy = 4;
-          params.encodings[0].maxBitrate = 500000; // 500 kbps
-          params.encodings[0].maxFramerate = 15;
-          await videoSender.setParameters(params);
-          console.log('[PreviewStream] Applied bandwidth constraints: scaleDown=4x, maxBitrate=500kbps, maxFps=15');
-        } catch (e) {
-          console.warn('[PreviewStream] Could not apply bandwidth constraints:', e);
-        }
+        await applyEncodingParams(videoSender, ENCODING_GREENROOM, guestId);
       }
 
       socketService.emit('preview-offer', {
@@ -267,6 +307,38 @@ export function usePreviewStream(broadcastId: string | undefined) {
     }
   }, []);
 
+  // Handle guest status change (promotion to stage or demotion to greenroom)
+  // Updates P2P preview stream quality accordingly
+  const handleGuestStatusChange = useCallback(async ({ participantId, newStatus }: { participantId: string; newStatus: string }) => {
+    // Look up socket ID from guest ID
+    const socketId = guestIdToSocketIdRef.current.get(participantId);
+    if (!socketId) {
+      // Guest might not have an active P2P connection (e.g., they haven't requested preview yet)
+      return;
+    }
+
+    const connection = peerConnectionsRef.current.get(socketId);
+    if (!connection || !connection.videoSender) {
+      return;
+    }
+
+    const isPromotedToStage = newStatus === 'live' || newStatus === 'guest';
+    const wasOnStage = connection.isOnStage;
+
+    // Only update if status actually changed
+    if (isPromotedToStage !== wasOnStage) {
+      connection.isOnStage = isPromotedToStage;
+
+      if (isPromotedToStage) {
+        console.log('[PreviewStream] Guest promoted to stage, upgrading preview quality:', participantId);
+        await applyEncodingParams(connection.videoSender, ENCODING_STAGE, participantId);
+      } else {
+        console.log('[PreviewStream] Guest moved to greenroom, downgrading preview quality:', participantId);
+        await applyEncodingParams(connection.videoSender, ENCODING_GREENROOM, participantId);
+      }
+    }
+  }, []);
+
   // Set up socket event listeners
   useEffect(() => {
     if (!broadcastId) return;
@@ -274,11 +346,14 @@ export function usePreviewStream(broadcastId: string | undefined) {
     socketService.on('preview-stream-requested', handlePreviewStreamRequested);
     socketService.on('preview-answer', handlePreviewAnswer);
     socketService.on('preview-ice-candidate', handlePreviewIceCandidate);
+    // Listen for guest status changes to upgrade/downgrade preview quality
+    socketService.on('participant-status-changed', handleGuestStatusChange);
 
     return () => {
       socketService.off('preview-stream-requested', handlePreviewStreamRequested);
       socketService.off('preview-answer', handlePreviewAnswer);
       socketService.off('preview-ice-candidate', handlePreviewIceCandidate);
+      socketService.off('participant-status-changed', handleGuestStatusChange);
 
       // Clean up canvas stream ready subscription
       if (unsubscribeRef.current) {
@@ -294,8 +369,11 @@ export function usePreviewStream(broadcastId: string | undefined) {
         pc.close();
       });
       peerConnectionsRef.current.clear();
+
+      // Clear guest ID to socket ID mapping
+      guestIdToSocketIdRef.current.clear();
     };
-  }, [broadcastId, handlePreviewStreamRequested, handlePreviewAnswer, handlePreviewIceCandidate]);
+  }, [broadcastId, handlePreviewStreamRequested, handlePreviewAnswer, handlePreviewIceCandidate, handleGuestStatusChange]);
 
   return {};
 }
