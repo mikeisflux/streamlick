@@ -28,6 +28,12 @@ import { GuestJoinLobby, GuestGreenroom, GuestStatus } from '../components/guest
 // Storage key for persisting participant session
 const getSessionKey = (token: string) => `streamlick_guest_${token}`;
 
+// Resolution presets for bandwidth optimization
+// Greenroom: Low resolution since preview tile is small (160x90px)
+// Stage: Higher resolution for the main broadcast canvas
+const RESOLUTION_GREENROOM = { width: 480, height: 270, frameRate: 15 };
+const RESOLUTION_STAGE = { width: 1280, height: 720, frameRate: 30 };
+
 interface StoredSession {
   participantId: string;
   guestName: string;
@@ -192,7 +198,12 @@ export function GuestJoin() {
 
     const initCamera = async () => {
       // Start with front camera (user) by default for mobile
-      await startCamera({ facingMode: 'user' });
+      // Use low resolution for greenroom to save bandwidth - host only sees small preview tile
+      await startCamera({
+        facingMode: 'user',
+        ...RESOLUTION_GREENROOM,
+      });
+      console.log('[GuestJoin] Started camera with greenroom resolution:', RESOLUTION_GREENROOM);
       // Re-enumerate devices after camera permission is granted
       // This ensures device labels are available (browsers only show labels after permission)
       await refreshDevices();
@@ -219,6 +230,78 @@ export function GuestJoin() {
     }
   }, [shouldAutoRejoin, broadcastInfo, localStream, hasJoined, isJoining]);
 
+  // Track current resolution mode for device switching
+  const currentResolutionRef = useRef<'greenroom' | 'stage'>('greenroom');
+
+  // Switch to high resolution when promoted to stage, back to low when moved to greenroom
+  const previousStatusRef = useRef<GuestStatus>(guestStatus);
+  useEffect(() => {
+    if (!hasJoined || !hasPublishedRef.current) return;
+
+    const previousStatus = previousStatusRef.current;
+    previousStatusRef.current = guestStatus;
+
+    // Detect promotion to stage (greenroom/backstage -> live)
+    if (guestStatus === 'live' && previousStatus !== 'live' && currentResolutionRef.current !== 'stage') {
+      console.log('[GuestJoin] Promoted to stage - upgrading to high resolution');
+      currentResolutionRef.current = 'stage';
+
+      const upgradeResolution = async () => {
+        try {
+          // Restart camera with higher resolution
+          const newStream = await startCamera({
+            videoDeviceId: selectedVideoDevice || undefined,
+            audioDeviceId: selectedAudioDevice || undefined,
+            ...RESOLUTION_STAGE,
+          });
+
+          // Replace video track on Ant Media connection
+          if (newStream) {
+            const videoTrack = newStream.getVideoTracks()[0];
+            if (videoTrack) {
+              await webrtcService.replaceVideoTrack(videoTrack);
+              console.log('[GuestJoin] Upgraded to stage resolution:', RESOLUTION_STAGE);
+            }
+          }
+        } catch (error) {
+          console.error('[GuestJoin] Failed to upgrade resolution:', error);
+        }
+      };
+
+      upgradeResolution();
+    }
+
+    // Detect demotion back to greenroom/backstage (live -> greenroom/backstage)
+    if (guestStatus !== 'live' && previousStatus === 'live' && currentResolutionRef.current !== 'greenroom') {
+      console.log('[GuestJoin] Moved to greenroom/backstage - downgrading to low resolution');
+      currentResolutionRef.current = 'greenroom';
+
+      const downgradeResolution = async () => {
+        try {
+          // Restart camera with lower resolution
+          const newStream = await startCamera({
+            videoDeviceId: selectedVideoDevice || undefined,
+            audioDeviceId: selectedAudioDevice || undefined,
+            ...RESOLUTION_GREENROOM,
+          });
+
+          // Replace video track on Ant Media connection
+          if (newStream) {
+            const videoTrack = newStream.getVideoTracks()[0];
+            if (videoTrack) {
+              await webrtcService.replaceVideoTrack(videoTrack);
+              console.log('[GuestJoin] Downgraded to greenroom resolution:', RESOLUTION_GREENROOM);
+            }
+          }
+        } catch (error) {
+          console.error('[GuestJoin] Failed to downgrade resolution:', error);
+        }
+      };
+
+      downgradeResolution();
+    }
+  }, [guestStatus, hasJoined, selectedVideoDevice, selectedAudioDevice, startCamera]);
+
   // Handle camera/mic device selection changes
   useEffect(() => {
     if (!selectedVideoDevice && !selectedAudioDevice) return;
@@ -226,10 +309,13 @@ export function GuestJoin() {
     if (!localStream) return;
 
     const switchDevices = async () => {
-      console.log('[GuestJoin] Switching devices:', { selectedVideoDevice, selectedAudioDevice });
+      // Preserve current resolution setting when switching devices
+      const resolution = currentResolutionRef.current === 'stage' ? RESOLUTION_STAGE : RESOLUTION_GREENROOM;
+      console.log('[GuestJoin] Switching devices with resolution:', { selectedVideoDevice, selectedAudioDevice, resolution });
       await startCamera({
         videoDeviceId: selectedVideoDevice || undefined,
         audioDeviceId: selectedAudioDevice || undefined,
+        ...resolution,
       });
     };
 
@@ -240,8 +326,10 @@ export function GuestJoin() {
   const [currentFacingMode, setCurrentFacingMode] = useState<'user' | 'environment'>('user');
   const flipCamera = async () => {
     const newMode = currentFacingMode === 'user' ? 'environment' : 'user';
-    console.log('[GuestJoin] Flipping camera to:', newMode);
-    await startCamera({ facingMode: newMode });
+    // Preserve current resolution setting when flipping camera
+    const resolution = currentResolutionRef.current === 'stage' ? RESOLUTION_STAGE : RESOLUTION_GREENROOM;
+    console.log('[GuestJoin] Flipping camera to:', newMode, 'with resolution:', resolution);
+    await startCamera({ facingMode: newMode, ...resolution });
     setCurrentFacingMode(newMode);
     await refreshDevices();
   };

@@ -28,6 +28,10 @@ export function useMedia() {
     videoDeviceId?: string;
     audioDeviceId?: string;
     facingMode?: 'user' | 'environment';
+    // Resolution options for bandwidth optimization
+    width?: number;
+    height?: number;
+    frameRate?: number;
   }) => {
     try {
       // Stop existing stream if switching devices
@@ -62,11 +66,18 @@ export function useMedia() {
       console.log('[useMedia] Using microphone:', microphones.find(m => m.deviceId === micDeviceId)?.label || 'default');
 
       // Build video constraints - support deviceId or facingMode (for mobile)
+      // Use provided resolution or default to 1080p
+      const targetWidth = options?.width || 1920;
+      const targetHeight = options?.height || 1080;
+      const targetFrameRate = options?.frameRate || 30;
+
       let videoConstraints: MediaTrackConstraints = {
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-        frameRate: { ideal: 30 },
+        width: { ideal: targetWidth, max: targetWidth },
+        height: { ideal: targetHeight, max: targetHeight },
+        frameRate: { ideal: targetFrameRate, max: targetFrameRate },
       };
+
+      console.log('[useMedia] Video constraints:', { width: targetWidth, height: targetHeight, frameRate: targetFrameRate });
 
       if (options?.videoDeviceId) {
         videoConstraints.deviceId = { exact: options.videoDeviceId };
