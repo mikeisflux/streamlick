@@ -615,10 +615,42 @@ Analysis of logs revealed THREE distinct issues:
 
 ---
 
+### Optimization #1: Adaptive Resolution for Greenroom vs Stage
+**Status**: ✅ IMPLEMENTED
+**Date**: 2026-01-15
+**Goal**: Reduce bandwidth usage when guests are in greenroom since host only sees them in a small 160x90px preview tile.
+
+**Solution**:
+Guests now transmit at different resolutions based on their status:
+
+| Status | Resolution | Frame Rate | Est. Bandwidth |
+|--------|------------|------------|----------------|
+| Greenroom | 480x270 | 15 fps | ~200-400 kbps |
+| On Stage | 1280x720 | 30 fps | ~1.5-2.5 Mbps |
+
+**Implementation**:
+1. Added `width`, `height`, `frameRate` options to `useMedia.startCamera()`
+2. Guest starts with greenroom resolution on initial join
+3. When promoted to stage (status changes to 'live'), automatically:
+   - Restart camera at higher resolution
+   - Replace video track on Ant Media connection
+4. When demoted back to greenroom, downgrade resolution
+5. Device switching and camera flip preserve current resolution mode
+
+**Trade-off**: Brief ~1-2 second video restart when resolution changes during promotion.
+
+**Files Modified**:
+- `frontend/src/hooks/useMedia.ts` - Resolution options
+- `frontend/src/pages/GuestJoin.tsx` - Adaptive resolution logic
+
+**Commit**: `aa21f2f` - Add adaptive resolution for greenroom vs stage bandwidth optimization
+
+---
+
 ## Next Steps / TODO
 - [ ] Set TURN password in production frontend `.env`
 - [ ] Consider adding TLS certificates to TURN server for better security
 - [ ] Investigate initial WebRTC connection failure (Ant Media server config?)
-- [ ] Test promotion from greenroom to stage
+- [x] Test promotion from greenroom to stage (resolution upgrade implemented)
 - [ ] Test multiple guests simultaneously
 - [ ] Verify RTMP output includes all participants correctly
