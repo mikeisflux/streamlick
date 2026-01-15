@@ -314,6 +314,8 @@ The track is technically "subscribed" but `mediaStreamTrack.muted` is `true` bec
 **Commits**:
 - `70fd5db` - Fix guest video freezing on initial join
 - `9a8ab5e` - Fix GuestStreamPreview video freezing (host preview on guest screen)
+- `2826199` - Fix race condition: set callbacks before joinRoom in GuestJoin
+- `7b24691` - Fix play() interruption in GuestStreamPreview frame retry
 
 ---
 
@@ -327,18 +329,24 @@ The track is technically "subscribed" but `mediaStreamTrack.muted` is `true` bec
 4. `635b790` - Fix frozen video in greenroom preview tiles
 5. `00b8aae` - Add progress report and Claude Code instructions
 6. `287b4c7` - Fix race condition: guest joins LiveKit before stream ready
+7. `70fd5db` - Fix guest video freezing on initial join
+8. `9a8ab5e` - Fix GuestStreamPreview video freezing (host preview on guest screen)
+9. `f2bf2eb` - Update progress report with GuestStreamPreview fix and documentation
+10. `2826199` - Fix race condition: set callbacks before joinRoom in GuestJoin
+11. `7b24691` - Fix play() interruption in GuestStreamPreview frame retry
 
 ---
 
 ## Files Modified
 
 ### Frontend
-- `frontend/src/services/webrtc.service.ts` - Participant ID parameter
-- `frontend/src/pages/GuestJoin.tsx` - Pass participant UUID, fix race condition with hasPublishedRef
+- `frontend/src/services/webrtc.service.ts` - Participant ID parameter, wait for track unmute
+- `frontend/src/pages/GuestJoin.tsx` - Pass participant UUID, fix race condition with hasPublishedRef, set callbacks before joinRoom
 - `frontend/src/hooks/studio/useWebRTC.ts` - Accept participantId, publish raw camera
 - `frontend/src/pages/Studio.tsx` - Pass host ID, handle pending streams
-- `frontend/src/components/studio/canvas/StudioCanvas.tsx` - Track detection for video updates
-- `frontend/src/components/studio/canvas/PreviewArea.tsx` - PreviewVideo component, debug logging
+- `frontend/src/components/studio/canvas/StudioCanvas.tsx` - Track detection for video updates, frame retry
+- `frontend/src/components/studio/canvas/PreviewArea.tsx` - PreviewVideo component, debug logging, frame retry
+- `frontend/src/components/guest/GuestStreamPreview.tsx` - Track detection, frame retry (less aggressive)
 
 ### Documentation
 - `PROGRESS_REPORT.md` - This file, tracks all issues and fixes
