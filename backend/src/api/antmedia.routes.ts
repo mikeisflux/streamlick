@@ -313,4 +313,158 @@ router.get('/config', (req: Request, res: Response) => {
   });
 });
 
+// ============================================
+// Admin Endpoints (require authentication)
+// ============================================
+
+/**
+ * GET /api/antmedia/admin/status
+ * Get Ant Media server status and health info
+ */
+router.get('/admin/status', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    logger.info('[AntMedia] Checking server status');
+
+    // Try to get server version/info
+    const version = await antmediaRequest('/version');
+
+    res.json({
+      status: 'online',
+      serverUrl: ANTMEDIA_URL,
+      application: ANTMEDIA_APP,
+      version: version,
+    });
+  } catch (error: any) {
+    logger.error('[AntMedia] Server status check failed:', error);
+    res.json({
+      status: 'offline',
+      serverUrl: ANTMEDIA_URL,
+      application: ANTMEDIA_APP,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/antmedia/admin/broadcasts
+ * List all active broadcasts on the server
+ */
+router.get('/admin/broadcasts', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { offset = 0, size = 50 } = req.query;
+
+    logger.info('[AntMedia] Listing broadcasts:', { offset, size });
+
+    // Get broadcast list with pagination
+    const broadcasts = await antmediaRequest(
+      `/broadcasts/list/${offset}/${size}`
+    );
+
+    res.json({
+      broadcasts: broadcasts || [],
+      count: broadcasts?.length || 0,
+      offset: Number(offset),
+      size: Number(size),
+    });
+  } catch (error: any) {
+    logger.error('[AntMedia] Failed to list broadcasts:', error);
+    res.status(500).json({
+      error: 'Failed to list broadcasts',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/antmedia/admin/statistics
+ * Get server statistics (CPU, memory, active streams)
+ */
+router.get('/admin/statistics', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    logger.info('[AntMedia] Getting server statistics');
+
+    // Get server stats
+    const stats = await antmediaRequest('/server-statistics');
+
+    res.json({
+      serverStats: stats,
+      serverUrl: ANTMEDIA_URL,
+      application: ANTMEDIA_APP,
+    });
+  } catch (error: any) {
+    logger.error('[AntMedia] Failed to get statistics:', error);
+    res.status(500).json({
+      error: 'Failed to get server statistics',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/antmedia/admin/broadcast/:streamId
+ * Get detailed info about a specific broadcast
+ */
+router.get('/admin/broadcast/:streamId', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { streamId } = req.params;
+
+    logger.info('[AntMedia] Getting broadcast details:', streamId);
+
+    const broadcast = await antmediaRequest(`/broadcasts/${streamId}`);
+
+    res.json(broadcast);
+  } catch (error: any) {
+    logger.error('[AntMedia] Failed to get broadcast:', error);
+    res.status(404).json({
+      error: 'Broadcast not found',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * DELETE /api/antmedia/admin/broadcast/:streamId
+ * Force delete a broadcast from the server
+ */
+router.delete('/admin/broadcast/:streamId', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { streamId } = req.params;
+
+    logger.info('[AntMedia] Force deleting broadcast:', streamId);
+
+    await antmediaRequest(`/broadcasts/${streamId}`, 'DELETE');
+
+    res.json({
+      success: true,
+      message: `Broadcast ${streamId} deleted`,
+    });
+  } catch (error: any) {
+    logger.error('[AntMedia] Failed to delete broadcast:', error);
+    res.status(500).json({
+      error: 'Failed to delete broadcast',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/antmedia/admin/app-settings
+ * Get application settings from Ant Media
+ */
+router.get('/admin/app-settings', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    logger.info('[AntMedia] Getting application settings');
+
+    const settings = await antmediaRequest('/applications/settings/LiveApp');
+
+    res.json(settings);
+  } catch (error: any) {
+    logger.error('[AntMedia] Failed to get app settings:', error);
+    res.status(500).json({
+      error: 'Failed to get application settings',
+      message: error.message,
+    });
+  }
+});
+
 export default router;

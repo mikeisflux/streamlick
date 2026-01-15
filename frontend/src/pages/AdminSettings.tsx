@@ -34,6 +34,8 @@ interface SystemConfig {
   max_concurrent_broadcasts?: string;
   hetzner_api_key?: string;
   daily_api_key?: string;
+  antmedia_url?: string;
+  antmedia_app?: string;
 }
 
 export default function AdminSettings() {
@@ -286,6 +288,13 @@ export default function AdminSettings() {
         fields: [
           { key: 'hetzner_api_key', label: 'Hetzner Cloud API Key', type: 'password', description: 'For automatic server provisioning and scaling' },
           { key: 'daily_api_key', label: 'Daily.co API Key', type: 'password', description: 'For RTMP streaming output via Daily.co (replaces FFmpeg)' },
+        ],
+      },
+      {
+        category: 'Ant Media Server (WebRTC SFU)',
+        fields: [
+          { key: 'antmedia_url', label: 'Ant Media Server URL', type: 'text', description: 'Full URL to Ant Media Server (e.g., https://media.streamlick.com:5443)' },
+          { key: 'antmedia_app', label: 'Ant Media Application Name', type: 'text', description: 'Application name on Ant Media (default: LiveApp)' },
         ],
       },
       {
