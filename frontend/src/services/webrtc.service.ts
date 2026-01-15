@@ -61,6 +61,7 @@ class WebRTCService {
   private participantId: string | null = null;
   private localStream: MediaStream | null = null;
   private remoteStreams: Map<string, MediaStream> = new Map();
+  private attachedElements: Map<string, HTMLMediaElement> = new Map(); // Keep references to prevent GC
   private closed: boolean = false;
 
   // Connection state
@@ -134,6 +135,9 @@ class WebRTCService {
     this.room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
       logger.info('[WebRTC-LiveKit] Participant disconnected:', participant.identity);
       this.remoteStreams.delete(participant.identity);
+      // Clean up attached elements for this participant
+      this.attachedElements.delete(`${participant.identity}_video`);
+      this.attachedElements.delete(`${participant.identity}_audio`);
       this.onParticipantLeft?.(participant.identity);
     });
 
@@ -176,10 +180,54 @@ class WebRTCService {
 
   /**
    * Handle when we subscribe to a remote track
+   * Uses LiveKit's track.attach() to properly initialize the track for playback
    */
   private handleTrackSubscribed(track: RemoteTrack, participant: RemoteParticipant): void {
-    const mediaTrack = track.mediaStreamTrack;
-    if (!mediaTrack) return;
+    // Use LiveKit's attach() method to properly initialize the track
+    // This is the recommended approach - directly accessing mediaStreamTrack may not work
+    const element = track.attach();
+
+    // Store element reference to prevent garbage collection
+    // Key includes track kind to support multiple tracks per participant
+    const elementKey = `${participant.identity}_${track.kind}`;
+    this.attachedElements.set(elementKey, element);
+
+    // Get the MediaStream from the attached element
+    const attachedStream = element.srcObject as MediaStream;
+    if (!attachedStream) {
+      logger.warn('[WebRTC-LiveKit] No stream from attached element:', {
+        participantId: participant.identity,
+        trackKind: track.kind,
+        elementTagName: element.tagName,
+      });
+      // Fallback to mediaStreamTrack if attach didn't provide a stream
+      const mediaTrack = track.mediaStreamTrack;
+      if (!mediaTrack) {
+        logger.error('[WebRTC-LiveKit] No mediaStreamTrack available either');
+        return;
+      }
+      this.handleTrackWithMediaStreamTrack(mediaTrack, participant);
+      return;
+    }
+
+    const mediaTrack = attachedStream.getTracks().find(t => t.kind === track.kind);
+    if (!mediaTrack) {
+      logger.warn('[WebRTC-LiveKit] No track found in attached stream:', {
+        participantId: participant.identity,
+        trackKind: track.kind,
+        streamTracks: attachedStream.getTracks().map(t => ({ kind: t.kind, id: t.id })),
+      });
+      return;
+    }
+
+    logger.info('[WebRTC-LiveKit] Track attached successfully:', {
+      participantId: participant.identity,
+      trackKind: track.kind,
+      trackId: mediaTrack.id,
+      attachedStreamId: attachedStream.id,
+      trackReadyState: mediaTrack.readyState,
+      trackMuted: mediaTrack.muted,
+    });
 
     // Get existing stream to preserve other tracks
     const existingStream = this.remoteStreams.get(participant.identity);
@@ -277,6 +325,55 @@ class WebRTCService {
       }, 2000);
     } else {
       // Track already has data, notify immediately with the new stream
+      this.onRemoteStream?.(participant.identity, stream);
+    }
+  }
+
+  /**
+   * Fallback handler when track.attach() doesn't provide a stream
+   */
+  private handleTrackWithMediaStreamTrack(mediaTrack: MediaStreamTrack, participant: RemoteParticipant): void {
+    // Get existing stream to preserve other tracks
+    const existingStream = this.remoteStreams.get(participant.identity);
+
+    // Collect all current tracks (excluding any of the same kind we're replacing)
+    const existingTracks: MediaStreamTrack[] = [];
+    if (existingStream) {
+      existingStream.getTracks().forEach((t) => {
+        if (t.kind !== mediaTrack.kind) {
+          existingTracks.push(t);
+        }
+      });
+    }
+
+    // Create a NEW MediaStream with all tracks
+    const stream = new MediaStream([...existingTracks, mediaTrack]);
+    this.remoteStreams.set(participant.identity, stream);
+
+    logger.info('[WebRTC-LiveKit] Created stream with fallback method:', {
+      participantId: participant.identity,
+      streamId: stream.id,
+      trackKind: mediaTrack.kind,
+      trackId: mediaTrack.id,
+    });
+
+    // If muted, wait for unmute
+    if (mediaTrack.muted) {
+      let notified = false;
+      const notifyOnce = () => {
+        if (notified) return;
+        notified = true;
+        const latestStream = this.remoteStreams.get(participant.identity);
+        if (latestStream) {
+          this.onRemoteStream?.(participant.identity, latestStream);
+        }
+      };
+
+      mediaTrack.addEventListener('unmute', notifyOnce);
+      setTimeout(() => {
+        if (!notified) notifyOnce();
+      }, 2000);
+    } else {
       this.onRemoteStream?.(participant.identity, stream);
     }
   }
@@ -453,6 +550,7 @@ class WebRTCService {
 
     this.localStream = null;
     this.remoteStreams.clear();
+    this.attachedElements.clear(); // Clean up attached elements
     this.roomId = null;
     this.participantId = null;
 

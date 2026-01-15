@@ -319,6 +319,43 @@ The track is technically "subscribed" but `mediaStreamTrack.muted` is `true` bec
 - `aeb299b` - Fix conflicting retry mechanisms in GuestStreamPreview
 - `51805c4` - Add muted attribute to GuestStreamPreview video for autoplay
 - `11352bd` - Add session persistence for guest page refresh
+- `cfea147` - Fix: Create new MediaStream when tracks change
+
+---
+
+### Issue #12: Video Track Shows 'live' But No Frames Received
+**Status**: ✅ FIXED
+**Date**: 2026-01-15
+**Symptom**: Video track from LiveKit shows `trackReadyState: 'live'` and `trackMuted: false` with valid settings (320x180, 30fps), but browser video element `readyState` stays at 0 (HAVE_NOTHING) - no frames ever received.
+
+**Root Cause**:
+The webrtc.service.ts was directly accessing `track.mediaStreamTrack` and creating MediaStreams manually. However, LiveKit's RemoteTrack may not be fully initialized for playback when accessed this way. LiveKit's recommended approach is to use `track.attach()` which:
+1. Properly initializes the track for playback
+2. Handles browser-specific quirks
+3. Sets up the correct MediaStream internally
+
+**Fix Applied**:
+- `webrtc.service.ts` - Use LiveKit's native `track.attach()` method:
+  - Call `track.attach()` to get a properly configured video/audio element
+  - Extract the MediaStream from the attached element's `srcObject`
+  - Store attached elements in `attachedElements` Map to prevent garbage collection
+  - Clean up attached elements when participant disconnects or room closes
+  - Added fallback to `handleTrackWithMediaStreamTrack()` if attach doesn't work
+
+**Key Changes**:
+```typescript
+// OLD approach (didn't work):
+const mediaTrack = track.mediaStreamTrack; // May not be initialized
+const stream = new MediaStream([mediaTrack]);
+
+// NEW approach (proper LiveKit pattern):
+const element = track.attach(); // Properly initializes track
+const attachedStream = element.srcObject as MediaStream;
+const mediaTrack = attachedStream.getTracks().find(t => t.kind === track.kind);
+```
+
+**Files Modified**:
+- `frontend/src/services/webrtc.service.ts`
 
 ---
 
