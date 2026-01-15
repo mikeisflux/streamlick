@@ -431,6 +431,36 @@ If video freezing occurs in a NEW component, apply the same pattern:
 
 ---
 
+### Issue #13: Internal License API Endpoint
+**Status**: ✅ COMPLETED
+**Date**: 2026-01-15
+**Request**: Create internal API endpoint to bypass external Ant Media license validation servers.
+
+**Implementation**:
+1. Created static JSON endpoint at `/api/license.json` in the root webapp
+2. Created standalone Python license server (`conf/license_server.py`) as backup
+3. Updated `upgrade.sh` to use internal API instead of `api-v2.antmedia.io`
+4. Updated `enable_ssl.sh` to use internal API for license validation
+
+**License Response**:
+```json
+{
+    "valid": true,
+    "type": "enterprise",
+    "expiry": "2050-02-15T04:14:31"
+}
+```
+
+**Files Created/Modified**:
+- `media-server/webapps/root/api/license.json` (new)
+- `media-server/conf/license_server.py` (new)
+- `media-server/upgrade.sh` (modified)
+- `media-server/enable_ssl.sh` (modified)
+
+**Commit**: `91bdd83` - Add internal license API endpoint for enterprise validation
+
+---
+
 ## Next Steps / TODO
 - [ ] Set TURN password in production frontend `.env`
 - [ ] Consider adding TLS certificates to TURN server for better security
