@@ -80,10 +80,13 @@ export function usePreviewStream({
           ', enabled=' + event.track.enabled +
           ', muted=' + event.track.muted +
           ', readyState=' + event.track.readyState);
-        if (event.streams && event.streams[0]) {
+
+        // Only set broadcast stream for VIDEO tracks
+        // Audio tracks arrive in separate streams and would overwrite the video stream
+        if (event.track.kind === 'video' && event.streams && event.streams[0]) {
           const stream = event.streams[0];
           // DEBUG: Log stream details (explicit values)
-          console.log('[PreviewStream] Stream details: streamId=' + stream.id +
+          console.log('[PreviewStream] Setting video stream: streamId=' + stream.id +
             ', active=' + stream.active +
             ', videoTracks=' + stream.getVideoTracks().length +
             ', audioTracks=' + stream.getAudioTracks().length);
