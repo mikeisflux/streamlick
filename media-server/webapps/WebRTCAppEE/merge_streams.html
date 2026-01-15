@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<title>Ant Media Server WebRTC Stream Merger</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<link rel="stylesheet" href="css/external/bootstrap4/bootstrap.min.css" >
+<link rel="stylesheet" href="css/common.css" />
+
+<style>
+video {
+	width: 100%;
+	max-width: 640px;
+}
+
+/* Everything but the jumbotron gets side spacing for mobile first views */
+.header, .marketing, .footer {
+	padding: 15px;
+}
+
+.form-row {
+	padding-top: 15px;
+}
+
+/* Custom page header */
+.header {
+	padding-bottom: 20px;
+	border-bottom: 1px solid #e5e5e5;
+}
+
+/* Customize container */
+@media ( min-width : 768px) {
+	.container {
+		max-width: 730px;
+	}
+}
+/* Custom page footer */
+.footer {
+	padding-top: 19px;
+	color: #777;
+	border-top: 1px solid #e5e5e5;
+}
+
+.container-narrow>hr {
+	margin: 30px 0;
+}
+
+/* Main marketing message and sign up button */
+.jumbotron {
+	text-align: center;
+	border-bottom: 1px solid #e5e5e5;
+}
+
+/* Responsive: Portrait tablets and up */
+@media screen and (min-width: 768px) {
+	/* Remove the padding we set earlier */
+	.header, .marketing, .footer {
+		padding-right: 0;
+		padding-left: 0;
+	}
+}
+.options {
+		display:none;
+	}
+</style>
+</head>
+<body>
+	<div id="players">
+    </div>
+
+	<div class="container">
+		<div class="header clearfix">
+			<div class="row">
+				<h3 class="col text-muted">WebRTC Merge</h3>
+				<nav class="col align-self-center">
+					<ul class="nav float-right">
+						<li><a href="http://antmedia.io">Contact</a></li>
+					</ul>
+				</nav>
+			</div>
+		</div>
+
+
+		<div class="jumbotron">
+			<div class="alert alert-primary text-center enterprise-feature" role="alert" style="margin-top:-2em">
+				WebRTC Merge is an enterprise edition feature. <br/>
+				<a href="https://antmedia.io">Try Enterprise Edition for free at antmedia.io</a> <br/><br/>
+			</div>
+
+			<div class="col-sm-12 form-group">
+				<video id="localVideo" autoplay controls playsinline ></video>
+			</div>
+
+				<div class="col-sm-12 form-group">
+					<div class="form-group text-left">
+						<label class="text-muted ">Conference Room Id</label>
+						<input type="text" class="form-control" value="room1"
+							   id="roomName" placeholder="Type room name">
+					</div>
+
+					<div class="form-group text-left">
+						<label class="text-muted">Stream Id</label>
+						<input type="text" class="form-control" value="mergedStream"
+							   id="streamId" placeholder="Type streamId here">
+					</div>
+					<label>Aspect Ratio   </label>
+					<div class="form-check form-check-inline">
+						<input type="radio" checked name = "options" id="narrow" class="form-check-input"/>
+						<label class="form-check-label font-weight-light" for="narrow">
+							4:3
+						</label>
+					</div>
+
+					<div class="form-check form-check-inline">
+						<input type="radio"  name = "options" id="wide" class="form-check-input"/>
+						<label class="form-check-label font-weight-light" for="wide">
+							16:9
+						</label>
+					</div>
+					<div >
+						<label for="framework">Stream size</label>
+						<select id="framework">
+							<option value="120">120p</option>
+							<option value="240">240p</option>
+							<option value="360">360p</option>
+							<option value="480">480p</option>
+							<option value="720">720p</option>
+						</select>
+					</div>
+
+					<div class="form-group">
+						<button class="btn btn-primary"
+							id="start_button">Start</button>
+						<button class="btn btn-primary"
+							id="stop_button">Stop</button>
+					</div>
+				</div>
+				<span class="badge badge-warning" id="bitrateInfo" style="font-size:14px;display:none"
+							style="display: none">Weak Network Connection</span>
+				<span class="label label-success" id="broadcastingInfo"
+				style="font-size: 14px; display: none" style="display: none">Publishing</span>
+
+		</div>
+		<footer class="footer text-center">
+			<p>
+				<a href="http://antmedia.io">Ant Media Server</a>
+			</p>
+		</footer>
+
+	</div>
+
+	<script src="js/external/jquery-3.7.1.min.js"  crossorigin="anonymous"></script>
+	<script src="js/external/popper.min.js" crossorigin="anonymous"></script>
+	<script src="js/external/bootstrap.min.js"  crossorigin="anonymous"></script>
+	<script src="js/external/notify.min.js" crossorigin="anonymous"></script>
+</body>
+<script type="module">
+    import {getUrlParameter} from "./js/fetch.stream.js"
+    import {StreamMerger} from "./js/stream_merger.js"
+	import { generateRandomString, getWebSocketURL, errorHandler } from "./js/utility.js"
+
+
+    /**
+    * This page accepts 6 arguments through url parameter
+    * 1. "streamId": the stream id to publish stream. It's optional. ?streamId=stream1
+	* 2. "roomName": the room name to join. It's optional. ?roomName=room1
+    * 3. "token": It's experimental.
+	* 4. "initialWidth": The initial width for the video stream. If not provided, defaults to 320.
+	* 5. "initialHeight": The initial height for the video stream. If not provided, defaults to 240.
+	* 6. "headless": If true, the stream will start automatically. If not provided, defaults to false.
+	* 
+    */
+
+	var token = getUrlParameter("token");
+	var streamId = getUrlParameter("streamId");
+	var roomName = getUrlParameter("roomName");
+	var initialWidth = getUrlParameter("width");
+	var initialHeight = getUrlParameter("height");
+	var headless = getUrlParameter("headless");
+
+	var websocketURL = getWebSocketURL(location);
+	var restURL = getRestURL(location);
+
+	var roomNameBox = document.getElementById("roomName");
+	var streamNameBox = document.getElementById("streamId");
+
+	if (initialHeight == null || initialHeight == "") {
+		initialHeight = 240;
+	}
+
+	if (initialWidth == null || initialWidth == "") {
+		initialWidth = 320;
+	}
+
+	if (headless == null || headless == "") {
+		headless = false;
+	}
+
+	if(roomName != null){
+		roomNameBox.value = roomName;
+	}
+
+	if(streamId != null){
+		streamNameBox.value = streamId;
+	}
+
+    var playOnly = true;
+	var merger = new StreamMerger({
+		width: initialWidth,
+		height: initialHeight,
+		autoMode: !headless,
+		headless: headless,
+		publishStreamId: streamNameBox.value,
+		roomName: roomNameBox.value,
+		token: token,
+		websocketURL: websocketURL,
+		restURL: restURL,
+		streamStartedCallback: () => streamStarted(),
+		streamFinishedCallback: () => streamFinished(),
+	});
+
+	window.merger = merger;
+
+
+	var narrow = document.getElementById("narrow");
+	narrow.addEventListener("click", toggleRatio, false);
+
+	var wide = document.getElementById("wide");
+	wide.addEventListener("click", toggleRatio, false);
+
+	var sb = document.querySelector('#framework');
+	sb.addEventListener("click" , toggleResolution, false);
+
+	var start_button = document.getElementById("start_button");
+	start_button.addEventListener("click", start, false);
+	var stop_button = document.getElementById("stop_button");
+	stop_button.addEventListener("click", stop, false);
+
+	if (document.querySelector('input[name="videoSource"]')) {
+  		document.querySelectorAll('input[name="videoSource"]').forEach((elem) => {
+    		elem.addEventListener("change", function(event) {
+      			var item = event.target;
+      			switchVideoMode(item)
+    			});
+  		});
+	}
+
+	function toggleResolution(event){
+		merger.changeStreamSize(sb.value);
+	}
+	function toggleRatio(){
+		if(narrow.checked == true){
+			merger.changeAspectRatio("4:3");
+		}
+		else{
+			merger.changeAspectRatio("16:9");
+		}
+	}
+
+	function start() {
+		merger.startStreaming();
+	}
+
+	function stop() {
+		merger.stopStreaming();
+	}
+
+	function startAnimation() {
+		$("#broadcastingInfo").fadeIn(800, function() {
+			$("#broadcastingInfo").fadeOut(800, function() {
+				var state = merger.webRTCAdaptorPublisher.signallingState(streamNameBox.value);
+				var iceState = merger.webRTCAdaptorPublisher.iceConnectionState(streamNameBox.value);
+				if (state !== "closed" && iceState !== "failed" && iceState !== "disconnected") {
+					startAnimation();
+				}
+			});
+		});
+	}
+
+	function getRestURL(location) {
+		var appName = location.pathname.substring(1, location.pathname.indexOf("/", 1) + 1);
+		var path = location.hostname + ":" + location.port + "/" + appName + "rest/v2";
+
+		var restURL = "http://" + path;
+
+		if (location.protocol.startsWith("https")) {
+			restURL = "https://" + path;
+		}
+		return restURL;
+	}
+
+	function streamStarted() {
+		$("#start_button").prop("disabled", true);
+		$("#stop_button").prop("disabled", false);
+		$("#broadcastingInfo").show();
+		startAnimation();
+	}
+
+	function streamFinished() {
+		$("#start_button").prop("disabled", false);
+		$("#stop_button").prop("disabled", true);
+		$("#broadcastingInfo").hide();
+	}
+
+	
+</script>
+</html>
+

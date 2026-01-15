@@ -1,0 +1,157 @@
+.dropdown-link{
+ cursor: pointer;
+}
+
+.isEnterprise{
+    font-size: 14px;
+    color: #777;
+    margin-bottom: 15px;
+}
+.vcenter {
+    float: none;
+    vertical-align: middle;
+    display: inline-block;
+}
+.big-icons {
+    font-size:1.4em;
+}
+
+.ct-legend {
+    position: relative;
+    z-index: 10;
+    list-style: none;
+    text-align: center;
+}
+.ct-legend li {
+    position: relative;
+    padding-left: 23px;
+    margin-right: 10px;
+    margin-bottom: 3px;
+    cursor: pointer;
+    display: inline-block;
+}
+.ct-legend li:before {
+    width: 12px;
+    height: 12px;
+    position: absolute;
+    left: 0;
+    content: '';
+    border: 3px solid transparent;
+    border-radius: 2px;
+}
+.ct-legend li.inactive:before {
+    background: transparent;
+}
+.ct-legend.ct-legend-inside {
+    position: absolute;
+    top: 0;
+    right: 0;
+}
+.ct-legend.ct-legend-inside li{
+    display: block;
+    margin: 0;
+}
+.ct-legend .ct-series-0:before {
+    background-color: #17a2b8;
+    border-color: #17a2b8;
+}
+.ct-legend .ct-series-1:before {
+    background-color: #ffc107;
+    border-color: #ffc107;
+}
+
+
+.ct-chart-line-multipleseries .ct-legend .ct-series-0:before {
+   background-color: #17a2b8;
+   border-color: #17a2b8;
+}
+
+.ct-chart-line-multipleseries .ct-legend .ct-series-1:before {
+   background-color: #ffc107;
+   border-color: #ffc107;
+}
+
+.ct-chart-line-multipleseries .ct-legend li.inactive:before {
+   background: transparent;
+ }
+
+label {
+    font-weight: 400;
+}
+
+@media (max-width: 990px) {
+    .mobile-text-left {
+        text-align: left !important;
+    }
+
+}
+
+@media (max-width: 990px) {
+    .row-mobile {
+        display: table;
+        margin: auto;
+    }
+}
+
+select.bs-select-hidden,
+select.selectpicker {
+     display: inline !important;
+}
+
+@media (min-width: 768px){
+    .form-horizontal .control-label {
+        text-align: left;
+    }
+    
+}
+
+@media(max-width: 768px) {
+    .mat-header-cell {
+        display: none;
+    }
+
+    .mat-row { 
+        flex-direction: column;
+        align-items: start;
+      }
+    .mat-cell:first-of-type {
+        padding-left: 0px;
+    }
+}
+
+.mat-tooltip {
+    font-size: 14px !important;
+}
+.playlist-name-column {
+    flex: 0 1 90%!important;
+}
+.stream-name-column{
+    flex: 0 1 20%!important;
+}
+.status-column{
+    flex: 0 1 20% !important;
+}
+.viewer-column{
+    flex: 0 1 20% !important;
+ }
+ .extradata-column{
+    flex: 0 1 20% !important;
+ }
+.social-column{
+    flex: 0 1 15% !important;
+ }
+.action-column{
+    flex: 0 1 20% !important;
+    justify-content:flex-end;
+}
+.justify-flex-end {
+    justify-content:flex-end;
+}
+
+.mat-tooltip {
+    white-space: pre-line;
+    max-width: 600px !important;
+  
+  }
+
+

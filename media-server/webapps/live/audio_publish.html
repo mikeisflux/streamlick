@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>WebRTC Samples > Audio Publish</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta charset="UTF-8">
+	<link rel="stylesheet" href="css/external/bootstrap4/bootstrap.min.css">
+	<link rel="stylesheet" href="css/samples.css" />
+</head>
+
+<body>
+	<div class="container">
+		<div class="header clearfix">
+			<div class="row">
+				<h3 class="col text-muted"><a href="samples.html">WebRTC Samples</a> > Audio Publish</h3>
+			</div>
+		</div>
+
+		<iframe src="samples/publish_audio.html" class="embed-frame" id="webrtc-audio-publish-frame" allow="camera;microphone"></iframe>
+			
+	</div>
+	<script  type="module">
+		import {getUrlParameter} from "./js/fetch.stream.js" 
+		import {getQueryParameter} from "./js/utility.js" 
+
+		let myIframe = document.getElementById("webrtc-audio-publish-frame");
+		let url_string = "samples/publish_audio.html";
+
+		var debug = getUrlParameter("debug");
+		if (debug == null) {
+			debug = false;
+		}
+		url_string += "?debug=" + debug;
+		url_string += getQueryParameter("id");
+
+		// It should be true
+		url_string += getQueryParameter("rtmpForward");
+
+		console.log(url_string);
+		myIframe.src = url_string;
+	</script>
+
+</body>
+
+
+</html>

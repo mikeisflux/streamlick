@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>WebRTC Samples > Play Audio</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta charset="UTF-8">
+	<link rel="stylesheet" href="css/external/bootstrap4/bootstrap.min.css">
+	<link rel="stylesheet" href="css/samples.css" />
+</head>
+
+<body>
+	<div class="container">
+		<div class="header clearfix">
+			<div class="row">
+				<h3 class="col text-muted"><a href="samples.html">WebRTC Samples</a> > Play Audio</h3>
+			</div>
+		</div>
+
+		<iframe src="samples/play_audio.html" class="embed-frame" id="audioPlayerIFrame" ></iframe>
+			
+	</div>
+		<script  type="module">
+			import {getUrlParameter} from "./js/fetch.stream.js" 
+
+            let myIframe = document.getElementById("audioPlayerIFrame");
+            let url_string = "samples/play_audio.html";
+			var id = getUrlParameter("id");
+
+			if (typeof id != "undefined") {
+				url_string += "?id="+id; 
+			}
+            console.log(url_string);
+            myIframe.src = url_string;
+        </script>
+</body>
+
+
+</html>
