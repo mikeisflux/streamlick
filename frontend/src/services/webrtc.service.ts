@@ -75,7 +75,7 @@ async function loadWebRTCAdaptor(): Promise<any> {
 
   try {
     // Try to import from npm package first
-    const module = await import('@AntMedia/webrtc_adaptor');
+    const module = await import('@antmedia/webrtc_adaptor');
     WebRTCAdaptor = module.WebRTCAdaptor || module.default;
     logger.info('[WebRTC-AntMedia] Loaded WebRTCAdaptor from npm');
     return WebRTCAdaptor;
