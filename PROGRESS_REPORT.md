@@ -647,6 +647,38 @@ Guests now transmit at different resolutions based on their status:
 
 ---
 
+### Optimization #2: Reduce P2P Preview Stream to Guests
+**Status**: ✅ IMPLEMENTED
+**Date**: 2026-01-15
+**Goal**: Reduce bandwidth for the P2P canvas preview stream sent to guests in greenroom.
+
+**Problem**: Host was sending full 1920×1080 @ 30fps canvas stream to guests, but their preview video is only ~300×170px.
+
+**Solution**:
+Applied WebRTC encoding constraints via `RTCRtpSender.setParameters()`:
+
+| Parameter | Value | Effect |
+|-----------|-------|--------|
+| `scaleResolutionDownBy` | 4 | 1920×1080 → 480×270 |
+| `maxBitrate` | 500 kbps | ~75% bandwidth reduction |
+| `maxFramerate` | 15 fps | 50% frame reduction |
+
+**Implementation**:
+After creating the WebRTC offer, apply encoding parameters to the video sender:
+```typescript
+params.encodings[0].scaleResolutionDownBy = 4;
+params.encodings[0].maxBitrate = 500000;
+params.encodings[0].maxFramerate = 15;
+await videoSender.setParameters(params);
+```
+
+**Files Modified**:
+- `frontend/src/hooks/studio/usePreviewStream.ts`
+
+**Commit**: `3e06042` - Reduce P2P preview stream bandwidth to guests
+
+---
+
 ## Next Steps / TODO
 - [ ] Set TURN password in production frontend `.env`
 - [ ] Consider adding TLS certificates to TURN server for better security
