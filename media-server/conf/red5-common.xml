@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<beans xmlns="http://www.springframework.org/schema/beans" 
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:lang="http://www.springframework.org/schema/lang" 
+    xmlns:context="http://www.springframework.org/schema/context"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd 
+    http://www.springframework.org/schema/lang http://www.springframework.org/schema/lang/spring-lang.xsd 
+    http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd">
+
+    <context:annotation-config></context:annotation-config>
+
+    <!-- DO NOT FORMAT THIS FILE IN ECLIPSE -->
+    
+    <bean id="placeholderConfig" class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+        <property name="location" value="classpath:/red5.properties" />
+    </bean>
+
+    <!-- This context is shared between all child contexts. -->
+    
+    <!-- Server bean -->
+    <bean id="red5.server" class="org.red5.server.Server" />
+
+    <!-- JMX -->
+    <bean id="mbeanServer" class="org.springframework.jmx.support.MBeanServerFactoryBean">
+        <property name="locateExistingServerIfPossible" value="${jmx.reuse.existing.server}"/>  
+        <property name="registerWithFactory" value="${jmx.register.factory}"/> 
+    </bean>
+
+    <context:mbean-export registration="replaceExisting" default-domain="org.red5.server"/>
+
+    <!-- Deals with StatusObjects representing statuses like NetConnection.Connect.Success status -->
+    <bean id="statusObjectService" class="org.red5.server.net.rtmp.status.StatusObjectService" autowire="byType" /> 
+
+    <!-- Streamable file factory -->
+    <bean id="streamableFileFactory" class="org.red5.server.stream.StreamableFileFactory">
+        <property name="services">
+            <list>
+                <bean id="flvFileService" class="org.red5.server.service.flv.impl.FLVService">
+                    <property name="generateMetadata" value="true"/>
+                </bean>
+            </list>
+        </property>
+    </bean>
+
+    <!-- High level access to streams -->
+    <bean id="streamService" class="org.red5.server.stream.StreamService"/>
+
+    <!-- High level access to broadcasted streams -->
+    <bean id="providerService" class="org.red5.server.stream.ProviderService"/>
+
+    <!-- Provides output to consumers -->
+    <bean id="consumerService" class="org.red5.server.stream.ConsumerService"/>
+
+    <!-- Scheduling service -->
+    <bean id="schedulingService" class="org.red5.server.scheduling.QuartzSchedulingService">
+        <property name="configFile" value="${red5.root}/conf/quartz.properties"/>   
+    </bean>
+
+    <!--
+    Now we can load the cache engine, only one may be enabled at a time. If no-caching is required select the
+    NoCacheImpl. Three other implementations based on EhCache, and Red5Cache are also available.
+    -->
+    <bean id="object.cache" class="org.red5.cache.impl.NoCacheImpl"/>
+    <!--
+    <bean id="object.cache" class="org.red5.cache.impl.CacheImpl" init-method="init" autowire="byType">
+        <property name="maxEntries"><value>5</value></property>
+    </bean>
+    <bean id="object.cache" class="org.red5.cache.impl.EhCacheImpl" init-method="init">
+        <property name="diskStore" value="java.io.tmpdir" />
+        <property name="memoryStoreEvictionPolicy" value="LFU" />
+        <property name="cacheManagerEventListener"><null/></property>
+        <property name="cacheConfigs">
+            <list>
+                <bean class="net.sf.ehcache.config.CacheConfiguration">
+                    <property name="name" value="flv.cache" />
+                    <property name="maxElementsInMemory" value="5" />
+                    <property name="eternal" value="false" />
+                    <property name="timeToIdleSeconds" value="0" />
+                    <property name="timeToLiveSeconds" value="0" />
+                    <property name="overflowToDisk" value="false" />
+                    <property name="diskPersistent" value="false" />
+                </bean>
+            </list>
+        </property>
+    </bean>
+-->
+
+    <!-- Cache to use for keyframe metadata. -->
+    <bean id="keyframe.cache" class="org.red5.io.CachingFileKeyFrameMetaCache">
+        <property name="maxCacheEntry" value="${keyframe.cache.entry.max}" />
+    </bean>
+  
+
+    <!-- Low level access for recording to file -->
+    <bean id="fileConsumer" scope="prototype" lazy-init="true" class="org.red5.server.stream.consumer.FileConsumer">
+        <property name="delayWrite" value="${fileconsumer.delayed.write}"/>
+        <property name="queueThreshold" value="${fileconsumer.queue.size}"/>
+    </bean>
+
+    <!-- ClientBroadcastStream and PlaylistSubscriberStream
+        that will be used by RTMPConnection and maybe other classes.
+        These beans are lazy-init because most likely server will need
+        to be up and running before we can get a smart implementation
+        of these streams
+    -->
+    <bean id="playlistSubscriberStream" scope="prototype" lazy-init="true" class="org.red5.server.stream.PlaylistSubscriberStream">
+        <!-- Check for buffer underruns every X ms and generate NetStream.Play.InsufficientBW accordingly.
+             Set to 0 to disable. Be careful not to set this value too small to avoid network congestion.
+          -->
+        <property name="bufferCheckInterval" value="${subscriberstream.buffer.check.interval}"/>
+        <!-- A NetStream.Play.InsufficientBW message is generated if more than X messages are queued for sending on the connection.
+             This value will also control the maximum pending messages on the server. To use a smaller value on slow connections
+             to get smaller delay for downstream server commands.
+          -->
+        <property name="underrunTrigger" value="${subscriberstream.underrun.trigger}"/>
+    </bean>
+
+    <bean id="clientBroadcastStream" scope="prototype" lazy-init="true" class="org.red5.server.stream.ClientBroadcastStream">
+        <property name="automaticRecording" value="${broadcaststream.auto.record}"/>
+        <property name="automaticMp4Recording" value="${broadcastream.auto.record.mp4}"/>
+        <property name="automaticHlsRecording" value="${broadcastream.auto.record.hls}"/>
+    </bean>
+    
+    <bean id="vertxMetricOptions" class="io.vertx.ext.dropwizard.DropwizardMetricsOptions">
+        <property name="enabled" value="true"/>        
+    </bean>
+    
+    <bean id="vertxCore" 
+    		class="io.vertx.core.Vertx" 
+   		factory-method="vertx">
+   		<constructor-arg>
+   			<bean class="io.vertx.core.VertxOptions">
+				<!-- we set these values to be compatible with max rtmp.executor.max_pool_size pool size because there may be some memory issues about that-->
+   				<property name="eventLoopPoolSize" value="128"></property>
+   				<property name="workerPoolSize" value="128"></property>
+				<property name="metricsOptions" ref="vertxMetricOptions"></property>
+				<property name="maxWorkerExecuteTime" value="10000000000"></property> <!--  make max worker execute time 10 seconds -->
+   			</bean>
+   		</constructor-arg>	
+   		<!--    * The default number of event loop threads to be used  = 2 * number of cores on the machine -->
+    </bean>
+    
+    <bean id="webRTCVertx" class="io.vertx.core.Vertx" factory-method="vertx">
+    	<constructor-arg>
+    		<bean class="io.vertx.core.VertxOptions">
+    			<!-- we set these values to be compatible with max rtmp.executor.max_pool_size pool size because there may be some memory issues about that-->
+
+    			<property name="eventLoopPoolSize" value="128"></property>
+   				<property name="workerPoolSize" value="128"></property>
+    			<property name="metricsOptions" ref="vertxMetricOptions"></property>
+    			<property name="maxWorkerExecuteTime" value="2000000000"></property> <!-- make max worker execute time 2 seconds -->
+    		</bean>
+    	</constructor-arg>
+    </bean>
+   	
+   	<bean id="statsCollector" class="io.antmedia.statistic.StatsCollector" init-method="start">
+   	   <property name="cpuLimit" value="${server.cpu_limit}"/>
+       <property name="kafkaBrokers" value="${server.kafka_brokers}" />
+       <property name="minFreeRamSize" value="${server.min_free_ram}"/>
+
+       <property name="memoryLimit" value="${server.memory_limit_percentage:75}" />
+   	</bean>
+   	
+    <bean id="srtAdaptor" class="#{ T(io.antmedia.rest.RestServiceBase).isEnterprise() ? 'io.antmedia.enterprise.srt.SRTAdaptor' : 'io.antmedia.srt.SRTAdaptor' }">
+	</bean>
+   	
+   	
+    
+
+</beans>
