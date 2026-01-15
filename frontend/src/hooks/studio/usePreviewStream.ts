@@ -66,6 +66,7 @@ export function usePreviewStream(broadcastId: string | undefined) {
 
     // Add canvas video track to the peer connection
     const videoTrack = canvasStream.getVideoTracks()[0];
+    let videoSender: RTCRtpSender | null = null;
     if (videoTrack) {
       // DEBUG: Log video track details (explicit values)
       console.log('[PreviewStream] Video track details: trackId=' + videoTrack.id +
@@ -74,7 +75,7 @@ export function usePreviewStream(broadcastId: string | undefined) {
         ', enabled=' + videoTrack.enabled +
         ', muted=' + videoTrack.muted +
         ', readyState=' + videoTrack.readyState);
-      pc.addTrack(videoTrack, canvasStream);
+      videoSender = pc.addTrack(videoTrack, canvasStream);
       console.log('[PreviewStream] Added video track to peer connection');
     } else {
       console.warn('[PreviewStream] No video track in canvas stream');
@@ -161,6 +162,25 @@ export function usePreviewStream(broadcastId: string | undefined) {
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+
+      // Apply bandwidth constraints to reduce preview stream size
+      // Guest preview is small (300x170px), so we don't need full resolution
+      if (videoSender) {
+        try {
+          const params = videoSender.getParameters();
+          if (!params.encodings || params.encodings.length === 0) {
+            params.encodings = [{}];
+          }
+          // Scale down by 4x (1920x1080 -> 480x270) and limit bitrate to 500kbps
+          params.encodings[0].scaleResolutionDownBy = 4;
+          params.encodings[0].maxBitrate = 500000; // 500 kbps
+          params.encodings[0].maxFramerate = 15;
+          await videoSender.setParameters(params);
+          console.log('[PreviewStream] Applied bandwidth constraints: scaleDown=4x, maxBitrate=500kbps, maxFps=15');
+        } catch (e) {
+          console.warn('[PreviewStream] Could not apply bandwidth constraints:', e);
+        }
+      }
 
       socketService.emit('preview-offer', {
         guestSocketId,
