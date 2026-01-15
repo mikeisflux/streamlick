@@ -31,7 +31,7 @@ interface PendingRequest {
 const ENCODING_GREENROOM = {
   scaleResolutionDownBy: 4, // 1920x1080 -> 480x270
   maxBitrate: 500000, // 500 kbps
-  maxFramerate: 15,
+  maxFramerate: 24,
 };
 
 const ENCODING_STAGE = {

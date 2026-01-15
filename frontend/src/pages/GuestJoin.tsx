@@ -31,7 +31,7 @@ const getSessionKey = (token: string) => `streamlick_guest_${token}`;
 // Resolution presets for bandwidth optimization
 // Greenroom: Low resolution since preview tile is small (160x90px)
 // Stage: Higher resolution for the main broadcast canvas
-const RESOLUTION_GREENROOM = { width: 480, height: 270, frameRate: 15 };
+const RESOLUTION_GREENROOM = { width: 480, height: 270, frameRate: 24 };
 const RESOLUTION_STAGE = { width: 1280, height: 720, frameRate: 30 };
 
 interface StoredSession {
