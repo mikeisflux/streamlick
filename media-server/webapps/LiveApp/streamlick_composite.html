@@ -533,16 +533,10 @@
           console.log('[Composite] Publishing canvas as:', compositeStreamId);
           webRTCAdaptor.publish(compositeStreamId, null, null, null, compositeStreamId, roomId);
 
-          // Subscribe to existing streams
-          if (obj.streams && obj.streams.length > 0) {
-            obj.streams.forEach(streamId => {
-              if (!streamId.includes('composite') && !subscribedStreams.has(streamId)) {
-                console.log('[Composite] Subscribing to:', streamId);
-                subscribedStreams.add(streamId);
-                webRTCAdaptor.play(streamId, null, roomId);
-              }
-            });
-          }
+          // In multitrack conference mode, play the ROOM to receive all tracks
+          // Don't play individual streams - tracks come via newTrackAvailable
+          console.log('[Composite] Playing room for multitrack:', roomId);
+          webRTCAdaptor.play(roomId, null, roomId);
           break;
 
         case 'publish_started':
@@ -576,11 +570,9 @@
           break;
 
         case 'subtrackAdded':
-          if (obj.trackId && !obj.trackId.includes('composite') && !subscribedStreams.has(obj.trackId)) {
-            console.log('[Composite] Subtrack added, subscribing:', obj.trackId);
-            subscribedStreams.add(obj.trackId);
-            webRTCAdaptor.play(obj.trackId, null, roomId);
-          }
+          // In multitrack mode, we don't need to play individual subtracks
+          // They come automatically via newTrackAvailable when playing the room
+          console.log('[Composite] Subtrack added (info only):', obj.trackId);
           break;
 
         case 'leavedFromRoom':
@@ -590,15 +582,8 @@
           break;
 
         case 'play_started':
-          console.log('[Composite] Play started:', obj.streamId);
-          // Try to get stream from adaptor since newStreamAvailable may not fire
-          if (obj.streamId && !obj.streamId.includes('composite')) {
-            const stream = webRTCAdaptor.remoteStreams?.[obj.streamId];
-            if (stream) {
-              console.log('[Composite] Got stream from remoteStreams');
-              addParticipant(obj.streamId, stream);
-            }
-          }
+          console.log('[Composite] Play started for:', obj.streamId);
+          // In multitrack mode, tracks come via newTrackAvailable callback
           break;
 
         case 'ice_connection_state_changed':
