@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>StreamLick Composite Layout</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background-color: #000;
+    }
+    #container {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+    }
+    #background {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 0;
+    }
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+    .hidden-video {
+      position: absolute;
+      top: -9999px;
+      left: -9999px;
+      width: 10px;
+      height: 10px;
+    }
+    #debug {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      color: #0f0;
+      font-family: monospace;
+      font-size: 12px;
+      z-index: 1000;
+      background: rgba(0,0,0,0.7);
+      padding: 5px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <img id="background" src="" style="display:none" />
+    <canvas id="canvas" width="1920" height="1080"></canvas>
+  </div>
+  <div id="debug"></div>
+
+  <!-- Ant Media SDK -->
+  <script src="https://media.streamlick.com:5443/LiveApp/js/webrtc_adaptor.js"></script>
+
+  <script>
+    // ========================================
+    // Configuration
+    // ========================================
+    const CANVAS_WIDTH = 1920;
+    const CANVAS_HEIGHT = 1080;
+    const FPS = 30;
+    const DEBUG = false;
+
+    // Get URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomId = urlParams.get('roomId');
+    const publisherId = urlParams.get('publisherId') || 'composite_' + Date.now();
+
+    // ========================================
+    // State
+    // ========================================
+    let currentLayout = 3; // Default to Group layout
+    let backgroundImage = null;
+    let participants = []; // Array of { id, stream, videoElement, name, audioEnabled, videoEnabled }
+    let webRTCAdaptor = null;
+    let isPublishing = false;
+
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const backgroundEl = document.getElementById('background');
+    const debugEl = document.getElementById('debug');
+
+    if (DEBUG) debugEl.style.display = 'block';
+
+    // ========================================
+    // Layout Engine (ported from layoutEngine.ts)
+    // ========================================
+    const LAYOUTS = {
+      SOLO: 1,
+      CROPPED: 2,
+      GROUP: 3,
+      SPOTLIGHT: 4,
+      NEWS: 5,
+      SCREEN: 6,
+      PIP: 7,
+      CINEMA: 8,
+      GRID: 9,
+      ADVANCED: 10
+    };
+
+    function calculateLayoutPositions(layout, participantCount, isScreenSharing = false) {
+      const canvasWidth = CANVAS_WIDTH;
+      const canvasHeight = CANVAS_HEIGHT;
+      const activeLayout = isScreenSharing ? 6 : layout;
+      const positions = [];
+
+      switch (activeLayout) {
+        case 1: // Solo - single participant centered at 60% of screen
+          if (participantCount === 1) {
+            const boxWidth = canvasWidth * 0.6;
+            const boxHeight = boxWidth * (9 / 16);
+            positions.push({
+              x: (canvasWidth - boxWidth) / 2,
+              y: (canvasHeight - boxHeight) / 2,
+              width: boxWidth,
+              height: boxHeight
+            });
+          } else {
+            calculateGridPositions(positions, canvasWidth, canvasHeight, participantCount);
+          }
+          break;
+
+        case 2: // Cropped - 2x2 grid
+          {
+            const cols = 2;
+            const rows = 2;
+            const boxWidth = canvasWidth / cols;
+            const boxHeight = canvasHeight / rows;
+            for (let i = 0; i < participantCount; i++) {
+              const col = i % cols;
+              const row = Math.floor(i / cols);
+              positions.push({ x: col * boxWidth, y: row * boxHeight, width: boxWidth, height: boxHeight });
+            }
+          }
+          break;
+
+        case 3: // Group - auto-calculated equal grid
+          calculateGridPositions(positions, canvasWidth, canvasHeight, participantCount);
+          break;
+
+        case 4: // Spotlight - one large + small boxes above
+          if (participantCount === 1) {
+            positions.push({ x: 0, y: 0, width: canvasWidth, height: canvasHeight });
+          } else {
+            const topBarHeight = canvasHeight * 0.25;
+            const mainHeight = canvasHeight * 0.75;
+            const thumbnailWidth = canvasWidth / Math.min(3, participantCount - 1);
+
+            // First participant is main (large)
+            positions.push({ x: 0, y: topBarHeight, width: canvasWidth, height: mainHeight });
+
+            // Rest are thumbnails in top bar
+            for (let i = 1; i < participantCount; i++) {
+              positions.push({
+                x: (i - 1) * thumbnailWidth,
+                y: 0,
+                width: thumbnailWidth,
+                height: topBarHeight
+              });
+            }
+          }
+          break;
+
+        case 5: // News - side by side
+          {
+            const boxWidth = canvasWidth / Math.max(2, participantCount);
+            for (let i = 0; i < participantCount; i++) {
+              positions.push({ x: i * boxWidth, y: 0, width: boxWidth, height: canvasHeight });
+            }
+          }
+          break;
+
+        case 6: // Screen Share - thumbnails on top
+          {
+            const topBarHeight = canvasHeight * 0.12;
+            const thumbnailWidth = participantCount > 0 ? canvasWidth / participantCount : canvasWidth;
+            for (let i = 0; i < participantCount; i++) {
+              positions.push({
+                x: i * thumbnailWidth,
+                y: 0,
+                width: thumbnailWidth,
+                height: topBarHeight
+              });
+            }
+          }
+          break;
+
+        case 7: // Picture-in-Picture
+          if (participantCount === 1) {
+            positions.push({ x: 0, y: 0, width: canvasWidth, height: canvasHeight });
+          } else {
+            positions.push({ x: 0, y: 0, width: canvasWidth, height: canvasHeight });
+            const pipWidth = 240;
+            const pipHeight = 180;
+            const gap = 10;
+            for (let i = 1; i < participantCount; i++) {
+              positions.push({
+                x: canvasWidth - pipWidth - gap,
+                y: canvasHeight - (pipHeight + gap) * i,
+                width: pipWidth,
+                height: pipHeight
+              });
+            }
+          }
+          break;
+
+        case 8: // Cinema - wide format
+          {
+            const boxWidth = participantCount > 1 ? canvasWidth / 2 : canvasWidth;
+            for (let i = 0; i < participantCount; i++) {
+              positions.push({ x: i * boxWidth, y: 0, width: boxWidth, height: canvasHeight });
+            }
+          }
+          break;
+
+        case 9: // Video Grid with gaps
+          {
+            const cols = Math.ceil(Math.sqrt(participantCount));
+            const rows = Math.ceil(participantCount / cols);
+            const gap = 4;
+            const boxWidth = (canvasWidth - gap * (cols + 1)) / cols;
+            const boxHeight = (canvasHeight - gap * (rows + 1)) / rows;
+            for (let i = 0; i < participantCount; i++) {
+              const col = i % cols;
+              const row = Math.floor(i / cols);
+              positions.push({
+                x: gap + col * (boxWidth + gap),
+                y: gap + row * (boxHeight + gap),
+                width: boxWidth,
+                height: boxHeight
+              });
+            }
+          }
+          break;
+
+        default:
+          calculateGridPositions(positions, canvasWidth, canvasHeight, participantCount);
+      }
+
+      return positions;
+    }
+
+    function calculateGridPositions(positions, canvasWidth, canvasHeight, participantCount) {
+      if (participantCount === 0) return;
+      const cols = Math.ceil(Math.sqrt(participantCount));
+      const rows = Math.ceil(participantCount / cols);
+      const boxWidth = canvasWidth / cols;
+      const boxHeight = canvasHeight / rows;
+
+      for (let i = 0; i < participantCount; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        positions.push({ x: col * boxWidth, y: row * boxHeight, width: boxWidth, height: boxHeight });
+      }
+    }
+
+    // ========================================
+    // Canvas Rendering
+    // ========================================
+    function renderFrame() {
+      // Clear canvas
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+      // Draw background if set
+      if (backgroundImage && backgroundImage.complete) {
+        ctx.drawImage(backgroundImage, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
+
+      // Calculate positions for current layout
+      const positions = calculateLayoutPositions(currentLayout, participants.length);
+
+      // Draw each participant
+      participants.forEach((participant, index) => {
+        if (index >= positions.length) return;
+
+        const pos = positions[index];
+        const video = participant.videoElement;
+
+        if (video && video.readyState >= 2 && video.videoWidth > 0 && participant.videoEnabled !== false) {
+          // Calculate aspect-ratio-preserving fit
+          const videoAspect = video.videoWidth / video.videoHeight;
+          const boxAspect = pos.width / pos.height;
+
+          let drawWidth, drawHeight, drawX, drawY;
+
+          if (videoAspect > boxAspect) {
+            // Video is wider - fit to height, crop width
+            drawHeight = pos.height;
+            drawWidth = drawHeight * videoAspect;
+            drawX = pos.x - (drawWidth - pos.width) / 2;
+            drawY = pos.y;
+          } else {
+            // Video is taller - fit to width, crop height
+            drawWidth = pos.width;
+            drawHeight = drawWidth / videoAspect;
+            drawX = pos.x;
+            drawY = pos.y - (drawHeight - pos.height) / 2;
+          }
+
+          // Clip to box bounds
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(pos.x, pos.y, pos.width, pos.height);
+          ctx.clip();
+
+          ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
+
+          ctx.restore();
+
+          // Draw name tag if available
+          if (participant.name) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(pos.x + 8, pos.y + pos.height - 32, participant.name.length * 10 + 16, 24);
+            ctx.fillStyle = '#fff';
+            ctx.font = '14px system-ui, sans-serif';
+            ctx.fillText(participant.name, pos.x + 16, pos.y + pos.height - 14);
+          }
+        } else {
+          // Draw placeholder for no video
+          ctx.fillStyle = '#1a1a2e';
+          ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+
+          // Draw avatar circle
+          const centerX = pos.x + pos.width / 2;
+          const centerY = pos.y + pos.height / 2;
+          const radius = Math.min(pos.width, pos.height) * 0.2;
+
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+          ctx.fillStyle = '#4a4a6a';
+          ctx.fill();
+
+          // Draw initial if name available
+          if (participant.name) {
+            ctx.fillStyle = '#fff';
+            ctx.font = `${radius}px system-ui, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(participant.name.charAt(0).toUpperCase(), centerX, centerY);
+          }
+        }
+      });
+
+      // Update debug info
+      if (DEBUG) {
+        debugEl.textContent = `Layout: ${currentLayout} | Participants: ${participants.length} | Publishing: ${isPublishing}`;
+      }
+
+      requestAnimationFrame(renderFrame);
+    }
+
+    // ========================================
+    // WebRTC - Join Room and Receive Streams
+    // ========================================
+    function initWebRTC() {
+      if (!roomId) {
+        console.error('[Composite] No roomId provided in URL');
+        return;
+      }
+
+      console.log('[Composite] Initializing WebRTC for room:', roomId);
+
+      webRTCAdaptor = new WebRTCAdaptor({
+        websocket_url: 'wss://media.streamlick.com:5443/LiveApp/websocket',
+        mediaConstraints: { video: false, audio: false },
+        peerconnection_config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' }
+          ]
+        },
+        sdp_constraints: {
+          OfferToReceiveAudio: true,
+          OfferToReceiveVideo: true
+        },
+        callback: function(info, obj) {
+          console.log('[Composite] Callback:', info, obj);
+
+          if (info === 'initialized') {
+            // Join the room as a player (receive-only)
+            webRTCAdaptor.joinRoom(roomId, publisherId);
+          }
+          else if (info === 'joinedTheRoom') {
+            console.log('[Composite] Joined room, streams:', obj.streams);
+            // Subscribe to existing streams
+            if (obj.streams && obj.streams.length > 0) {
+              obj.streams.forEach(streamId => {
+                if (streamId !== publisherId && !streamId.includes('composite')) {
+                  console.log('[Composite] Subscribing to stream:', streamId);
+                  webRTCAdaptor.play(streamId);
+                }
+              });
+            }
+          }
+          else if (info === 'newStreamAvailable') {
+            console.log('[Composite] New stream available:', obj.streamId);
+            handleNewStream(obj.streamId, obj.stream);
+          }
+          else if (info === 'subtrackAdded') {
+            // New participant joined
+            if (obj.trackId && obj.trackId !== publisherId && !obj.trackId.includes('composite')) {
+              console.log('[Composite] Subtrack added, subscribing:', obj.trackId);
+              webRTCAdaptor.play(obj.trackId);
+            }
+          }
+          else if (info === 'leavedFromRoom' || info === 'streamLeaved') {
+            // Participant left
+            const streamId = obj.streamId || obj;
+            removeParticipant(streamId);
+          }
+        },
+        callbackError: function(error, message) {
+          console.error('[Composite] Error:', error, message);
+        }
+      });
+    }
+
+    function handleNewStream(streamId, stream) {
+      // Extract participant ID from stream ID (format: roomId_participantId)
+      const participantId = streamId.includes('_') ? streamId.split('_').pop() : streamId;
+
+      // Check if already exists
+      const existing = participants.find(p => p.id === participantId);
+      if (existing) {
+        existing.stream = stream;
+        existing.videoElement.srcObject = stream;
+        return;
+      }
+
+      // Create hidden video element
+      const video = document.createElement('video');
+      video.className = 'hidden-video';
+      video.autoplay = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.srcObject = stream;
+      document.body.appendChild(video);
+
+      video.play().catch(e => console.warn('[Composite] Video play error:', e));
+
+      participants.push({
+        id: participantId,
+        streamId: streamId,
+        stream: stream,
+        videoElement: video,
+        name: null,
+        videoEnabled: true,
+        audioEnabled: true
+      });
+
+      console.log('[Composite] Added participant:', participantId, 'Total:', participants.length);
+    }
+
+    function removeParticipant(streamId) {
+      const participantId = streamId.includes('_') ? streamId.split('_').pop() : streamId;
+      const index = participants.findIndex(p => p.id === participantId || p.streamId === streamId);
+
+      if (index !== -1) {
+        const participant = participants[index];
+        if (participant.videoElement) {
+          participant.videoElement.srcObject = null;
+          participant.videoElement.remove();
+        }
+        participants.splice(index, 1);
+        console.log('[Composite] Removed participant:', participantId, 'Total:', participants.length);
+      }
+    }
+
+    // ========================================
+    // Publishing the Composite Stream
+    // ========================================
+    function startPublishing() {
+      const stream = canvas.captureStream(FPS);
+      console.log('[Composite] Captured canvas stream at', FPS, 'FPS');
+
+      // This stream will be automatically used by Media Push Plugin
+      // or can be manually published to Ant Media
+
+      isPublishing = true;
+      return stream;
+    }
+
+    // ========================================
+    // External Control API (called via postMessage or REST)
+    // ========================================
+    window.setBackground = function(url) {
+      console.log('[Composite] Setting background:', url);
+      if (!url) {
+        backgroundImage = null;
+        backgroundEl.style.display = 'none';
+        return;
+      }
+
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = function() {
+        backgroundImage = img;
+        backgroundEl.src = url;
+        backgroundEl.style.display = 'block';
+        console.log('[Composite] Background loaded');
+      };
+      img.onerror = function() {
+        console.error('[Composite] Failed to load background:', url);
+      };
+      img.src = url;
+    };
+
+    window.setLayout = function(layoutId) {
+      console.log('[Composite] Setting layout:', layoutId);
+      currentLayout = parseInt(layoutId) || 3;
+    };
+
+    window.setParticipantName = function(participantId, name) {
+      const participant = participants.find(p => p.id === participantId);
+      if (participant) {
+        participant.name = name;
+        console.log('[Composite] Set name for', participantId, ':', name);
+      }
+    };
+
+    window.setParticipantVideo = function(participantId, enabled) {
+      const participant = participants.find(p => p.id === participantId);
+      if (participant) {
+        participant.videoEnabled = enabled;
+        console.log('[Composite] Set video for', participantId, ':', enabled);
+      }
+    };
+
+    window.reorderParticipants = function(orderedIds) {
+      const newOrder = [];
+      orderedIds.forEach(id => {
+        const participant = participants.find(p => p.id === id);
+        if (participant) newOrder.push(participant);
+      });
+      // Add any remaining participants not in the order
+      participants.forEach(p => {
+        if (!newOrder.includes(p)) newOrder.push(p);
+      });
+      participants = newOrder;
+      console.log('[Composite] Reordered participants:', orderedIds);
+    };
+
+    window.getState = function() {
+      return {
+        layout: currentLayout,
+        participantCount: participants.length,
+        participants: participants.map(p => ({
+          id: p.id,
+          name: p.name,
+          videoEnabled: p.videoEnabled
+        })),
+        isPublishing: isPublishing
+      };
+    };
+
+    // Listen for postMessage commands from parent/controller
+    window.addEventListener('message', function(event) {
+      const { type, data } = event.data || {};
+
+      switch (type) {
+        case 'setBackground':
+          window.setBackground(data.url);
+          break;
+        case 'setLayout':
+          window.setLayout(data.layoutId);
+          break;
+        case 'setParticipantName':
+          window.setParticipantName(data.participantId, data.name);
+          break;
+        case 'setParticipantVideo':
+          window.setParticipantVideo(data.participantId, data.enabled);
+          break;
+        case 'reorderParticipants':
+          window.reorderParticipants(data.orderedIds);
+          break;
+      }
+    });
+
+    // ========================================
+    // Initialization
+    // ========================================
+    window.onload = function() {
+      console.log('[Composite] StreamLick Composite Layout loaded');
+      console.log('[Composite] Room ID:', roomId);
+      console.log('[Composite] Publisher ID:', publisherId);
+
+      // Start render loop
+      requestAnimationFrame(renderFrame);
+
+      // Initialize WebRTC if room specified
+      if (roomId) {
+        initWebRTC();
+      }
+
+      // Start publishing the canvas
+      const compositeStream = startPublishing();
+
+      // Make stream available to Media Push Plugin
+      window.compositeStream = compositeStream;
+    };
+  </script>
+</body>
+</html>
