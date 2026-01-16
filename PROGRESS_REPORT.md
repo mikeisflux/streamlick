@@ -709,29 +709,59 @@ this.adaptor.updateVideoTrack(tempStream, this.streamId, null);
 
 ---
 
-### Server-Side Composition: Composite Layout HTML
-**Status**: 🔧 IN PROGRESS
+### Server-Side Composition: Complete Architecture
+**Status**: ✅ IMPLEMENTED
 **Date**: 2026-01-16
 
 **Goal**: Make broadcast independent of host browser by moving canvas composition to the server using Ant Media's Media Push Plugin.
 
 **Problem**: When host refreshes browser, guests' LIVE preview goes black temporarily. The host browser is a single point of failure for the broadcast.
 
-**Solution**: Ant Media's Media Push Plugin can run a headless Chrome on the server to render the composite canvas.
+**Solution**: Server-side composite using Ant Media's Media Push Plugin:
+1. Headless Chrome on server renders composite HTML
+2. Composite joins Ant Media room and receives participant streams
+3. Draws background image and participant videos to canvas
+4. Output is independent of host browser connection
 
-**Files Created**:
-- `frontend/public/streamlick_composite.html` - Custom HTML page for server-side composition
-  - Ports all 10 layouts from `layoutEngine.ts`
-  - WebRTC connection to receive participant streams
+**Architecture (Lightweight)**:
+- Background: Static image, drawn once per frame
+- Participants: WebRTC video streams drawn to canvas positions
+- No GPU required - just CPU drawImage() operations
+- Similar resource usage to playing a video
+
+**Files Created/Modified**:
+- `frontend/public/streamlick_composite.html` - Server-side composite page
+  - All 10 layouts from `layoutEngine.ts`
+  - WebRTC connection to Ant Media room
   - Canvas rendering at 30 FPS (1920x1080)
-  - External control API (setBackground, setLayout, setParticipantName, etc.)
-  - ES Module imports for Ant Media SDK
+  - URL parameters: `roomId`, `layout`, `bg` (background)
+  - Control API: `setBackground()`, `setLayout()`, `setParticipantName()`, etc.
+
+- `backend/src/api/antmedia.routes.ts` - Media Push Plugin API endpoints:
+  - `POST /api/antmedia/composite/start` - Start composite stream
+  - `POST /api/antmedia/composite/stop/:id` - Stop composite
+  - `POST /api/antmedia/composite/:id/layout` - Change layout
+  - `POST /api/antmedia/composite/:id/background` - Change background
+  - `POST /api/antmedia/composite/:id/command` - Send JS command
+
+- `frontend/src/services/composite.service.ts` - Frontend composite control
+  - `start(broadcastId, layout, backgroundUrl)` - Start server composite
+  - `stop()` - Stop composite
+  - `setLayout(layoutId)` - Change layout
+  - `setBackground(url)` - Change background
+
+- `frontend/src/pages/Studio.tsx` - Auto-start composite on studio load
+- `frontend/src/hooks/studio/useBroadcast.ts` - Forward layout changes to server
 
 **Issue Fixed**: Video elements staying paused despite receiving frames
-- **Symptom**: Composite page joined room and received streams, but canvas showed black
-- **Root Cause**: `video.play()` was interrupted by audio track arriving asynchronously
-- **Fix**: Added `loadedmetadata` event listener and 500ms retry timeout to ensure play() succeeds
-- **Commit**: `8ca027c` - Fix video elements staying paused in composite layout
+- **Root Cause**: `video.play()` interrupted by audio track arriving async
+- **Fix**: Added `loadedmetadata` listener and 500ms retry timeout
+- **Commit**: `8ca027c`
+
+**Issue Fixed**: Ant Media joinRoom not publishing
+- **Root Cause**: Missing mode parameter in `joinRoom()` call
+- **Fix**: Added `'publish'` as third parameter
+- **Commit**: `c893f77`
 
 **Deployment Commands** (on Ant Media server):
 ```bash
@@ -740,16 +770,11 @@ git pull origin claude/merge-previewarea-typescript-04F8x
 sudo cp frontend/public/streamlick_composite.html /usr/local/antmedia/webapps/LiveApp/
 ```
 
-**Test URL**:
-```
-https://media.streamlick.com:5443/LiveApp/streamlick_composite.html?roomId=<ROOM_ID>
-```
-
-**Next Steps**:
-- [ ] Test video play retry fix
-- [ ] Create backend API endpoints to control composite streams via REST
-- [ ] Set up background image hosting (S3/CDN) for server-side access
-- [ ] Integrate Media Push Plugin to publish composite stream
+**Commits**:
+- `8ca027c` - Fix video elements staying paused in composite layout
+- `c893f77` - Fix Ant Media conference mode - add publish mode parameter
+- `d4ca4aa` - Add server-side composite control API and URL params support
+- `49813e3` - Integrate server-side composite into frontend
 
 ---
 
@@ -761,4 +786,6 @@ https://media.streamlick.com:5443/LiveApp/streamlick_composite.html?roomId=<ROOM
 - [x] Fix video freeze on promotion (MediaStream wrapper for Ant Media)
 - [ ] Test multiple guests simultaneously
 - [ ] Verify RTMP output includes all participants correctly
-- [ ] Complete server-side composite integration
+- [x] Complete server-side composite integration
+- [ ] Test server-side composite with host disconnect scenario
+- [ ] Configure Ant Media to forward composite stream to RTMP destinations
