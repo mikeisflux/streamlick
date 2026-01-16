@@ -12,6 +12,7 @@ import {
   bringOnStage, removeFromStage, goLive, endBroadcast
 } from '../services/socket';
 import { AntMediaClient, generateStreamId } from '../services/antmedia';
+import { PreviewArea } from '../components/studio/canvas/PreviewArea';
 
 const LAYOUTS: { value: LayoutType; label: string; icon: string }[] = [
   { value: 'grid', label: 'Grid', icon: '⊞' },
@@ -36,6 +37,7 @@ export default function Studio() {
   const [guestName, setGuestName] = useState('');
   const [showLayoutPanel, setShowLayoutPanel] = useState(false);
   const [, setIsConnecting] = useState(true);
+  const [screenShareStream, setScreenShareStream] = useState<MediaStream | null>(null);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const antMediaRef = useRef<AntMediaClient | null>(null);
@@ -373,6 +375,53 @@ export default function Studio() {
               <UserPlus className="w-5 h-5" />
             </button>
           </div>
+
+          {/* Preview / Backstage Area */}
+          <PreviewArea
+            localStream={localStream}
+            rawStream={localStream}
+            videoEnabled={isVideoEnabled}
+            audioEnabled={isAudioEnabled}
+            isLocalUserOnStage={onStageParticipants.some(p => p.role === 'HOST')}
+            backstageParticipants={backstageParticipants.map(p => ({
+              id: p.id,
+              name: p.name,
+              stream: null, // Remote streams would be populated from WebRTC
+              audioEnabled: p.audioEnabled ?? true,
+              videoEnabled: p.videoEnabled ?? true,
+              role: p.role === 'HOST' ? 'host' : p.role === 'GUEST' ? 'guest' : 'backstage',
+              status: p.status === 'GREENROOM' ? 'greenroom' : p.status === 'BACKSTAGE' ? 'backstage' : 'live',
+            }))}
+            greenroomParticipants={participants
+              .filter(p => p.status === 'GREENROOM' && !p.isOnStage)
+              .map(p => ({
+                id: p.id,
+                name: p.name,
+                stream: null,
+                audioEnabled: p.audioEnabled ?? true,
+                videoEnabled: p.videoEnabled ?? true,
+                role: p.role === 'HOST' ? 'host' : 'guest',
+                status: 'greenroom' as const,
+              }))}
+            screenShareStream={screenShareStream}
+            onAddToStage={(participantId) => {
+              if (participantId === 'local-user') {
+                const host = participants.find(p => p.role === 'HOST');
+                if (host) bringOnStage(host.id);
+              } else {
+                bringOnStage(participantId);
+              }
+            }}
+            onRemoveFromStage={(participantId) => {
+              if (participantId === 'local-user') {
+                const host = participants.find(p => p.role === 'HOST');
+                if (host) removeFromStage(host.id);
+              } else {
+                removeFromStage(participantId);
+              }
+            }}
+            onInviteGuests={() => setShowInviteModal(true)}
+          />
         </div>
 
         {/* Sidebar */}
