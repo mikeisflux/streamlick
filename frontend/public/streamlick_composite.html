@@ -515,6 +515,30 @@
     }
 
     // ========================================
+    // Room Polling - detect streams that join after composite
+    // ========================================
+    let roomPollingInterval = null;
+
+    function startRoomPolling() {
+      if (roomPollingInterval) return;
+
+      console.log('[Composite] Starting room polling every 3 seconds');
+      roomPollingInterval = setInterval(() => {
+        if (webRTCAdaptor && isJoined) {
+          console.log('[Composite] Polling room info...');
+          webRTCAdaptor.getRoomInfo(roomId, compositeStreamId);
+        }
+      }, 3000);
+    }
+
+    function stopRoomPolling() {
+      if (roomPollingInterval) {
+        clearInterval(roomPollingInterval);
+        roomPollingInterval = null;
+      }
+    }
+
+    // ========================================
     // WebRTC Connection
     // ========================================
     function initWebRTC() {
@@ -532,7 +556,8 @@
 
       webRTCAdaptor = new WebRTCAdaptor({
         websocket_url: WS_URL,
-        mediaConstraints: { video: false, audio: false },
+        // Set constraints to match our canvas stream (video only)
+        mediaConstraints: { video: true, audio: false },
         localStream: canvasStream,
         peerconnection_config: {
           iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
@@ -544,6 +569,20 @@
         callback: handleCallback,
         callbackError: handleError
       });
+
+      // IMPORTANT: Override the adaptor's track handler to catch incoming streams
+      // Ant Media sometimes doesn't fire newStreamAvailable in conference mode
+      const originalOnTrack = webRTCAdaptor.onTrack?.bind(webRTCAdaptor);
+      webRTCAdaptor.onTrack = function(event, streamId) {
+        console.log('[Composite] Adaptor onTrack override:', streamId, event.track?.kind, event.streams?.length);
+        if (originalOnTrack) originalOnTrack(event, streamId);
+
+        // Manually add participant if we got a stream
+        if (event.streams?.[0] && streamId && !streamId.includes('composite')) {
+          console.log('[Composite] Adding participant from onTrack override');
+          addParticipant(streamId, event.streams[0]);
+        }
+      };
     }
 
     function handleCallback(info, obj) {
@@ -572,6 +611,9 @@
               }
             });
           }
+
+          // Start polling for room info to catch streams that join after us
+          startRoomPolling();
           break;
 
         case 'publish_started':
@@ -621,11 +663,14 @@
           console.log('[Composite] Play started:', obj.streamId);
           // In conference mode, we need to get the stream from the adaptor
           if (obj.streamId && !obj.streamId.includes('composite')) {
-            // Debug: log what's available on the adaptor
-            console.log('[Composite] Adaptor state:', {
-              remoteStreams: Object.keys(webRTCAdaptor.remoteStreams || {}),
-              remotePeerConnections: Object.keys(webRTCAdaptor.remotePeerConnection || {}),
-              playStreamIds: webRTCAdaptor.playStreamIds || [],
+            // Debug: log ALL adaptor properties to find where streams are stored
+            console.log('[Composite] Full adaptor debug:', {
+              remoteStreams: webRTCAdaptor.remoteStreams,
+              remotePeerConnection: webRTCAdaptor.remotePeerConnection,
+              remotePeerConnectionStats: webRTCAdaptor.remotePeerConnectionStats,
+              playStreamIds: webRTCAdaptor.playStreamIds,
+              remoteDescriptionSet: webRTCAdaptor.remoteDescriptionSet,
+              playedStream: webRTCAdaptor.playedStream,
             });
 
             // Try multiple methods to get the stream
@@ -637,20 +682,45 @@
               console.log('[Composite] Got stream from remoteStreams');
             }
 
-            // Method 2: remotePeerConnection receivers
+            // Method 2: playedStream (Ant Media sometimes uses this)
+            if (!remoteStream && webRTCAdaptor.playedStream?.[obj.streamId]) {
+              remoteStream = webRTCAdaptor.playedStream[obj.streamId];
+              console.log('[Composite] Got stream from playedStream');
+            }
+
+            // Method 3: remotePeerConnection receivers
             if (!remoteStream && webRTCAdaptor.remotePeerConnection?.[obj.streamId]) {
               const pc = webRTCAdaptor.remotePeerConnection[obj.streamId];
+              console.log('[Composite] PC state:', pc.connectionState, 'signalingState:', pc.signalingState);
               const receivers = pc.getReceivers?.() || [];
-              console.log('[Composite] PC receivers:', receivers.map(r => ({ kind: r.track?.kind, readyState: r.track?.readyState })));
+              console.log('[Composite] PC receivers:', receivers.length, receivers.map(r => ({ kind: r.track?.kind, readyState: r.track?.readyState, id: r.track?.id })));
+
               if (receivers.length > 0) {
                 remoteStream = new MediaStream();
                 receivers.forEach(r => {
-                  if (r.track) remoteStream.addTrack(r.track);
+                  if (r.track) {
+                    console.log('[Composite] Adding track from receiver:', r.track.kind, r.track.readyState);
+                    remoteStream.addTrack(r.track);
+                  }
                 });
+              }
+
+              // Also add a track event listener for future tracks
+              if (!pc._compositeTrackListener) {
+                pc._compositeTrackListener = true;
+                pc.ontrack = (event) => {
+                  console.log('[Composite] PC ontrack event:', event.track.kind, event.streams);
+                  if (event.streams?.[0]) {
+                    addParticipant(obj.streamId, event.streams[0]);
+                  } else if (event.track) {
+                    const newStream = new MediaStream([event.track]);
+                    addParticipant(obj.streamId, newStream);
+                  }
+                };
               }
             }
 
-            // Method 3: Check if stream is in obj itself
+            // Method 4: Check if stream is in obj itself
             if (!remoteStream && obj.stream) {
               remoteStream = obj.stream;
               console.log('[Composite] Got stream from obj.stream');
@@ -661,6 +731,38 @@
               addParticipant(obj.streamId, remoteStream);
             } else {
               console.warn('[Composite] No stream found after play_started for:', obj.streamId);
+              console.warn('[Composite] Starting track polling for:', obj.streamId);
+
+              // Poll for tracks every 500ms for up to 10 seconds
+              let pollCount = 0;
+              const maxPolls = 20;
+              const trackPollInterval = setInterval(() => {
+                pollCount++;
+                const pc = webRTCAdaptor.remotePeerConnection?.[obj.streamId];
+                if (pc) {
+                  const receivers = pc.getReceivers?.() || [];
+                  console.log(`[Composite] Track poll #${pollCount}: receivers=${receivers.length}, tracks=${receivers.filter(r => r.track).length}`);
+
+                  if (receivers.length > 0 && receivers.some(r => r.track)) {
+                    const stream = new MediaStream();
+                    receivers.forEach(r => {
+                      if (r.track) {
+                        console.log('[Composite] Poll found track:', r.track.kind, r.track.readyState);
+                        stream.addTrack(r.track);
+                      }
+                    });
+                    if (stream.getTracks().length > 0) {
+                      console.log('[Composite] Adding participant from track polling:', obj.streamId);
+                      addParticipant(obj.streamId, stream);
+                      clearInterval(trackPollInterval);
+                    }
+                  }
+                }
+                if (pollCount >= maxPolls) {
+                  console.error('[Composite] Track polling timed out for:', obj.streamId);
+                  clearInterval(trackPollInterval);
+                }
+              }, 500);
             }
           }
           break;
