@@ -886,6 +886,38 @@ sudo cp frontend/public/streamlick_composite.html /usr/local/antmedia/webapps/Li
 
 ---
 
+### Issue #20: Host Browser Should Not Stream to RTMP
+**Status**: ✅ FIXED
+**Date**: 2026-01-16
+
+**Problem**: The old architecture had the host browser compositing and streaming directly to RTMP destinations via `broadcastOutputService`. This meant:
+- Host refresh = stream interruption
+- Host's browser/network was bottleneck for streaming
+- High CPU/bandwidth usage on host machine
+
+**Solution**: Implemented Streamyard-style server-side streaming:
+1. Host sends raw camera only to Ant Media SFU
+2. Server composite renders all participants + layouts + backgrounds
+3. RTMP forwarding from composite stream to YouTube/Facebook/etc
+4. Host browser does NOT stream to destinations
+
+**Key Changes**:
+- `useBroadcast.ts` - `handleGoLive()` now uses `compositeService.addRtmpEndpoint()` instead of `broadcastOutputService`
+- `antmedia.routes.ts` - Added `POST/DELETE /composite/:id/rtmp` endpoints for RTMP forwarding
+- `composite.service.ts` - Added `addRtmpEndpoint()` and `removeRtmpEndpoint()` methods
+- Removed `broadcastOutputService` usage from broadcast flow
+
+**New Architecture Flow**:
+```
+Host/Guests → Ant Media SFU → Server Composite → RTMP → YouTube/Facebook
+                                    ↓
+                           Guests subscribe for LIVE preview
+```
+
+**Commit**: `f7015ed` - Implement Streamyard-style server-side streaming architecture
+
+---
+
 ## Next Steps / TODO
 - [ ] Set TURN password in production frontend `.env`
 - [ ] Consider adding TLS certificates to TURN server for better security
@@ -893,9 +925,10 @@ sudo cp frontend/public/streamlick_composite.html /usr/local/antmedia/webapps/Li
 - [x] Test promotion from greenroom to stage (resolution upgrade implemented)
 - [x] Fix video freeze on promotion (MediaStream wrapper for Ant Media)
 - [ ] Test multiple guests simultaneously
-- [ ] Verify RTMP output includes all participants correctly
+- [x] Verify RTMP output includes all participants correctly (now via composite)
 - [x] Complete server-side composite integration
 - [x] Implement unified server-side composite architecture
+- [x] Configure Ant Media RTMP forwarding from composite stream
 - [ ] Test server-side composite with host disconnect scenario
-- [ ] Configure Ant Media RTMP forwarding from composite stream
-- [ ] Remove deprecated P2P preview code after testing
+- [ ] Deploy composite HTML to Ant Media server
+- [ ] Remove deprecated P2P preview code and broadcastOutputService after testing
