@@ -174,9 +174,6 @@
     const initialLayout = parseInt(urlParams.get('layout')) || 1;
     const initialBackground = urlParams.get('bg') || null;
 
-    // Backend API URL for polling settings (configurable via URL param)
-    const API_URL = urlParams.get('api') || 'https://api.streamlick.com';
-
     // ========================================
     // State
     // ========================================
@@ -189,7 +186,6 @@
     let isJoined = false;
     let compositeStreamId = null;
     let canvasStream = null;
-    let lastSettingsHash = ''; // Track settings changes
 
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
@@ -621,6 +617,11 @@
         case 'ice_connection_state_changed':
           console.log('[Composite] ICE state:', obj.state, obj.streamId);
           break;
+
+        case 'data_received':
+          console.log('[Composite] Data received from:', obj.streamId);
+          handleDataMessage(obj.data);
+          break;
       }
     }
 
@@ -773,62 +774,48 @@
     });
 
     // ========================================
-    // Poll Backend for Studio Settings
+    // Handle Data Channel Messages (Real-time from Host)
     // ========================================
-    async function pollStudioSettings() {
-      if (!roomId) return;
-
+    function handleDataMessage(data) {
       try {
-        const response = await fetch(`${API_URL}/api/broadcasts/${roomId}/studio-settings`);
-        if (!response.ok) {
-          console.warn('[Composite] Settings poll failed:', response.status);
-          return;
+        const msg = JSON.parse(data);
+        console.log('[Composite] Data channel message:', msg);
+
+        switch (msg.type) {
+          case 'layout':
+            window.setLayout(msg.value);
+            document.getElementById('layoutSelect').value = msg.value;
+            break;
+
+          case 'background':
+            window.setBackground(msg.value);
+            document.getElementById('bgInput').value = msg.value || '';
+            break;
+
+          case 'participantName':
+            window.setParticipantName(msg.participantId, msg.name);
+            break;
+
+          case 'participantVideo':
+            window.setParticipantVideo(msg.participantId, msg.enabled);
+            break;
+
+          default:
+            console.log('[Composite] Unknown message type:', msg.type);
         }
-
-        const settings = await response.json();
-        const settingsHash = JSON.stringify(settings);
-
-        // Only update if settings changed
-        if (settingsHash !== lastSettingsHash) {
-          lastSettingsHash = settingsHash;
-          console.log('[Composite] Settings updated:', settings);
-
-          // Update layout
-          if (settings.layout && settings.layout !== currentLayout) {
-            window.setLayout(settings.layout);
-            document.getElementById('layoutSelect').value = settings.layout;
-          }
-
-          // Update background
-          if (settings.backgroundUrl !== (backgroundImage?.src || null)) {
-            window.setBackground(settings.backgroundUrl);
-            document.getElementById('bgInput').value = settings.backgroundUrl || '';
-          }
-
-          // Update participant names
-          if (settings.participantNames) {
-            Object.entries(settings.participantNames).forEach(([id, name]) => {
-              window.setParticipantName(id, name);
-            });
-          }
-        }
-      } catch (error) {
-        console.warn('[Composite] Settings poll error:', error);
+      } catch (e) {
+        console.warn('[Composite] Failed to parse data message:', data, e);
       }
     }
-
-    // Start polling every 2 seconds
-    setInterval(pollStudioSettings, 2000);
 
     // ========================================
     // Initialize
     // ========================================
-    window.onload = async () => {
+    window.onload = () => {
       console.log('[Composite] Initializing...');
       console.log('[Composite] Room:', roomId);
       console.log('[Composite] Layout:', initialLayout);
       console.log('[Composite] Background:', initialBackground);
-      console.log('[Composite] API URL:', API_URL);
 
       if (initialBackground) {
         window.setBackground(initialBackground);
@@ -837,11 +824,8 @@
       // Start render loop FIRST
       requestAnimationFrame(renderFrame);
 
-      // Then initialize WebRTC
+      // Then initialize WebRTC (receives settings via data channel in real-time)
       if (roomId) {
-        // Fetch initial settings from backend
-        await pollStudioSettings();
-
         initWebRTC();
       } else {
         updateStatus('ERROR: No roomId parameter', 'error');

@@ -95,24 +95,23 @@ class CompositeService {
 
   /**
    * Change the layout of the running composite
-   * Updates both the database (for composite polling) and Ant Media
+   * Sends via WebRTC data channel for real-time update
    */
   async setLayout(layoutId: number): Promise<void> {
-    if (!this.state.broadcastId) {
-      logger.warn('[CompositeService] Cannot set layout - no broadcast ID');
-      return;
-    }
-
     try {
-      logger.info('[CompositeService] Setting layout:', layoutId);
+      logger.info('[CompositeService] Setting layout via data channel:', layoutId);
 
-      // Update database so composite HTML can poll it
-      await api.patch(`/broadcasts/${this.state.broadcastId}/studio-settings`, {
-        layout: layoutId,
-      });
+      // Import webrtcService dynamically to avoid circular dependency
+      const { webrtcService } = await import('./webrtc.service');
+
+      // Send via WebRTC data channel - instant delivery to composite
+      webrtcService.sendData(JSON.stringify({
+        type: 'layout',
+        value: layoutId,
+      }));
 
       this.state.layout = layoutId;
-      logger.info('[CompositeService] Layout updated in database');
+      logger.info('[CompositeService] Layout sent via data channel');
     } catch (error: any) {
       logger.error('[CompositeService] Failed to set layout:', error);
       throw new Error(`Failed to set layout: ${error.message}`);
@@ -121,24 +120,23 @@ class CompositeService {
 
   /**
    * Change the background of the running composite
-   * Updates database so composite HTML can poll it
+   * Sends via WebRTC data channel for real-time update
    */
   async setBackground(backgroundUrl: string | null): Promise<void> {
-    if (!this.state.broadcastId) {
-      logger.warn('[CompositeService] Cannot set background - no broadcast ID');
-      return;
-    }
-
     try {
-      logger.info('[CompositeService] Setting background:', backgroundUrl);
+      logger.info('[CompositeService] Setting background via data channel:', backgroundUrl);
 
-      // Update database so composite HTML can poll it
-      await api.patch(`/broadcasts/${this.state.broadcastId}/studio-settings`, {
-        backgroundUrl: backgroundUrl,
-      });
+      // Import webrtcService dynamically to avoid circular dependency
+      const { webrtcService } = await import('./webrtc.service');
+
+      // Send via WebRTC data channel - instant delivery to composite
+      webrtcService.sendData(JSON.stringify({
+        type: 'background',
+        value: backgroundUrl,
+      }));
 
       this.state.backgroundUrl = backgroundUrl;
-      logger.info('[CompositeService] Background updated in database');
+      logger.info('[CompositeService] Background sent via data channel');
     } catch (error: any) {
       logger.error('[CompositeService] Failed to set background:', error);
       throw new Error(`Failed to set background: ${error.message}`);
@@ -147,29 +145,23 @@ class CompositeService {
 
   /**
    * Update participant name for composite display
+   * Sends via WebRTC data channel for real-time update
    */
   async setParticipantName(participantId: string, name: string): Promise<void> {
-    if (!this.state.broadcastId) {
-      logger.warn('[CompositeService] Cannot set participant name - no broadcast ID');
-      return;
-    }
-
     try {
-      logger.info('[CompositeService] Setting participant name:', participantId, name);
+      logger.info('[CompositeService] Setting participant name via data channel:', participantId, name);
 
-      // Get current settings first
-      const response = await api.get(`/broadcasts/${this.state.broadcastId}/studio-settings`);
-      const currentNames = response.data.participantNames || {};
+      // Import webrtcService dynamically to avoid circular dependency
+      const { webrtcService } = await import('./webrtc.service');
 
-      // Update database with new name
-      await api.patch(`/broadcasts/${this.state.broadcastId}/studio-settings`, {
-        participantNames: {
-          ...currentNames,
-          [participantId]: name,
-        },
-      });
+      // Send via WebRTC data channel - instant delivery to composite
+      webrtcService.sendData(JSON.stringify({
+        type: 'participantName',
+        participantId,
+        name,
+      }));
 
-      logger.info('[CompositeService] Participant name updated');
+      logger.info('[CompositeService] Participant name sent via data channel');
     } catch (error: any) {
       logger.error('[CompositeService] Failed to set participant name:', error);
       // Don't throw - this is not critical
