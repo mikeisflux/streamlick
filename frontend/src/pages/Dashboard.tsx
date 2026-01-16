@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Play, Settings, Trash2, Users, LogOut, Radio } from 'lucide-react';
+import { Plus, Play, Trash2, Users, LogOut, Radio } from 'lucide-react';
 import { broadcastAPI } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 

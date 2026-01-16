@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { Mic, MicOff, Video, VideoOff, Monitor, Settings } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Monitor } from 'lucide-react';
 import { participantAPI } from '../services/api';
 import { connectWithInviteToken, joinBroadcast, publishStream } from '../services/socket';
 import { AntMediaClient, generateStreamId } from '../services/antmedia';

@@ -2,8 +2,8 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Mic, MicOff, Video, VideoOff, Users, Settings, Layout,
-  ArrowLeft, Copy, Radio, Square, Play, UserPlus, Monitor
+  Mic, MicOff, Video, VideoOff, Users, Layout,
+  ArrowLeft, Copy, Radio, Square, UserPlus
 } from 'lucide-react';
 import { broadcastAPI } from '../services/api';
 import { useStudioStore, LayoutType } from '../store/studioStore';
@@ -27,7 +27,7 @@ export default function Studio() {
 
   const {
     broadcast, participants, localStream, isAudioEnabled, isVideoEnabled,
-    setBroadcast, setParticipants, updateParticipant, addParticipant, removeParticipant,
+    setBroadcast, setParticipants, updateParticipant, removeParticipant,
     setLocalStream, setAudioEnabled, setVideoEnabled, setLayout, reset
   } = useStudioStore();
 
@@ -35,10 +35,9 @@ export default function Studio() {
   const [inviteUrl, setInviteUrl] = useState('');
   const [guestName, setGuestName] = useState('');
   const [showLayoutPanel, setShowLayoutPanel] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(true);
+  const [, setIsConnecting] = useState(true);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
-  const previewRef = useRef<HTMLVideoElement>(null);
   const antMediaRef = useRef<AntMediaClient | null>(null);
 
   // Fetch broadcast data
@@ -79,7 +78,7 @@ export default function Studio() {
       setParticipants(state.participants);
     });
 
-    socket.on('participant-joined', (data) => {
+    socket.on('participant-joined', () => {
       // Refetch participants
     });
 
@@ -97,7 +96,7 @@ export default function Studio() {
       setLayout(data.layout);
     });
 
-    socket.on('broadcast-live', (data) => {
+    socket.on('broadcast-live', () => {
       setBroadcast({ ...broadcast!, status: 'LIVE' });
     });
 
