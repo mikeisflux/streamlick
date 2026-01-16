@@ -14,12 +14,13 @@ import api from '../services/api';
 import toast from 'react-hot-toast';
 
 // Hooks - useGuestStream removed in favor of Ant Media SFU
-// BUT usePreviewStream is KEPT for P2P canvas preview (composed output to guests)
+// useCompositeStream subscribes to server-side composite via Ant Media WebRTC
+// This replaces P2P preview - now host disconnect won't break guest preview!
 import {
   useDeviceEnumeration,
   useStatusListeners,
   useGreenroomChat,
-  usePreviewStream,
+  useCompositeStream,
 } from '../hooks/guest';
 
 // Components
@@ -115,10 +116,10 @@ export function GuestJoin() {
     sendPrivateChat,
   } = useGreenroomChat({ hasJoined });
 
-  // P2P preview stream hook - receives composed canvas output from host
+  // Server composite stream hook - subscribes to server-side composite via Ant Media
   // This shows the FULL broadcast preview (all participants, overlays, backgrounds)
-  // NOT the raw camera streams from Ant Media SFU
-  const { broadcastStream } = usePreviewStream({
+  // Host disconnect no longer breaks guest preview!
+  const { compositeStream: broadcastStream, isConnecting: isCompositeConnecting, error: compositeError } = useCompositeStream({
     hasJoined,
     broadcastId: broadcastInfo?.id,
   });

@@ -540,8 +540,8 @@ router.post('/composite/start', authenticate, async (req: AuthRequest, res: Resp
     }
 
     // Composite stream ID - matches what the composite HTML publishes
-    // The composite HTML uses `composite_${roomId}` where roomId is broadcastId
-    const compositeStreamId = `composite_${broadcastId}`;
+    // The composite HTML uses `${roomId}_composite` format to match participant pattern
+    const compositeStreamId = `${broadcastId}_composite`;
 
     // Build the composite HTML URL with parameters
     const frontendUrl = process.env.FRONTEND_URL || 'https://app.streamlick.com';

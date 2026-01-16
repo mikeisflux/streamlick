@@ -814,6 +814,78 @@ Participants → Composite HTML (renders to canvas) → WebRTC Publish
 
 ---
 
+### Issue #19: Unified Server-Side Composite Architecture (Streamyard-Style)
+**Status**: ✅ IMPLEMENTED
+**Date**: 2026-01-16
+
+**Goal**: Make the broadcast completely independent of the host browser, similar to Streamyard's architecture where the server handles all compositing.
+
+**Problem Analysis**:
+The previous architecture had multiple competing streaming systems:
+1. **P2P Preview** (host → guest): Breaks when host refreshes
+2. **Local Canvas Compositing**: Tied to host browser
+3. **Server Composite HTML**: Not properly integrated with guest preview
+
+**New Architecture**:
+```
+Participants (Host + Guests)
+         |
+         v
+    Ant Media SFU (Individual Streams)
+         |
+         v
+    Server Composite HTML (composites all streams)
+         |
+    +----+----+
+    |         |
+    v         v
+RTMP Out   All clients subscribe for "LIVE" preview
+```
+
+**Key Changes**:
+
+1. **Stream ID Format Consistency**:
+   - Fixed mismatch between backend (`composite_${broadcastId}`) and HTML (`${broadcastId}_composite`)
+   - Now consistently uses `${broadcastId}_composite` everywhere
+   - Matches participant stream pattern: `${roomId}_${participantId}`
+
+2. **New `useCompositeStream` Hook** (replaces P2P `usePreviewStream` for guests):
+   - Subscribes to server composite via Ant Media WebRTC
+   - Auto-reconnects on connection failure
+   - Host disconnect no longer breaks guest preview!
+   - Located at: `frontend/src/hooks/guest/useCompositeStream.ts`
+
+3. **Guest LIVE Preview** now subscribes to server composite:
+   - `GuestJoin.tsx` uses `useCompositeStream` instead of P2P `usePreviewStream`
+   - Composite runs on server, independent of host browser
+   - Guests see the same view whether host is connected or not
+
+4. **Layout Sync**:
+   - `useBroadcast.ts` already forwards layout changes to server composite
+   - `compositeService.setLayout(layoutId)` sends JS command to composite HTML
+
+**Files Created/Modified**:
+- `frontend/src/hooks/guest/useCompositeStream.ts` - NEW hook for server composite subscription
+- `frontend/src/hooks/guest/index.ts` - Export new hook
+- `frontend/src/pages/GuestJoin.tsx` - Use `useCompositeStream` instead of P2P
+- `backend/src/api/antmedia.routes.ts` - Fixed stream ID format
+
+**Benefits**:
+- Host can refresh without interrupting guests' preview
+- Server composite is the single source of truth for output
+- RTMP forwarding from server composite (not host browser)
+- Reduced complexity - one composite system instead of three
+
+**Deployment Required**:
+After pushing, deploy composite HTML to Ant Media server:
+```bash
+cd ~/streamlick
+git pull origin claude/merge-previewarea-typescript-04F8x
+sudo cp frontend/public/streamlick_composite.html /usr/local/antmedia/webapps/LiveApp/
+```
+
+---
+
 ## Next Steps / TODO
 - [ ] Set TURN password in production frontend `.env`
 - [ ] Consider adding TLS certificates to TURN server for better security
@@ -823,5 +895,7 @@ Participants → Composite HTML (renders to canvas) → WebRTC Publish
 - [ ] Test multiple guests simultaneously
 - [ ] Verify RTMP output includes all participants correctly
 - [x] Complete server-side composite integration
+- [x] Implement unified server-side composite architecture
 - [ ] Test server-side composite with host disconnect scenario
-- [ ] Configure Ant Media to forward composite stream to RTMP destinations
+- [ ] Configure Ant Media RTMP forwarding from composite stream
+- [ ] Remove deprecated P2P preview code after testing

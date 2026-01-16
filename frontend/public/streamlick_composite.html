@@ -16,22 +16,11 @@
       width: 1920px;
       height: 1080px;
     }
-    #background {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      z-index: 0;
-    }
     #canvas {
       position: absolute;
       top: 0;
       left: 0;
-      z-index: 9999;
-      display: block !important;
-      visibility: visible !important;
+      z-index: 1;
       background-color: #111;
     }
     .hidden-video {
@@ -42,35 +31,37 @@
       height: 1px !important;
       opacity: 0 !important;
       pointer-events: none !important;
-      z-index: -1 !important;
     }
-    #debug {
+    #status {
       position: absolute;
-      bottom: 10px;
+      top: 10px;
       left: 10px;
       color: #0f0;
       font-family: monospace;
-      font-size: 12px;
+      font-size: 14px;
       z-index: 1000;
-      background: rgba(0,0,0,0.7);
-      padding: 5px;
-      display: none;
+      background: rgba(0,0,0,0.8);
+      padding: 10px;
+      border-radius: 5px;
+      max-width: 400px;
     }
+    #status.error { color: #f00; }
+    #status.warning { color: #ff0; }
+    #status.success { color: #0f0; }
   </style>
 </head>
 <body>
   <div id="container">
-    <img id="background" src="" style="display:none" />
     <canvas id="canvas" width="1920" height="1080"></canvas>
   </div>
-  <div id="debug"></div>
+  <div id="status">Initializing...</div>
 
-  <!-- WebRTC Adapter (browser compatibility) -->
+  <!-- WebRTC Adapter for browser compatibility -->
   <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
 
   <script type="module">
     // ========================================
-    // Import Ant Media SDK as ES Module
+    // Import Ant Media SDK
     // ========================================
     import { WebRTCAdaptor } from './js/webrtc_adaptor.js';
 
@@ -80,540 +71,384 @@
     const CANVAS_WIDTH = 1920;
     const CANVAS_HEIGHT = 1080;
     const FPS = 30;
-    const DEBUG = false;
+    const WS_URL = 'wss://media.streamlick.com:5443/LiveApp/websocket';
 
     // Get URL parameters
     const urlParams = new URLSearchParams(window.location.search);
     const roomId = urlParams.get('roomId');
-    const publisherId = urlParams.get('publisherId') || 'composite_' + Date.now();
     const initialLayout = parseInt(urlParams.get('layout')) || 3;
     const initialBackground = urlParams.get('bg') || null;
 
     // ========================================
     // State
     // ========================================
-    let currentLayout = 3; // Default to Group layout
+    let currentLayout = initialLayout;
     let backgroundImage = null;
-    let participants = []; // Array of { id, stream, videoElement, name, audioEnabled, videoEnabled }
+    let participants = []; // Array of { id, streamId, stream, videoElement, name, videoEnabled }
     let webRTCAdaptor = null;
     let isPublishing = false;
+    let isJoined = false;
+    let compositeStreamId = null;
+    let canvasStream = null;
 
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    const backgroundEl = document.getElementById('background');
-    const debugEl = document.getElementById('debug');
+    const statusEl = document.getElementById('status');
 
-    if (DEBUG) debugEl.style.display = 'block';
+    function updateStatus(message, type = 'info') {
+      console.log(`[Composite] ${message}`);
+      statusEl.textContent = message;
+      statusEl.className = type;
+    }
 
     // ========================================
-    // Layout Engine (ported from layoutEngine.ts)
+    // Layout Engine (from layoutEngine.ts)
     // ========================================
-    const LAYOUTS = {
-      SOLO: 1,
-      CROPPED: 2,
-      GROUP: 3,
-      SPOTLIGHT: 4,
-      NEWS: 5,
-      SCREEN: 6,
-      PIP: 7,
-      CINEMA: 8,
-      GRID: 9,
-      ADVANCED: 10
-    };
-
-    function calculateLayoutPositions(layout, participantCount, isScreenSharing = false) {
-      const canvasWidth = CANVAS_WIDTH;
-      const canvasHeight = CANVAS_HEIGHT;
-      const activeLayout = isScreenSharing ? 6 : layout;
+    function calculateLayoutPositions(layout, count) {
       const positions = [];
+      if (count === 0) return positions;
 
-      switch (activeLayout) {
-        case 1: // Solo - single participant centered at 60% of screen
-          if (participantCount === 1) {
-            const boxWidth = canvasWidth * 0.6;
-            const boxHeight = boxWidth * (9 / 16);
-            positions.push({
-              x: (canvasWidth - boxWidth) / 2,
-              y: (canvasHeight - boxHeight) / 2,
-              width: boxWidth,
-              height: boxHeight
-            });
+      switch (layout) {
+        case 1: // Solo
+          if (count === 1) {
+            const w = CANVAS_WIDTH * 0.6;
+            const h = w * (9/16);
+            positions.push({ x: (CANVAS_WIDTH-w)/2, y: (CANVAS_HEIGHT-h)/2, width: w, height: h });
           } else {
-            calculateGridPositions(positions, canvasWidth, canvasHeight, participantCount);
+            return calculateGridPositions(count);
           }
           break;
-
-        case 2: // Cropped - 2x2 grid
-          {
-            const cols = 2;
-            const rows = 2;
-            const boxWidth = canvasWidth / cols;
-            const boxHeight = canvasHeight / rows;
-            for (let i = 0; i < participantCount; i++) {
-              const col = i % cols;
-              const row = Math.floor(i / cols);
-              positions.push({ x: col * boxWidth, y: row * boxHeight, width: boxWidth, height: boxHeight });
-            }
+        case 2: // 2x2 Cropped
+          const cols2 = 2, rows2 = 2;
+          const bw2 = CANVAS_WIDTH/cols2, bh2 = CANVAS_HEIGHT/rows2;
+          for (let i = 0; i < count && i < 4; i++) {
+            positions.push({ x: (i%cols2)*bw2, y: Math.floor(i/cols2)*bh2, width: bw2, height: bh2 });
           }
           break;
-
-        case 3: // Group - auto-calculated equal grid
-          calculateGridPositions(positions, canvasWidth, canvasHeight, participantCount);
-          break;
-
-        case 4: // Spotlight - one large + small boxes above
-          if (participantCount === 1) {
-            positions.push({ x: 0, y: 0, width: canvasWidth, height: canvasHeight });
+        case 3: // Group (auto grid)
+          return calculateGridPositions(count);
+        case 4: // Spotlight
+          if (count === 1) {
+            positions.push({ x: 0, y: 0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
           } else {
-            const topBarHeight = canvasHeight * 0.25;
-            const mainHeight = canvasHeight * 0.75;
-            const thumbnailWidth = canvasWidth / Math.min(3, participantCount - 1);
-
-            // First participant is main (large)
-            positions.push({ x: 0, y: topBarHeight, width: canvasWidth, height: mainHeight });
-
-            // Rest are thumbnails in top bar
-            for (let i = 1; i < participantCount; i++) {
-              positions.push({
-                x: (i - 1) * thumbnailWidth,
-                y: 0,
-                width: thumbnailWidth,
-                height: topBarHeight
-              });
+            const topH = CANVAS_HEIGHT * 0.25;
+            const mainH = CANVAS_HEIGHT * 0.75;
+            positions.push({ x: 0, y: topH, width: CANVAS_WIDTH, height: mainH });
+            const thumbW = CANVAS_WIDTH / Math.min(3, count-1);
+            for (let i = 1; i < count; i++) {
+              positions.push({ x: (i-1)*thumbW, y: 0, width: thumbW, height: topH });
             }
           }
           break;
-
-        case 5: // News - side by side
-          {
-            const boxWidth = canvasWidth / Math.max(2, participantCount);
-            for (let i = 0; i < participantCount; i++) {
-              positions.push({ x: i * boxWidth, y: 0, width: boxWidth, height: canvasHeight });
-            }
+        case 5: // News (side by side)
+          const newsW = CANVAS_WIDTH / Math.max(2, count);
+          for (let i = 0; i < count; i++) {
+            positions.push({ x: i*newsW, y: 0, width: newsW, height: CANVAS_HEIGHT });
           }
           break;
-
-        case 6: // Screen Share - thumbnails on top
-          {
-            const topBarHeight = canvasHeight * 0.12;
-            const thumbnailWidth = participantCount > 0 ? canvasWidth / participantCount : canvasWidth;
-            for (let i = 0; i < participantCount; i++) {
-              positions.push({
-                x: i * thumbnailWidth,
-                y: 0,
-                width: thumbnailWidth,
-                height: topBarHeight
-              });
-            }
-          }
-          break;
-
-        case 7: // Picture-in-Picture
-          if (participantCount === 1) {
-            positions.push({ x: 0, y: 0, width: canvasWidth, height: canvasHeight });
-          } else {
-            positions.push({ x: 0, y: 0, width: canvasWidth, height: canvasHeight });
-            const pipWidth = 240;
-            const pipHeight = 180;
-            const gap = 10;
-            for (let i = 1; i < participantCount; i++) {
-              positions.push({
-                x: canvasWidth - pipWidth - gap,
-                y: canvasHeight - (pipHeight + gap) * i,
-                width: pipWidth,
-                height: pipHeight
-              });
-            }
-          }
-          break;
-
-        case 8: // Cinema - wide format
-          {
-            const boxWidth = participantCount > 1 ? canvasWidth / 2 : canvasWidth;
-            for (let i = 0; i < participantCount; i++) {
-              positions.push({ x: i * boxWidth, y: 0, width: boxWidth, height: canvasHeight });
-            }
-          }
-          break;
-
-        case 9: // Video Grid with gaps
-          {
-            const cols = Math.ceil(Math.sqrt(participantCount));
-            const rows = Math.ceil(participantCount / cols);
-            const gap = 4;
-            const boxWidth = (canvasWidth - gap * (cols + 1)) / cols;
-            const boxHeight = (canvasHeight - gap * (rows + 1)) / rows;
-            for (let i = 0; i < participantCount; i++) {
-              const col = i % cols;
-              const row = Math.floor(i / cols);
-              positions.push({
-                x: gap + col * (boxWidth + gap),
-                y: gap + row * (boxHeight + gap),
-                width: boxWidth,
-                height: boxHeight
-              });
-            }
-          }
-          break;
-
         default:
-          calculateGridPositions(positions, canvasWidth, canvasHeight, participantCount);
+          return calculateGridPositions(count);
       }
-
       return positions;
     }
 
-    function calculateGridPositions(positions, canvasWidth, canvasHeight, participantCount) {
-      if (participantCount === 0) return;
-      const cols = Math.ceil(Math.sqrt(participantCount));
-      const rows = Math.ceil(participantCount / cols);
-      const boxWidth = canvasWidth / cols;
-      const boxHeight = canvasHeight / rows;
-
-      for (let i = 0; i < participantCount; i++) {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        positions.push({ x: col * boxWidth, y: row * boxHeight, width: boxWidth, height: boxHeight });
+    function calculateGridPositions(count) {
+      const positions = [];
+      if (count === 0) return positions;
+      const cols = Math.ceil(Math.sqrt(count));
+      const rows = Math.ceil(count / cols);
+      const bw = CANVAS_WIDTH / cols;
+      const bh = CANVAS_HEIGHT / rows;
+      for (let i = 0; i < count; i++) {
+        positions.push({ x: (i%cols)*bw, y: Math.floor(i/cols)*bh, width: bw, height: bh });
       }
+      return positions;
     }
 
     // ========================================
     // Canvas Rendering
     // ========================================
     let frameCount = 0;
-    let lastDebugTime = Date.now();
+    let lastStatTime = Date.now();
 
     function renderFrame() {
       frameCount++;
-
-      // Debug output every 5 seconds
       const now = Date.now();
-      if (now - lastDebugTime > 5000) {
-        console.log('[Composite] Render stats:', {
-          frameCount,
-          fps: Math.round(frameCount / ((now - lastDebugTime) / 1000)),
-          participantCount: participants.length,
-          layout: currentLayout,
-          hasBackground: !!backgroundImage,
-          participants: participants.map(p => ({
-            id: p.id,
-            readyState: p.videoElement?.readyState,
-            videoWidth: p.videoElement?.videoWidth,
-            videoHeight: p.videoElement?.videoHeight,
-            paused: p.videoElement?.paused
-          }))
-        });
+
+      // Log stats every 5 seconds
+      if (now - lastStatTime > 5000) {
+        const fps = Math.round(frameCount / 5);
+        console.log(`[Composite] Stats: ${fps} fps, ${participants.length} participants, layout=${currentLayout}, publishing=${isPublishing}`);
         frameCount = 0;
-        lastDebugTime = now;
+        lastStatTime = now;
       }
 
-      // Clear canvas with dark background
+      // Clear canvas
       ctx.fillStyle = '#111';
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-      // Draw a subtle border to show canvas is rendering
-      ctx.strokeStyle = '#333';
-      ctx.lineWidth = 4;
-      ctx.strokeRect(2, 2, CANVAS_WIDTH - 4, CANVAS_HEIGHT - 4);
-
-      // Draw background if set
-      if (backgroundImage && backgroundImage.complete) {
+      // Draw background
+      if (backgroundImage && backgroundImage.complete && backgroundImage.naturalWidth > 0) {
         ctx.drawImage(backgroundImage, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       }
 
-      // Draw frame counter in corner to prove canvas is updating
-      ctx.fillStyle = '#0f0';
-      ctx.font = '14px monospace';
-      ctx.fillText(`Frame: ${frameCount} | Participants: ${participants.length} | Layout: ${currentLayout}`, 10, 20);
-
-      // Calculate positions for current layout
+      // Calculate positions
       const positions = calculateLayoutPositions(currentLayout, participants.length);
 
-      // Draw each participant
-      participants.forEach((participant, index) => {
-        if (index >= positions.length) return;
-
-        const pos = positions[index];
-        const video = participant.videoElement;
-
-        // Debug: Log why video might not draw (only once per participant per second)
-        if (!participant._lastDebug || now - participant._lastDebug > 1000) {
-          participant._lastDebug = now;
-          if (!video) {
-            console.log(`[Composite] Participant ${index}: No video element`);
-          } else if (video.readyState < 2) {
-            console.log(`[Composite] Participant ${index}: readyState=${video.readyState} (need >=2)`);
-          } else if (video.videoWidth === 0) {
-            console.log(`[Composite] Participant ${index}: videoWidth=0`);
-          } else if (video.paused) {
-            console.log(`[Composite] Participant ${index}: video paused, trying to play`);
-            video.play().catch(e => console.warn('Play failed:', e));
-          }
-        }
-
-        // Try to draw even if conditions are slightly off - readyState 1 might work
-        const canDraw = video && video.videoWidth > 0 && participant.videoEnabled !== false;
-
-        // Helper to draw rounded rect clip
+      // Draw participants
+      participants.forEach((p, i) => {
+        if (i >= positions.length) return;
+        const pos = positions[i];
+        const video = p.videoElement;
         const cornerRadius = 12;
-        function clipRoundedRect(x, y, w, h, r) {
+
+        // Rounded rect clip helper
+        function roundRect(x, y, w, h, r) {
           ctx.beginPath();
-          ctx.moveTo(x + r, y);
-          ctx.lineTo(x + w - r, y);
-          ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-          ctx.lineTo(x + w, y + h - r);
-          ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-          ctx.lineTo(x + r, y + h);
-          ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-          ctx.lineTo(x, y + r);
-          ctx.quadraticCurveTo(x, y, x + r, y);
+          ctx.moveTo(x+r, y);
+          ctx.lineTo(x+w-r, y);
+          ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+          ctx.lineTo(x+w, y+h-r);
+          ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+          ctx.lineTo(x+r, y+h);
+          ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+          ctx.lineTo(x, y+r);
+          ctx.quadraticCurveTo(x, y, x+r, y);
           ctx.closePath();
         }
 
+        const canDraw = video && video.readyState >= 2 && video.videoWidth > 0 && p.videoEnabled !== false;
+
         if (canDraw) {
-          // Calculate aspect-ratio-preserving fit
-          const videoAspect = video.videoWidth / video.videoHeight;
-          const boxAspect = pos.width / pos.height;
-
-          let drawWidth, drawHeight, drawX, drawY;
-
-          if (videoAspect > boxAspect) {
-            // Video is wider - fit to height, crop width
-            drawHeight = pos.height;
-            drawWidth = drawHeight * videoAspect;
-            drawX = pos.x - (drawWidth - pos.width) / 2;
-            drawY = pos.y;
+          // Calculate aspect-preserving dimensions
+          const vAspect = video.videoWidth / video.videoHeight;
+          const bAspect = pos.width / pos.height;
+          let dw, dh, dx, dy;
+          if (vAspect > bAspect) {
+            dh = pos.height; dw = dh * vAspect;
+            dx = pos.x - (dw - pos.width) / 2; dy = pos.y;
           } else {
-            // Video is taller - fit to width, crop height
-            drawWidth = pos.width;
-            drawHeight = drawWidth / videoAspect;
-            drawX = pos.x;
-            drawY = pos.y - (drawHeight - pos.height) / 2;
+            dw = pos.width; dh = dw / vAspect;
+            dx = pos.x; dy = pos.y - (dh - pos.height) / 2;
           }
 
-          // Clip to rounded rect bounds
           ctx.save();
-          clipRoundedRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
+          roundRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
           ctx.clip();
-
-          ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
-
+          ctx.drawImage(video, dx, dy, dw, dh);
           ctx.restore();
-
-          // Draw name tag pill
-          if (participant.name) {
-            const tagHeight = 28;
-            const tagPadding = 12;
-            const tagY = pos.y + pos.height - tagHeight - 12;
-            const tagX = pos.x + 12;
-
-            ctx.font = 'bold 14px system-ui, sans-serif';
-            const textWidth = ctx.measureText(participant.name).width;
-            const tagWidth = textWidth + tagPadding * 2;
-            const tagRadius = tagHeight / 2;
-
-            // Draw pill background
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.beginPath();
-            ctx.moveTo(tagX + tagRadius, tagY);
-            ctx.lineTo(tagX + tagWidth - tagRadius, tagY);
-            ctx.arc(tagX + tagWidth - tagRadius, tagY + tagRadius, tagRadius, -Math.PI/2, Math.PI/2);
-            ctx.lineTo(tagX + tagRadius, tagY + tagHeight);
-            ctx.arc(tagX + tagRadius, tagY + tagRadius, tagRadius, Math.PI/2, -Math.PI/2);
-            ctx.closePath();
-            ctx.fill();
-
-            // Draw text
-            ctx.fillStyle = '#fff';
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(participant.name, tagX + tagPadding, tagY + tagHeight / 2);
-          }
         } else {
-          // Draw placeholder with rounded corners - camera off state
+          // Placeholder tile
           ctx.save();
-          clipRoundedRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
+          roundRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
           ctx.clip();
-
-          // Dark tile background
           ctx.fillStyle = '#1e2330';
           ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
           ctx.restore();
 
-          // Draw avatar circle (30% of tile)
-          const centerX = pos.x + pos.width / 2;
-          const centerY = pos.y + pos.height / 2;
-          const circleSize = Math.min(pos.width, pos.height) * 0.3;
-          const radius = circleSize / 2;
+          // Avatar circle (30%)
+          const cx = pos.x + pos.width/2, cy = pos.y + pos.height/2;
+          const size = Math.min(pos.width, pos.height) * 0.3;
+          const r = size / 2;
 
-          // Draw subtle border ring
           ctx.beginPath();
-          ctx.arc(centerX, centerY, radius + 2, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+          ctx.arc(cx, cy, r+2, 0, Math.PI*2);
+          ctx.fillStyle = 'rgba(255,255,255,0.1)';
           ctx.fill();
 
-          // Draw circle background
           ctx.beginPath();
-          ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+          ctx.arc(cx, cy, r, 0, Math.PI*2);
           ctx.fillStyle = '#374151';
           ctx.fill();
 
-          // Draw initial letter (centered)
-          const displayName = participant.name || 'Guest';
-          const fontSize = Math.min(radius * 0.8, 60);
+          const name = p.name || 'Guest';
           ctx.fillStyle = '#fff';
-          ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
+          ctx.font = `bold ${Math.min(r*0.8, 60)}px system-ui, sans-serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText(displayName.charAt(0).toUpperCase(), centerX, centerY);
-
-          // Draw name tag pill at bottom left
-          const tagHeight = 28;
-          const tagPadding = 12;
-          const tagY = pos.y + pos.height - tagHeight - 12;
-          const tagX = pos.x + 12;
-
-          ctx.font = 'bold 14px system-ui, sans-serif';
-          const textWidth = ctx.measureText(displayName).width;
-          const tagWidth = textWidth + tagPadding * 2;
-          const tagRadius = tagHeight / 2;
-
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-          ctx.beginPath();
-          ctx.moveTo(tagX + tagRadius, tagY);
-          ctx.lineTo(tagX + tagWidth - tagRadius, tagY);
-          ctx.arc(tagX + tagWidth - tagRadius, tagY + tagRadius, tagRadius, -Math.PI/2, Math.PI/2);
-          ctx.lineTo(tagX + tagRadius, tagY + tagHeight);
-          ctx.arc(tagX + tagRadius, tagY + tagRadius, tagRadius, Math.PI/2, -Math.PI/2);
-          ctx.closePath();
-          ctx.fill();
-
-          ctx.fillStyle = '#fff';
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(displayName, tagX + tagPadding, tagY + tagHeight / 2);
+          ctx.fillText(name.charAt(0).toUpperCase(), cx, cy);
         }
+
+        // Name tag
+        const displayName = p.name || 'Guest';
+        const tagH = 28, tagPad = 12;
+        const tagY = pos.y + pos.height - tagH - 12;
+        const tagX = pos.x + 12;
+        ctx.font = 'bold 14px system-ui, sans-serif';
+        const tw = ctx.measureText(displayName).width;
+        const tagW = tw + tagPad * 2;
+        const tagR = tagH / 2;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.beginPath();
+        ctx.moveTo(tagX+tagR, tagY);
+        ctx.lineTo(tagX+tagW-tagR, tagY);
+        ctx.arc(tagX+tagW-tagR, tagY+tagR, tagR, -Math.PI/2, Math.PI/2);
+        ctx.lineTo(tagX+tagR, tagY+tagH);
+        ctx.arc(tagX+tagR, tagY+tagR, tagR, Math.PI/2, -Math.PI/2);
+        ctx.fill();
+
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(displayName, tagX+tagPad, tagY+tagH/2);
       });
 
-      // Update debug info
-      if (DEBUG) {
-        debugEl.textContent = `Layout: ${currentLayout} | Participants: ${participants.length} | Publishing: ${isPublishing}`;
-      }
+      // Status overlay (top-left)
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(8, 8, 350, 24);
+      ctx.fillStyle = isPublishing ? '#0f0' : '#f00';
+      ctx.font = '12px monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${isPublishing ? '● LIVE' : '○ OFFLINE'} | Participants: ${participants.length} | Layout: ${currentLayout}`, 14, 20);
 
       requestAnimationFrame(renderFrame);
     }
 
     // ========================================
-    // WebRTC - Join Room, Receive Streams, and Publish Composite
+    // WebRTC - Mirroring webrtc.service.ts approach
     // ========================================
-    let compositeStreamId = null;
-    let canvasStream = null;
-
     function initWebRTC() {
       if (!roomId) {
-        console.error('[Composite] No roomId provided in URL');
+        updateStatus('ERROR: No roomId in URL', 'error');
         return;
       }
 
-      // Generate composite stream ID - this is what hosts can subscribe to
-      compositeStreamId = `composite_${roomId}`;
-      console.log('[Composite] Initializing WebRTC for room:', roomId);
-      console.log('[Composite] Output stream ID:', compositeStreamId);
+      // Use same stream ID format as host: roomId_participantId
+      compositeStreamId = `${roomId}_composite`;
+      updateStatus(`Connecting to room: ${roomId}`, 'warning');
 
-      // Capture canvas stream at target FPS
+      // Capture canvas BEFORE creating adaptor
       canvasStream = canvas.captureStream(FPS);
-      console.log('[Composite] Captured canvas stream at', FPS, 'FPS');
+      console.log('[Composite] Canvas stream captured:', canvasStream.getTracks().map(t => t.kind));
 
       webRTCAdaptor = new WebRTCAdaptor({
-        websocket_url: 'wss://media.streamlick.com:5443/LiveApp/websocket',
+        websocket_url: WS_URL,
         mediaConstraints: { video: false, audio: false },
-        localStream: canvasStream, // Pass canvas stream for publishing
+        localStream: canvasStream,
         peerconnection_config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' }
-          ]
+          iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
         },
         sdp_constraints: {
           OfferToReceiveAudio: true,
           OfferToReceiveVideo: true
         },
-        callback: function(info, obj) {
-          console.log('[Composite] Callback:', info, obj);
-
-          if (info === 'initialized') {
-            // Join the room in 'publish' mode to both receive and send
-            console.log('[Composite] Joining room in publish mode...');
-            webRTCAdaptor.joinRoom(roomId, compositeStreamId, 'publish');
-          }
-          else if (info === 'joinedTheRoom') {
-            console.log('[Composite] Joined room, streams:', obj.streams);
-
-            // Publish the composite canvas stream
-            console.log('[Composite] Publishing canvas stream as:', compositeStreamId);
-            webRTCAdaptor.publish(compositeStreamId, null, null, null, compositeStreamId, roomId);
-
-            // Subscribe to existing streams (but not our own composite)
-            if (obj.streams && obj.streams.length > 0) {
-              obj.streams.forEach(streamId => {
-                if (streamId !== compositeStreamId && !streamId.includes('composite')) {
-                  console.log('[Composite] Subscribing to stream:', streamId);
-                  webRTCAdaptor.play(streamId);
-                }
-              });
-            }
-          }
-          else if (info === 'publish_started') {
-            console.log('[Composite] ✅ Canvas stream is now publishing!');
-            console.log('[Composite] Stream ID for subscription:', compositeStreamId);
-            isPublishing = true;
-          }
-          else if (info === 'publish_finished') {
-            console.log('[Composite] Publishing finished');
-            isPublishing = false;
-          }
-          else if (info === 'newStreamAvailable') {
-            console.log('[Composite] New stream available:', obj.streamId);
-            // Don't add our own composite stream as a participant
-            if (!obj.streamId.includes('composite')) {
-              handleNewStream(obj.streamId, obj.stream);
-            }
-          }
-          else if (info === 'subtrackAdded') {
-            // New participant joined
-            if (obj.trackId && obj.trackId !== compositeStreamId && !obj.trackId.includes('composite')) {
-              console.log('[Composite] Subtrack added, subscribing:', obj.trackId);
-              webRTCAdaptor.play(obj.trackId);
-            }
-          }
-          else if (info === 'leavedFromRoom' || info === 'streamLeaved') {
-            // Participant left
-            const streamId = obj.streamId || obj;
-            removeParticipant(streamId);
-          }
-        },
-        callbackError: function(error, message) {
-          console.error('[Composite] Error:', error, message);
-        }
+        callback: handleCallback,
+        callbackError: handleError
       });
     }
 
-    function handleNewStream(streamId, stream) {
-      // Extract participant ID from stream ID (format: roomId_participantId)
-      const participantId = streamId.includes('_') ? streamId.split('_').pop() : streamId;
+    function handleCallback(info, obj) {
+      console.log('[Composite] Callback:', info, obj);
 
-      // Check if already exists - just update stream
-      const existing = participants.find(p => p.id === participantId);
+      switch (info) {
+        case 'initialized':
+          updateStatus('WebSocket connected, joining room...', 'warning');
+          // Join room in publish mode (same as webrtc.service.ts)
+          webRTCAdaptor.joinRoom(roomId, compositeStreamId, 'publish');
+          break;
+
+        case 'joinedTheRoom':
+          isJoined = true;
+          updateStatus(`Joined room. Streams: ${obj.streams?.length || 0}`, 'warning');
+
+          // Publish our canvas stream
+          console.log('[Composite] Publishing canvas as:', compositeStreamId);
+          webRTCAdaptor.publish(compositeStreamId, null, null, null, compositeStreamId, roomId);
+
+          // Subscribe to existing streams
+          if (obj.streams && obj.streams.length > 0) {
+            obj.streams.forEach(streamId => {
+              if (!streamId.includes('composite')) {
+                console.log('[Composite] Subscribing to:', streamId);
+                webRTCAdaptor.play(streamId, null, roomId);
+              }
+            });
+          }
+          break;
+
+        case 'publish_started':
+          isPublishing = true;
+          updateStatus(`PUBLISHING: ${compositeStreamId}`, 'success');
+          break;
+
+        case 'publish_finished':
+          isPublishing = false;
+          updateStatus('Publishing stopped', 'warning');
+          break;
+
+        case 'newStreamAvailable':
+          console.log('[Composite] New stream:', obj.streamId);
+          if (!obj.streamId.includes('composite')) {
+            addParticipant(obj.streamId, obj.stream);
+          }
+          break;
+
+        case 'newTrackAvailable':
+          console.log('[Composite] New track:', obj.streamId, obj.track?.kind);
+          if (!obj.streamId.includes('composite') && obj.stream) {
+            addParticipant(obj.streamId, obj.stream);
+          }
+          break;
+
+        case 'subtrackAdded':
+          // New participant joined room after us
+          if (obj.trackId && !obj.trackId.includes('composite')) {
+            console.log('[Composite] New subtrack, subscribing:', obj.trackId);
+            webRTCAdaptor.play(obj.trackId, null, roomId);
+          }
+          break;
+
+        case 'leavedFromRoom':
+        case 'streamLeaved':
+          const leftId = obj.streamId || obj;
+          removeParticipant(leftId);
+          break;
+
+        case 'play_started':
+          console.log('[Composite] Play started for:', obj.streamId);
+          break;
+
+        case 'ice_connection_state_changed':
+          console.log('[Composite] ICE state:', obj.state, 'for', obj.streamId);
+          break;
+
+        case 'pong':
+          // Heartbeat, ignore
+          break;
+
+        case 'bitrateMeasurement':
+          // Track bitrate, ignore for now
+          break;
+      }
+    }
+
+    function handleError(error, message) {
+      console.error('[Composite] Error:', error, message);
+      updateStatus(`ERROR: ${error} - ${message}`, 'error');
+    }
+
+    function addParticipant(streamId, stream) {
+      // Extract participant ID from stream ID (format: roomId_participantId)
+      const parts = streamId.split('_');
+      const participantId = parts.length >= 2 ? parts.slice(1).join('_') : streamId;
+
+      // Check if already exists
+      const existing = participants.find(p => p.id === participantId || p.streamId === streamId);
       if (existing) {
+        console.log('[Composite] Updating existing participant:', participantId);
         existing.stream = stream;
-        existing.videoElement.srcObject = stream;
-        // Retry play since we got a new stream
-        setTimeout(() => {
-          existing.videoElement.play().catch(e => console.warn('[Composite] Retry play error:', e));
-        }, 100);
+        if (existing.videoElement) {
+          existing.videoElement.srcObject = stream;
+          existing.videoElement.play().catch(e => console.warn('Replay error:', e));
+        }
         return;
       }
 
-      // Create hidden video element
+      console.log('[Composite] Adding new participant:', participantId, 'streamId:', streamId);
+
+      // Create video element
       const video = document.createElement('video');
       video.className = 'hidden-video';
       video.autoplay = true;
@@ -622,16 +457,17 @@
       video.srcObject = stream;
       document.body.appendChild(video);
 
-      // Don't call play() immediately - wait for loadedmetadata
-      video.addEventListener('loadedmetadata', () => {
-        video.play().catch(e => console.warn('[Composite] Video play error:', e));
-      });
+      // Play handlers
+      video.onloadedmetadata = () => {
+        console.log('[Composite] Video metadata loaded:', participantId, video.videoWidth, 'x', video.videoHeight);
+        video.play().catch(e => console.warn('Play error:', e));
+      };
 
-      // Also retry play after a delay to handle race conditions
+      // Retry play after delay
       setTimeout(() => {
-        if (video.paused) {
-          console.log('[Composite] Video still paused, retrying play for:', participantId);
-          video.play().catch(e => console.warn('[Composite] Retry play error:', e));
+        if (video.paused && video.srcObject) {
+          console.log('[Composite] Retrying play for:', participantId);
+          video.play().catch(e => console.warn('Retry play error:', e));
         }
       }, 500);
 
@@ -641,152 +477,88 @@
         stream: stream,
         videoElement: video,
         name: null,
-        videoEnabled: true,
-        audioEnabled: true
+        videoEnabled: true
       });
 
-      console.log('[Composite] Added participant:', participantId, 'Total:', participants.length);
+      updateStatus(`${participants.length} participant(s) | Publishing: ${isPublishing}`, isPublishing ? 'success' : 'warning');
     }
 
     function removeParticipant(streamId) {
-      const participantId = streamId.includes('_') ? streamId.split('_').pop() : streamId;
-      const index = participants.findIndex(p => p.id === participantId || p.streamId === streamId);
+      const parts = streamId.split('_');
+      const participantId = parts.length >= 2 ? parts.slice(1).join('_') : streamId;
 
-      if (index !== -1) {
-        const participant = participants[index];
-        if (participant.videoElement) {
-          participant.videoElement.srcObject = null;
-          participant.videoElement.remove();
+      const idx = participants.findIndex(p => p.id === participantId || p.streamId === streamId);
+      if (idx !== -1) {
+        const p = participants[idx];
+        if (p.videoElement) {
+          p.videoElement.srcObject = null;
+          p.videoElement.remove();
         }
-        participants.splice(index, 1);
-        console.log('[Composite] Removed participant:', participantId, 'Total:', participants.length);
+        participants.splice(idx, 1);
+        console.log('[Composite] Removed participant:', participantId, 'Remaining:', participants.length);
+        updateStatus(`${participants.length} participant(s)`, isPublishing ? 'success' : 'warning');
       }
     }
 
     // ========================================
-    // Publishing the Composite Stream
-    // ========================================
-    function startPublishing() {
-      const stream = canvas.captureStream(FPS);
-      console.log('[Composite] Captured canvas stream at', FPS, 'FPS');
-
-      // This stream will be automatically used by Media Push Plugin
-      // or can be manually published to Ant Media
-
-      isPublishing = true;
-      return stream;
-    }
-
-    // ========================================
-    // External Control API (called via postMessage or REST)
+    // External Control API
     // ========================================
     window.setBackground = function(url) {
       console.log('[Composite] Setting background:', url);
       if (!url) {
         backgroundImage = null;
-        backgroundEl.style.display = 'none';
         return;
       }
-
       const img = new Image();
       img.crossOrigin = 'anonymous';
-      img.onload = function() {
-        backgroundImage = img;
-        backgroundEl.src = url;
-        backgroundEl.style.display = 'block';
-        console.log('[Composite] Background loaded');
-      };
-      img.onerror = function() {
-        console.error('[Composite] Failed to load background:', url);
-      };
+      img.onload = () => { backgroundImage = img; console.log('[Composite] Background loaded'); };
+      img.onerror = () => console.error('[Composite] Background load failed:', url);
       img.src = url;
     };
 
-    window.setLayout = function(layoutId) {
-      console.log('[Composite] Setting layout:', layoutId);
-      currentLayout = parseInt(layoutId) || 3;
+    window.setLayout = function(id) {
+      currentLayout = parseInt(id) || 3;
+      console.log('[Composite] Layout set to:', currentLayout);
     };
 
-    window.setParticipantName = function(participantId, name) {
-      const participant = participants.find(p => p.id === participantId);
-      if (participant) {
-        participant.name = name;
-        console.log('[Composite] Set name for', participantId, ':', name);
-      }
+    window.setParticipantName = function(id, name) {
+      const p = participants.find(p => p.id === id);
+      if (p) p.name = name;
     };
 
-    window.setParticipantVideo = function(participantId, enabled) {
-      const participant = participants.find(p => p.id === participantId);
-      if (participant) {
-        participant.videoEnabled = enabled;
-        console.log('[Composite] Set video for', participantId, ':', enabled);
-      }
+    window.setParticipantVideo = function(id, enabled) {
+      const p = participants.find(p => p.id === id);
+      if (p) p.videoEnabled = enabled;
     };
 
-    window.reorderParticipants = function(orderedIds) {
-      const newOrder = [];
-      orderedIds.forEach(id => {
-        const participant = participants.find(p => p.id === id);
-        if (participant) newOrder.push(participant);
-      });
-      // Add any remaining participants not in the order
-      participants.forEach(p => {
-        if (!newOrder.includes(p)) newOrder.push(p);
-      });
-      participants = newOrder;
-      console.log('[Composite] Reordered participants:', orderedIds);
-    };
+    window.getState = () => ({
+      roomId,
+      compositeStreamId,
+      layout: currentLayout,
+      isPublishing,
+      isJoined,
+      participantCount: participants.length,
+      participants: participants.map(p => ({ id: p.id, name: p.name, videoEnabled: p.videoEnabled }))
+    });
 
-    window.getState = function() {
-      return {
-        layout: currentLayout,
-        participantCount: participants.length,
-        participants: participants.map(p => ({
-          id: p.id,
-          name: p.name,
-          videoEnabled: p.videoEnabled
-        })),
-        isPublishing: isPublishing
-      };
-    };
-
-    // Listen for postMessage commands from parent/controller
-    window.addEventListener('message', function(event) {
-      const { type, data } = event.data || {};
-
-      switch (type) {
-        case 'setBackground':
-          window.setBackground(data.url);
-          break;
-        case 'setLayout':
-          window.setLayout(data.layoutId);
-          break;
-        case 'setParticipantName':
-          window.setParticipantName(data.participantId, data.name);
-          break;
-        case 'setParticipantVideo':
-          window.setParticipantVideo(data.participantId, data.enabled);
-          break;
-        case 'reorderParticipants':
-          window.reorderParticipants(data.orderedIds);
-          break;
-      }
+    // PostMessage handler
+    window.addEventListener('message', (e) => {
+      const { type, data } = e.data || {};
+      if (type === 'setBackground') window.setBackground(data.url);
+      if (type === 'setLayout') window.setLayout(data.layoutId);
+      if (type === 'setParticipantName') window.setParticipantName(data.participantId, data.name);
+      if (type === 'setParticipantVideo') window.setParticipantVideo(data.participantId, data.enabled);
     });
 
     // ========================================
-    // Initialization
+    // Initialize
     // ========================================
-    window.onload = function() {
-      console.log('[Composite] StreamLick Composite Layout loaded');
-      console.log('[Composite] Room ID:', roomId);
-      console.log('[Composite] Publisher ID:', publisherId);
-      console.log('[Composite] Initial layout:', initialLayout);
-      console.log('[Composite] Initial background:', initialBackground);
+    window.onload = () => {
+      console.log('[Composite] Initializing...');
+      console.log('[Composite] Room:', roomId);
+      console.log('[Composite] Layout:', initialLayout);
+      console.log('[Composite] Background:', initialBackground);
 
-      // Apply initial layout from URL parameter
-      currentLayout = initialLayout;
-
-      // Apply initial background from URL parameter
       if (initialBackground) {
         window.setBackground(initialBackground);
       }
@@ -794,36 +566,26 @@
       // Start render loop
       requestAnimationFrame(renderFrame);
 
-      // Initialize WebRTC if room specified
+      // Initialize WebRTC
       if (roomId) {
         initWebRTC();
+      } else {
+        updateStatus('ERROR: No roomId parameter', 'error');
       }
-
-      // Start publishing the canvas
-      const compositeStream = startPublishing();
-
-      // Make stream available to Media Push Plugin
-      window.compositeStream = compositeStream;
-
-      // Report ready status for Media Push Plugin
-      console.log('[Composite] Ready for Media Push Plugin');
     };
 
-    // ========================================
-    // Expose for debugging
-    // ========================================
-    window.getParticipants = () => participants;
-    window.debugVideo = () => {
+    // Debug helpers
+    window.debugParticipants = () => {
       participants.forEach((p, i) => {
         const v = p.videoElement;
-        console.log(`Participant ${i}:`, {
+        console.log(`P${i}:`, {
           id: p.id,
-          readyState: v.readyState,
-          videoWidth: v.videoWidth,
-          videoHeight: v.videoHeight,
-          paused: v.paused,
-          srcObject: v.srcObject ? 'yes' : 'no',
-          tracks: v.srcObject ? v.srcObject.getTracks().map(t => `${t.kind}:${t.readyState}:enabled=${t.enabled}`) : []
+          streamId: p.streamId,
+          readyState: v?.readyState,
+          videoWidth: v?.videoWidth,
+          videoHeight: v?.videoHeight,
+          paused: v?.paused,
+          tracks: p.stream?.getTracks().map(t => `${t.kind}:${t.readyState}`) || []
         });
       });
     };
