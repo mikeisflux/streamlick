@@ -613,6 +613,25 @@
       // Make stream available to Media Push Plugin
       window.compositeStream = compositeStream;
     };
+
+    // ========================================
+    // Expose for debugging
+    // ========================================
+    window.getParticipants = () => participants;
+    window.debugVideo = () => {
+      participants.forEach((p, i) => {
+        const v = p.videoElement;
+        console.log(`Participant ${i}:`, {
+          id: p.id,
+          readyState: v.readyState,
+          videoWidth: v.videoWidth,
+          videoHeight: v.videoHeight,
+          paused: v.paused,
+          srcObject: v.srcObject ? 'yes' : 'no',
+          tracks: v.srcObject ? v.srcObject.getTracks().map(t => `${t.kind}:${t.readyState}:enabled=${t.enabled}`) : []
+        });
+      });
+    };
   </script>
 </body>
 </html>
