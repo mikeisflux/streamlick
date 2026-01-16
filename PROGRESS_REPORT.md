@@ -709,6 +709,50 @@ this.adaptor.updateVideoTrack(tempStream, this.streamId, null);
 
 ---
 
+### Server-Side Composition: Composite Layout HTML
+**Status**: 🔧 IN PROGRESS
+**Date**: 2026-01-16
+
+**Goal**: Make broadcast independent of host browser by moving canvas composition to the server using Ant Media's Media Push Plugin.
+
+**Problem**: When host refreshes browser, guests' LIVE preview goes black temporarily. The host browser is a single point of failure for the broadcast.
+
+**Solution**: Ant Media's Media Push Plugin can run a headless Chrome on the server to render the composite canvas.
+
+**Files Created**:
+- `frontend/public/streamlick_composite.html` - Custom HTML page for server-side composition
+  - Ports all 10 layouts from `layoutEngine.ts`
+  - WebRTC connection to receive participant streams
+  - Canvas rendering at 30 FPS (1920x1080)
+  - External control API (setBackground, setLayout, setParticipantName, etc.)
+  - ES Module imports for Ant Media SDK
+
+**Issue Fixed**: Video elements staying paused despite receiving frames
+- **Symptom**: Composite page joined room and received streams, but canvas showed black
+- **Root Cause**: `video.play()` was interrupted by audio track arriving asynchronously
+- **Fix**: Added `loadedmetadata` event listener and 500ms retry timeout to ensure play() succeeds
+- **Commit**: `8ca027c` - Fix video elements staying paused in composite layout
+
+**Deployment Commands** (on Ant Media server):
+```bash
+cd ~/streamlick
+git pull origin claude/merge-previewarea-typescript-04F8x
+sudo cp frontend/public/streamlick_composite.html /usr/local/antmedia/webapps/LiveApp/
+```
+
+**Test URL**:
+```
+https://media.streamlick.com:5443/LiveApp/streamlick_composite.html?roomId=<ROOM_ID>
+```
+
+**Next Steps**:
+- [ ] Test video play retry fix
+- [ ] Create backend API endpoints to control composite streams via REST
+- [ ] Set up background image hosting (S3/CDN) for server-side access
+- [ ] Integrate Media Push Plugin to publish composite stream
+
+---
+
 ## Next Steps / TODO
 - [ ] Set TURN password in production frontend `.env`
 - [ ] Consider adding TLS certificates to TURN server for better security
@@ -717,3 +761,4 @@ this.adaptor.updateVideoTrack(tempStream, this.streamId, null);
 - [x] Fix video freeze on promotion (MediaStream wrapper for Ant Media)
 - [ ] Test multiple guests simultaneously
 - [ ] Verify RTMP output includes all participants correctly
+- [ ] Complete server-side composite integration
