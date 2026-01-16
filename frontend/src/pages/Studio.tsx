@@ -37,7 +37,7 @@ export default function Studio() {
   const [guestName, setGuestName] = useState('');
   const [showLayoutPanel, setShowLayoutPanel] = useState(false);
   const [, setIsConnecting] = useState(true);
-  const [screenShareStream, setScreenShareStream] = useState<MediaStream | null>(null);
+  const [screenShareStream, _setScreenShareStream] = useState<MediaStream | null>(null);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const antMediaRef = useRef<AntMediaClient | null>(null);
@@ -390,7 +390,7 @@ export default function Studio() {
               audioEnabled: p.audioEnabled ?? true,
               videoEnabled: p.videoEnabled ?? true,
               role: p.role === 'HOST' ? 'host' : p.role === 'GUEST' ? 'guest' : 'backstage',
-              status: p.status === 'GREENROOM' ? 'greenroom' : p.status === 'BACKSTAGE' ? 'backstage' : 'live',
+              status: p.status === 'GREENROOM' ? 'greenroom' : p.status === 'WAITING' ? 'backstage' : 'live',
             }))}
             greenroomParticipants={participants
               .filter(p => p.status === 'GREENROOM' && !p.isOnStage)
