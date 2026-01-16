@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1920, height=1080">
   <title>Streamlick Compositor</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <style>
     * {
       margin: 0;
@@ -325,6 +326,7 @@
       backendWs: new URLSearchParams(window.location.search).get('backendWs') || 'ws://localhost:3001',
       antmediaWs: new URLSearchParams(window.location.search).get('antmediaWs') || 'wss://media.streamlick.com:5443/LiveApp/websocket',
       outputStreamId: new URLSearchParams(window.location.search).get('outputStreamId') || null,
+      compositorSecret: new URLSearchParams(window.location.search).get('compositorSecret') || 'streamlick-compositor-secret',
     };
 
     console.log('[Compositor] Starting with config:', CONFIG);
@@ -817,32 +819,52 @@
     }
 
     // ==========================================================================
-    // BACKEND WEBSOCKET - RECEIVE COMMANDS
+    // BACKEND SOCKET.IO - RECEIVE COMMANDS
     // ==========================================================================
+
+    let backendSocket = null;
 
     function connectToBackend() {
       console.log('[Backend] Connecting to:', CONFIG.backendWs);
 
-      backendWs = new WebSocket(`${CONFIG.backendWs}/compositor?broadcastId=${CONFIG.broadcastId}`);
+      backendSocket = io(CONFIG.backendWs, {
+        auth: {
+          isCompositor: true,
+          compositorSecret: CONFIG.compositorSecret,
+        },
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: Infinity,
+      });
 
-      backendWs.onopen = () => {
+      backendSocket.on('connect', () => {
         console.log('[Backend] Connected');
-        backendWs.send(JSON.stringify({ type: 'compositor-ready', broadcastId: CONFIG.broadcastId }));
-      };
+        backendSocket.emit('compositor-join', CONFIG.broadcastId);
+      });
 
-      backendWs.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        handleBackendMessage(msg);
-      };
+      backendSocket.on('disconnect', () => {
+        console.log('[Backend] Disconnected');
+      });
 
-      backendWs.onclose = () => {
-        console.log('[Backend] Disconnected, reconnecting...');
-        setTimeout(connectToBackend, 3000);
-      };
+      backendSocket.on('connect_error', (err) => {
+        console.error('[Backend] Connection error:', err.message);
+      });
 
-      backendWs.onerror = (err) => {
-        console.error('[Backend] Error:', err);
-      };
+      // Register all event handlers
+      backendSocket.on('full-state', (data) => handleBackendMessage({ type: 'full-state', ...data }));
+      backendSocket.on('set-layout', (data) => handleBackendMessage({ type: 'set-layout', ...data }));
+      backendSocket.on('set-background', (data) => handleBackendMessage({ type: 'set-background', ...data }));
+      backendSocket.on('participant-added', (data) => handleBackendMessage({ type: 'participant-added', ...data }));
+      backendSocket.on('participant-removed', (data) => handleBackendMessage({ type: 'participant-removed', ...data }));
+      backendSocket.on('participant-updated', (data) => handleBackendMessage({ type: 'participant-updated', ...data }));
+      backendSocket.on('bring-on-stage', (data) => handleBackendMessage({ type: 'bring-on-stage', ...data }));
+      backendSocket.on('remove-from-stage', (data) => handleBackendMessage({ type: 'remove-from-stage', ...data }));
+      backendSocket.on('set-logo', (data) => handleBackendMessage({ type: 'set-logo', ...data }));
+      backendSocket.on('set-lower-third', (data) => handleBackendMessage({ type: 'set-lower-third', ...data }));
+      backendSocket.on('set-ticker', (data) => handleBackendMessage({ type: 'set-ticker', ...data }));
+      backendSocket.on('set-countdown', (data) => handleBackendMessage({ type: 'set-countdown', ...data }));
+      backendSocket.on('go-live', () => handleBackendMessage({ type: 'go-live' }));
+      backendSocket.on('end-broadcast', () => handleBackendMessage({ type: 'end-broadcast' }));
     }
 
     function handleBackendMessage(msg) {
