@@ -955,6 +955,35 @@ Host/Guests → Ant Media SFU → Server Composite → RTMP → YouTube/Facebook
 
 ---
 
+### Issue #22: Composite Should Be Receive-Only
+**Status**: ✅ FIXED
+**Date**: 2026-01-16
+
+**Problem**: The server-side composite was configured to BOTH publish (its canvas) AND receive (participant streams). This was architecturally wrong:
+- The composite was publishing a `${roomId}_composite` stream
+- But the HOST's StudioCanvas is the final render that goes to YouTube
+- The composite should only receive streams for display/preview, not be part of the broadcast chain
+
+**Clarification from User**:
+- "THIS IS SUPPOSED TO BE A RECEIVING STREAM ONLY"
+- Host's StudioCanvas is the final render that goes to YouTube (via WHIP/RTMP from host browser)
+- Server-side composite is for preview/display purposes only
+
+**Fix Applied**:
+1. Changed `joinRoom(roomId, compositeStreamId, 'publish')` → `joinRoom(roomId, compositeStreamId, 'play')`
+2. Removed `publish()` call from `joinedTheRoom` handler
+3. Removed canvas stream capture (`canvasStream = canvas.captureStream()`)
+4. Removed `isPublishing` state and `publish_started`/`publish_finished` handlers
+5. Updated status display from "LIVE/OFFLINE" to "RECEIVING/CONNECTING"
+
+**Files Modified**:
+- `frontend/public/streamlick_composite.html`
+- `media-server/webapps/LiveApp/streamlick_composite.html`
+
+**Commit**: `2d8bc6c` - Make composite receive-only - remove all publishing code
+
+---
+
 ## Next Steps / TODO
 - [ ] Set TURN password in production frontend `.env`
 - [ ] Consider adding TLS certificates to TURN server for better security
