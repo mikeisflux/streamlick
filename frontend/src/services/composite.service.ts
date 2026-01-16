@@ -208,7 +208,8 @@ class CompositeService {
    * This allows the host to preview the exact output that goes to YouTube
    */
   async subscribeToComposite(): Promise<MediaStream | null> {
-    if (!this.state.compositeStreamId) {
+    const streamId = this.state.compositeStreamId;
+    if (!streamId) {
       logger.warn('[CompositeService] No composite stream to subscribe to');
       return null;
     }
@@ -230,7 +231,7 @@ class CompositeService {
           },
           callback: (info: string, obj: any) => {
             if (info === 'initialized') {
-              adaptor.play(this.state.compositeStreamId);
+              adaptor.play(streamId);
             } else if (info === 'newStreamAvailable') {
               logger.info('[CompositeService] Received composite stream');
               resolve(obj.stream);
