@@ -236,6 +236,7 @@ class WebRTCService {
 
         // Subscribe to existing streams in the room
         if (obj.streams && Array.isArray(obj.streams)) {
+          logger.info('[WebRTC-AntMedia] Existing streams in room:', obj.streams);
           obj.streams.forEach((streamId: string) => {
             if (streamId !== this.streamId) {
               this.subscribeToStream(streamId);
@@ -244,8 +245,17 @@ class WebRTCService {
         }
 
         // Start publishing our stream
+        logger.info('[WebRTC-AntMedia] About to publish:', {
+          hasLocalStream: !!this.localStream,
+          streamId: this.streamId,
+          roomId: this.roomId,
+          localStreamTracks: this.localStream?.getTracks().map(t => ({ kind: t.kind, id: t.id, readyState: t.readyState }))
+        });
         if (this.localStream && this.streamId) {
+          logger.info('[WebRTC-AntMedia] Calling adaptor.publish()');
           this.adaptor.publish(this.streamId, null, null, null, this.streamId, this.roomId);
+        } else {
+          logger.error('[WebRTC-AntMedia] Cannot publish - missing localStream or streamId!');
         }
         break;
 
@@ -455,8 +465,10 @@ class WebRTCService {
     // Create adaptor with local stream
     await this.createAdaptor(localStream);
 
-    // Join the conference room
-    this.adaptor?.joinRoom(this.roomId, this.streamId);
+    // Join the conference room in 'publish' mode to enable publishing
+    // Third parameter is mode: 'publish' to send and receive, 'play' for receive only
+    logger.info('[WebRTC-AntMedia] Calling joinRoom with publish mode');
+    this.adaptor?.joinRoom(this.roomId, this.streamId, 'publish');
 
     this.connectionState = { state: 'connecting', lastCheck: Date.now() };
     this.onConnectionChange?.(this.connectionState);
