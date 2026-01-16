@@ -598,9 +598,15 @@
           break;
 
         case 'subtrackAdded':
+          // Only subscribe if we haven't already (avoid already_playing error)
           if (obj.trackId && !obj.trackId.includes('composite')) {
-            console.log('[Composite] Subtrack added, subscribing:', obj.trackId);
-            webRTCAdaptor.play(obj.trackId, null, roomId);
+            const alreadySubscribed = participants.some(p => p.streamId === obj.trackId);
+            if (!alreadySubscribed) {
+              console.log('[Composite] Subtrack added, subscribing:', obj.trackId);
+              webRTCAdaptor.play(obj.trackId, null, roomId);
+            } else {
+              console.log('[Composite] Subtrack already subscribed:', obj.trackId);
+            }
           }
           break;
 
@@ -612,6 +618,18 @@
 
         case 'play_started':
           console.log('[Composite] Play started:', obj.streamId);
+          // In conference mode, we may need to get the stream from the adaptor
+          if (obj.streamId && !obj.streamId.includes('composite')) {
+            // Try to get remote stream from adaptor
+            const remoteStream = webRTCAdaptor.getRemoteStream?.(obj.streamId) ||
+                                webRTCAdaptor.remotePeerConnection?.[obj.streamId]?.getReceivers?.()
+                                  .filter(r => r.track)
+                                  .reduce((stream, r) => { stream.addTrack(r.track); return stream; }, new MediaStream());
+            if (remoteStream && remoteStream.getTracks().length > 0) {
+              console.log('[Composite] Got stream from play_started:', obj.streamId, remoteStream.getTracks());
+              addParticipant(obj.streamId, remoteStream);
+            }
+          }
           break;
 
         case 'ice_connection_state_changed':
@@ -626,6 +644,15 @@
     }
 
     function handleError(error, message) {
+      // Ignore non-critical errors
+      if (error === 'already_playing') {
+        console.log('[Composite] Stream already playing (safe to ignore):', message);
+        return;
+      }
+      if (error === 'no_stream_exist') {
+        console.log('[Composite] Stream does not exist yet:', message);
+        return;
+      }
       console.error('[Composite] Error:', error, message);
       updateStatus(`ERROR: ${error} - ${message}`, 'error');
     }
