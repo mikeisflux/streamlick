@@ -111,34 +111,28 @@ export default function Studio() {
     };
   }, [broadcastData, broadcastId]);
 
-  // Get local media
+  // Get local media - only runs once on mount
   useEffect(() => {
+    let mounted = true;
+    let mediaStream: MediaStream | null = null;
+
     async function getMedia() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: true,
         });
+
+        if (!mounted) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+
+        mediaStream = stream;
         setLocalStream(stream);
 
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
-        }
-
-        // Publish to Ant Media
-        if (broadcastId) {
-          const hostParticipant = participants.find(p => p.role === 'HOST');
-          if (hostParticipant) {
-            const streamId = generateStreamId(broadcastId, hostParticipant.id);
-            antMediaRef.current = new AntMediaClient({
-              streamId,
-              mode: 'publish',
-              localStream: stream,
-              onStateChange: (state) => console.log('Stream state:', state),
-              onError: (error) => console.error('Stream error:', error),
-            });
-            antMediaRef.current.connect();
-          }
         }
       } catch (error) {
         console.error('Failed to get media:', error);
@@ -148,10 +142,41 @@ export default function Studio() {
     getMedia();
 
     return () => {
-      antMediaRef.current?.disconnect();
-      localStream?.getTracks().forEach(t => t.stop());
+      mounted = false;
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(t => t.stop());
+      }
     };
-  }, [broadcastId, participants]);
+  }, []);
+
+  // Publish to Ant Media - separate effect that depends on participants
+  useEffect(() => {
+    if (!broadcastId || !localStream) return;
+
+    const hostParticipant = participants.find(p => p.role === 'HOST');
+    if (!hostParticipant) return;
+
+    // Don't create new client if one already exists and is not stopped
+    if (antMediaRef.current && !antMediaRef.current.isStopping()) {
+      return;
+    }
+
+    const streamId = generateStreamId(broadcastId, hostParticipant.id);
+
+    antMediaRef.current = new AntMediaClient({
+      streamId,
+      mode: 'publish',
+      localStream,
+      onStateChange: (state) => console.log('Stream state:', state),
+      onError: (error) => console.error('Stream error:', error),
+    });
+
+    antMediaRef.current.connect().catch(console.error);
+
+    return () => {
+      antMediaRef.current?.disconnect();
+    };
+  }, [broadcastId, localStream, participants]);
 
   // Toggle audio/video
   const toggleAudio = () => {
