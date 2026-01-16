@@ -504,19 +504,30 @@
     }
 
     // ========================================
-    // WebRTC - Join Room and Receive Streams
+    // WebRTC - Join Room, Receive Streams, and Publish Composite
     // ========================================
+    let compositeStreamId = null;
+    let canvasStream = null;
+
     function initWebRTC() {
       if (!roomId) {
         console.error('[Composite] No roomId provided in URL');
         return;
       }
 
+      // Generate composite stream ID - this is what hosts can subscribe to
+      compositeStreamId = `composite_${roomId}`;
       console.log('[Composite] Initializing WebRTC for room:', roomId);
+      console.log('[Composite] Output stream ID:', compositeStreamId);
+
+      // Capture canvas stream at target FPS
+      canvasStream = canvas.captureStream(FPS);
+      console.log('[Composite] Captured canvas stream at', FPS, 'FPS');
 
       webRTCAdaptor = new WebRTCAdaptor({
         websocket_url: 'wss://media.streamlick.com:5443/LiveApp/websocket',
         mediaConstraints: { video: false, audio: false },
+        localStream: canvasStream, // Pass canvas stream for publishing
         peerconnection_config: {
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' }
@@ -530,28 +541,46 @@
           console.log('[Composite] Callback:', info, obj);
 
           if (info === 'initialized') {
-            // Join the room as a player (receive-only)
-            webRTCAdaptor.joinRoom(roomId, publisherId);
+            // Join the room in 'publish' mode to both receive and send
+            console.log('[Composite] Joining room in publish mode...');
+            webRTCAdaptor.joinRoom(roomId, compositeStreamId, 'publish');
           }
           else if (info === 'joinedTheRoom') {
             console.log('[Composite] Joined room, streams:', obj.streams);
-            // Subscribe to existing streams
+
+            // Publish the composite canvas stream
+            console.log('[Composite] Publishing canvas stream as:', compositeStreamId);
+            webRTCAdaptor.publish(compositeStreamId, null, null, null, compositeStreamId, roomId);
+
+            // Subscribe to existing streams (but not our own composite)
             if (obj.streams && obj.streams.length > 0) {
               obj.streams.forEach(streamId => {
-                if (streamId !== publisherId && !streamId.includes('composite')) {
+                if (streamId !== compositeStreamId && !streamId.includes('composite')) {
                   console.log('[Composite] Subscribing to stream:', streamId);
                   webRTCAdaptor.play(streamId);
                 }
               });
             }
           }
+          else if (info === 'publish_started') {
+            console.log('[Composite] ✅ Canvas stream is now publishing!');
+            console.log('[Composite] Stream ID for subscription:', compositeStreamId);
+            isPublishing = true;
+          }
+          else if (info === 'publish_finished') {
+            console.log('[Composite] Publishing finished');
+            isPublishing = false;
+          }
           else if (info === 'newStreamAvailable') {
             console.log('[Composite] New stream available:', obj.streamId);
-            handleNewStream(obj.streamId, obj.stream);
+            // Don't add our own composite stream as a participant
+            if (!obj.streamId.includes('composite')) {
+              handleNewStream(obj.streamId, obj.stream);
+            }
           }
           else if (info === 'subtrackAdded') {
             // New participant joined
-            if (obj.trackId && obj.trackId !== publisherId && !obj.trackId.includes('composite')) {
+            if (obj.trackId && obj.trackId !== compositeStreamId && !obj.trackId.includes('composite')) {
               console.log('[Composite] Subtrack added, subscribing:', obj.trackId);
               webRTCAdaptor.play(obj.trackId);
             }

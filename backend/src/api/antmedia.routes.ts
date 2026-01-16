@@ -539,8 +539,9 @@ router.post('/composite/start', authenticate, async (req: AuthRequest, res: Resp
       return res.status(400).json({ error: 'broadcastId is required' });
     }
 
-    // Generate a unique stream ID for the composite output
-    const compositeStreamId = `composite_${broadcastId}_${Date.now()}`;
+    // Composite stream ID - matches what the composite HTML publishes
+    // The composite HTML uses `composite_${roomId}` where roomId is broadcastId
+    const compositeStreamId = `composite_${broadcastId}`;
 
     // Build the composite HTML URL with parameters
     const frontendUrl = process.env.FRONTEND_URL || 'https://app.streamlick.com';
