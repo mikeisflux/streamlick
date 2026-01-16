@@ -521,22 +521,27 @@
 
       switch (info) {
         case 'initialized':
-          updateStatus('WebSocket connected, joining room...', 'warning');
-          webRTCAdaptor.joinRoom(roomId, compositeStreamId, 'publish');
+          // Following Ant Media conference.html pattern:
+          // Don't call joinRoom() - directly call publish() and play()
+          updateStatus('WebSocket connected, publishing...', 'warning');
+
+          // Publish our canvas stream to the room
+          // Parameters: streamId, token, subscriberId, subscriberCode, streamName, mainTrack(roomId), metadata, role
+          console.log('[Composite] Publishing canvas as:', compositeStreamId, 'to room:', roomId);
+          webRTCAdaptor.publish(compositeStreamId, null, null, null, compositeStreamId, roomId, null, null);
+
+          // Play the room to receive all tracks (multitrack conference mode)
+          console.log('[Composite] Playing room for multitrack:', roomId);
+          webRTCAdaptor.play({
+            streamId: roomId,
+            token: null
+          });
           break;
 
         case 'joinedTheRoom':
+          // This callback is for joinRoom() which we're not using anymore
           isJoined = true;
-          updateStatus(`Joined room. Streams: ${obj.streams?.length || 0}`, 'warning');
-
-          // Publish our canvas stream
-          console.log('[Composite] Publishing canvas as:', compositeStreamId);
-          webRTCAdaptor.publish(compositeStreamId, null, null, null, compositeStreamId, roomId);
-
-          // In multitrack conference mode, play the ROOM to receive all tracks
-          // Don't play individual streams - tracks come via newTrackAvailable
-          console.log('[Composite] Playing room for multitrack:', roomId);
-          webRTCAdaptor.play(roomId, null, roomId);
+          console.log('[Composite] joinedTheRoom (unexpected):', obj);
           break;
 
         case 'publish_started':
@@ -557,15 +562,21 @@
           break;
 
         case 'newTrackAvailable':
-          console.log('[Composite] New track:', obj.streamId, obj.track?.kind, obj.trackId);
+          console.log('[Composite] New track available:', obj.trackId, obj.track?.kind, obj);
           // In multitrack conference mode, tracks arrive individually
-          if (obj.track && obj.trackId && !obj.trackId.includes('composite')) {
-            // Extract participant ID from trackId (format: ARDAMSx + streamId)
-            let streamId = obj.trackId;
-            if (streamId.startsWith('ARDAMS')) {
-              streamId = streamId.substring(7); // Remove ARDAMSv or ARDAMSa prefix
+          // trackId format: ARDAMSv + streamId (video) or ARDAMSa + streamId (audio)
+          if (obj.track && obj.trackId) {
+            // Extract stream ID by removing ARDAMSx prefix (7 chars)
+            const incomingStreamId = obj.trackId.substring(7);
+
+            // Skip if it's the room itself or our own composite stream
+            if (incomingStreamId === roomId || incomingStreamId === compositeStreamId) {
+              console.log('[Composite] Skipping own/room track:', incomingStreamId);
+              return;
             }
-            addTrackToParticipant(streamId, obj.track);
+
+            console.log('[Composite] Processing track for stream:', incomingStreamId, obj.track.kind);
+            addTrackToParticipant(incomingStreamId, obj.track, obj.stream);
           }
           break;
 
@@ -602,32 +613,46 @@
       updateStatus(`ERROR: ${error} - ${message}`, 'error');
     }
 
-    function addTrackToParticipant(streamId, track) {
+    function addTrackToParticipant(streamId, track, sourceStream) {
+      // streamId format is typically: roomId_participantId
       const parts = streamId.split('_');
       const participantId = parts.length >= 2 ? parts.slice(1).join('_') : streamId;
 
-      console.log('[Composite] addTrackToParticipant:', participantId, track.kind);
+      console.log('[Composite] addTrackToParticipant:', streamId, '->', participantId, track.kind);
 
-      // Find existing participant or create new one
+      // Find existing participant
       let participant = participants.find(p => p.id === participantId || p.streamId === streamId);
 
       if (participant) {
-        // Add track to existing stream
+        // Add track to existing MediaStream
         if (participant.videoElement && participant.videoElement.srcObject) {
           participant.videoElement.srcObject.addTrack(track);
           console.log('[Composite] Added', track.kind, 'track to existing participant:', participantId);
         }
       } else {
-        // Create new participant with new MediaStream
-        console.log('[Composite] Creating new participant for track:', participantId);
-        const stream = new MediaStream([track]);
-        addParticipant(streamId, stream);
+        // Create new participant with new MediaStream containing this track
+        console.log('[Composite] Creating new participant for:', participantId, 'kind:', track.kind);
+        const newStream = new MediaStream([track]);
+        addParticipant(streamId, newStream);
       }
 
       // Handle track ended
-      track.onended = () => {
-        console.log('[Composite] Track ended:', track.kind, participantId);
+      track.onended = (event) => {
+        console.log('[Composite] Track ended:', track.kind, participantId, event.target.id);
       };
+
+      // Handle track removal from source stream (Ant Media pattern)
+      if (sourceStream) {
+        sourceStream.onremovetrack = (event) => {
+          console.log('[Composite] Track removed from stream:', event.track.id, event.track.kind);
+          // Extract streamId from removed track
+          const removedTrackId = event.track.id;
+          if (removedTrackId.startsWith('ARDAMS')) {
+            const removedStreamId = removedTrackId.substring(7);
+            removeParticipant(removedStreamId);
+          }
+        };
+      }
     }
 
     function addParticipant(streamId, stream) {
