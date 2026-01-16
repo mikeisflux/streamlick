@@ -14,7 +14,7 @@ import { LeftSidebar } from '../components/studio/LeftSidebar';
 import { RightSidebar } from '../components/studio/RightSidebar';
 import { BottomControlBar } from '../components/studio/BottomControlBar';
 import { DeviceSelectors } from '../components/studio/DeviceSelectors';
-import { StudioCanvas, LayoutSelector, PreviewArea, CanvasSettingsModal, CountdownOverlay } from '../components/studio/canvas';
+import { StudioCanvas, LayoutSelector, PreviewArea, CanvasSettingsModal, CountdownOverlay, CompositePreview } from '../components/studio/canvas';
 import { StudioHeader } from '../components/studio/StudioHeader';
 import { StudioDrawers } from '../components/studio/StudioDrawers';
 import { StudioModals } from '../components/studio/StudioModals';
@@ -64,6 +64,10 @@ export function Studio() {
 
   // Green Room state - host can enter green room when not on stage
   const [isInGreenRoom, setIsInGreenRoom] = useState(false);
+
+  // Composite Preview state - show server composite output instead of local canvas
+  const [showCompositePreview, setShowCompositePreview] = useState(false);
+  const [compositeStreamId, setCompositeStreamId] = useState<string | null>(null);
 
   // Refs
   const micButtonRef = useRef<HTMLDivElement>(null);
@@ -253,11 +257,13 @@ export function Studio() {
       try {
         console.log('[Studio] Starting server-side composite...');
         compositeStartedRef.current = true;
-        await compositeService.start(broadcastId, 3); // Default to Group layout
-        console.log('[Studio] Server-side composite started');
+        const streamId = await compositeService.start(broadcastId, 3); // Default to Group layout
+        setCompositeStreamId(streamId);
+        console.log('[Studio] Server-side composite started, streamId:', streamId);
       } catch (error) {
         console.error('[Studio] Failed to start server composite:', error);
         compositeStartedRef.current = false;
+        setCompositeStreamId(null);
         // Don't show error to user - fall back to local compositing
       }
     };
@@ -599,8 +605,34 @@ export function Studio() {
         <main className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#F5F5F5' }}>
           {/* Canvas Container - constrained to leave room for Layout Selector and Preview Area */}
           <div className="flex items-center justify-center px-6 pb-20 relative" style={{ minHeight: 0, maxHeight: 'calc(100% - 350px)', flexShrink: 1, paddingTop: '144px' }}>
-            {/* StudioCanvas renders using Canvas 2D API and provides output stream via canvas.captureStream() */}
-            {/* Single rendering system - what user sees IS what gets streamed to media server */}
+            {/* Toggle between local canvas and server composite preview */}
+            {compositeStreamId && (
+              <div className="absolute top-4 right-4 z-20 flex items-center gap-2 bg-black/60 px-3 py-2 rounded-lg">
+                <span className="text-white text-xs">
+                  {showCompositePreview ? 'Output Preview' : 'Local View'}
+                </span>
+                <button
+                  onClick={() => setShowCompositePreview(!showCompositePreview)}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${
+                    showCompositePreview ? 'bg-purple-600' : 'bg-gray-600'
+                  }`}
+                >
+                  <div
+                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                      showCompositePreview ? 'left-7' : 'left-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            )}
+
+            {/* Show CompositePreview when toggled, otherwise show local StudioCanvas */}
+            {showCompositePreview && compositeStreamId ? (
+              <CompositePreview
+                compositeStreamId={compositeStreamId}
+                orientation={canvasSettings.orientation}
+              />
+            ) : (
             <StudioCanvas
               localStream={processedStream || localStream}
               rawStream={rawStream}
@@ -639,6 +671,7 @@ export function Studio() {
               displayedComment={displayedComment}
               onDismissComment={() => setDisplayedComment(null)}
             />
+            )}
             {/* Countdown Overlay */}
             <CountdownOverlay seconds={countdownSeconds} />
           </div>

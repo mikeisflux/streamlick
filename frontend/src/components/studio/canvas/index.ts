@@ -7,3 +7,4 @@ export { CanvasSettingsModal } from './CanvasSettingsModal';
 export { TeleprompterOverlay } from './TeleprompterOverlay';
 export { CommentOverlay } from './CommentOverlay';
 export { CompositorPreview } from './CompositorPreview';
+export { CompositePreview } from './CompositePreview';

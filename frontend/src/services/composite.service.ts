@@ -184,6 +184,74 @@ class CompositeService {
   getCompositeStreamId(): string | null {
     return this.state.compositeStreamId;
   }
+
+  /**
+   * Get the WebRTC play URL for the composite stream
+   * Host can use this to preview exactly what viewers see
+   */
+  getCompositePlayUrl(): string | null {
+    if (!this.state.compositeStreamId) return null;
+    // Ant Media WebRTC play URL format
+    return `wss://media.streamlick.com:5443/LiveApp/websocket?streamId=${this.state.compositeStreamId}`;
+  }
+
+  /**
+   * Get the HLS play URL for the composite stream (fallback)
+   */
+  getCompositeHlsUrl(): string | null {
+    if (!this.state.compositeStreamId) return null;
+    return `https://media.streamlick.com:5443/LiveApp/streams/${this.state.compositeStreamId}.m3u8`;
+  }
+
+  /**
+   * Subscribe to the composite stream and return a MediaStream
+   * This allows the host to preview the exact output that goes to YouTube
+   */
+  async subscribeToComposite(): Promise<MediaStream | null> {
+    if (!this.state.compositeStreamId) {
+      logger.warn('[CompositeService] No composite stream to subscribe to');
+      return null;
+    }
+
+    try {
+      // Import WebRTCAdaptor dynamically
+      const { WebRTCAdaptor } = await import('@antmedia/webrtc_adaptor');
+
+      return new Promise((resolve, reject) => {
+        const adaptor = new WebRTCAdaptor({
+          websocket_url: 'wss://media.streamlick.com:5443/LiveApp/websocket',
+          mediaConstraints: { video: false, audio: false },
+          peerconnection_config: {
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+          },
+          sdp_constraints: {
+            OfferToReceiveAudio: true,
+            OfferToReceiveVideo: true
+          },
+          callback: (info: string, obj: any) => {
+            if (info === 'initialized') {
+              adaptor.play(this.state.compositeStreamId);
+            } else if (info === 'newStreamAvailable') {
+              logger.info('[CompositeService] Received composite stream');
+              resolve(obj.stream);
+            }
+          },
+          callbackError: (error: string, message: string) => {
+            logger.error('[CompositeService] Error subscribing to composite:', error, message);
+            reject(new Error(`${error}: ${message}`));
+          }
+        });
+
+        // Timeout after 10 seconds
+        setTimeout(() => {
+          reject(new Error('Timeout waiting for composite stream'));
+        }, 10000);
+      });
+    } catch (error: any) {
+      logger.error('[CompositeService] Failed to subscribe to composite:', error);
+      return null;
+    }
+  }
 }
 
 export const compositeService = new CompositeService();
