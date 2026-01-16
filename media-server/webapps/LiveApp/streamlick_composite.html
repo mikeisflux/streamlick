@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, height=1080">
+  <title>Streamlick Compositor</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    }
+
+    #compositor {
+      width: 1920px;
+      height: 1080px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Background layer */
+    #background-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+    }
+
+    #background-layer.color {
+      background: var(--bg-color, #1a1a2e);
+    }
+
+    #background-layer img,
+    #background-layer video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Participants layer */
+    #participants-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+    }
+
+    /* Participant tile */
+    .participant-tile {
+      position: absolute;
+      overflow: hidden;
+      border-radius: 16px;
+      background: #1a1a2e;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    .participant-tile.has-border {
+      border: 4px solid var(--border-color, #10b981);
+    }
+
+    .participant-tile video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 12px;
+    }
+
+    .participant-tile .avatar {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 12px;
+    }
+
+    .participant-tile .avatar-letter {
+      font-size: 72px;
+      font-weight: 700;
+      color: white;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .participant-tile .name-tag {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 18px;
+      font-weight: 600;
+      max-width: calc(100% - 32px);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .participant-tile .muted-icon {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 36px;
+      height: 36px;
+      background: rgba(239, 68, 68, 0.9);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .participant-tile .muted-icon svg {
+      width: 20px;
+      height: 20px;
+      fill: white;
+    }
+
+    /* Overlays layer */
+    #overlays-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    /* Logo */
+    #logo-overlay {
+      position: absolute;
+      top: 32px;
+      right: 32px;
+      max-width: 240px;
+      max-height: 100px;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    #logo-overlay.visible {
+      opacity: 1;
+    }
+
+    /* Lower third */
+    #lower-third {
+      position: absolute;
+      bottom: 100px;
+      left: 80px;
+      max-width: 800px;
+      opacity: 0;
+      transform: translateX(-20px);
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #lower-third.visible {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    #lower-third .content {
+      background: linear-gradient(135deg, rgba(102, 126, 234, 0.95) 0%, rgba(118, 75, 162, 0.95) 100%);
+      backdrop-filter: blur(8px);
+      padding: 20px 32px;
+      border-radius: 12px;
+      color: white;
+    }
+
+    #lower-third .title {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    #lower-third .subtitle {
+      font-size: 18px;
+      opacity: 0.9;
+    }
+
+    /* Live indicator */
+    #live-indicator {
+      position: absolute;
+      top: 32px;
+      left: 32px;
+      background: #ef4444;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    #live-indicator.visible {
+      opacity: 1;
+      animation: pulse-live 2s infinite;
+    }
+
+    @keyframes pulse-live {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    /* Ticker/Banner */
+    #ticker {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 48px;
+      background: rgba(0, 0, 0, 0.8);
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    #ticker.visible {
+      opacity: 1;
+    }
+
+    #ticker .ticker-content {
+      position: absolute;
+      white-space: nowrap;
+      color: white;
+      font-size: 20px;
+      line-height: 48px;
+      animation: ticker-scroll 30s linear infinite;
+    }
+
+    @keyframes ticker-scroll {
+      0% { transform: translateX(100%); }
+      100% { transform: translateX(-100%); }
+    }
+
+    /* Countdown timer */
+    #countdown {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 200px;
+      font-weight: 900;
+      color: white;
+      text-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    #countdown.visible {
+      opacity: 1;
+    }
+
+    /* Hidden video elements for streams */
+    #hidden-streams {
+      position: absolute;
+      top: -9999px;
+      left: -9999px;
+      visibility: hidden;
+    }
+  </style>
+</head>
+<body>
+  <div id="compositor">
+    <!-- Background -->
+    <div id="background-layer" class="color"></div>
+
+    <!-- Participants -->
+    <div id="participants-layer"></div>
+
+    <!-- Overlays -->
+    <div id="overlays-layer">
+      <div id="live-indicator">LIVE</div>
+      <img id="logo-overlay" src="" alt="">
+      <div id="lower-third">
+        <div class="content">
+          <div class="title"></div>
+          <div class="subtitle"></div>
+        </div>
+      </div>
+      <div id="ticker">
+        <div class="ticker-content"></div>
+      </div>
+      <div id="countdown"></div>
+    </div>
+
+    <!-- Hidden stream elements -->
+    <div id="hidden-streams"></div>
+  </div>
+
+  <script>
+    /**
+     * Streamlick Server Compositor
+     *
+     * Runs in headless Chrome on Ant Media server.
+     * Receives commands via WebSocket from backend.
+     * Subscribes to participant streams and composites them.
+     * Publishes composite output back to Ant Media.
+     */
+
+    // ==========================================================================
+    // CONFIGURATION
+    // ==========================================================================
+
+    const CONFIG = {
+      // Get from URL params or defaults
+      broadcastId: new URLSearchParams(window.location.search).get('broadcastId') || 'test',
+      backendWs: new URLSearchParams(window.location.search).get('backendWs') || 'ws://localhost:3001',
+      antmediaWs: new URLSearchParams(window.location.search).get('antmediaWs') || 'wss://media.streamlick.com:5443/LiveApp/websocket',
+      outputStreamId: new URLSearchParams(window.location.search).get('outputStreamId') || null,
+    };
+
+    console.log('[Compositor] Starting with config:', CONFIG);
+
+    // ==========================================================================
+    // STATE
+    // ==========================================================================
+
+    const state = {
+      isLive: false,
+      layout: 'grid',
+      backgroundColor: '#1a1a2e',
+      backgroundType: 'color', // 'color', 'image', 'video'
+      backgroundUrl: null,
+      logoUrl: null,
+      logoVisible: false,
+      lowerThird: { visible: false, title: '', subtitle: '' },
+      ticker: { visible: false, text: '' },
+      countdown: { visible: false, seconds: 0 },
+      participants: [], // { id, name, streamId, isOnStage, audioEnabled, videoEnabled, borderColor }
+      streams: new Map(), // streamId -> MediaStream
+    };
+
+    // WebRTC connections
+    const peerConnections = new Map();
+    let antmediaWs = null;
+    let backendWs = null;
+    let publishPc = null;
+
+    // ==========================================================================
+    // LAYOUT ENGINE
+    // ==========================================================================
+
+    const LAYOUTS = {
+      single: (count, w = 1920, h = 1080) => {
+        if (count === 0) return [];
+        const padding = 48;
+        return [{ x: padding, y: padding, width: w - padding * 2, height: h - padding * 2 }];
+      },
+
+      grid: (count, w = 1920, h = 1080) => {
+        if (count === 0) return [];
+        const padding = 48;
+        const gap = 24;
+        const cols = count === 1 ? 1 : count <= 4 ? 2 : count <= 9 ? 3 : 4;
+        const rows = Math.ceil(count / cols);
+        const cellW = (w - padding * 2 - gap * (cols - 1)) / cols;
+        const cellH = (h - padding * 2 - gap * (rows - 1)) / rows;
+
+        return Array.from({ length: count }, (_, i) => ({
+          x: padding + (i % cols) * (cellW + gap),
+          y: padding + Math.floor(i / cols) * (cellH + gap),
+          width: cellW,
+          height: cellH,
+        }));
+      },
+
+      spotlight: (count, w = 1920, h = 1080) => {
+        if (count === 0) return [];
+        if (count === 1) return LAYOUTS.single(1, w, h);
+
+        const padding = 48;
+        const gap = 24;
+        const mainW = (w - padding * 2) * 0.72;
+        const sideW = (w - padding * 2) * 0.28 - gap;
+        const sideCount = count - 1;
+        const sideH = (h - padding * 2 - gap * (sideCount - 1)) / sideCount;
+
+        return [
+          { x: padding, y: padding, width: mainW, height: h - padding * 2 },
+          ...Array.from({ length: sideCount }, (_, i) => ({
+            x: padding + mainW + gap,
+            y: padding + i * (sideH + gap),
+            width: sideW,
+            height: sideH,
+          })),
+        ];
+      },
+
+      'side-by-side': (count, w = 1920, h = 1080) => {
+        if (count === 0) return [];
+        if (count === 1) return LAYOUTS.single(1, w, h);
+
+        const padding = 48;
+        const gap = 24;
+        const cellW = (w - padding * 2 - gap) / 2;
+        const cellH = h - padding * 2;
+
+        return Array.from({ length: Math.min(count, 2) }, (_, i) => ({
+          x: padding + i * (cellW + gap),
+          y: padding,
+          width: cellW,
+          height: cellH,
+        }));
+      },
+
+      'picture-in-picture': (count, w = 1920, h = 1080) => {
+        if (count === 0) return [];
+        if (count === 1) return LAYOUTS.single(1, w, h);
+
+        const padding = 48;
+        const pipW = 400;
+        const pipH = 225;
+
+        return [
+          { x: padding, y: padding, width: w - padding * 2, height: h - padding * 2 },
+          { x: w - pipW - padding, y: h - pipH - padding, width: pipW, height: pipH },
+        ];
+      },
+
+      'featured-left': (count, w = 1920, h = 1080) => {
+        if (count === 0) return [];
+        if (count === 1) return LAYOUTS.single(1, w, h);
+
+        const padding = 48;
+        const gap = 24;
+        const mainW = (w - padding * 2) * 0.65;
+        const sideW = (w - padding * 2) * 0.35 - gap;
+        const sideCount = Math.min(count - 1, 3);
+        const sideH = (h - padding * 2 - gap * (sideCount - 1)) / sideCount;
+
+        return [
+          { x: padding, y: padding, width: mainW, height: h - padding * 2 },
+          ...Array.from({ length: sideCount }, (_, i) => ({
+            x: padding + mainW + gap,
+            y: padding + i * (sideH + gap),
+            width: sideW,
+            height: sideH,
+          })),
+        ];
+      },
+
+      'news-panel': (count, w = 1920, h = 1080) => {
+        if (count === 0) return [];
+        const padding = 48;
+        const gap = 24;
+        const bottomH = 200;
+
+        if (count === 1) {
+          return [{ x: padding, y: padding, width: w - padding * 2, height: h - padding * 2 - bottomH - gap }];
+        }
+
+        const topH = h - padding * 2 - bottomH - gap;
+        const mainW = (w - padding * 2) * 0.6;
+        const sideW = (w - padding * 2) * 0.4 - gap;
+
+        const result = [
+          { x: padding, y: padding, width: mainW, height: topH },
+          { x: padding + mainW + gap, y: padding, width: sideW, height: topH },
+        ];
+
+        const bottomCount = Math.min(count - 2, 4);
+        if (bottomCount > 0) {
+          const cellW = (w - padding * 2 - gap * (bottomCount - 1)) / bottomCount;
+          for (let i = 0; i < bottomCount; i++) {
+            result.push({
+              x: padding + i * (cellW + gap),
+              y: padding + topH + gap,
+              width: cellW,
+              height: bottomH,
+            });
+          }
+        }
+
+        return result;
+      },
+    };
+
+    function calculateLayout(participants, layout) {
+      const onStage = participants.filter(p => p.isOnStage);
+      const layoutFn = LAYOUTS[layout] || LAYOUTS.grid;
+      return layoutFn(onStage.length);
+    }
+
+    // ==========================================================================
+    // DOM RENDERING
+    // ==========================================================================
+
+    function render() {
+      renderBackground();
+      renderParticipants();
+      renderOverlays();
+    }
+
+    function renderBackground() {
+      const layer = document.getElementById('background-layer');
+      layer.innerHTML = '';
+      layer.className = '';
+      layer.style.cssText = '';
+
+      switch (state.backgroundType) {
+        case 'color':
+          layer.className = 'color';
+          layer.style.setProperty('--bg-color', state.backgroundColor);
+          break;
+        case 'image':
+          if (state.backgroundUrl) {
+            const img = document.createElement('img');
+            img.src = state.backgroundUrl;
+            layer.appendChild(img);
+          }
+          break;
+        case 'video':
+          if (state.backgroundUrl) {
+            const video = document.createElement('video');
+            video.src = state.backgroundUrl;
+            video.autoplay = true;
+            video.loop = true;
+            video.muted = true;
+            layer.appendChild(video);
+          }
+          break;
+      }
+    }
+
+    function renderParticipants() {
+      const layer = document.getElementById('participants-layer');
+      const onStage = state.participants.filter(p => p.isOnStage);
+      const positions = calculateLayout(state.participants, state.layout);
+
+      // Remove tiles for participants no longer on stage
+      const existingTiles = layer.querySelectorAll('.participant-tile');
+      existingTiles.forEach(tile => {
+        const id = tile.dataset.participantId;
+        if (!onStage.find(p => p.id === id)) {
+          tile.remove();
+        }
+      });
+
+      // Update or create tiles
+      onStage.forEach((participant, index) => {
+        const pos = positions[index];
+        if (!pos) return;
+
+        let tile = layer.querySelector(`[data-participant-id="${participant.id}"]`);
+
+        if (!tile) {
+          tile = createParticipantTile(participant);
+          layer.appendChild(tile);
+        }
+
+        // Update position
+        tile.style.left = `${pos.x}px`;
+        tile.style.top = `${pos.y}px`;
+        tile.style.width = `${pos.width}px`;
+        tile.style.height = `${pos.height}px`;
+
+        // Update border
+        if (participant.borderColor) {
+          tile.classList.add('has-border');
+          tile.style.setProperty('--border-color', participant.borderColor);
+        } else {
+          tile.classList.remove('has-border');
+        }
+
+        // Update video/avatar
+        updateParticipantContent(tile, participant);
+
+        // Update name tag
+        const nameTag = tile.querySelector('.name-tag');
+        if (nameTag) nameTag.textContent = participant.name;
+
+        // Update muted icon
+        const mutedIcon = tile.querySelector('.muted-icon');
+        if (mutedIcon) {
+          mutedIcon.style.display = participant.audioEnabled ? 'none' : 'flex';
+        }
+      });
+    }
+
+    function createParticipantTile(participant) {
+      const tile = document.createElement('div');
+      tile.className = 'participant-tile';
+      tile.dataset.participantId = participant.id;
+
+      tile.innerHTML = `
+        <div class="video-container"></div>
+        <div class="avatar" style="display: none;">
+          <span class="avatar-letter">${participant.name.charAt(0).toUpperCase()}</span>
+        </div>
+        <div class="name-tag">${participant.name}</div>
+        <div class="muted-icon" style="display: none;">
+          <svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+        </div>
+      `;
+
+      return tile;
+    }
+
+    function updateParticipantContent(tile, participant) {
+      const videoContainer = tile.querySelector('.video-container');
+      const avatar = tile.querySelector('.avatar');
+      const stream = state.streams.get(participant.streamId);
+
+      if (participant.videoEnabled && stream) {
+        avatar.style.display = 'none';
+
+        let video = videoContainer.querySelector('video');
+        if (!video) {
+          video = document.createElement('video');
+          video.autoplay = true;
+          video.muted = true;
+          video.playsInline = true;
+          videoContainer.appendChild(video);
+        }
+
+        if (video.srcObject !== stream) {
+          video.srcObject = stream;
+        }
+        videoContainer.style.display = 'block';
+      } else {
+        videoContainer.style.display = 'none';
+        avatar.style.display = 'flex';
+
+        // Update avatar letter
+        const letter = avatar.querySelector('.avatar-letter');
+        if (letter) letter.textContent = participant.name.charAt(0).toUpperCase();
+      }
+    }
+
+    function renderOverlays() {
+      // Live indicator
+      const liveIndicator = document.getElementById('live-indicator');
+      liveIndicator.classList.toggle('visible', state.isLive);
+
+      // Logo
+      const logo = document.getElementById('logo-overlay');
+      if (state.logoUrl && state.logoVisible) {
+        logo.src = state.logoUrl;
+        logo.classList.add('visible');
+      } else {
+        logo.classList.remove('visible');
+      }
+
+      // Lower third
+      const lowerThird = document.getElementById('lower-third');
+      const ltTitle = lowerThird.querySelector('.title');
+      const ltSubtitle = lowerThird.querySelector('.subtitle');
+
+      if (state.lowerThird.visible) {
+        ltTitle.textContent = state.lowerThird.title;
+        ltSubtitle.textContent = state.lowerThird.subtitle;
+        lowerThird.classList.add('visible');
+      } else {
+        lowerThird.classList.remove('visible');
+      }
+
+      // Ticker
+      const ticker = document.getElementById('ticker');
+      const tickerContent = ticker.querySelector('.ticker-content');
+
+      if (state.ticker.visible && state.ticker.text) {
+        tickerContent.textContent = state.ticker.text;
+        ticker.classList.add('visible');
+      } else {
+        ticker.classList.remove('visible');
+      }
+
+      // Countdown
+      const countdown = document.getElementById('countdown');
+      if (state.countdown.visible && state.countdown.seconds > 0) {
+        countdown.textContent = state.countdown.seconds;
+        countdown.classList.add('visible');
+      } else {
+        countdown.classList.remove('visible');
+      }
+    }
+
+    // ==========================================================================
+    // ANT MEDIA - SUBSCRIBE TO STREAMS
+    // ==========================================================================
+
+    function connectToAntMedia() {
+      console.log('[AntMedia] Connecting to:', CONFIG.antmediaWs);
+
+      antmediaWs = new WebSocket(CONFIG.antmediaWs);
+
+      antmediaWs.onopen = () => {
+        console.log('[AntMedia] Connected');
+        // Subscribe to all on-stage participant streams
+        state.participants.filter(p => p.isOnStage && p.streamId).forEach(p => {
+          subscribeToStream(p.streamId);
+        });
+      };
+
+      antmediaWs.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        handleAntMediaMessage(msg);
+      };
+
+      antmediaWs.onclose = () => {
+        console.log('[AntMedia] Disconnected, reconnecting...');
+        setTimeout(connectToAntMedia, 3000);
+      };
+
+      antmediaWs.onerror = (err) => {
+        console.error('[AntMedia] Error:', err);
+      };
+    }
+
+    function subscribeToStream(streamId) {
+      if (!streamId || peerConnections.has(streamId)) return;
+
+      console.log('[AntMedia] Subscribing to stream:', streamId);
+
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'turn:turn.streamlick.com:3478', username: 'streamlick', credential: 'Str3aml1ck_TURN_2026!xK9m' }
+        ]
+      });
+
+      pc.ontrack = (event) => {
+        console.log('[AntMedia] Received track for:', streamId);
+        state.streams.set(streamId, event.streams[0]);
+        render();
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate && antmediaWs?.readyState === WebSocket.OPEN) {
+          antmediaWs.send(JSON.stringify({
+            command: 'takeCandidate',
+            streamId,
+            label: event.candidate.sdpMLineIndex,
+            id: event.candidate.sdpMid,
+            candidate: event.candidate.candidate,
+          }));
+        }
+      };
+
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+
+      peerConnections.set(streamId, pc);
+
+      antmediaWs.send(JSON.stringify({
+        command: 'play',
+        streamId,
+        token: '',
+      }));
+    }
+
+    function unsubscribeFromStream(streamId) {
+      const pc = peerConnections.get(streamId);
+      if (pc) {
+        pc.close();
+        peerConnections.delete(streamId);
+        state.streams.delete(streamId);
+      }
+    }
+
+    function handleAntMediaMessage(msg) {
+      const pc = peerConnections.get(msg.streamId);
+
+      switch (msg.command) {
+        case 'start':
+          if (pc) {
+            pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: msg.sdp }))
+              .then(() => pc.createAnswer())
+              .then(answer => pc.setLocalDescription(answer))
+              .then(() => {
+                antmediaWs.send(JSON.stringify({
+                  command: 'takeConfiguration',
+                  streamId: msg.streamId,
+                  type: 'answer',
+                  sdp: pc.localDescription.sdp,
+                }));
+              })
+              .catch(err => console.error('[AntMedia] SDP error:', err));
+          }
+          break;
+
+        case 'takeCandidate':
+          if (pc) {
+            pc.addIceCandidate(new RTCIceCandidate({
+              sdpMLineIndex: msg.label,
+              candidate: msg.candidate,
+            })).catch(err => console.error('[AntMedia] ICE error:', err));
+          }
+          break;
+
+        case 'notification':
+          console.log('[AntMedia] Notification:', msg.definition);
+          break;
+
+        case 'error':
+          console.error('[AntMedia] Error:', msg.definition);
+          break;
+      }
+    }
+
+    // ==========================================================================
+    // BACKEND WEBSOCKET - RECEIVE COMMANDS
+    // ==========================================================================
+
+    function connectToBackend() {
+      console.log('[Backend] Connecting to:', CONFIG.backendWs);
+
+      backendWs = new WebSocket(`${CONFIG.backendWs}/compositor?broadcastId=${CONFIG.broadcastId}`);
+
+      backendWs.onopen = () => {
+        console.log('[Backend] Connected');
+        backendWs.send(JSON.stringify({ type: 'compositor-ready', broadcastId: CONFIG.broadcastId }));
+      };
+
+      backendWs.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        handleBackendMessage(msg);
+      };
+
+      backendWs.onclose = () => {
+        console.log('[Backend] Disconnected, reconnecting...');
+        setTimeout(connectToBackend, 3000);
+      };
+
+      backendWs.onerror = (err) => {
+        console.error('[Backend] Error:', err);
+      };
+    }
+
+    function handleBackendMessage(msg) {
+      console.log('[Backend] Received:', msg.type, msg);
+
+      switch (msg.type) {
+        case 'full-state':
+          Object.assign(state, msg.state);
+          // Subscribe to any new streams
+          state.participants.filter(p => p.isOnStage && p.streamId).forEach(p => {
+            subscribeToStream(p.streamId);
+          });
+          render();
+          break;
+
+        case 'set-layout':
+          state.layout = msg.layout;
+          render();
+          break;
+
+        case 'set-background':
+          state.backgroundType = msg.backgroundType || 'color';
+          state.backgroundColor = msg.backgroundColor || '#1a1a2e';
+          state.backgroundUrl = msg.backgroundUrl || null;
+          render();
+          break;
+
+        case 'participant-added':
+          state.participants.push(msg.participant);
+          if (msg.participant.isOnStage && msg.participant.streamId) {
+            subscribeToStream(msg.participant.streamId);
+          }
+          render();
+          break;
+
+        case 'participant-removed':
+          const idx = state.participants.findIndex(p => p.id === msg.participantId);
+          if (idx >= 0) {
+            const p = state.participants[idx];
+            if (p.streamId) unsubscribeFromStream(p.streamId);
+            state.participants.splice(idx, 1);
+          }
+          render();
+          break;
+
+        case 'participant-updated':
+          const pIdx = state.participants.findIndex(p => p.id === msg.participant.id);
+          if (pIdx >= 0) {
+            const oldP = state.participants[pIdx];
+            const newP = { ...oldP, ...msg.participant };
+
+            // Handle stream subscription changes
+            if (newP.isOnStage && newP.streamId && !state.streams.has(newP.streamId)) {
+              subscribeToStream(newP.streamId);
+            } else if (!newP.isOnStage && oldP.streamId) {
+              unsubscribeFromStream(oldP.streamId);
+            }
+
+            state.participants[pIdx] = newP;
+          }
+          render();
+          break;
+
+        case 'bring-on-stage':
+          const bringP = state.participants.find(p => p.id === msg.participantId);
+          if (bringP) {
+            bringP.isOnStage = true;
+            if (bringP.streamId) subscribeToStream(bringP.streamId);
+          }
+          render();
+          break;
+
+        case 'remove-from-stage':
+          const removeP = state.participants.find(p => p.id === msg.participantId);
+          if (removeP) {
+            removeP.isOnStage = false;
+            if (removeP.streamId) unsubscribeFromStream(removeP.streamId);
+          }
+          render();
+          break;
+
+        case 'set-logo':
+          state.logoUrl = msg.logoUrl;
+          state.logoVisible = msg.visible !== false;
+          render();
+          break;
+
+        case 'set-lower-third':
+          state.lowerThird = {
+            visible: msg.visible !== false,
+            title: msg.title || '',
+            subtitle: msg.subtitle || '',
+          };
+          render();
+          break;
+
+        case 'set-ticker':
+          state.ticker = {
+            visible: msg.visible !== false,
+            text: msg.text || '',
+          };
+          render();
+          break;
+
+        case 'set-countdown':
+          state.countdown = {
+            visible: msg.visible !== false,
+            seconds: msg.seconds || 0,
+          };
+          render();
+
+          // Auto-countdown
+          if (msg.visible && msg.seconds > 0) {
+            const interval = setInterval(() => {
+              state.countdown.seconds--;
+              if (state.countdown.seconds <= 0) {
+                state.countdown.visible = false;
+                clearInterval(interval);
+              }
+              render();
+            }, 1000);
+          }
+          break;
+
+        case 'go-live':
+          state.isLive = true;
+          render();
+          break;
+
+        case 'end-broadcast':
+          state.isLive = false;
+          render();
+          break;
+      }
+    }
+
+    // ==========================================================================
+    // INITIALIZATION
+    // ==========================================================================
+
+    function init() {
+      console.log('[Compositor] Initializing...');
+      render();
+      connectToAntMedia();
+      connectToBackend();
+    }
+
+    // Expose API for testing/debugging
+    window.CompositorAPI = {
+      getState: () => state,
+      setState: (newState) => { Object.assign(state, newState); render(); },
+      setLayout: (layout) => { state.layout = layout; render(); },
+      setBackground: (type, colorOrUrl) => {
+        state.backgroundType = type;
+        if (type === 'color') state.backgroundColor = colorOrUrl;
+        else state.backgroundUrl = colorOrUrl;
+        render();
+      },
+      addTestParticipant: (name) => {
+        state.participants.push({
+          id: 'test-' + Date.now(),
+          name,
+          streamId: null,
+          isOnStage: true,
+          audioEnabled: true,
+          videoEnabled: false,
+          borderColor: '#10b981',
+        });
+        render();
+      },
+      render,
+    };
+
+    // Start
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  </script>
+</body>
+</html>
