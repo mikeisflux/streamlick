@@ -434,11 +434,15 @@
       // Extract participant ID from stream ID (format: roomId_participantId)
       const participantId = streamId.includes('_') ? streamId.split('_').pop() : streamId;
 
-      // Check if already exists
+      // Check if already exists - just update stream
       const existing = participants.find(p => p.id === participantId);
       if (existing) {
         existing.stream = stream;
         existing.videoElement.srcObject = stream;
+        // Retry play since we got a new stream
+        setTimeout(() => {
+          existing.videoElement.play().catch(e => console.warn('[Composite] Retry play error:', e));
+        }, 100);
         return;
       }
 
@@ -451,7 +455,18 @@
       video.srcObject = stream;
       document.body.appendChild(video);
 
-      video.play().catch(e => console.warn('[Composite] Video play error:', e));
+      // Don't call play() immediately - wait for loadedmetadata
+      video.addEventListener('loadedmetadata', () => {
+        video.play().catch(e => console.warn('[Composite] Video play error:', e));
+      });
+
+      // Also retry play after a delay to handle race conditions
+      setTimeout(() => {
+        if (video.paused) {
+          console.log('[Composite] Video still paused, retrying play for:', participantId);
+          video.play().catch(e => console.warn('[Composite] Retry play error:', e));
+        }
+      }, 500);
 
       participants.push({
         id: participantId,
