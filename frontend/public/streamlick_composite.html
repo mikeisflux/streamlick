@@ -62,10 +62,12 @@
   <!-- WebRTC Adapter (browser compatibility) -->
   <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
 
-  <!-- Ant Media SDK - use bundled version from LiveApp -->
-  <script src="js/webrtc_adaptor.js"></script>
+  <script type="module">
+    // ========================================
+    // Import Ant Media SDK as ES Module
+    // ========================================
+    import { WebRTCAdaptor } from './js/webrtc_adaptor.js';
 
-  <script>
     // ========================================
     // Configuration
     // ========================================
