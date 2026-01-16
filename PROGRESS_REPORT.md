@@ -788,6 +788,20 @@ The toggle appears when server composite is running, allowing host to preview fi
 - `frontend/src/components/studio/canvas/CompositePreview.tsx` - New component
 - `frontend/src/services/composite.service.ts` - Added `subscribeToComposite()`, HLS/WebRTC URLs
 
+**Composite Stream Publishing**:
+The composite HTML now publishes its canvas output directly via WebRTC:
+1. Joins Ant Media room in 'publish' mode
+2. Captures canvas at 30 FPS using `canvas.captureStream()`
+3. Publishes as `composite_${broadcastId}`
+4. Host can subscribe to this stream to preview exact output
+
+Flow:
+```
+Participants → Composite HTML (renders to canvas) → WebRTC Publish
+                                                          ↓
+                                     Host subscribes to composite_${broadcastId}
+```
+
 **Commits**:
 - `8ca027c` - Fix video elements staying paused in composite layout
 - `c893f77` - Fix Ant Media conference mode - add publish mode parameter
@@ -796,6 +810,7 @@ The toggle appears when server composite is running, allowing host to preview fi
 - `842a373` - Improve avatar display when camera is disabled
 - `63355c5` - Fix avatar size to 30% of tile as specified
 - `65c4219` - Add composite preview to show server output to host
+- `b98ca1e` - Update composite to publish canvas stream via WebRTC
 
 ---
 
