@@ -770,11 +770,32 @@ git pull origin claude/merge-previewarea-typescript-04F8x
 sudo cp frontend/public/streamlick_composite.html /usr/local/antmedia/webapps/LiveApp/
 ```
 
+**Avatar Display (Camera Off)**:
+When participants have camera disabled, tiles show:
+- Circular avatar/initial at 30% of tile size
+- Dark background (`#1e2330`)
+- Name tag pill at bottom left
+- Subtle border ring for visual definition
+
+**Composite Preview Component**:
+Added `CompositePreview.tsx` - Host can toggle between:
+1. **Local View**: See individual participant tiles (current behavior)
+2. **Output Preview**: See exactly what viewers see on YouTube
+
+The toggle appears when server composite is running, allowing host to preview final output quality.
+
+**Files**:
+- `frontend/src/components/studio/canvas/CompositePreview.tsx` - New component
+- `frontend/src/services/composite.service.ts` - Added `subscribeToComposite()`, HLS/WebRTC URLs
+
 **Commits**:
 - `8ca027c` - Fix video elements staying paused in composite layout
 - `c893f77` - Fix Ant Media conference mode - add publish mode parameter
 - `d4ca4aa` - Add server-side composite control API and URL params support
 - `49813e3` - Integrate server-side composite into frontend
+- `842a373` - Improve avatar display when camera is disabled
+- `63355c5` - Fix avatar size to 30% of tile as specified
+- `65c4219` - Add composite preview to show server output to host
 
 ---
 
