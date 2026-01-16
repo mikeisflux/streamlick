@@ -516,6 +516,19 @@
       });
     }
 
+    // Extract participant ID from various stream ID formats
+    function extractParticipantId(streamId) {
+      if (!streamId) return null;
+      // Skip composite streams
+      if (streamId.includes('composite')) return null;
+      // Stream ID format: roomId_participantId
+      const parts = streamId.split('_');
+      if (parts.length >= 2) {
+        return parts.slice(1).join('_');
+      }
+      return streamId;
+    }
+
     function handleCallback(info, obj) {
       console.log('[Composite] Callback:', info, obj);
 
@@ -534,12 +547,13 @@
           console.log('[Composite] Publishing canvas as:', compositeStreamId);
           webRTCAdaptor.publish(compositeStreamId, null, null, null, compositeStreamId, roomId);
 
-          // Subscribe to existing streams
+          // Subscribe to existing streams - but only participant streams, not the room itself
           if (obj.streams && obj.streams.length > 0) {
             obj.streams.forEach(streamId => {
-              if (!streamId.includes('composite') && !subscribedStreams.has(streamId)) {
-                console.log('[Composite] Subscribing to existing stream:', streamId);
-                subscribedStreams.add(streamId);
+              const participantId = extractParticipantId(streamId);
+              if (participantId && !subscribedStreams.has(participantId)) {
+                console.log('[Composite] Subscribing to existing stream:', streamId, 'participant:', participantId);
+                subscribedStreams.add(participantId);
                 webRTCAdaptor.play(streamId, null, roomId);
               }
             });
@@ -558,30 +572,33 @@
 
         case 'newStreamAvailable':
           console.log('[Composite] New stream:', obj.streamId, obj);
-          if (!obj.streamId.includes('composite') && obj.stream) {
-            addParticipant(obj.streamId, obj.stream);
+          const newStreamParticipant = extractParticipantId(obj.streamId);
+          if (newStreamParticipant && obj.stream) {
+            addParticipant(newStreamParticipant, obj.stream);
           }
           break;
 
         case 'newTrackAvailable':
           console.log('[Composite] New track:', obj.streamId, obj.track?.kind);
-          if (!obj.streamId?.includes('composite') && obj.stream) {
-            addParticipant(obj.streamId, obj.stream);
+          const newTrackParticipant = extractParticipantId(obj.streamId);
+          if (newTrackParticipant && obj.stream) {
+            addParticipant(newTrackParticipant, obj.stream);
           }
           break;
 
         case 'subtrackAdded':
           // New participant joined - subscribe if we haven't already
-          if (obj.trackId && !obj.trackId.includes('composite') && !subscribedStreams.has(obj.trackId)) {
-            console.log('[Composite] Subtrack added, subscribing:', obj.trackId);
-            subscribedStreams.add(obj.trackId);
+          const subtrackParticipant = extractParticipantId(obj.trackId);
+          if (subtrackParticipant && !subscribedStreams.has(subtrackParticipant)) {
+            console.log('[Composite] Subtrack added, subscribing:', obj.trackId, 'participant:', subtrackParticipant);
+            subscribedStreams.add(subtrackParticipant);
             webRTCAdaptor.play(obj.trackId, null, roomId);
           }
           break;
 
         case 'leavedFromRoom':
         case 'streamLeaved':
-          const leftId = obj.streamId || obj;
+          const leftId = extractParticipantId(obj.streamId || obj) || obj.streamId || obj;
           subscribedStreams.delete(leftId);
           removeParticipant(leftId);
           break;
@@ -606,15 +623,12 @@
       updateStatus(`ERROR: ${error} - ${message}`, 'error');
     }
 
-    function addParticipant(streamId, stream) {
-      const parts = streamId.split('_');
-      const participantId = parts.length >= 2 ? parts.slice(1).join('_') : streamId;
-
-      // Update existing or create new
-      let participant = participants.find(p => p.id === participantId || p.streamId === streamId);
+    function addParticipant(participantId, stream) {
+      // Check if already exists
+      let participant = participants.find(p => p.id === participantId);
 
       if (participant) {
-        console.log('[Composite] Updating participant:', participantId);
+        console.log('[Composite] Updating existing participant:', participantId);
         participant.stream = stream;
         if (participant.videoElement) {
           participant.videoElement.srcObject = stream;
@@ -623,7 +637,7 @@
         return;
       }
 
-      console.log('[Composite] Adding participant:', participantId, 'streamId:', streamId);
+      console.log('[Composite] Adding NEW participant:', participantId);
 
       // Create hidden video element
       const video = document.createElement('video');
@@ -649,7 +663,6 @@
 
       participants.push({
         id: participantId,
-        streamId: streamId,
         stream: stream,
         videoElement: video,
         name: null,
@@ -659,11 +672,8 @@
       updateStatus(`${participants.length} participant(s) | Publishing: ${isPublishing}`, isPublishing ? 'success' : 'warning');
     }
 
-    function removeParticipant(streamId) {
-      const parts = streamId.split('_');
-      const participantId = parts.length >= 2 ? parts.slice(1).join('_') : streamId;
-
-      const idx = participants.findIndex(p => p.id === participantId || p.streamId === streamId);
+    function removeParticipant(participantId) {
+      const idx = participants.findIndex(p => p.id === participantId);
       if (idx !== -1) {
         const p = participants[idx];
         if (p.videoElement) {
