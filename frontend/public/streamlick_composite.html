@@ -6,55 +6,150 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
-      width: 1920px;
-      height: 1080px;
+      width: 100%;
+      height: 100%;
       overflow: hidden;
-      background-color: #000;
+      background-color: #1a1a2e;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 20px;
+    }
+    #wrapper {
+      /* Scale down to fit browser - adjust scale as needed */
+      transform: scale(0.5);
+      transform-origin: top center;
     }
     #container {
       position: relative;
       width: 1920px;
       height: 1080px;
+      border: 3px solid #333;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
     }
     #canvas {
       position: absolute;
       top: 0;
       left: 0;
-      z-index: 1;
+      z-index: 100;
       background-color: #111;
+      display: block;
     }
-    .hidden-video {
+    /* Aggressively hide ALL video elements */
+    video {
       position: fixed !important;
       top: -9999px !important;
       left: -9999px !important;
       width: 1px !important;
       height: 1px !important;
-      opacity: 0 !important;
+      opacity: 0.001 !important;
       pointer-events: none !important;
+      z-index: -1000 !important;
+    }
+    #video-container {
+      position: fixed;
+      top: -10000px;
+      left: -10000px;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
     }
     #status {
-      position: absolute;
-      top: 10px;
-      left: 10px;
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
       color: #0f0;
       font-family: monospace;
-      font-size: 14px;
+      font-size: 12px;
       z-index: 1000;
-      background: rgba(0,0,0,0.8);
-      padding: 10px;
-      border-radius: 5px;
+      background: rgba(0,0,0,0.9);
+      padding: 12px 16px;
+      border-radius: 8px;
       max-width: 400px;
+      border: 1px solid #333;
     }
-    #status.error { color: #f00; }
-    #status.warning { color: #ff0; }
-    #status.success { color: #0f0; }
+    #status.error { color: #f00; border-color: #f00; }
+    #status.warning { color: #ff0; border-color: #ff0; }
+    #status.success { color: #0f0; border-color: #0f0; }
+
+    /* Controls panel */
+    #controls {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(0,0,0,0.9);
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid #333;
+      z-index: 1000;
+    }
+    #controls label {
+      color: #fff;
+      font-family: sans-serif;
+      font-size: 12px;
+      display: block;
+      margin-bottom: 8px;
+    }
+    #controls select, #controls input {
+      width: 150px;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #444;
+      background: #222;
+      color: #fff;
+      font-size: 12px;
+    }
+    #controls button {
+      margin-top: 8px;
+      padding: 8px 16px;
+      background: #4f46e5;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    #controls button:hover {
+      background: #6366f1;
+    }
   </style>
 </head>
 <body>
-  <div id="container">
-    <canvas id="canvas" width="1920" height="1080"></canvas>
+  <div id="wrapper">
+    <div id="container">
+      <canvas id="canvas" width="1920" height="1080"></canvas>
+    </div>
   </div>
+  <div id="video-container"></div>
   <div id="status">Initializing...</div>
+
+  <!-- Controls panel for testing -->
+  <div id="controls">
+    <label>Layout:
+      <select id="layoutSelect" onchange="window.setLayout(this.value)">
+        <option value="1">1 - Solo</option>
+        <option value="2">2 - Cropped 2x2</option>
+        <option value="3">3 - Group Grid</option>
+        <option value="4">4 - Spotlight</option>
+        <option value="5">5 - News</option>
+        <option value="6">6 - Screen Share</option>
+        <option value="7">7 - PiP</option>
+        <option value="8">8 - Cinema</option>
+        <option value="9">9 - Grid + Gaps</option>
+      </select>
+    </label>
+    <label>Background:
+      <input type="text" id="bgInput" placeholder="Image URL...">
+    </label>
+    <button onclick="window.setBackground(document.getElementById('bgInput').value)">Set BG</button>
+    <button onclick="window.setBackground(null)">Clear BG</button>
+    <br>
+    <button onclick="window.debugParticipants()">Debug</button>
+  </div>
 
   <!-- WebRTC Adapter for browser compatibility -->
   <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
@@ -76,7 +171,7 @@
     // Get URL parameters
     const urlParams = new URLSearchParams(window.location.search);
     const roomId = urlParams.get('roomId');
-    const initialLayout = parseInt(urlParams.get('layout')) || 3;
+    const initialLayout = parseInt(urlParams.get('layout')) || 1;
     const initialBackground = urlParams.get('bg') || null;
 
     // ========================================
@@ -94,6 +189,7 @@
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const statusEl = document.getElementById('status');
+    const videoContainer = document.getElementById('video-container');
 
     function updateStatus(message, type = 'info') {
       console.log(`[Composite] ${message}`);
@@ -102,8 +198,7 @@
     }
 
     // ========================================
-    // Layout Engine (from layoutEngine.ts)
-    // All 10 layouts matching frontend
+    // Layout Engine - All 10 layouts
     // ========================================
     function calculateLayoutPositions(layout, count) {
       const positions = [];
@@ -121,10 +216,12 @@
           break;
 
         case 2: // Cropped - 2x2 grid
-          const cols2 = 2, rows2 = 2;
-          const bw2 = CANVAS_WIDTH/cols2, bh2 = CANVAS_HEIGHT/rows2;
-          for (let i = 0; i < count && i < 4; i++) {
-            positions.push({ x: (i%cols2)*bw2, y: Math.floor(i/cols2)*bh2, width: bw2, height: bh2 });
+          {
+            const cols = 2, rows = 2;
+            const bw = CANVAS_WIDTH/cols, bh = CANVAS_HEIGHT/rows;
+            for (let i = 0; i < count && i < 4; i++) {
+              positions.push({ x: (i%cols)*bw, y: Math.floor(i/cols)*bh, width: bw, height: bh });
+            }
           }
           break;
 
@@ -146,13 +243,15 @@
           break;
 
         case 5: // News - side by side
-          const newsW = CANVAS_WIDTH / Math.max(2, count);
-          for (let i = 0; i < count; i++) {
-            positions.push({ x: i*newsW, y: 0, width: newsW, height: CANVAS_HEIGHT });
+          {
+            const newsW = CANVAS_WIDTH / Math.max(2, count);
+            for (let i = 0; i < count; i++) {
+              positions.push({ x: i*newsW, y: 0, width: newsW, height: CANVAS_HEIGHT });
+            }
           }
           break;
 
-        case 6: // Screen Share - thumbnails on top (12%), screen share below
+        case 6: // Screen Share - thumbnails on top (12%)
           {
             const topBarH = CANVAS_HEIGHT * 0.12;
             const thumbW = count > 0 ? CANVAS_WIDTH / count : CANVAS_WIDTH;
@@ -162,14 +261,12 @@
           }
           break;
 
-        case 7: // Picture-in-Picture - main fullscreen + corner overlays
+        case 7: // Picture-in-Picture
           if (count === 1) {
             positions.push({ x: 0, y: 0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
           } else {
-            // First participant fullscreen
             positions.push({ x: 0, y: 0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
-            // Others in bottom-right corner, stacked
-            const pipW = 240, pipH = 180, gap = 10;
+            const pipW = 320, pipH = 180, gap = 20;
             for (let i = 1; i < count; i++) {
               positions.push({
                 x: CANVAS_WIDTH - pipW - gap,
@@ -181,7 +278,7 @@
           }
           break;
 
-        case 8: // Cinema - wide format (split horizontally)
+        case 8: // Cinema - wide format
           {
             const boxW = count > 1 ? CANVAS_WIDTH / 2 : CANVAS_WIDTH;
             for (let i = 0; i < count; i++) {
@@ -190,11 +287,11 @@
           }
           break;
 
-        case 9: // Video Grid - auto grid with gaps
+        case 9: // Video Grid with gaps
           {
             const cols = Math.ceil(Math.sqrt(count));
             const rows = Math.ceil(count / cols);
-            const gap = 4;
+            const gap = 8;
             const boxW = (CANVAS_WIDTH - gap * (cols + 1)) / cols;
             const boxH = (CANVAS_HEIGHT - gap * (rows + 1)) / rows;
             for (let i = 0; i < count; i++) {
@@ -247,131 +344,147 @@
         lastStatTime = now;
       }
 
-      // Clear canvas
-      ctx.fillStyle = '#111';
+      // Clear canvas with dark background
+      ctx.fillStyle = '#1a1a2e';
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-      // Draw background
+      // Draw background image if available
       if (backgroundImage && backgroundImage.complete && backgroundImage.naturalWidth > 0) {
         ctx.drawImage(backgroundImage, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       }
 
-      // Calculate positions
+      // Calculate positions for current layout
       const positions = calculateLayoutPositions(currentLayout, participants.length);
 
-      // Draw participants
+      // Draw each participant
       participants.forEach((p, i) => {
         if (i >= positions.length) return;
         const pos = positions[i];
         const video = p.videoElement;
-        const cornerRadius = 12;
+        const cornerRadius = 16;
 
-        // Rounded rect clip helper
-        function roundRect(x, y, w, h, r) {
+        // Rounded rectangle helper
+        function drawRoundRect(x, y, w, h, r) {
           ctx.beginPath();
-          ctx.moveTo(x+r, y);
-          ctx.lineTo(x+w-r, y);
-          ctx.quadraticCurveTo(x+w, y, x+w, y+r);
-          ctx.lineTo(x+w, y+h-r);
-          ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
-          ctx.lineTo(x+r, y+h);
-          ctx.quadraticCurveTo(x, y+h, x, y+h-r);
-          ctx.lineTo(x, y+r);
-          ctx.quadraticCurveTo(x, y, x+r, y);
+          ctx.moveTo(x + r, y);
+          ctx.lineTo(x + w - r, y);
+          ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+          ctx.lineTo(x + w, y + h - r);
+          ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+          ctx.lineTo(x + r, y + h);
+          ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+          ctx.lineTo(x, y + r);
+          ctx.quadraticCurveTo(x, y, x + r, y);
           ctx.closePath();
         }
 
-        const canDraw = video && video.readyState >= 2 && video.videoWidth > 0 && p.videoEnabled !== false;
+        const hasVideo = video && video.readyState >= 2 && video.videoWidth > 0 && p.videoEnabled !== false;
 
-        if (canDraw) {
-          // Calculate aspect-preserving dimensions
+        if (hasVideo) {
+          // Calculate cover-fit dimensions (crop to fill)
           const vAspect = video.videoWidth / video.videoHeight;
           const bAspect = pos.width / pos.height;
-          let dw, dh, dx, dy;
+          let sx = 0, sy = 0, sw = video.videoWidth, sh = video.videoHeight;
+
           if (vAspect > bAspect) {
-            dh = pos.height; dw = dh * vAspect;
-            dx = pos.x - (dw - pos.width) / 2; dy = pos.y;
+            // Video is wider - crop sides
+            sw = video.videoHeight * bAspect;
+            sx = (video.videoWidth - sw) / 2;
           } else {
-            dw = pos.width; dh = dw / vAspect;
-            dx = pos.x; dy = pos.y - (dh - pos.height) / 2;
+            // Video is taller - crop top/bottom
+            sh = video.videoWidth / bAspect;
+            sy = (video.videoHeight - sh) / 2;
           }
 
+          // Draw video with rounded corners
           ctx.save();
-          roundRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
+          drawRoundRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
           ctx.clip();
-          ctx.drawImage(video, dx, dy, dw, dh);
+          ctx.drawImage(video, sx, sy, sw, sh, pos.x, pos.y, pos.width, pos.height);
           ctx.restore();
         } else {
-          // Placeholder tile
+          // Draw placeholder tile with avatar
           ctx.save();
-          roundRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
+          drawRoundRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
           ctx.clip();
           ctx.fillStyle = '#1e2330';
           ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
           ctx.restore();
 
-          // Avatar circle (30%)
-          const cx = pos.x + pos.width/2, cy = pos.y + pos.height/2;
-          const size = Math.min(pos.width, pos.height) * 0.3;
-          const r = size / 2;
+          // Draw avatar circle (30% of tile)
+          const cx = pos.x + pos.width / 2;
+          const cy = pos.y + pos.height / 2;
+          const avatarSize = Math.min(pos.width, pos.height) * 0.3;
+          const avatarRadius = avatarSize / 2;
 
+          // Avatar ring
           ctx.beginPath();
-          ctx.arc(cx, cy, r+2, 0, Math.PI*2);
-          ctx.fillStyle = 'rgba(255,255,255,0.1)';
+          ctx.arc(cx, cy, avatarRadius + 3, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255,255,255,0.15)';
           ctx.fill();
 
+          // Avatar background
           ctx.beginPath();
-          ctx.arc(cx, cy, r, 0, Math.PI*2);
+          ctx.arc(cx, cy, avatarRadius, 0, Math.PI * 2);
           ctx.fillStyle = '#374151';
           ctx.fill();
 
+          // Avatar initial
           const name = p.name || 'Guest';
+          const initial = name.charAt(0).toUpperCase();
           ctx.fillStyle = '#fff';
-          ctx.font = `bold ${Math.min(r*0.8, 60)}px system-ui, sans-serif`;
+          ctx.font = `bold ${Math.min(avatarRadius * 0.9, 72)}px -apple-system, BlinkMacSystemFont, sans-serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText(name.charAt(0).toUpperCase(), cx, cy);
+          ctx.fillText(initial, cx, cy);
         }
 
-        // Name tag
+        // Draw name tag pill
         const displayName = p.name || 'Guest';
-        const tagH = 28, tagPad = 12;
-        const tagY = pos.y + pos.height - tagH - 12;
-        const tagX = pos.x + 12;
-        ctx.font = 'bold 14px system-ui, sans-serif';
-        const tw = ctx.measureText(displayName).width;
-        const tagW = tw + tagPad * 2;
-        const tagR = tagH / 2;
+        const tagHeight = 32;
+        const tagPadding = 14;
+        const tagY = pos.y + pos.height - tagHeight - 16;
+        const tagX = pos.x + 16;
 
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, sans-serif';
+        const textWidth = ctx.measureText(displayName).width;
+        const tagWidth = textWidth + tagPadding * 2;
+        const tagRadius = tagHeight / 2;
+
+        // Tag background
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
         ctx.beginPath();
-        ctx.moveTo(tagX+tagR, tagY);
-        ctx.lineTo(tagX+tagW-tagR, tagY);
-        ctx.arc(tagX+tagW-tagR, tagY+tagR, tagR, -Math.PI/2, Math.PI/2);
-        ctx.lineTo(tagX+tagR, tagY+tagH);
-        ctx.arc(tagX+tagR, tagY+tagR, tagR, Math.PI/2, -Math.PI/2);
+        ctx.moveTo(tagX + tagRadius, tagY);
+        ctx.lineTo(tagX + tagWidth - tagRadius, tagY);
+        ctx.arc(tagX + tagWidth - tagRadius, tagY + tagRadius, tagRadius, -Math.PI/2, Math.PI/2);
+        ctx.lineTo(tagX + tagRadius, tagY + tagHeight);
+        ctx.arc(tagX + tagRadius, tagY + tagRadius, tagRadius, Math.PI/2, -Math.PI/2);
         ctx.fill();
 
-        ctx.fillStyle = '#fff';
+        // Tag text
+        ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(displayName, tagX+tagPad, tagY+tagH/2);
+        ctx.fillText(displayName, tagX + tagPadding, tagY + tagHeight/2 + 1);
       });
 
-      // Status overlay (top-left)
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(8, 8, 350, 24);
-      ctx.fillStyle = isPublishing ? '#0f0' : '#f00';
-      ctx.font = '12px monospace';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(`${isPublishing ? '● LIVE' : '○ OFFLINE'} | Participants: ${participants.length} | Layout: ${currentLayout}`, 14, 20);
+      // Draw status overlay (can be hidden in production)
+      const showDebug = true;
+      if (showDebug) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(10, 10, 380, 28);
+        ctx.fillStyle = isPublishing ? '#00ff00' : '#ff4444';
+        ctx.font = 'bold 13px monospace';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${isPublishing ? '● LIVE' : '○ OFFLINE'} | ${participants.length} participants | Layout: ${currentLayout}`, 18, 24);
+      }
 
       requestAnimationFrame(renderFrame);
     }
 
     // ========================================
-    // WebRTC - Mirroring webrtc.service.ts approach
+    // WebRTC Connection
     // ========================================
     function initWebRTC() {
       if (!roomId) {
@@ -379,13 +492,12 @@
         return;
       }
 
-      // Use same stream ID format as host: roomId_participantId
       compositeStreamId = `${roomId}_composite`;
       updateStatus(`Connecting to room: ${roomId}`, 'warning');
 
-      // Capture canvas BEFORE creating adaptor
+      // Capture canvas stream BEFORE creating adaptor
       canvasStream = canvas.captureStream(FPS);
-      console.log('[Composite] Canvas stream captured:', canvasStream.getTracks().map(t => t.kind));
+      console.log('[Composite] Canvas stream captured:', canvasStream.getTracks().map(t => `${t.kind}:${t.readyState}`));
 
       webRTCAdaptor = new WebRTCAdaptor({
         websocket_url: WS_URL,
@@ -409,7 +521,6 @@
       switch (info) {
         case 'initialized':
           updateStatus('WebSocket connected, joining room...', 'warning');
-          // Join room in publish mode (same as webrtc.service.ts)
           webRTCAdaptor.joinRoom(roomId, compositeStreamId, 'publish');
           break;
 
@@ -443,8 +554,8 @@
           break;
 
         case 'newStreamAvailable':
-          console.log('[Composite] New stream:', obj.streamId);
-          if (!obj.streamId.includes('composite')) {
+          console.log('[Composite] New stream:', obj.streamId, obj);
+          if (!obj.streamId.includes('composite') && obj.stream) {
             addParticipant(obj.streamId, obj.stream);
           }
           break;
@@ -457,9 +568,8 @@
           break;
 
         case 'subtrackAdded':
-          // New participant joined room after us
           if (obj.trackId && !obj.trackId.includes('composite')) {
-            console.log('[Composite] New subtrack, subscribing:', obj.trackId);
+            console.log('[Composite] Subtrack added, subscribing:', obj.trackId);
             webRTCAdaptor.play(obj.trackId, null, roomId);
           }
           break;
@@ -471,19 +581,11 @@
           break;
 
         case 'play_started':
-          console.log('[Composite] Play started for:', obj.streamId);
+          console.log('[Composite] Play started:', obj.streamId);
           break;
 
         case 'ice_connection_state_changed':
-          console.log('[Composite] ICE state:', obj.state, 'for', obj.streamId);
-          break;
-
-        case 'pong':
-          // Heartbeat, ignore
-          break;
-
-        case 'bitrateMeasurement':
-          // Track bitrate, ignore for now
+          console.log('[Composite] ICE state:', obj.state, obj.streamId);
           break;
       }
     }
@@ -494,44 +596,43 @@
     }
 
     function addParticipant(streamId, stream) {
-      // Extract participant ID from stream ID (format: roomId_participantId)
       const parts = streamId.split('_');
       const participantId = parts.length >= 2 ? parts.slice(1).join('_') : streamId;
 
-      // Check if already exists
-      const existing = participants.find(p => p.id === participantId || p.streamId === streamId);
-      if (existing) {
-        console.log('[Composite] Updating existing participant:', participantId);
-        existing.stream = stream;
-        if (existing.videoElement) {
-          existing.videoElement.srcObject = stream;
-          existing.videoElement.play().catch(e => console.warn('Replay error:', e));
+      // Update existing or create new
+      let participant = participants.find(p => p.id === participantId || p.streamId === streamId);
+
+      if (participant) {
+        console.log('[Composite] Updating participant:', participantId);
+        participant.stream = stream;
+        if (participant.videoElement) {
+          participant.videoElement.srcObject = stream;
+          participant.videoElement.play().catch(e => console.warn('Replay error:', e));
         }
         return;
       }
 
-      console.log('[Composite] Adding new participant:', participantId, 'streamId:', streamId);
+      console.log('[Composite] Adding participant:', participantId, 'streamId:', streamId);
 
-      // Create video element
+      // Create hidden video element
       const video = document.createElement('video');
-      video.className = 'hidden-video';
       video.autoplay = true;
       video.muted = true;
       video.playsInline = true;
       video.srcObject = stream;
-      document.body.appendChild(video);
 
-      // Play handlers
+      // Add to hidden container
+      videoContainer.appendChild(video);
+
       video.onloadedmetadata = () => {
-        console.log('[Composite] Video metadata loaded:', participantId, video.videoWidth, 'x', video.videoHeight);
+        console.log('[Composite] Video ready:', participantId, video.videoWidth, 'x', video.videoHeight);
         video.play().catch(e => console.warn('Play error:', e));
       };
 
       // Retry play after delay
       setTimeout(() => {
         if (video.paused && video.srcObject) {
-          console.log('[Composite] Retrying play for:', participantId);
-          video.play().catch(e => console.warn('Retry play error:', e));
+          video.play().catch(e => console.warn('Retry play:', e));
         }
       }, 500);
 
@@ -559,7 +660,7 @@
           p.videoElement.remove();
         }
         participants.splice(idx, 1);
-        console.log('[Composite] Removed participant:', participantId, 'Remaining:', participants.length);
+        console.log('[Composite] Removed:', participantId, 'Remaining:', participants.length);
         updateStatus(`${participants.length} participant(s)`, isPublishing ? 'success' : 'warning');
       }
     }
@@ -576,23 +677,23 @@
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.onload = () => { backgroundImage = img; console.log('[Composite] Background loaded'); };
-      img.onerror = () => console.error('[Composite] Background load failed:', url);
+      img.onerror = () => console.error('[Composite] Background failed:', url);
       img.src = url;
     };
 
     window.setLayout = function(id) {
-      currentLayout = parseInt(id) || 3;
-      console.log('[Composite] Layout set to:', currentLayout);
+      currentLayout = parseInt(id) || 1;
+      console.log('[Composite] Layout:', currentLayout);
     };
 
     window.setParticipantName = function(id, name) {
-      const p = participants.find(p => p.id === id);
-      if (p) p.name = name;
+      const p = participants.find(p => p.id === id || p.streamId?.includes(id));
+      if (p) { p.name = name; console.log('[Composite] Set name:', id, name); }
     };
 
     window.setParticipantVideo = function(id, enabled) {
-      const p = participants.find(p => p.id === id);
-      if (p) p.videoEnabled = enabled;
+      const p = participants.find(p => p.id === id || p.streamId?.includes(id));
+      if (p) { p.videoEnabled = enabled; console.log('[Composite] Set video:', id, enabled); }
     };
 
     window.getState = () => ({
@@ -605,7 +706,7 @@
       participants: participants.map(p => ({ id: p.id, name: p.name, videoEnabled: p.videoEnabled }))
     });
 
-    // PostMessage handler
+    // PostMessage handler for external control
     window.addEventListener('message', (e) => {
       const { type, data } = e.data || {};
       if (type === 'setBackground') window.setBackground(data.url);
@@ -627,10 +728,10 @@
         window.setBackground(initialBackground);
       }
 
-      // Start render loop
+      // Start render loop FIRST
       requestAnimationFrame(renderFrame);
 
-      // Initialize WebRTC
+      // Then initialize WebRTC
       if (roomId) {
         initWebRTC();
       } else {
@@ -638,18 +739,18 @@
       }
     };
 
-    // Debug helpers
+    // Debug helper
     window.debugParticipants = () => {
       participants.forEach((p, i) => {
         const v = p.videoElement;
         console.log(`P${i}:`, {
           id: p.id,
+          name: p.name,
           streamId: p.streamId,
           readyState: v?.readyState,
           videoWidth: v?.videoWidth,
           videoHeight: v?.videoHeight,
-          paused: v?.paused,
-          tracks: p.stream?.getTracks().map(t => `${t.kind}:${t.readyState}`) || []
+          paused: v?.paused
         });
       });
     };
