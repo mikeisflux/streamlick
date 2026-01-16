@@ -182,10 +182,8 @@
     let participants = []; // Array of { id, streamId, stream, videoElement, name, videoEnabled }
     let subscribedStreams = new Set(); // Track streams we've already subscribed to
     let webRTCAdaptor = null;
-    let isPublishing = false;
     let isJoined = false;
     let compositeStreamId = null;
-    let canvasStream = null;
 
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
@@ -340,7 +338,7 @@
       // Log stats every 5 seconds
       if (now - lastStatTime > 5000) {
         const fps = Math.round(frameCount / 5);
-        console.log(`[Composite] Stats: ${fps} fps, ${participants.length} participants, layout=${currentLayout}, publishing=${isPublishing}`);
+        console.log(`[Composite] Stats: ${fps} fps, ${participants.length} participants, layout=${currentLayout}, joined=${isJoined}`);
         frameCount = 0;
         lastStatTime = now;
       }
@@ -474,11 +472,11 @@
       if (showDebug) {
         ctx.fillStyle = 'rgba(0,0,0,0.7)';
         ctx.fillRect(10, 10, 380, 28);
-        ctx.fillStyle = isPublishing ? '#00ff00' : '#ff4444';
+        ctx.fillStyle = isJoined ? '#00ff00' : '#ff4444';
         ctx.font = 'bold 13px monospace';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(`${isPublishing ? '● LIVE' : '○ OFFLINE'} | ${participants.length} participants | Layout: ${currentLayout}`, 18, 24);
+        ctx.fillText(`${isJoined ? '● RECEIVING' : '○ CONNECTING'} | ${participants.length} participants | Layout: ${currentLayout}`, 18, 24);
       }
 
       requestAnimationFrame(renderFrame);
@@ -496,14 +494,10 @@
       compositeStreamId = `${roomId}_composite`;
       updateStatus(`Connecting to room: ${roomId}`, 'warning');
 
-      // Capture canvas stream BEFORE creating adaptor
-      canvasStream = canvas.captureStream(FPS);
-      console.log('[Composite] Canvas stream captured:', canvasStream.getTracks().map(t => `${t.kind}:${t.readyState}`));
-
+      // Receive-only adaptor - no publishing, just play streams
       webRTCAdaptor = new WebRTCAdaptor({
         websocket_url: WS_URL,
-        mediaConstraints: { video: true, audio: false }, // Need video:true to send canvas
-        localStream: canvasStream,
+        mediaConstraints: { video: false, audio: false },
         peerconnection_config: {
           iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
         },
@@ -511,6 +505,7 @@
           OfferToReceiveAudio: true,
           OfferToReceiveVideo: true
         },
+        isPlayMode: true, // Receive only
         callback: handleCallback,
         callbackError: handleError
       });
@@ -535,17 +530,13 @@
       switch (info) {
         case 'initialized':
           updateStatus('WebSocket connected, joining room...', 'warning');
-          // Use joinRoom like the host does
-          webRTCAdaptor.joinRoom(roomId, compositeStreamId, 'publish');
+          // Join room in PLAY mode (receive-only)
+          webRTCAdaptor.joinRoom(roomId, compositeStreamId, 'play');
           break;
 
         case 'joinedTheRoom':
           isJoined = true;
-          updateStatus(`Joined room. Streams: ${obj.streams?.length || 0}`, 'warning');
-
-          // Publish our canvas stream
-          console.log('[Composite] Publishing canvas as:', compositeStreamId);
-          webRTCAdaptor.publish(compositeStreamId, null, null, null, compositeStreamId, roomId);
+          updateStatus(`Joined room (receive-only). Streams: ${obj.streams?.length || 0}`, 'success');
 
           // Subscribe to existing streams - but only participant streams, not the room itself
           if (obj.streams && obj.streams.length > 0) {
@@ -558,16 +549,6 @@
               }
             });
           }
-          break;
-
-        case 'publish_started':
-          isPublishing = true;
-          updateStatus(`PUBLISHING: ${compositeStreamId}`, 'success');
-          break;
-
-        case 'publish_finished':
-          isPublishing = false;
-          updateStatus('Publishing stopped', 'warning');
           break;
 
         case 'newStreamAvailable':
@@ -684,7 +665,7 @@
         videoEnabled: true
       });
 
-      updateStatus(`${participants.length} participant(s) | Publishing: ${isPublishing}`, isPublishing ? 'success' : 'warning');
+      updateStatus(`Receiving ${participants.length} participant(s)`, 'success');
     }
 
     function removeParticipant(participantId) {
@@ -697,7 +678,7 @@
         }
         participants.splice(idx, 1);
         console.log('[Composite] Removed:', participantId, 'Remaining:', participants.length);
-        updateStatus(`${participants.length} participant(s)`, isPublishing ? 'success' : 'warning');
+        updateStatus(`Receiving ${participants.length} participant(s)`, 'success');
       }
     }
 
@@ -736,8 +717,8 @@
       roomId,
       compositeStreamId,
       layout: currentLayout,
-      isPublishing,
       isJoined,
+      mode: 'receive-only',
       participantCount: participants.length,
       participants: participants.map(p => ({ id: p.id, name: p.name, videoEnabled: p.videoEnabled }))
     });
