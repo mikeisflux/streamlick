@@ -332,14 +332,12 @@ function HTMLPreviewVideo({
       ) : showAvatar ? (
         <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: '#1e2330' }}>
           <div
-            className="rounded-full overflow-hidden border-4 border-white/10"
+            className="rounded-full overflow-hidden border-2 border-white/10"
             style={{
-              width: '70%',
+              width: '30%',
               height: 'auto',
               aspectRatio: '1',
-              maxWidth: '400px',
-              maxHeight: '400px',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
             }}
           >
             <img
@@ -352,18 +350,16 @@ function HTMLPreviewVideo({
       ) : (
         <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: '#1e2330' }}>
           <div
-            className="rounded-full flex items-center justify-center border-4 border-white/10"
+            className="rounded-full flex items-center justify-center border-2 border-white/10"
             style={{
-              width: '60%',
+              width: '30%',
               height: 'auto',
               aspectRatio: '1',
-              maxWidth: '300px',
-              maxHeight: '300px',
               backgroundColor: '#374151',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
             }}
           >
-            <span className="text-6xl text-white font-bold" style={{ fontSize: 'clamp(2rem, 10vw, 6rem)' }}>
+            <span className="text-white font-bold" style={{ fontSize: 'clamp(1.5rem, 6vw, 3rem)' }}>
               {name.charAt(0).toUpperCase()}
             </span>
           </div>
@@ -899,15 +895,15 @@ export function StudioCanvas({
             ctx.fillStyle = '#1e2330';
             ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
 
-            // Draw larger circular avatar (70% of tile)
-            const size = Math.min(pos.width, pos.height) * 0.7;
+            // Draw circular avatar (30% of tile)
+            const size = Math.min(pos.width, pos.height) * 0.3;
             const avatarX = pos.x + (pos.width - size) / 2;
             const avatarY = pos.y + (pos.height - size) / 2;
 
-            // Draw subtle border/shadow ring
+            // Draw subtle border ring
             ctx.save();
             ctx.beginPath();
-            ctx.arc(avatarX + size / 2, avatarY + size / 2, size / 2 + 4, 0, Math.PI * 2);
+            ctx.arc(avatarX + size / 2, avatarY + size / 2, size / 2 + 2, 0, Math.PI * 2);
             ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
             ctx.fill();
             ctx.restore();
@@ -925,14 +921,14 @@ export function StudioCanvas({
             ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
 
             if (!p.videoEnabled) {
-              // Video disabled - show large circular initial
-              const size = Math.min(pos.width, pos.height) * 0.6;
+              // Video disabled - show circular initial (30% of tile)
+              const size = Math.min(pos.width, pos.height) * 0.3;
               const circleX = pos.x + (pos.width - size) / 2;
               const circleY = pos.y + (pos.height - size) / 2;
 
-              // Draw subtle border/shadow ring
+              // Draw subtle border ring
               ctx.beginPath();
-              ctx.arc(circleX + size / 2, circleY + size / 2, size / 2 + 4, 0, Math.PI * 2);
+              ctx.arc(circleX + size / 2, circleY + size / 2, size / 2 + 2, 0, Math.PI * 2);
               ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
               ctx.fill();
 
@@ -944,7 +940,7 @@ export function StudioCanvas({
 
               // Draw initial letter
               const name = p.type === 'local' ? 'You' : (p.participant?.name || 'Guest');
-              const fontSize = Math.min(size * 0.5, 120);
+              const fontSize = Math.min(size * 0.5, 60);
               ctx.font = `bold ${fontSize}px Inter, system-ui, sans-serif`;
               ctx.fillStyle = 'white';
               ctx.textAlign = 'center';

@@ -435,20 +435,20 @@
           clipRoundedRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
           ctx.clip();
 
-          // Dark tile background (matching reference image)
+          // Dark tile background
           ctx.fillStyle = '#1e2330';
           ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
           ctx.restore();
 
-          // Draw large avatar circle (60% of tile, like reference image)
+          // Draw avatar circle (30% of tile)
           const centerX = pos.x + pos.width / 2;
           const centerY = pos.y + pos.height / 2;
-          const circleSize = Math.min(pos.width, pos.height) * 0.6;
+          const circleSize = Math.min(pos.width, pos.height) * 0.3;
           const radius = circleSize / 2;
 
-          // Draw subtle border/shadow ring
+          // Draw subtle border ring
           ctx.beginPath();
-          ctx.arc(centerX, centerY, radius + 4, 0, Math.PI * 2);
+          ctx.arc(centerX, centerY, radius + 2, 0, Math.PI * 2);
           ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
           ctx.fill();
 
@@ -458,9 +458,9 @@
           ctx.fillStyle = '#374151';
           ctx.fill();
 
-          // Draw initial letter (large, centered)
+          // Draw initial letter (centered)
           const displayName = participant.name || 'Guest';
-          const fontSize = Math.min(radius * 0.8, 120);
+          const fontSize = Math.min(radius * 0.8, 60);
           ctx.fillStyle = '#fff';
           ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
           ctx.textAlign = 'center';
