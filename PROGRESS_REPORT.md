@@ -918,6 +918,43 @@ Host/Guests → Ant Media SFU → Server Composite → RTMP → YouTube/Facebook
 
 ---
 
+### Issue #21: Host Control Panel to Composite Sync
+**Status**: ✅ IMPLEMENTED
+**Date**: 2026-01-16
+
+**Problem**: How does the host's layout/background selection get to the server composite running on Ant Media server? Can't send actual images via JSON.
+
+**Solution**: Backend polling architecture:
+
+1. **Backgrounds are already uploaded** with URLs like:
+   - `https://api.streamlick.com/uploads/backgrounds/abc123.jpg`
+
+2. **Host changes settings** → API saves to database:
+   - `PATCH /api/broadcasts/:id/studio-settings` (auth required)
+   - Stores `layout`, `backgroundUrl`, `participantNames` in `studioConfig`
+
+3. **Composite polls backend** every 2 seconds:
+   - `GET /api/broadcasts/:id/studio-settings` (public, no auth)
+   - Returns current layout, background URL, participant names
+
+4. **Composite loads background from URL**:
+   - `new Image().src = backgroundUrl`
+   - CORS-enabled for cross-origin loading
+
+**Screen Share Support**:
+- Detect screen share by checking if streamId contains "screenshare"
+- When Layout 6 (Screen Share) is active, screen share renders as main content
+- Camera feeds become thumbnails at top of canvas
+
+**Files Modified**:
+- `backend/src/api/broadcasts.routes.ts` - Added studio-settings endpoints
+- `frontend/public/streamlick_composite.html` - Added polling logic, screen share detection
+- `frontend/src/services/composite.service.ts` - Updated to call studio-settings endpoint
+
+**Commit**: `7ffee76` - Add host-to-composite sync via backend polling
+
+---
+
 ## Next Steps / TODO
 - [ ] Set TURN password in production frontend `.env`
 - [ ] Consider adding TLS certificates to TURN server for better security
