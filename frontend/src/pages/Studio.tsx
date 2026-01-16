@@ -9,7 +9,7 @@ import { broadcastAPI } from '../services/api';
 import { useStudioStore, LayoutType } from '../store/studioStore';
 import {
   getSocket, joinBroadcast, leaveBroadcast, setLayout as emitSetLayout,
-  bringOnStage, removeFromStage, goLive, endBroadcast
+  bringOnStage, removeFromStage, goLive, endBroadcast, publishStream
 } from '../services/socket';
 import { AntMediaClient, generateStreamId } from '../services/antmedia';
 import { PreviewArea } from '../components/studio/canvas/PreviewArea';
@@ -38,9 +38,11 @@ export default function Studio() {
   const [showLayoutPanel, setShowLayoutPanel] = useState(false);
   const [, setIsConnecting] = useState(true);
   const [screenShareStream, _setScreenShareStream] = useState<MediaStream | null>(null);
+  const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const antMediaRef = useRef<AntMediaClient | null>(null);
+  const remoteClientsRef = useRef<Map<string, AntMediaClient>>(new Map());
 
   // Fetch broadcast data
   const { data: broadcastData, isLoading } = useQuery({
@@ -106,9 +108,23 @@ export default function Studio() {
       setBroadcast({ ...broadcast!, status: 'ENDED' });
     });
 
+    // Listen for participant stream events
+    socket.on('participant-stream-published', (data: { participantId: string; streamId: string }) => {
+      console.log('[Studio] Participant stream published:', data);
+      subscribeToParticipantStream(data.participantId, data.streamId);
+    });
+
+    socket.on('participant-stream-stopped', (data: { participantId: string }) => {
+      console.log('[Studio] Participant stream stopped:', data);
+      unsubscribeFromParticipantStream(data.participantId);
+    });
+
     return () => {
       leaveBroadcast();
       socket.disconnect();
+      // Cleanup all remote clients
+      remoteClientsRef.current.forEach(client => client.disconnect());
+      remoteClientsRef.current.clear();
       reset();
     };
   }, [broadcastData, broadcastId]);
@@ -169,8 +185,14 @@ export default function Studio() {
       streamId,
       mode: 'publish',
       localStream,
-      onStateChange: (state) => console.log('Stream state:', state),
-      onError: (error) => console.error('Stream error:', error),
+      onStateChange: (state) => {
+        console.log('[Studio] Host stream state:', state);
+        // Notify server when publishing starts
+        if (state === 'publishing') {
+          publishStream(streamId);
+        }
+      },
+      onError: (error) => console.error('[Studio] Host stream error:', error),
     });
 
     antMediaRef.current.connect().catch(console.error);
@@ -231,6 +253,54 @@ export default function Studio() {
       navigate('/dashboard');
     } catch (error) {
       console.error('Failed to end broadcast:', error);
+    }
+  };
+
+  // Subscribe to a participant's stream via Ant Media
+  const subscribeToParticipantStream = (participantId: string, streamId: string) => {
+    // Don't subscribe if already subscribed
+    if (remoteClientsRef.current.has(participantId)) {
+      console.log('[Studio] Already subscribed to participant:', participantId);
+      return;
+    }
+
+    console.log('[Studio] Subscribing to participant stream:', { participantId, streamId });
+
+    const client = new AntMediaClient({
+      streamId,
+      mode: 'play',
+      onRemoteStream: (stream) => {
+        console.log('[Studio] Received remote stream for participant:', participantId);
+        setRemoteStreams(prev => {
+          const newMap = new Map(prev);
+          newMap.set(participantId, stream);
+          return newMap;
+        });
+      },
+      onStateChange: (state) => {
+        console.log(`[Studio] Remote stream state for ${participantId}:`, state);
+      },
+      onError: (error) => {
+        console.error(`[Studio] Remote stream error for ${participantId}:`, error);
+      },
+    });
+
+    remoteClientsRef.current.set(participantId, client);
+    client.connect().catch(console.error);
+  };
+
+  // Unsubscribe from a participant's stream
+  const unsubscribeFromParticipantStream = (participantId: string) => {
+    const client = remoteClientsRef.current.get(participantId);
+    if (client) {
+      console.log('[Studio] Unsubscribing from participant:', participantId);
+      client.disconnect();
+      remoteClientsRef.current.delete(participantId);
+      setRemoteStreams(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(participantId);
+        return newMap;
+      });
     }
   };
 
@@ -307,29 +377,42 @@ export default function Studio() {
                 </div>
               ) : (
                 <div className="w-full h-full grid grid-cols-2 gap-2 p-2">
-                  {onStageParticipants.map((participant) => (
-                    <div
-                      key={participant.id}
-                      className="bg-dark-800 rounded-lg flex items-center justify-center relative"
-                    >
-                      {participant.role === 'HOST' && localStream && isVideoEnabled ? (
-                        <video
-                          ref={localVideoRef}
-                          autoPlay
-                          muted
-                          playsInline
-                          className="w-full h-full object-cover rounded-lg"
-                        />
-                      ) : (
-                        <div className="w-20 h-20 bg-brand-600 rounded-full flex items-center justify-center text-2xl font-bold">
-                          {participant.name.charAt(0).toUpperCase()}
+                  {onStageParticipants.map((participant) => {
+                    const remoteStream = remoteStreams.get(participant.id);
+
+                    return (
+                      <div
+                        key={participant.id}
+                        className="bg-dark-800 rounded-lg flex items-center justify-center relative overflow-hidden"
+                      >
+                        {participant.role === 'HOST' && localStream && isVideoEnabled ? (
+                          <video
+                            ref={localVideoRef}
+                            autoPlay
+                            muted
+                            playsInline
+                            className="w-full h-full object-cover rounded-lg"
+                          />
+                        ) : remoteStream && participant.videoEnabled ? (
+                          <video
+                            autoPlay
+                            playsInline
+                            ref={(el) => {
+                              if (el && remoteStream) el.srcObject = remoteStream;
+                            }}
+                            className="w-full h-full object-cover rounded-lg"
+                          />
+                        ) : (
+                          <div className="w-20 h-20 bg-brand-600 rounded-full flex items-center justify-center text-2xl font-bold">
+                            {participant.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 rounded text-sm">
+                          {participant.name}
                         </div>
-                      )}
-                      <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 rounded text-sm">
-                        {participant.name}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -386,7 +469,7 @@ export default function Studio() {
             backstageParticipants={backstageParticipants.map(p => ({
               id: p.id,
               name: p.name,
-              stream: null, // Remote streams would be populated from WebRTC
+              stream: remoteStreams.get(p.id) || null,
               audioEnabled: p.audioEnabled ?? true,
               videoEnabled: p.videoEnabled ?? true,
               role: p.role === 'HOST' ? 'host' : p.role === 'GUEST' ? 'guest' : 'backstage',
@@ -397,7 +480,7 @@ export default function Studio() {
               .map(p => ({
                 id: p.id,
                 name: p.name,
-                stream: null,
+                stream: remoteStreams.get(p.id) || null,
                 audioEnabled: p.audioEnabled ?? true,
                 videoEnabled: p.videoEnabled ?? true,
                 role: p.role === 'HOST' ? 'host' : 'guest',
