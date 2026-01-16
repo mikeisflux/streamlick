@@ -502,7 +502,7 @@
 
       webRTCAdaptor = new WebRTCAdaptor({
         websocket_url: WS_URL,
-        mediaConstraints: { video: false, audio: false },
+        mediaConstraints: { video: true, audio: false }, // Need video:true to send canvas
         localStream: canvasStream,
         peerconnection_config: {
           iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
