@@ -40,6 +40,7 @@ export class AntMediaClient {
   private isConnecting = false;
   private isStopped = false;
   private currentStreamId: string;
+  private hasCreatedOffer = false; // Track if we've sent our offer
 
   constructor(config: AntMediaConfig) {
     this.config = config;
@@ -122,6 +123,9 @@ export class AntMediaClient {
   }
 
   private async cleanupExistingConnection(): Promise<void> {
+    // Reset offer tracking
+    this.hasCreatedOffer = false;
+
     // Send stop command if websocket is still open
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
@@ -230,26 +234,62 @@ export class AntMediaClient {
     }
   }
 
+  private async createAndSendOffer() {
+    if (!this.pc) {
+      console.error('[AntMedia] No peer connection for creating offer');
+      return;
+    }
+
+    try {
+      console.log('[AntMedia] Creating SDP offer...');
+      const offer = await this.pc.createOffer();
+      await this.pc.setLocalDescription(offer);
+
+      console.log('[AntMedia] Sending SDP offer to server');
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          command: 'takeConfiguration',
+          streamId: this.currentStreamId,
+          type: 'offer',
+          sdp: this.pc.localDescription?.sdp,
+        }));
+      }
+      this.hasCreatedOffer = true;
+    } catch (error) {
+      console.error('[AntMedia] Error creating offer:', error);
+      this.config.onError?.('Failed to create offer');
+    }
+  }
+
   private async handleMessage(message: any) {
     console.log(`[AntMedia] Received message: ${message.command || message.definition || 'unknown'}`);
 
     switch (message.command) {
       case 'start':
-        // SDP received - validate before processing
+        // For publish mode: first 'start' comes without SDP - we need to send our offer
+        // After we send offer, server responds with 'start' containing SDP answer
         if (!isValidSdp(message.sdp)) {
-          console.error('[AntMedia] Invalid or missing SDP in start message:', {
-            hasSdp: !!message.sdp,
-            sdpType: typeof message.sdp,
-            sdpPreview: message.sdp ? message.sdp.substring(0, 50) : 'null',
-          });
-          this.config.onError?.('Invalid SDP received from server');
+          if (this.config.mode === 'publish' && !this.hasCreatedOffer) {
+            // This is expected - server is asking us to send our offer
+            console.log('[AntMedia] Received start signal, creating and sending offer...');
+            await this.createAndSendOffer();
+            return;
+          } else {
+            console.error('[AntMedia] Invalid or missing SDP in start message:', {
+              hasSdp: !!message.sdp,
+              sdpType: typeof message.sdp,
+              sdpPreview: message.sdp ? message.sdp.substring(0, 50) : 'null',
+              hasCreatedOffer: this.hasCreatedOffer,
+            });
+            this.config.onError?.('Invalid SDP received from server');
 
-          // Attempt reconnect with new stream ID to avoid conflict
-          if (!this.isStopped && this.reconnectAttempts < this.maxReconnectAttempts) {
-            this.regenerateStreamId();
-            this.attemptReconnect();
+            // Attempt reconnect with new stream ID to avoid conflict
+            if (!this.isStopped && this.reconnectAttempts < this.maxReconnectAttempts) {
+              this.regenerateStreamId();
+              this.attemptReconnect();
+            }
+            return;
           }
-          return;
         }
 
         try {
@@ -284,6 +324,26 @@ export class AntMediaClient {
           if (!this.isStopped && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.regenerateStreamId();
             this.attemptReconnect();
+          }
+        }
+        break;
+
+      case 'takeConfiguration':
+        // Server sent SDP configuration (answer for our offer)
+        if (isValidSdp(message.sdp)) {
+          try {
+            const sdpType = message.type || 'answer';
+            console.log(`[AntMedia] Received takeConfiguration with SDP type: ${sdpType}`);
+
+            await this.pc?.setRemoteDescription(new RTCSessionDescription({
+              type: sdpType,
+              sdp: message.sdp,
+            }));
+
+            this.config.onStateChange?.('connected');
+          } catch (error) {
+            console.error('[AntMedia] takeConfiguration SDP error:', error);
+            this.config.onError?.('SDP configuration failed');
           }
         }
         break;
@@ -469,6 +529,7 @@ export class AntMediaClient {
     this.isStopped = false;
     this.reconnectAttempts = 0;
     this.currentStreamId = this.config.streamId;
+    this.hasCreatedOffer = false;
   }
 }
 
