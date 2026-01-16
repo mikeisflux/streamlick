@@ -738,10 +738,21 @@
               const maxPolls = 20;
               const trackPollInterval = setInterval(() => {
                 pollCount++;
+
+                // Debug: Log ALL keys on the adaptor to find where streams might be stored
+                if (pollCount === 1) {
+                  console.log('[Composite] Adaptor keys:', Object.keys(webRTCAdaptor));
+                  console.log('[Composite] remotePeerConnection type:', typeof webRTCAdaptor.remotePeerConnection);
+                  console.log('[Composite] remotePeerConnection keys:', webRTCAdaptor.remotePeerConnection ? Object.keys(webRTCAdaptor.remotePeerConnection) : 'null');
+                }
+
                 const pc = webRTCAdaptor.remotePeerConnection?.[obj.streamId];
+                console.log(`[Composite] Track poll #${pollCount}: pc exists=${!!pc}, pc type=${pc?.constructor?.name}`);
+
                 if (pc) {
                   const receivers = pc.getReceivers?.() || [];
-                  console.log(`[Composite] Track poll #${pollCount}: receivers=${receivers.length}, tracks=${receivers.filter(r => r.track).length}`);
+                  const senders = pc.getSenders?.() || [];
+                  console.log(`[Composite] Track poll #${pollCount}: receivers=${receivers.length}, senders=${senders.length}, connectionState=${pc.connectionState}, iceConnectionState=${pc.iceConnectionState}`);
 
                   if (receivers.length > 0 && receivers.some(r => r.track)) {
                     const stream = new MediaStream();
