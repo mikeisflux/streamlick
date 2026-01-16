@@ -19,6 +19,7 @@ import { canvasStreamService } from '../../services/canvas-stream.service';
 import { recordingService } from '../../services/recording.service';
 import { broadcastOutputService, BroadcastDestination } from '../../services/broadcast-output.service';
 import { audioMixerService } from '../../services/audio-mixer.service';
+import { compositeService } from '../../services/composite.service';
 import { useStudioStore } from '../../store/studioStore';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
@@ -353,7 +354,7 @@ export function useBroadcast({
   }, [broadcastId, isRecording, handleStopRecording, setIsLive]);
 
   /**
-   * Layout Change
+   * Layout Change - Updates both local compositor and server composite
    */
   const handleLayoutChange = useCallback((layoutId: number) => {
     setSelectedLayout(layoutId);
@@ -371,6 +372,13 @@ export function useBroadcast({
 
     const layoutType = layoutMap[layoutId] || 'grid';
     compositorService.setLayout({ type: layoutType });
+
+    // Forward layout change to server-side composite (if running)
+    // This keeps the server composite in sync with host's layout selection
+    compositeService.setLayout(layoutId).catch((error) => {
+      console.warn('[useBroadcast] Failed to sync layout to server composite:', error);
+      // Don't show error to user - server composite is optional enhancement
+    });
 
     const layoutNames: { [key: number]: string } = {
       1: 'Solo',

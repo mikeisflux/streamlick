@@ -47,6 +47,7 @@ import {
   // NOTE: useGuestStreams (P2P) removed - now using LiveKit SFU via webrtcService
 } from '../hooks/studio';
 import { webrtcService } from '../services/webrtc.service';
+import { compositeService } from '../services/composite.service';
 import { useCanvasSettings } from '../hooks/studio/useCanvasSettings';
 import { socketService } from '../services/socket.service';
 
@@ -234,13 +235,48 @@ export function Studio() {
   useEffect(() => {
     if (!broadcastId || !localStream || webrtcInitializedRef.current || isInitializing) return;
 
-    console.log('[Studio] Auto-initializing WebRTC for LiveKit SFU...');
+    console.log('[Studio] Auto-initializing WebRTC for Ant Media SFU...');
     webrtcInitializedRef.current = true;
     initializeWebRTC().catch((error) => {
       console.error('[Studio] Failed to auto-initialize WebRTC:', error);
       webrtcInitializedRef.current = false; // Allow retry
     });
   }, [broadcastId, localStream, initializeWebRTC, isInitializing]);
+
+  // Start server-side composite after WebRTC is initialized
+  // This makes the broadcast independent of the host browser
+  const compositeStartedRef = useRef(false);
+  useEffect(() => {
+    if (!broadcastId || !webrtcInitializedRef.current || compositeStartedRef.current) return;
+
+    const startComposite = async () => {
+      try {
+        console.log('[Studio] Starting server-side composite...');
+        compositeStartedRef.current = true;
+        await compositeService.start(broadcastId, 3); // Default to Group layout
+        console.log('[Studio] Server-side composite started');
+      } catch (error) {
+        console.error('[Studio] Failed to start server composite:', error);
+        compositeStartedRef.current = false;
+        // Don't show error to user - fall back to local compositing
+      }
+    };
+
+    // Small delay to ensure WebRTC is fully connected
+    const timer = setTimeout(startComposite, 2000);
+    return () => clearTimeout(timer);
+  }, [broadcastId]);
+
+  // Cleanup composite on unmount
+  useEffect(() => {
+    return () => {
+      if (compositeStartedRef.current) {
+        compositeService.stop().catch((error) => {
+          console.error('[Studio] Failed to stop composite on unmount:', error);
+        });
+      }
+    };
+  }, []);
 
   // Chat overlay
   const {
