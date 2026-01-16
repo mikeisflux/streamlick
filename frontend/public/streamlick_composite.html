@@ -29,14 +29,21 @@
       position: absolute;
       top: 0;
       left: 0;
-      z-index: 1;
+      z-index: 9999;
+      display: block !important;
+      visibility: visible !important;
+      background-color: #111;
+      border: 5px solid red;
     }
     .hidden-video {
-      position: absolute;
-      top: -9999px;
-      left: -9999px;
-      width: 10px;
-      height: 10px;
+      position: fixed !important;
+      top: -9999px !important;
+      left: -9999px !important;
+      width: 1px !important;
+      height: 1px !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      z-index: -1 !important;
     }
     #debug {
       position: absolute;
