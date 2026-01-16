@@ -1,50 +1,39 @@
 import { create } from 'zustand';
-import { User } from '../types';
-import { authService } from '../services/auth.service';
-import { fetchCsrfToken } from '../services/api';
+import { persist } from 'zustand/middleware';
+
+interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  avatar?: string;
+}
 
 interface AuthState {
   user: User | null;
+  token: string | null;
   isAuthenticated: boolean;
-  isLoading: boolean;
-  setUser: (user: User | null) => void;
-  login: (user: User) => void;
+  setAuth: (user: User, token: string) => void;
   logout: () => void;
-  checkAuth: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: authService.getUser(),
-  isAuthenticated: authService.isAuthenticated(),
-  isLoading: false,
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      token: null,
+      isAuthenticated: false,
 
-  setUser: (user) => set({ user, isAuthenticated: !!user }),
+      setAuth: (user, token) => set({ user, token, isAuthenticated: true }),
 
-  login: (user) => {
-    authService.setAuth(user);
-    set({ user, isAuthenticated: true });
-  },
-
-  logout: async () => {
-    await authService.logout();
-    set({ user: null, isAuthenticated: false });
-  },
-
-  checkAuth: async () => {
-    if (!authService.isAuthenticated()) {
-      set({ user: null, isAuthenticated: false, isLoading: false });
-      return;
+      logout: () => {
+        set({ user: null, token: null, isAuthenticated: false });
+        // Call logout API
+        fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      },
+    }),
+    {
+      name: 'streamlick-auth',
     }
-
-    set({ isLoading: true });
-    try {
-      const user = await authService.getMe();
-      // Fetch CSRF token after validating authentication
-      // This ensures CSRF token is available for state-changing requests
-      await fetchCsrfToken();
-      set({ user, isAuthenticated: true, isLoading: false });
-    } catch (error) {
-      set({ user: null, isAuthenticated: false, isLoading: false });
-    }
-  },
-}));
+  )
+);

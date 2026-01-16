@@ -1,94 +1,75 @@
-export interface JwtPayload {
-  userId: string;
-  email: string;
-  role?: 'user' | 'admin' | 'guest';
-  id?: string; // Alias for userId for compatibility
-  participantId?: string; // For guest tokens
-  broadcastId?: string; // For guest tokens
+import { Request } from 'express';
+import { Socket } from 'socket.io';
+
+// Authenticated request with user info
+export interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    email: string;
+    role: string;
+  };
 }
 
-export interface BroadcastStatus {
-  id: string;
-  status: 'scheduled' | 'live' | 'ended' | 'recording';
-  viewerCount: number;
-  startedAt?: Date;
+// Socket with user data
+export interface AuthenticatedSocket extends Socket {
+  userId?: string;
+  broadcastId?: string;
+  participantId?: string;
 }
 
-export interface ParticipantInfo {
+// Broadcast layout types
+export type LayoutType =
+  | 'grid'           // Equal-sized grid
+  | 'spotlight'      // One large, others small
+  | 'side-by-side'   // Two columns
+  | 'picture-in-picture' // Main + small overlay
+  | 'single';        // One participant only
+
+// Compositor state
+export interface CompositorState {
+  broadcastId: string;
+  layout: LayoutType;
+  participants: ParticipantState[];
+  overlays: OverlayState[];
+  backgroundColor: string;
+  logoUrl?: string;
+}
+
+export interface ParticipantState {
   id: string;
   name: string;
-  role: 'host' | 'guest' | 'backstage' | 'greenroom';
-  status: 'invited' | 'joined' | 'disconnected';
-  audio: boolean;
-  video: boolean;
+  streamId: string;
+  position: number;
+  isOnStage: boolean;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
 }
 
-export interface StudioConfig {
-  layout: LayoutConfig;
-  branding: BrandingConfig;
-  overlays: OverlayConfig[];
-}
-
-export interface LayoutConfig {
-  type: 'single' | 'side-by-side' | 'grid' | 'pip' | 'screen-share';
-  participants: ParticipantLayout[];
-}
-
-export interface ParticipantLayout {
-  participantId: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  shape: 'rectangle' | 'circle' | 'rounded';
-  zIndex: number;
-}
-
-export interface BrandingConfig {
-  logo?: {
-    url: string;
-    position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-    size: number;
-  };
-  background?: {
-    type: 'color' | 'image' | 'video';
-    value: string;
-  };
-  colors?: {
-    primary: string;
-    secondary: string;
-  };
-}
-
-export interface OverlayConfig {
-  id: string;
-  type: 'banner' | 'text' | 'image' | 'cta';
+export interface OverlayState {
+  type: 'text' | 'image' | 'lower-third';
   content: string;
   position: { x: number; y: number };
-  style: Record<string, string>;
   visible: boolean;
 }
 
-export interface RTMPDestination {
-  platform: 'youtube' | 'facebook' | 'linkedin' | 'twitch' | 'custom';
-  rtmpUrl: string;
-  streamKey: string;
-  active: boolean;
+// WebRTC Signaling
+export interface WebRTCOffer {
+  streamId: string;
+  sdp: string;
 }
 
-export interface MediaCapabilities {
-  audio: boolean;
-  video: boolean;
-  screen: boolean;
-  videoResolution?: {
-    width: number;
-    height: number;
-  };
+export interface WebRTCAnswer {
+  streamId: string;
+  sdp: string;
 }
 
-export interface ChatMessageData {
-  platform: string;
-  author: string;
-  message: string;
-  timestamp: Date;
+export interface WebRTCCandidate {
+  streamId: string;
+  candidate: RTCIceCandidateInit;
+}
+
+// Ant Media Events
+export interface AntMediaStreamInfo {
+  streamId: string;
+  status: 'broadcasting' | 'finished' | 'failed';
 }

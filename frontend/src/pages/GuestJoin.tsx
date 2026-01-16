@@ -1,670 +1,360 @@
-/**
- * GuestJoin Page
- *
- * Entry point for guests joining a broadcast.
- * Uses modular hooks and components for cleaner code organization.
- */
-
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { useMedia } from '../hooks/useMedia';
-import { socketService } from '../services/socket.service';
-import { webrtcService } from '../services/webrtc.service';
-import api from '../services/api';
-import toast from 'react-hot-toast';
+import { Mic, MicOff, Video, VideoOff, Monitor, Settings } from 'lucide-react';
+import { participantAPI } from '../services/api';
+import { connectWithInviteToken, joinBroadcast, publishStream } from '../services/socket';
+import { AntMediaClient, generateStreamId } from '../services/antmedia';
 
-// Hooks - useGuestStream removed in favor of Ant Media SFU
-// useCompositeStream subscribes to server-side composite via Ant Media WebRTC
-// This replaces P2P preview - now host disconnect won't break guest preview!
-import {
-  useDeviceEnumeration,
-  useStatusListeners,
-  useGreenroomChat,
-  useCompositeStream,
-} from '../hooks/guest';
+type Stage = 'loading' | 'lobby' | 'greenroom' | 'live' | 'ended';
 
-// Components
-import { GuestJoinLobby, GuestGreenroom, GuestStatus } from '../components/guest';
-
-// Storage key for persisting participant session
-const getSessionKey = (token: string) => `streamlick_guest_${token}`;
-
-// Resolution presets for bandwidth optimization
-// Greenroom: Low resolution since preview tile is small (160x90px)
-// Stage: Higher resolution for the main broadcast canvas
-const RESOLUTION_GREENROOM = { width: 480, height: 270, frameRate: 24 };
-const RESOLUTION_STAGE = { width: 1280, height: 720, frameRate: 30 };
-
-interface StoredSession {
-  participantId: string;
-  guestName: string;
-  hasJoined: boolean;
-}
-
-export function GuestJoin() {
+export default function GuestJoin() {
   const { token } = useParams<{ token: string }>();
+  const [stage, setStage] = useState<Stage>('loading');
+  const [participant, setParticipant] = useState<any>(null);
+  const [broadcast, setBroadcast] = useState<any>(null);
+  const [error, setError] = useState('');
+  const [name, setName] = useState('');
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
 
-  // Load stored session if exists
-  const storedSession = token ? (() => {
-    try {
-      const stored = sessionStorage.getItem(getSessionKey(token));
-      return stored ? JSON.parse(stored) as StoredSession : null;
-    } catch {
-      return null;
-    }
-  })() : null;
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const previewRef = useRef<HTMLVideoElement>(null);
+  const antMediaRef = useRef<AntMediaClient | null>(null);
+  const previewClientRef = useRef<AntMediaClient | null>(null);
 
-  // Core state - restore from session if available
-  const [guestName, setGuestName] = useState(storedSession?.guestName || '');
-  const [isJoining, setIsJoining] = useState(false);
-  const [broadcastInfo, setBroadcastInfo] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasJoined, setHasJoined] = useState(false);
-  const [guestStatus, setGuestStatus] = useState<GuestStatus>('greenroom');
-  const [myParticipantId, setMyParticipantId] = useState<string | null>(storedSession?.participantId || null);
-  const [streamVolume, setStreamVolume] = useState(0.3);
-
-  // Track if we should auto-rejoin on load
-  const shouldAutoRejoin = storedSession?.hasJoined && storedSession?.guestName;
-
-  // Media hook
-  const {
-    localStream,
-    screenStream,
-    audioEnabled,
-    videoEnabled,
-    startCamera,
-    startScreenShare,
-    stopScreenShare,
-    toggleAudio,
-    toggleVideo,
-  } = useMedia();
-
-  // Screen sharing state
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
-
-  // Track if we've successfully published to LiveKit
-  const hasPublishedRef = useRef(false);
-
-  // Device enumeration hook
-  const {
-    audioDevices,
-    videoDevices,
-    selectedAudioDevice,
-    selectedVideoDevice,
-    setSelectedAudioDevice,
-    setSelectedVideoDevice,
-    refreshDevices,
-  } = useDeviceEnumeration();
-
-  // Status listeners hook
-  useStatusListeners({
-    hasJoined,
-    myParticipantId,
-    onStatusChange: setGuestStatus,
-  });
-
-  // NOTE: useGuestStream (P2P camera) removed in favor of Ant Media SFU
-  // Guest publishes/subscribes camera via webrtcService.joinRoom()
-  // LIVE preview now comes from server composite via useCompositeStream (not P2P from host)
-
-  // Greenroom chat hook
-  const {
-    greenroomParticipants,
-    privateChatMessages,
-    publicChatMessages,
-    sendPrivateChat,
-  } = useGreenroomChat({ hasJoined });
-
-  // Server composite stream hook - subscribes to server-side composite via Ant Media
-  // This shows the FULL broadcast preview (all participants, overlays, backgrounds)
-  // Host disconnect no longer breaks guest preview!
-  const { compositeStream: broadcastStream, isConnecting: isCompositeConnecting, error: compositeError } = useCompositeStream({
-    hasJoined,
-    broadcastId: broadcastInfo?.id,
-  });
-
-  // Cleanup Ant Media callbacks when leaving
-  // NOTE: Callbacks are set up in handleJoin BEFORE joinRoom to avoid race condition
+  // Load participant info
   useEffect(() => {
-    return () => {
-      if (hasJoined) {
-        webrtcService.setRemoteStreamCallback(() => {});
-        webrtcService.setParticipantLeftCallback(() => {});
-      }
-    };
-  }, [hasJoined]);
-
-  // Track initial mute state to avoid calling mute API on mount
-  // Calling turnOnLocalCamera/unmuteLocalMic when already on can restart the stream
-  const initialMuteStateRef = useRef<{ audio: boolean | null; video: boolean | null }>({
-    audio: null,
-    video: null,
-  });
-
-  // Sync audio mute state with Ant Media - only on actual state CHANGES
-  // Skip initial sync since the stream is already set up correctly
-  useEffect(() => {
-    if (!hasJoined || !hasPublishedRef.current) return;
-
-    // On first run, just record the initial state without calling the API
-    if (initialMuteStateRef.current.audio === null) {
-      initialMuteStateRef.current.audio = audioEnabled;
-      console.log('[GuestJoin] Recording initial audio state:', audioEnabled);
-      return;
-    }
-
-    // Only call API if state actually changed
-    if (initialMuteStateRef.current.audio !== audioEnabled) {
-      console.log('[GuestJoin] Audio state changed, syncing with Ant Media:', !audioEnabled);
-      webrtcService.muteAudio(!audioEnabled);
-      initialMuteStateRef.current.audio = audioEnabled;
-    }
-  }, [audioEnabled, hasJoined]);
-
-  // Sync video mute state with Ant Media - only on actual state CHANGES
-  useEffect(() => {
-    if (!hasJoined || !hasPublishedRef.current) return;
-
-    // On first run, just record the initial state without calling the API
-    if (initialMuteStateRef.current.video === null) {
-      initialMuteStateRef.current.video = videoEnabled;
-      console.log('[GuestJoin] Recording initial video state:', videoEnabled);
-      return;
-    }
-
-    // Only call API if state actually changed
-    if (initialMuteStateRef.current.video !== videoEnabled) {
-      console.log('[GuestJoin] Video state changed, syncing with Ant Media:', !videoEnabled);
-      webrtcService.muteVideo(!videoEnabled);
-      initialMuteStateRef.current.video = videoEnabled;
-    }
-  }, [videoEnabled, hasJoined]);
-
-  // Load invite on mount
-  useEffect(() => {
-    const loadInvite = async () => {
+    async function loadParticipant() {
       try {
-        const response = await api.get(`/participants/join/${token}`);
-        setBroadcastInfo(response.data.broadcast);
-        if (response.data.participantName) {
-          setGuestName(response.data.participantName);
-        }
-        setIsLoading(false);
-      } catch (error) {
-        toast.error('Invalid or expired invite link');
-        setIsLoading(false);
+        const data = await participantAPI.getByToken(token!);
+        setParticipant(data);
+        setBroadcast(data.broadcast);
+        setName(data.name);
+        setStage('lobby');
+      } catch (err: any) {
+        setError(err.message || 'Invalid invite link');
       }
-    };
+    }
 
-    const initCamera = async () => {
-      // Start with front camera (user) by default for mobile
-      // Use low resolution for greenroom to save bandwidth - host only sees small preview tile
-      await startCamera({
-        facingMode: 'user',
-        ...RESOLUTION_GREENROOM,
-      });
-      console.log('[GuestJoin] Started camera with greenroom resolution:', RESOLUTION_GREENROOM);
-      // Re-enumerate devices after camera permission is granted
-      // This ensures device labels are available (browsers only show labels after permission)
-      await refreshDevices();
-    };
-
-    loadInvite();
-    initCamera();
+    if (token) {
+      loadParticipant();
+    }
   }, [token]);
 
-  // Auto-rejoin if we have a stored session (page refresh)
-  const autoRejoinAttempted = useRef(false);
+  // Get local media when entering greenroom
   useEffect(() => {
-    if (
-      shouldAutoRejoin &&
-      broadcastInfo &&
-      localStream &&
-      !hasJoined &&
-      !isJoining &&
-      !autoRejoinAttempted.current
-    ) {
-      autoRejoinAttempted.current = true;
-      console.log('[GuestJoin] Auto-rejoining from stored session');
-      handleJoin();
-    }
-  }, [shouldAutoRejoin, broadcastInfo, localStream, hasJoined, isJoining]);
+    async function getMedia() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+        setLocalStream(stream);
 
-  // Track current resolution mode for device switching
-  const currentResolutionRef = useRef<'greenroom' | 'stage'>('greenroom');
-
-  // Switch to high resolution when promoted to stage, back to low when moved to greenroom
-  const previousStatusRef = useRef<GuestStatus>(guestStatus);
-  useEffect(() => {
-    if (!hasJoined || !hasPublishedRef.current) return;
-
-    const previousStatus = previousStatusRef.current;
-    previousStatusRef.current = guestStatus;
-
-    // Detect promotion to stage (greenroom/backstage -> live)
-    if (guestStatus === 'live' && previousStatus !== 'live' && currentResolutionRef.current !== 'stage') {
-      console.log('[GuestJoin] Promoted to stage - upgrading to high resolution');
-      currentResolutionRef.current = 'stage';
-
-      const upgradeResolution = async () => {
-        try {
-          // Restart camera with higher resolution
-          const newStream = await startCamera({
-            videoDeviceId: selectedVideoDevice || undefined,
-            audioDeviceId: selectedAudioDevice || undefined,
-            ...RESOLUTION_STAGE,
-          });
-
-          // Replace video track on Ant Media connection
-          if (newStream) {
-            const videoTrack = newStream.getVideoTracks()[0];
-            if (videoTrack) {
-              await webrtcService.replaceVideoTrack(videoTrack);
-              console.log('[GuestJoin] Upgraded to stage resolution:', RESOLUTION_STAGE);
-            }
-          }
-        } catch (error) {
-          console.error('[GuestJoin] Failed to upgrade resolution:', error);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
         }
-      };
-
-      upgradeResolution();
+      } catch (err) {
+        console.error('Failed to get media:', err);
+        setError('Could not access camera/microphone');
+      }
     }
 
-    // Detect demotion back to greenroom/backstage (live -> greenroom/backstage)
-    if (guestStatus !== 'live' && previousStatus === 'live' && currentResolutionRef.current !== 'greenroom') {
-      console.log('[GuestJoin] Moved to greenroom/backstage - downgrading to low resolution');
-      currentResolutionRef.current = 'greenroom';
-
-      const downgradeResolution = async () => {
-        try {
-          // Restart camera with lower resolution
-          const newStream = await startCamera({
-            videoDeviceId: selectedVideoDevice || undefined,
-            audioDeviceId: selectedAudioDevice || undefined,
-            ...RESOLUTION_GREENROOM,
-          });
-
-          // Replace video track on Ant Media connection
-          if (newStream) {
-            const videoTrack = newStream.getVideoTracks()[0];
-            if (videoTrack) {
-              await webrtcService.replaceVideoTrack(videoTrack);
-              console.log('[GuestJoin] Downgraded to greenroom resolution:', RESOLUTION_GREENROOM);
-            }
-          }
-        } catch (error) {
-          console.error('[GuestJoin] Failed to downgrade resolution:', error);
-        }
-      };
-
-      downgradeResolution();
+    if (stage === 'greenroom' || stage === 'live') {
+      getMedia();
     }
-  }, [guestStatus, hasJoined, selectedVideoDevice, selectedAudioDevice, startCamera]);
 
-  // Handle camera/mic device selection changes
-  useEffect(() => {
-    if (!selectedVideoDevice && !selectedAudioDevice) return;
-    // Only switch if we already have a stream (don't trigger on initial load)
-    if (!localStream) return;
-
-    const switchDevices = async () => {
-      // Preserve current resolution setting when switching devices
-      const resolution = currentResolutionRef.current === 'stage' ? RESOLUTION_STAGE : RESOLUTION_GREENROOM;
-      console.log('[GuestJoin] Switching devices with resolution:', { selectedVideoDevice, selectedAudioDevice, resolution });
-      await startCamera({
-        videoDeviceId: selectedVideoDevice || undefined,
-        audioDeviceId: selectedAudioDevice || undefined,
-        ...resolution,
-      });
+    return () => {
+      localStream?.getTracks().forEach(t => t.stop());
     };
+  }, [stage]);
 
-    switchDevices();
-  }, [selectedVideoDevice, selectedAudioDevice]);
+  // Connect to socket and Ant Media when joining
+  const handleJoin = async () => {
+    try {
+      // Join via API
+      const updatedParticipant = await participantAPI.join(token!, name);
+      setParticipant(updatedParticipant);
 
-  // Helper to flip camera (mobile)
-  const [currentFacingMode, setCurrentFacingMode] = useState<'user' | 'environment'>('user');
-  const flipCamera = async () => {
-    const newMode = currentFacingMode === 'user' ? 'environment' : 'user';
-    // Preserve current resolution setting when flipping camera
-    const resolution = currentResolutionRef.current === 'stage' ? RESOLUTION_STAGE : RESOLUTION_GREENROOM;
-    console.log('[GuestJoin] Flipping camera to:', newMode, 'with resolution:', resolution);
-    await startCamera({ facingMode: newMode, ...resolution });
-    setCurrentFacingMode(newMode);
-    await refreshDevices();
+      // Connect socket with invite token
+      const socket = connectWithInviteToken(token!);
+
+      socket.on('connect', () => {
+        joinBroadcast(updatedParticipant.broadcast.id);
+      });
+
+      socket.on('broadcast-state', (state) => {
+        setBroadcast(state.broadcast);
+        if (state.broadcast.status === 'LIVE') {
+          setStage('live');
+        } else if (state.broadcast.status === 'ENDED') {
+          setStage('ended');
+        }
+      });
+
+      socket.on('broadcast-live', () => {
+        setStage('live');
+      });
+
+      socket.on('broadcast-ended', () => {
+        setStage('ended');
+      });
+
+      // Move to greenroom
+      setStage('greenroom');
+
+    } catch (err: any) {
+      setError(err.message || 'Failed to join');
+    }
   };
 
-  // Cleanup on unmount
+  // Publish stream to Ant Media
+  const handlePublish = async () => {
+    if (!localStream || !participant || !broadcast) return;
+
+    const streamId = generateStreamId(broadcast.id, participant.id);
+
+    antMediaRef.current = new AntMediaClient({
+      streamId,
+      mode: 'publish',
+      localStream,
+      onStateChange: (state) => {
+        console.log('Publish state:', state);
+        if (state === 'publishing') {
+          publishStream(streamId);
+        }
+      },
+      onError: (error) => {
+        console.error('Publish error:', error);
+      },
+    });
+
+    await antMediaRef.current.connect();
+  };
+
+  // Subscribe to preview stream
+  useEffect(() => {
+    if (stage !== 'live' || !broadcast?.previewUrl) return;
+
+    previewClientRef.current = new AntMediaClient({
+      streamId: broadcast.previewUrl,
+      mode: 'play',
+      onRemoteStream: (stream) => {
+        setPreviewStream(stream);
+        if (previewRef.current) {
+          previewRef.current.srcObject = stream;
+        }
+      },
+      onStateChange: (state) => console.log('Preview state:', state),
+      onError: (error) => console.error('Preview error:', error),
+    });
+
+    previewClientRef.current.connect();
+
+    return () => {
+      previewClientRef.current?.disconnect();
+    };
+  }, [stage, broadcast?.previewUrl]);
+
+  // Toggle controls
+  const toggleAudio = () => {
+    if (localStream) {
+      localStream.getAudioTracks().forEach(t => { t.enabled = !isAudioEnabled; });
+      setIsAudioEnabled(!isAudioEnabled);
+    }
+  };
+
+  const toggleVideo = () => {
+    if (localStream) {
+      localStream.getVideoTracks().forEach(t => { t.enabled = !isVideoEnabled; });
+      setIsVideoEnabled(!isVideoEnabled);
+    }
+  };
+
+  // Cleanup
   useEffect(() => {
     return () => {
-      if (hasJoined) {
-        socketService.leaveStudio();
-        socketService.disconnect();
-        webrtcService.close().catch((error) => {
-          console.error('Error cleaning up WebRTC on unmount:', error);
-        });
-      }
+      antMediaRef.current?.disconnect();
+      previewClientRef.current?.disconnect();
     };
-  }, [hasJoined]);
-
-  // Join LiveKit when localStream becomes available (handles race condition)
-  // If we joined before the stream was ready, this will publish once it's available
-  useEffect(() => {
-    if (!hasJoined || !localStream || hasPublishedRef.current) return;
-
-    const publishToLiveKit = async () => {
-      try {
-        console.log('[GuestJoin] localStream now available, joining LiveKit room');
-        await webrtcService.joinRoom(localStream);
-        hasPublishedRef.current = true;
-        console.log('[GuestJoin] Successfully published to LiveKit');
-      } catch (error) {
-        console.error('[GuestJoin] Failed to publish to LiveKit:', error);
-      }
-    };
-
-    publishToLiveKit();
-  }, [hasJoined, localStream]);
-
-  // Join handler
-  const handleJoin = async () => {
-    if (!guestName.trim()) {
-      toast.error('Please enter your name');
-      return;
-    }
-
-    if (!token || !broadcastInfo) return;
-
-    setIsJoining(true);
-    try {
-      // Update participant with name
-      const response = await api.post(`/participants/join/${token}`, {
-        name: guestName,
-      });
-
-      const participant = response.data.participant;
-      setMyParticipantId(participant.id);
-
-      // Connect to studio with participant token
-      socketService.connect(undefined, token);
-      socketService.joinStudio(broadcastInfo.id, participant.id);
-
-      // Initialize WebRTC connection to LiveKit SFU with StreamLick participant ID
-      // This ensures the LiveKit participant.identity matches our database ID
-      try {
-        await webrtcService.initialize(broadcastInfo.id, participant.id);
-      } catch (error) {
-        console.error('Failed to initialize WebRTC:', error);
-        throw new Error('Failed to initialize WebRTC connection');
-      }
-
-      // CRITICAL: Set up callbacks BEFORE joining room to avoid race condition
-      // Tracks can arrive immediately after joinRoom() returns
-      // NOTE: These callbacks receive raw camera streams from other participants (via Ant Media SFU)
-      // The composed canvas preview comes separately via P2P (usePreviewStream hook)
-      webrtcService.setRemoteStreamCallback((streamId: string, stream: MediaStream) => {
-        console.log('[GuestJoin] Received remote participant stream from Ant Media:', streamId, {
-          audioTracks: stream.getAudioTracks().length,
-          videoTracks: stream.getVideoTracks().length,
-        });
-        // Note: This is a raw participant camera stream, not the composed canvas preview
-        // The canvas preview is handled by the usePreviewStream P2P hook
-      });
-      webrtcService.setParticipantLeftCallback((streamId: string) => {
-        console.log('[GuestJoin] Participant left:', streamId);
-      });
-
-      // Join room and publish local stream via LiveKit SFU
-      // This handles both sending our stream and receiving other participants' streams
-      if (localStream) {
-        try {
-          await webrtcService.joinRoom(localStream);
-          hasPublishedRef.current = true;
-          console.log('[GuestJoin] Joined LiveKit room with local stream');
-        } catch (error) {
-          console.error('Failed to join room:', error);
-          throw new Error('Failed to join media room');
-        }
-      } else {
-        // Stream not ready yet - the useEffect will handle publishing when it becomes available
-        console.warn('[GuestJoin] No local stream available when joining - will publish when ready');
-      }
-
-      // Join greenroom
-      socketService.emit('join-greenroom', { broadcastId: broadcastInfo.id });
-
-      setHasJoined(true);
-
-      // Save session for page refresh persistence
-      try {
-        sessionStorage.setItem(getSessionKey(token!), JSON.stringify({
-          participantId: participant.id,
-          guestName,
-          hasJoined: true,
-        } as StoredSession));
-        console.log('[GuestJoin] Session saved for refresh persistence');
-      } catch (e) {
-        console.warn('[GuestJoin] Failed to save session:', e);
-      }
-
-      toast.success('Joined successfully! Waiting for host...');
-    } catch (error) {
-      console.error('Failed to join broadcast:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to join broadcast');
-
-      // Cleanup on failure
-      try {
-        socketService.leaveStudio();
-        socketService.disconnect();
-        await webrtcService.close();
-      } catch (cleanupError) {
-        console.error('Cleanup error:', cleanupError);
-      }
-
-      setIsJoining(false);
-    }
-  };
-
-  // Send private chat handler
-  const handleSendPrivateMessage = (message: string) => {
-    if (broadcastInfo?.id) {
-      sendPrivateChat(message, guestName, broadcastInfo.id);
-    }
-  };
-
-  // Screen share handler
-  const handleToggleScreenShare = async () => {
-    try {
-      if (isScreenSharing) {
-        // Stop screen share - restore camera track
-        stopScreenShare();
-        setIsScreenSharing(false);
-
-        // Restore camera video track on the WebRTC connection
-        const cameraTrack = localStream?.getVideoTracks()[0];
-        if (cameraTrack) {
-          try {
-            await webrtcService.replaceVideoTrack(cameraTrack);
-          } catch (error) {
-            console.error('Failed to restore camera track:', error);
-          }
-        }
-        toast.success('Screen sharing stopped');
-      } else {
-        const stream = await startScreenShare();
-        if (stream) {
-          setIsScreenSharing(true);
-          toast.success('Screen sharing started');
-
-          // Handle user stopping screen share via browser UI
-          const screenTrack = stream.getVideoTracks()[0];
-          screenTrack.onended = () => {
-            setIsScreenSharing(false);
-            stopScreenShare();
-            // Restore camera track
-            const cameraTrack = localStream?.getVideoTracks()[0];
-            if (cameraTrack) {
-              webrtcService.replaceVideoTrack(cameraTrack).catch(console.error);
-            }
-          };
-
-          // Replace camera track with screen share track on WebRTC connection
-          if (screenTrack) {
-            try {
-              await webrtcService.replaceVideoTrack(screenTrack);
-              console.log('[GuestJoin] Replaced camera with screen share');
-            } catch (error) {
-              console.error('Failed to share screen via WebRTC:', error);
-              toast.error('Failed to share screen');
-              stopScreenShare();
-              setIsScreenSharing(false);
-            }
-          }
-        }
-      }
-    } catch (error: any) {
-      if (error?.name !== 'NotAllowedError') {
-        console.error('Screen share error:', error);
-        toast.error('Failed to share screen');
-      }
-      setIsScreenSharing(false);
-    }
-  };
-
-  // Leave handler with proper cleanup
-  const handleLeave = async () => {
-    if (window.confirm('Are you sure you want to leave the show?')) {
-      try {
-        // Stop screen sharing if active
-        if (isScreenSharing) {
-          stopScreenShare();
-          setIsScreenSharing(false);
-        }
-
-        // Leave studio via socket
-        socketService.leaveStudio();
-        socketService.disconnect();
-
-        // Close WebRTC connections
-        await webrtcService.close();
-
-        // Reset state
-        setHasJoined(false);
-        setGuestStatus('greenroom');
-        hasPublishedRef.current = false;
-
-        // Clear stored session so we don't auto-rejoin
-        if (token) {
-          try {
-            sessionStorage.removeItem(getSessionKey(token));
-          } catch (e) {
-            // Ignore
-          }
-        }
-
-        toast.success('You have left the show');
-
-        // Redirect to home or show a "left" message
-        window.location.href = '/';
-      } catch (error) {
-        console.error('Error leaving broadcast:', error);
-        // Force reload as fallback
-        window.location.reload();
-      }
-    }
-  };
+  }, []);
 
   // Loading state
-  if (isLoading) {
+  if (stage === 'loading') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
+      <div className="min-h-screen bg-dark-950 flex items-center justify-center">
+        <div className="text-dark-400">Loading...</div>
       </div>
     );
   }
 
-  // Invalid invite state
-  if (!broadcastInfo) {
+  // Error state
+  if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center px-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg
-              className="w-8 h-8 text-red-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Invalid Invite</h2>
-          <p className="text-gray-600 mb-6">
-            This invite link is invalid or has expired. Please contact the host for a new link.
-          </p>
+      <div className="min-h-screen bg-dark-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-400 mb-4">{error}</div>
+          <a href="/" className="text-brand-400 hover:text-brand-300">
+            Go to homepage
+          </a>
         </div>
       </div>
     );
   }
 
-  // Greenroom view (after joining)
-  if (hasJoined) {
+  // Ended state
+  if (stage === 'ended') {
     return (
-      <GuestGreenroom
-        broadcastTitle={broadcastInfo.title}
-        guestName={guestName}
-        status={guestStatus}
-        localStream={localStream}
-        broadcastStream={broadcastStream}
-        streamVolume={streamVolume}
-        audioEnabled={audioEnabled}
-        videoEnabled={videoEnabled}
-        isScreenSharing={isScreenSharing}
-        participants={greenroomParticipants}
-        privateChatMessages={privateChatMessages}
-        publicChatMessages={publicChatMessages}
-        audioDevices={audioDevices}
-        videoDevices={videoDevices}
-        selectedAudioDevice={selectedAudioDevice}
-        selectedVideoDevice={selectedVideoDevice}
-        onToggleAudio={toggleAudio}
-        onToggleVideo={toggleVideo}
-        onToggleScreenShare={handleToggleScreenShare}
-        onVolumeChange={setStreamVolume}
-        onSendPrivateMessage={handleSendPrivateMessage}
-        onAudioDeviceChange={setSelectedAudioDevice}
-        onVideoDeviceChange={setSelectedVideoDevice}
-        onLeave={handleLeave}
-      />
+      <div className="min-h-screen bg-dark-950 flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-4">Broadcast Ended</h2>
+          <p className="text-dark-400">Thanks for joining!</p>
+        </div>
+      </div>
     );
   }
 
-  // Lobby view (before joining)
+  // Lobby - Name entry
+  if (stage === 'lobby') {
+    return (
+      <div className="min-h-screen bg-dark-950 flex items-center justify-center px-4">
+        <div className="max-w-md w-full">
+          <div className="text-center mb-8">
+            <div className="text-3xl font-bold bg-gradient-to-r from-brand-400 to-brand-600 text-transparent bg-clip-text mb-4">
+              Streamlick
+            </div>
+            <h2 className="text-xl font-semibold">{broadcast?.title}</h2>
+            <p className="text-dark-400 mt-2">You've been invited to join this broadcast</p>
+          </div>
+
+          <div className="bg-dark-900 rounded-2xl p-6 border border-dark-800">
+            <div className="mb-6">
+              <label className="block text-sm font-medium mb-2">Your Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-lg focus:outline-none focus:border-brand-500"
+                placeholder="Enter your name"
+              />
+            </div>
+
+            <button
+              onClick={handleJoin}
+              disabled={!name.trim()}
+              className="w-full py-3 bg-brand-600 hover:bg-brand-700 rounded-lg font-semibold transition disabled:opacity-50"
+            >
+              Join Greenroom
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Greenroom / Live
   return (
-    <GuestJoinLobby
-      broadcastTitle={broadcastInfo.title}
-      localStream={localStream}
-      guestName={guestName}
-      isJoining={isJoining}
-      audioEnabled={audioEnabled}
-      videoEnabled={videoEnabled}
-      audioDevices={audioDevices}
-      videoDevices={videoDevices}
-      selectedAudioDevice={selectedAudioDevice}
-      selectedVideoDevice={selectedVideoDevice}
-      onNameChange={setGuestName}
-      onJoin={handleJoin}
-      onToggleAudio={toggleAudio}
-      onToggleVideo={toggleVideo}
-      onAudioDeviceChange={setSelectedAudioDevice}
-      onVideoDeviceChange={setSelectedVideoDevice}
-      onFlipCamera={flipCamera}
-    />
+    <div className="min-h-screen bg-dark-950 flex flex-col">
+      {/* Header */}
+      <header className="h-14 bg-dark-900 border-b border-dark-800 flex items-center justify-between px-4">
+        <div>
+          <h1 className="font-semibold">{broadcast?.title}</h1>
+          <div className="text-sm">
+            {stage === 'live' ? (
+              <span className="flex items-center gap-1 text-red-400">
+                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                LIVE
+              </span>
+            ) : (
+              <span className="text-yellow-400">Greenroom</span>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Main */}
+      <div className="flex-1 flex">
+        {/* Self view */}
+        <div className="flex-1 p-4 flex flex-col">
+          <div className="flex-1 bg-dark-900 rounded-xl overflow-hidden relative">
+            {localStream && isVideoEnabled ? (
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="w-32 h-32 bg-brand-600 rounded-full flex items-center justify-center text-5xl font-bold">
+                  {name.charAt(0).toUpperCase()}
+                </div>
+              </div>
+            )}
+            <div className="absolute bottom-4 left-4 px-3 py-1.5 bg-black/50 rounded-lg text-sm">
+              {name} (You)
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="mt-4 flex items-center justify-center gap-4">
+            <button
+              onClick={toggleAudio}
+              className={`p-4 rounded-full transition ${
+                isAudioEnabled ? 'bg-dark-700 hover:bg-dark-600' : 'bg-red-600 hover:bg-red-700'
+              }`}
+            >
+              {isAudioEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
+            </button>
+            <button
+              onClick={toggleVideo}
+              className={`p-4 rounded-full transition ${
+                isVideoEnabled ? 'bg-dark-700 hover:bg-dark-600' : 'bg-red-600 hover:bg-red-700'
+              }`}
+            >
+              {isVideoEnabled ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
+            </button>
+            {stage === 'greenroom' && !antMediaRef.current && (
+              <button
+                onClick={handlePublish}
+                className="px-6 py-4 bg-brand-600 hover:bg-brand-700 rounded-full font-medium transition"
+              >
+                Start Streaming
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Live Preview (when live) */}
+        {stage === 'live' && (
+          <div className="w-96 bg-dark-900 border-l border-dark-800 p-4">
+            <h3 className="font-semibold mb-3 flex items-center gap-2">
+              <Monitor className="w-4 h-4" />
+              Live Preview
+            </h3>
+            <div className="aspect-video bg-dark-800 rounded-lg overflow-hidden">
+              {previewStream ? (
+                <video
+                  ref={previewRef}
+                  autoPlay
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-dark-500">
+                  Connecting to preview...
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-dark-500 mt-2 text-center">
+              This is what viewers see
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

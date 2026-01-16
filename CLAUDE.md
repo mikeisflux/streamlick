@@ -1,105 +1,111 @@
-# Claude Code Instructions for StreamLick
+# Streamlick v2.0 - StreamYard Competitor
 
-## Standard Procedures
+## Architecture Overview
 
-### 1. Progress Report Maintenance
-**ALWAYS** update `PROGRESS_REPORT.md` when:
-- Encountering a new bug/issue
-- Implementing a fix
-- Discovering root causes
-- Making commits
-
-Before attempting any fix, **CHECK** `PROGRESS_REPORT.md` to see if:
-- The issue has been encountered before
-- A fix was already attempted
-- There are known workarounds
-
-### 2. Commit Tracking
-After every commit, add an entry to `PROGRESS_REPORT.md` with:
-- Issue description
-- Root cause analysis
-- Fix applied
-- Commit hash
-- Files modified
-
-### 3. Debugging WebRTC/Video Issues
-When debugging video streaming issues:
-1. Check console logs for these patterns:
-   - `[HTMLPreviewVideo]` - Main canvas video
-   - `[PreviewVideo]` - Preview tile video
-   - `[StudioCanvas]` - Canvas render loop
-   - `[WebRTC-AntMedia]` - Ant Media connection
-   - `[Studio]` - Stream matching
-2. Verify participant IDs are UUIDs (not timestamp-based)
-3. Check if track IDs are changing on reconnect
-4. Verify `hadStream` values in logs
-
-### 4. Audio Configuration Reference
-| Source | Destination | Config |
-|--------|-------------|--------|
-| Host Mic | Broadcast only | `playLocally: false` |
-| Guest Audio | Broadcast + Host Speakers | `playLocally: true` |
-| Muting | Track enable/disable | `track.enabled = !track.enabled` |
-
-## Project Architecture
-
-### Ant Media SFU Flow
 ```
-All Participants → Ant Media SFU → All Participants
-                        ↓
-              Host composites locally
-                        ↓
-                 RTMP/WHIP Output
+Participants (Host + Guests)
+         ↓
+    Ant Media SFU (Individual Streams)
+         ↓
+    Server Composite HTML (composites all streams)
+         ↓
+    +----+----+
+    ↓         ↓
+RTMP Out   All clients subscribe for "LIVE" preview
 ```
 
-### Key Services
-- `webrtc.service.ts` - Ant Media WebRTCAdaptor connection
-- `audio-mixer.service.ts` - Audio routing and mixing
-- `canvas-stream.service.ts` - Canvas capture for RTMP
-- `broadcast-output.service.ts` - RTMP/WHIP streaming
+## Project Structure
 
-### Key Components
-- `StudioCanvas.tsx` - Main broadcast canvas (renders participants)
-- `PreviewArea.tsx` - Greenroom/backstage preview tiles
-- `Studio.tsx` - Main studio page, handles stream callbacks
+```
+streamlick/
+├── backend/                 # Node.js/Express backend
+│   ├── prisma/              # Database schema
+│   │   └── schema.prisma    # Prisma schema (PostgreSQL)
+│   └── src/
+│       ├── api/             # REST API routes
+│       ├── middleware/      # Express middleware
+│       ├── services/        # Business logic services
+│       ├── socket/          # Socket.io handlers
+│       ├── types/           # TypeScript types
+│       └── index.ts         # Server entry point
+│
+├── frontend/                # React/Vite frontend
+│   └── src/
+│       ├── components/      # Reusable components
+│       ├── hooks/           # Custom React hooks
+│       ├── pages/           # Page components
+│       ├── services/        # API & WebRTC services
+│       ├── store/           # Zustand state stores
+│       ├── types/           # TypeScript types
+│       └── App.tsx          # Main app component
+│
+├── compositor/              # Server-side HTML compositor
+│   └── index.html           # Compositor HTML page
+│
+├── promo-website/           # Marketing landing page
+│
+└── streamlick-backup/       # Old codebase backup (DO NOT USE)
+```
 
-## Known Issues & Workarounds
+## Key Technologies
 
-### Video Track Changes
-When guests reconnect or simulcast quality changes, video tracks may change but the MediaStream object reference stays the same. Components must track individual track IDs, not just stream references.
+- **Backend**: Node.js, Express, Socket.io, Prisma, PostgreSQL
+- **Frontend**: React, TypeScript, Vite, TailwindCSS, Zustand
+- **Media**: Ant Media Server (WebRTC SFU)
+- **Streaming**: RTMP output to YouTube/Twitch/Facebook/Custom
 
-### Ant Media REST API
-The backend proxies Ant Media REST API calls. The frontend never connects directly to the Ant Media REST API - all conference management goes through the Streamlick backend.
+## Database Schema
 
-## Branch Information
-Current development branch: `claude/merge-previewarea-typescript-04F8x`
+- **User**: Hosts/admins
+- **Broadcast**: Live streaming sessions
+- **Participant**: Host + guests in a broadcast
+- **Destination**: RTMP output targets
+- **BroadcastOutput**: Active stream to a destination
+- **Recording**: Recorded broadcasts
 
-## Quick Commands
+## Development Commands
+
 ```bash
-# Build frontend
-cd frontend && npx vite build
+# Install dependencies
+npm install
 
-# Check Ant Media status (on media server)
-systemctl status antmedia
+# Run database migrations
+npm run db:push
 
-# View Ant Media logs
-tail -f /usr/local/antmedia/log/ant-media-server.log
+# Start development servers
+npm run dev
 
-# Ant Media REST API base URL
-# https://media.streamlick.com:5443/LiveApp/rest/v2/
+# Build for production
+npm run build
 ```
 
 ## Environment Variables
 
-### Frontend (.env)
-```
-VITE_ANTMEDIA_URL=https://media.streamlick.com
-VITE_ANTMEDIA_WS_URL=wss://media.streamlick.com:5443/LiveApp/websocket
-VITE_ANTMEDIA_APP=LiveApp
-```
+See `.env.example` files in root, backend, and frontend directories.
 
-### Backend (.env)
-```
-ANTMEDIA_URL=https://media.streamlick.com:5443
-ANTMEDIA_APP=LiveApp
-```
+## Key Workflows
+
+### Creating a Broadcast
+1. Host creates broadcast via Dashboard
+2. Host enters Studio
+3. Host invites guests with invite links
+4. Guests join via GuestJoin page
+5. Host adds guests to stage
+6. Host selects layout and branding
+7. Host clicks "Go Live" to start streaming
+
+### Guest Flow
+1. Guest receives invite link
+2. Guest enters name in lobby
+3. Guest enters greenroom
+4. Guest enables camera/mic
+5. Host brings guest on stage
+6. Guest can see live preview of broadcast
+
+### WebRTC Flow
+1. Participant publishes stream to Ant Media SFU
+2. Compositor subscribes to all on-stage streams
+3. Compositor composites streams into single output
+4. Output is sent to RTMP destinations
+5. Preview stream is published back to Ant Media
+6. All participants can subscribe to preview

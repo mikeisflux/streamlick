@@ -1,140 +1,354 @@
-/**
- * Socket.IO Server Initialization
- *
- * This module initializes the Socket.IO server with authentication middleware
- * and registers all socket event handlers from modular handler files.
- *
- * Handler modules:
- * - studio.handlers: Join/leave studio, media state, layout updates
- * - participant.handlers: Promote/demote/kick/ban/mute participants
- * - greenroom.handlers: Guest backstage management
- * - chat.handlers: Chat messages and polling
- * - screen-share.handlers: Screen share lifecycle
- * - webrtc-signaling.handlers: Preview and guest stream WebRTC
- * - health-monitoring.handlers: Stream health and adaptive bitrate
- * - rtmp.handlers: RTMP streaming to destinations
- * - disconnect.handler: Socket disconnection cleanup
- */
+import { Server, Socket } from 'socket.io';
+import jwt from 'jsonwebtoken';
+import { prisma } from '../services/prisma.js';
+import { antMediaService } from '../services/antmedia.js';
+import { AuthenticatedSocket } from '../types/index.js';
 
-import { Server as SocketServer, Socket } from 'socket.io';
-import { Server as HttpServer } from 'http';
-import { verifyAccessToken } from '../auth/jwt';
-import { streamHealthMonitor, StreamHealthMetrics } from '../services/stream-health.service';
-import logger from '../utils/logger';
-import { setIOInstance } from './io-instance';
-import prisma from '../database/prisma';
+const JWT_SECRET = process.env.JWT_SECRET || 'development-secret';
 
-// Import all handler registration functions
-import {
-  registerStudioHandlers,
-  registerParticipantHandlers,
-  registerGreenroomHandlers,
-  registerChatHandlers,
-  registerScreenShareHandlers,
-  registerWebRTCSignalingHandlers,
-  registerHealthMonitoringHandlers,
-  registerRtmpHandlers,
-  registerDisconnectHandler,
-} from './handlers';
+// Track connected participants per broadcast
+const broadcastRooms = new Map<string, Set<string>>();
 
-export function initializeSocket(httpServer: HttpServer): SocketServer {
-  const io = new SocketServer(httpServer, {
-    cors: {
-      origin: process.env.FRONTEND_URL || 'http://localhost:3002',
-      credentials: true,
-    },
-  });
-
+export function setupSocketHandlers(io: Server) {
   // Authentication middleware
-  io.use(async (socket, next) => {
+  io.use(async (socket: AuthenticatedSocket, next) => {
     try {
-      // Check for guest authentication via participant token first
-      const participantToken = socket.handshake.auth.participantToken;
-      if (participantToken) {
-        // Validate participant token against database
+      const token = socket.handshake.auth.token;
+      const inviteToken = socket.handshake.auth.inviteToken;
+
+      if (token) {
+        // Authenticated user (host)
+        const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
+        socket.userId = decoded.id;
+      } else if (inviteToken) {
+        // Guest with invite token
         const participant = await prisma.participant.findUnique({
-          where: { joinLinkToken: participantToken },
-          select: { id: true, broadcastId: true, status: true, joinLinkExpiry: true },
+          where: { inviteToken },
+          include: { broadcast: true },
         });
 
         if (!participant) {
-          logger.warn(`Socket connection rejected: Invalid participant token (${socket.id})`);
-          return next(new Error('Invalid participant token'));
+          return next(new Error('Invalid invite token'));
         }
 
-        // Check if invite link has expired
-        if (participant.joinLinkExpiry && participant.joinLinkExpiry < new Date()) {
-          logger.warn(`Socket connection rejected: Expired participant token (${socket.id})`);
-          return next(new Error('Participant token expired'));
-        }
-
-        // Guest authentication successful - set participant data
-        socket.data.participantId = participant.id;
-        socket.data.broadcastId = participant.broadcastId;
-        socket.data.isGuest = true;
-        logger.info(`[Socket] Guest connected with participant token: ${participant.id}`);
-        return next();
+        socket.participantId = participant.id;
+        socket.broadcastId = participant.broadcastId;
       }
-
-      // Try to get token from auth object first (backward compatibility)
-      let token = socket.handshake.auth.token;
-
-      // If no auth token, try to get from cookies
-      if (!token) {
-        const cookies = socket.handshake.headers.cookie;
-        if (cookies) {
-          const cookieMatch = cookies.match(/accessToken=([^;]+)/);
-          if (cookieMatch) {
-            token = cookieMatch[1];
-          }
-        }
-      }
-
-      // Require authentication - no token means no connection
-      if (!token) {
-        logger.warn(`Socket connection rejected: No authentication token provided (${socket.id})`);
-        return next(new Error('Authentication required'));
-      }
-
-      // Verify token
-      const payload = verifyAccessToken(token);
-      socket.data.userId = payload.userId;
-      socket.data.userEmail = payload.email;
-      socket.data.userRole = payload.role;
 
       next();
     } catch (error) {
-      logger.error('Socket auth error:', error);
-      return next(new Error('Authentication failed'));
+      next(new Error('Authentication failed'));
     }
   });
 
-  // Broadcast health metrics updates
-  streamHealthMonitor.on('metrics-updated', (metrics: StreamHealthMetrics) => {
-    io.to(`broadcast:${metrics.broadcastId}`).emit('health-metrics', metrics);
+  io.on('connection', (socket: AuthenticatedSocket) => {
+    console.log(`Socket connected: ${socket.id}, User: ${socket.userId || 'guest'}`);
+
+    // =========================================================================
+    // BROADCAST ROOM MANAGEMENT
+    // =========================================================================
+
+    socket.on('join-broadcast', async (broadcastId: string) => {
+      try {
+        // Verify access
+        let broadcast;
+        if (socket.userId) {
+          broadcast = await prisma.broadcast.findFirst({
+            where: { id: broadcastId, userId: socket.userId },
+            include: { participants: true },
+          });
+        } else if (socket.participantId) {
+          const participant = await prisma.participant.findUnique({
+            where: { id: socket.participantId },
+            include: { broadcast: { include: { participants: true } } },
+          });
+          broadcast = participant?.broadcast;
+        }
+
+        if (!broadcast) {
+          socket.emit('error', { message: 'Broadcast not found' });
+          return;
+        }
+
+        // Join the room
+        socket.broadcastId = broadcastId;
+        socket.join(`broadcast:${broadcastId}`);
+
+        // Track participant
+        if (!broadcastRooms.has(broadcastId)) {
+          broadcastRooms.set(broadcastId, new Set());
+        }
+        broadcastRooms.get(broadcastId)?.add(socket.id);
+
+        // Send current state
+        socket.emit('broadcast-state', {
+          broadcast: {
+            id: broadcast.id,
+            title: broadcast.title,
+            status: broadcast.status,
+            layout: broadcast.layout,
+            backgroundColor: broadcast.backgroundColor,
+            logoUrl: broadcast.logoUrl,
+          },
+          participants: broadcast.participants.map(p => ({
+            id: p.id,
+            name: p.name,
+            role: p.role,
+            status: p.status,
+            streamId: p.streamId,
+            isOnStage: p.isOnStage,
+            audioEnabled: p.audioEnabled,
+            videoEnabled: p.videoEnabled,
+          })),
+        });
+
+        // Notify others
+        socket.to(`broadcast:${broadcastId}`).emit('participant-joined', {
+          socketId: socket.id,
+          participantId: socket.participantId,
+          userId: socket.userId,
+        });
+
+        console.log(`Socket ${socket.id} joined broadcast ${broadcastId}`);
+      } catch (error) {
+        console.error('Join broadcast error:', error);
+        socket.emit('error', { message: 'Failed to join broadcast' });
+      }
+    });
+
+    socket.on('leave-broadcast', () => {
+      if (socket.broadcastId) {
+        socket.leave(`broadcast:${socket.broadcastId}`);
+        broadcastRooms.get(socket.broadcastId)?.delete(socket.id);
+        socket.to(`broadcast:${socket.broadcastId}`).emit('participant-left', {
+          socketId: socket.id,
+          participantId: socket.participantId,
+        });
+      }
+    });
+
+    // =========================================================================
+    // WEBRTC SIGNALING
+    // =========================================================================
+
+    socket.on('publish-stream', async (data: { streamId: string }) => {
+      if (!socket.broadcastId) return;
+
+      try {
+        // Update participant with stream ID
+        if (socket.participantId) {
+          await prisma.participant.update({
+            where: { id: socket.participantId },
+            data: { streamId: data.streamId },
+          });
+        }
+
+        // Notify compositor and other participants
+        io.to(`broadcast:${socket.broadcastId}`).emit('stream-published', {
+          participantId: socket.participantId || socket.userId,
+          streamId: data.streamId,
+        });
+      } catch (error) {
+        console.error('Publish stream error:', error);
+      }
+    });
+
+    socket.on('unpublish-stream', async () => {
+      if (!socket.broadcastId) return;
+
+      if (socket.participantId) {
+        await prisma.participant.update({
+          where: { id: socket.participantId },
+          data: { streamId: null },
+        });
+      }
+
+      io.to(`broadcast:${socket.broadcastId}`).emit('stream-unpublished', {
+        participantId: socket.participantId || socket.userId,
+      });
+    });
+
+    // =========================================================================
+    // HOST CONTROLS
+    // =========================================================================
+
+    socket.on('bring-on-stage', async (participantId: string) => {
+      if (!socket.userId || !socket.broadcastId) return;
+
+      try {
+        const participant = await prisma.participant.update({
+          where: { id: participantId },
+          data: { isOnStage: true, status: 'ONSTAGE' },
+        });
+
+        io.to(`broadcast:${socket.broadcastId}`).emit('participant-updated', participant);
+      } catch (error) {
+        console.error('Bring on stage error:', error);
+      }
+    });
+
+    socket.on('remove-from-stage', async (participantId: string) => {
+      if (!socket.userId || !socket.broadcastId) return;
+
+      try {
+        const participant = await prisma.participant.update({
+          where: { id: participantId },
+          data: { isOnStage: false, status: 'GREENROOM' },
+        });
+
+        io.to(`broadcast:${socket.broadcastId}`).emit('participant-updated', participant);
+      } catch (error) {
+        console.error('Remove from stage error:', error);
+      }
+    });
+
+    socket.on('set-layout', async (layout: string) => {
+      if (!socket.userId || !socket.broadcastId) return;
+
+      try {
+        await prisma.broadcast.update({
+          where: { id: socket.broadcastId },
+          data: { layout },
+        });
+
+        io.to(`broadcast:${socket.broadcastId}`).emit('layout-changed', { layout });
+      } catch (error) {
+        console.error('Set layout error:', error);
+      }
+    });
+
+    socket.on('update-branding', async (data: { backgroundColor?: string; logoUrl?: string; overlayText?: string }) => {
+      if (!socket.userId || !socket.broadcastId) return;
+
+      try {
+        const broadcast = await prisma.broadcast.update({
+          where: { id: socket.broadcastId },
+          data,
+        });
+
+        io.to(`broadcast:${socket.broadcastId}`).emit('branding-updated', {
+          backgroundColor: broadcast.backgroundColor,
+          logoUrl: broadcast.logoUrl,
+          overlayText: broadcast.overlayText,
+        });
+      } catch (error) {
+        console.error('Update branding error:', error);
+      }
+    });
+
+    socket.on('mute-participant', async (data: { participantId: string; audio?: boolean; video?: boolean }) => {
+      if (!socket.userId || !socket.broadcastId) return;
+
+      try {
+        const participant = await prisma.participant.update({
+          where: { id: data.participantId },
+          data: {
+            audioEnabled: data.audio ?? undefined,
+            videoEnabled: data.video ?? undefined,
+          },
+        });
+
+        io.to(`broadcast:${socket.broadcastId}`).emit('participant-updated', participant);
+      } catch (error) {
+        console.error('Mute participant error:', error);
+      }
+    });
+
+    // =========================================================================
+    // BROADCAST STATUS
+    // =========================================================================
+
+    socket.on('go-live', async () => {
+      if (!socket.userId || !socket.broadcastId) return;
+
+      try {
+        const broadcast = await prisma.broadcast.update({
+          where: { id: socket.broadcastId },
+          data: { status: 'LIVE', startedAt: new Date() },
+        });
+
+        io.to(`broadcast:${socket.broadcastId}`).emit('broadcast-live', {
+          status: 'LIVE',
+          startedAt: broadcast.startedAt,
+        });
+      } catch (error) {
+        console.error('Go live error:', error);
+      }
+    });
+
+    socket.on('end-broadcast', async () => {
+      if (!socket.userId || !socket.broadcastId) return;
+
+      try {
+        const broadcast = await prisma.broadcast.update({
+          where: { id: socket.broadcastId },
+          data: { status: 'ENDED', endedAt: new Date() },
+        });
+
+        io.to(`broadcast:${socket.broadcastId}`).emit('broadcast-ended', {
+          status: 'ENDED',
+          endedAt: broadcast.endedAt,
+        });
+      } catch (error) {
+        console.error('End broadcast error:', error);
+      }
+    });
+
+    // =========================================================================
+    // COMPOSITOR COMMUNICATION
+    // =========================================================================
+
+    socket.on('compositor-ready', async (data: { compositeStreamId: string }) => {
+      if (!socket.broadcastId) return;
+
+      // Store the composite stream ID for preview subscription
+      await prisma.broadcast.update({
+        where: { id: socket.broadcastId },
+        data: { previewUrl: data.compositeStreamId },
+      });
+
+      io.to(`broadcast:${socket.broadcastId}`).emit('preview-available', {
+        streamId: data.compositeStreamId,
+      });
+    });
+
+    // =========================================================================
+    // CHAT
+    // =========================================================================
+
+    socket.on('chat-message', (data: { message: string }) => {
+      if (!socket.broadcastId) return;
+
+      io.to(`broadcast:${socket.broadcastId}`).emit('chat-message', {
+        from: socket.participantId || socket.userId,
+        message: data.message,
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+    // =========================================================================
+    // DISCONNECT
+    // =========================================================================
+
+    socket.on('disconnect', async () => {
+      console.log(`Socket disconnected: ${socket.id}`);
+
+      if (socket.broadcastId) {
+        broadcastRooms.get(socket.broadcastId)?.delete(socket.id);
+
+        // Update participant status
+        if (socket.participantId) {
+          await prisma.participant.update({
+            where: { id: socket.participantId },
+            data: { status: 'LEFT', leftAt: new Date() },
+          });
+        }
+
+        socket.to(`broadcast:${socket.broadcastId}`).emit('participant-left', {
+          socketId: socket.id,
+          participantId: socket.participantId,
+        });
+      }
+    });
   });
-
-  // Connection handler - register all socket event handlers
-  io.on('connection', (socket: Socket) => {
-    // Register handlers from modular files
-    // Order matters: studio handlers set up socket.data properties used by others
-    registerStudioHandlers(socket, io);
-    registerParticipantHandlers(socket, io);
-    registerGreenroomHandlers(socket, io);
-    registerChatHandlers(socket, io);
-    registerScreenShareHandlers(socket, io);
-    registerWebRTCSignalingHandlers(socket, io);
-    registerHealthMonitoringHandlers(socket, io);
-    registerRtmpHandlers(socket, io);
-
-    // Disconnect handler should be registered last
-    registerDisconnectHandler(socket, io);
-  });
-
-  // Set global io instance for use in routes
-  setIOInstance(io);
-
-  return io;
 }
-
-export default initializeSocket;

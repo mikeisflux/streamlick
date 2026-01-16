@@ -1,150 +1,81 @@
+// Broadcast types
+export type BroadcastStatus = 'IDLE' | 'GREENROOM' | 'LIVE' | 'ENDED';
+export type LayoutType = 'grid' | 'spotlight' | 'side-by-side' | 'picture-in-picture' | 'single';
+export type Platform = 'YOUTUBE' | 'TWITCH' | 'FACEBOOK' | 'CUSTOM_RTMP';
+export type ParticipantRole = 'HOST' | 'COHOST' | 'GUEST';
+export type ParticipantStatus = 'WAITING' | 'GREENROOM' | 'ONSTAGE' | 'LEFT';
+
 export interface User {
   id: string;
   email: string;
-  name?: string;
-  avatarUrl?: string;
-  planType: 'pro'; // Single $20/month plan with all features
-  role?: 'user' | 'admin'; // User role for access control
-  createdAt: string;
+  name: string;
+  role: 'USER' | 'ADMIN';
+  avatar?: string;
 }
 
 export interface Broadcast {
   id: string;
-  userId: string;
   title: string;
   description?: string;
-  status: 'scheduled' | 'countdown' | 'live' | 'ended' | 'recording' | 'error';
+  status: BroadcastStatus;
+  streamKey: string;
+  previewUrl?: string;
+  layout: LayoutType;
+  backgroundColor: string;
+  logoUrl?: string;
+  overlayText?: string;
   scheduledAt?: string;
   startedAt?: string;
   endedAt?: string;
-  durationSeconds?: number;
-  studioConfig?: StudioConfig;
+  userId: string;
+  participants?: Participant[];
+  outputs?: BroadcastOutput[];
   createdAt: string;
   updatedAt: string;
 }
 
-export interface StudioConfig {
-  layout?: LayoutConfig;
-  branding?: BrandingConfig;
-  overlays?: OverlayConfig[];
-  // Create modal options
-  broadcastType?: 'live' | 'recording' | 'webinar';
-  source?: 'studio' | 'prerecorded';
-  isReusable?: boolean;
-  selectedDestinations?: string[];
-  localRecordings?: boolean;
-  recordingType?: 'audio-video' | 'audio-only';
-  // Allow additional properties for flexibility
-  [key: string]: unknown;
-}
-
-export interface LayoutConfig {
-  type: 'single' | 'side-by-side' | 'grid' | 'pip' | 'screen-share';
-  participants: ParticipantLayout[];
-}
-
-export interface ParticipantLayout {
-  participantId: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  shape: 'rectangle' | 'circle' | 'rounded';
-  zIndex: number;
-}
-
-export interface BrandingConfig {
-  logo?: {
-    url: string;
-    position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-    size: number;
-  };
-  background?: {
-    type: 'color' | 'image' | 'video';
-    value: string;
-  };
-  colors?: {
-    primary: string;
-    secondary: string;
-  };
-}
-
-export interface OverlayConfig {
-  id: string;
-  type: 'banner' | 'text' | 'image' | 'cta';
-  content: string;
-  position: { x: number; y: number };
-  style: Record<string, string>;
-  visible: boolean;
-}
-
 export interface Participant {
   id: string;
+  name: string;
+  email?: string;
+  role: ParticipantRole;
+  status: ParticipantStatus;
+  streamId?: string;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
+  position: number;
+  isOnStage: boolean;
+  inviteToken: string;
   broadcastId: string;
   userId?: string;
-  name?: string;
-  role: 'host' | 'guest' | 'backstage' | 'greenroom';
-  status: 'invited' | 'joined' | 'disconnected';
   joinedAt?: string;
   leftAt?: string;
 }
 
 export interface Destination {
   id: string;
-  platform: 'youtube' | 'facebook' | 'linkedin' | 'twitch' | 'custom';
-  displayName?: string;
-  rtmpUrl?: string;
-  isActive: boolean;
+  name: string;
+  platform: Platform;
+  rtmpUrl: string;
+  streamKey: string;
+  platformId?: string;
+  accessToken?: string;
+  userId: string;
 }
 
-export interface MediaState {
-  audio: boolean;
-  video: boolean;
-  screen: boolean;
-}
-
-// WebRTC/Socket Service Types
-export interface SocketCallback<T = unknown> {
-  (data: T): void;
-}
-
-export interface SocketErrorResponse {
-  error: string;
-}
-
-export interface TransportData {
+export interface BroadcastOutput {
   id: string;
-  iceParameters: unknown; // mediasoup IceParameters
-  iceCandidates: unknown[]; // mediasoup IceCandidate[]
-  dtlsParameters: unknown; // mediasoup DtlsParameters
-  error?: string;
+  status: 'IDLE' | 'STARTING' | 'LIVE' | 'ERROR' | 'STOPPED';
+  broadcastId: string;
+  destinationId: string;
+  destination: Destination;
+  startedAt?: string;
+  endedAt?: string;
 }
 
-export interface ProduceResponse {
-  producerId: string;
-  error?: string;
-}
-
-export interface ConsumeResponse {
-  consumerId: string;
-  producerId: string;
-  kind: 'audio' | 'video';
-  rtpParameters: unknown; // mediasoup RtpParameters
-  transportId: string;
-  iceParameters: unknown; // mediasoup IceParameters
-  iceCandidates: unknown[]; // mediasoup IceCandidate[]
-  dtlsParameters: unknown; // mediasoup DtlsParameters
-  error?: string;
-}
-
-export interface ConnectTransportResponse {
-  error?: string;
-}
-
-export interface PerformanceMetrics {
-  averageRenderTime: string;
-  droppedFrames: number;
-  totalFrames: number;
-  dropRate: string;
-  participantCount: number;
+// WebRTC types
+export interface StreamInfo {
+  streamId: string;
+  participantId: string;
+  stream: MediaStream;
 }

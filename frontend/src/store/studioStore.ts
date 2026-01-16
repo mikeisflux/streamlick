@@ -1,104 +1,109 @@
 import { create } from 'zustand';
-import { Broadcast, Participant, MediaState } from '../types';
+
+export type LayoutType = 'grid' | 'spotlight' | 'side-by-side' | 'picture-in-picture' | 'single';
+export type BroadcastStatus = 'IDLE' | 'GREENROOM' | 'LIVE' | 'ENDED';
+
+interface Participant {
+  id: string;
+  name: string;
+  role: 'HOST' | 'COHOST' | 'GUEST';
+  status: 'WAITING' | 'GREENROOM' | 'ONSTAGE' | 'LEFT';
+  streamId: string | null;
+  isOnStage: boolean;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
+  position: number;
+}
+
+interface Broadcast {
+  id: string;
+  title: string;
+  status: BroadcastStatus;
+  layout: LayoutType;
+  backgroundColor: string;
+  logoUrl: string | null;
+  overlayText: string | null;
+  previewUrl: string | null;
+}
 
 interface StudioState {
   broadcast: Broadcast | null;
-  participants: Map<string, Participant>;
-  mediaStates: Map<string, MediaState>;
+  participants: Participant[];
   localStream: MediaStream | null;
-  screenStream: MediaStream | null;
-  isLive: boolean;
-  isRecording: boolean;
+  previewStream: MediaStream | null;
+  isAudioEnabled: boolean;
+  isVideoEnabled: boolean;
+  isScreenSharing: boolean;
 
+  // Actions
   setBroadcast: (broadcast: Broadcast) => void;
+  setParticipants: (participants: Participant[]) => void;
+  updateParticipant: (participant: Partial<Participant> & { id: string }) => void;
   addParticipant: (participant: Participant) => void;
-  removeParticipant: (participantId: string) => void;
-  updateMediaState: (participantId: string, state: MediaState) => void;
+  removeParticipant: (id: string) => void;
   setLocalStream: (stream: MediaStream | null) => void;
-  setScreenStream: (stream: MediaStream | null) => void;
-  setIsLive: (isLive: boolean) => void;
-  setIsRecording: (isRecording: boolean) => void;
+  setPreviewStream: (stream: MediaStream | null) => void;
+  setAudioEnabled: (enabled: boolean) => void;
+  setVideoEnabled: (enabled: boolean) => void;
+  setScreenSharing: (enabled: boolean) => void;
+  setLayout: (layout: LayoutType) => void;
+  setBranding: (branding: { backgroundColor?: string; logoUrl?: string | null; overlayText?: string | null }) => void;
   reset: () => void;
 }
 
-export const useStudioStore = create<StudioState>((set, get) => ({
+const initialState = {
   broadcast: null,
-  participants: new Map(),
-  mediaStates: new Map(),
+  participants: [],
   localStream: null,
-  screenStream: null,
-  isLive: false,
-  isRecording: false,
+  previewStream: null,
+  isAudioEnabled: true,
+  isVideoEnabled: true,
+  isScreenSharing: false,
+};
+
+export const useStudioStore = create<StudioState>((set) => ({
+  ...initialState,
 
   setBroadcast: (broadcast) => set({ broadcast }),
 
-  addParticipant: (participant: Participant) =>
-    set((state: StudioState) => {
-      const participants = new Map(state.participants);
-      participants.set(participant.id, participant);
-      return { participants };
-    }),
+  setParticipants: (participants) => set({ participants }),
 
-  removeParticipant: (participantId: string) =>
-    set((state: StudioState) => {
-      const participants = new Map(state.participants);
-      participants.delete(participantId);
-      return { participants };
-    }),
+  updateParticipant: (updated) =>
+    set((state) => ({
+      participants: state.participants.map((p) =>
+        p.id === updated.id ? { ...p, ...updated } : p
+      ),
+    })),
 
-  updateMediaState: (participantId: string, mediaState: MediaState) =>
-    set((state: StudioState) => {
-      const mediaStates = new Map(state.mediaStates);
-      mediaStates.set(participantId, mediaState);
-      return { mediaStates };
-    }),
+  addParticipant: (participant) =>
+    set((state) => ({
+      participants: [...state.participants, participant],
+    })),
 
-  setLocalStream: (stream: MediaStream | null) =>
-    set((state: StudioState) => {
-      // Stop all tracks from previous stream to prevent memory leak
-      if (state.localStream) {
-        state.localStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-      }
-      return { localStream: stream };
-    }),
+  removeParticipant: (id) =>
+    set((state) => ({
+      participants: state.participants.filter((p) => p.id !== id),
+    })),
 
-  setScreenStream: (stream: MediaStream | null) =>
-    set((state: StudioState) => {
-      // Stop all tracks from previous stream to prevent memory leak
-      if (state.screenStream) {
-        state.screenStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-      }
-      return { screenStream: stream };
-    }),
-  setIsLive: (isLive: boolean) => set({ isLive }),
-  setIsRecording: (isRecording: boolean) => set({ isRecording }),
+  setLocalStream: (stream) => set({ localStream: stream }),
 
-  // MAJOR FIX: Stop media tracks before resetting to prevent camera/mic LED staying on
-  reset: () => {
-    const state = get();
+  setPreviewStream: (stream) => set({ previewStream: stream }),
 
-    // Stop all local stream tracks (camera/mic)
-    if (state.localStream) {
-      state.localStream.getTracks().forEach((track: MediaStreamTrack) => {
-        track.stop();
-      });
-    }
+  setAudioEnabled: (enabled) => set({ isAudioEnabled: enabled }),
 
-    // Stop all screen share tracks
-    if (state.screenStream) {
-      state.screenStream.getTracks().forEach((track: MediaStreamTrack) => {
-        track.stop();
-      });
-    }
+  setVideoEnabled: (enabled) => set({ isVideoEnabled: enabled }),
 
-    set({
-      broadcast: null,
-      participants: new Map(),
-      mediaStates: new Map(),
-      localStream: null,
-      screenStream: null,
-      isLive: false,
-      isRecording: false,
-    });
-  },
+  setScreenSharing: (enabled) => set({ isScreenSharing: enabled }),
+
+  setLayout: (layout) =>
+    set((state) => ({
+      broadcast: state.broadcast ? { ...state.broadcast, layout } : null,
+    })),
+
+  setBranding: (branding) =>
+    set((state) => ({
+      broadcast: state.broadcast ? { ...state.broadcast, ...branding } : null,
+    })),
+
+  reset: () => set(initialState),
 }));

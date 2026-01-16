@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, height=1080">
+  <title>Streamlick Compositor</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    #compositor {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      background: var(--bg-color, #1a1a2e);
+    }
+
+    /* Participant video containers */
+    .participant {
+      position: absolute;
+      overflow: hidden;
+      border-radius: 12px;
+      background: #000;
+      transition: all 0.3s ease;
+    }
+
+    .participant video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .participant .name-tag {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .participant .muted-indicator {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 32px;
+      height: 32px;
+      background: rgba(255, 59, 48, 0.9);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .participant .muted-indicator svg {
+      width: 18px;
+      height: 18px;
+      fill: white;
+    }
+
+    .participant.video-off {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #2d2d44 0%, #1a1a2e 100%);
+    }
+
+    .participant.video-off .avatar {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+      color: white;
+      font-weight: 600;
+    }
+
+    /* Overlays */
+    #logo {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      max-width: 200px;
+      max-height: 80px;
+      z-index: 100;
+    }
+
+    #lower-third {
+      position: absolute;
+      bottom: 80px;
+      left: 60px;
+      background: linear-gradient(90deg, rgba(102, 126, 234, 0.95) 0%, rgba(118, 75, 162, 0.95) 100%);
+      color: white;
+      padding: 16px 32px;
+      border-radius: 8px;
+      font-size: 24px;
+      font-weight: 500;
+      z-index: 100;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.3s ease;
+    }
+
+    #lower-third.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Layout styles */
+    .layout-grid .participant {
+      border: 3px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .layout-spotlight .participant.spotlight {
+      z-index: 10;
+    }
+
+    .layout-spotlight .participant:not(.spotlight) {
+      border: 2px solid rgba(255, 255, 255, 0.2);
+    }
+
+    /* Live indicator */
+    #live-indicator {
+      position: absolute;
+      top: 24px;
+      left: 24px;
+      background: #ff3b30;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      z-index: 100;
+      display: none;
+    }
+
+    #live-indicator.visible {
+      display: block;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+  </style>
+</head>
+<body>
+  <div id="compositor">
+    <div id="live-indicator">LIVE</div>
+    <img id="logo" src="" alt="" style="display: none;">
+    <div id="lower-third"></div>
+    <div id="participants-container"></div>
+  </div>
+
+  <script>
+    /**
+     * Streamlick Server Compositor
+     *
+     * This page runs in headless Chrome on the server.
+     * It receives WebRTC streams from Ant Media and composites them into a single output.
+     * The output is captured and sent to RTMP destinations + WebRTC preview.
+     */
+
+    const ANTMEDIA_WS_URL = 'wss://media.streamlick.com:5443/LiveApp/websocket';
+
+    // State
+    let state = {
+      broadcastId: null,
+      layout: 'grid',
+      backgroundColor: '#1a1a2e',
+      logoUrl: null,
+      overlayText: null,
+      isLive: false,
+      participants: [],
+      streams: new Map(),
+    };
+
+    let ws = null;
+    let peerConnections = new Map();
+
+    // =========================================================================
+    // LAYOUT CALCULATIONS
+    // =========================================================================
+
+    function calculateLayout(participants, layout, width = 1920, height = 1080) {
+      const count = participants.length;
+      if (count === 0) return [];
+
+      const padding = 24;
+      const gap = 16;
+      const availableWidth = width - (padding * 2);
+      const availableHeight = height - (padding * 2);
+
+      switch (layout) {
+        case 'single':
+          return [{
+            x: padding,
+            y: padding,
+            width: availableWidth,
+            height: availableHeight,
+          }];
+
+        case 'side-by-side':
+          if (count === 1) {
+            return [{ x: padding, y: padding, width: availableWidth, height: availableHeight }];
+          }
+          const halfWidth = (availableWidth - gap) / 2;
+          return participants.slice(0, 2).map((_, i) => ({
+            x: padding + (i * (halfWidth + gap)),
+            y: padding,
+            width: halfWidth,
+            height: availableHeight,
+          }));
+
+        case 'spotlight':
+          if (count === 1) {
+            return [{ x: padding, y: padding, width: availableWidth, height: availableHeight }];
+          }
+          const mainWidth = availableWidth * 0.7;
+          const sideWidth = availableWidth * 0.3 - gap;
+          const sideHeight = (availableHeight - (gap * (count - 2))) / Math.max(1, count - 1);
+
+          return participants.map((_, i) => {
+            if (i === 0) {
+              return { x: padding, y: padding, width: mainWidth, height: availableHeight };
+            }
+            return {
+              x: padding + mainWidth + gap,
+              y: padding + ((i - 1) * (sideHeight + gap)),
+              width: sideWidth,
+              height: sideHeight,
+            };
+          });
+
+        case 'picture-in-picture':
+          if (count === 1) {
+            return [{ x: padding, y: padding, width: availableWidth, height: availableHeight }];
+          }
+          return [
+            { x: padding, y: padding, width: availableWidth, height: availableHeight },
+            { x: width - 400 - padding, y: height - 260 - padding, width: 380, height: 240 },
+          ];
+
+        case 'grid':
+        default:
+          const cols = count <= 1 ? 1 : count <= 4 ? 2 : count <= 9 ? 3 : 4;
+          const rows = Math.ceil(count / cols);
+          const cellWidth = (availableWidth - (gap * (cols - 1))) / cols;
+          const cellHeight = (availableHeight - (gap * (rows - 1))) / rows;
+
+          return participants.map((_, i) => {
+            const col = i % cols;
+            const row = Math.floor(i / cols);
+            return {
+              x: padding + (col * (cellWidth + gap)),
+              y: padding + (row * (cellHeight + gap)),
+              width: cellWidth,
+              height: cellHeight,
+            };
+          });
+      }
+    }
+
+    // =========================================================================
+    // DOM MANIPULATION
+    // =========================================================================
+
+    function updateCompositor() {
+      const compositor = document.getElementById('compositor');
+      compositor.style.setProperty('--bg-color', state.backgroundColor);
+
+      // Update logo
+      const logo = document.getElementById('logo');
+      if (state.logoUrl) {
+        logo.src = state.logoUrl;
+        logo.style.display = 'block';
+      } else {
+        logo.style.display = 'none';
+      }
+
+      // Update lower third
+      const lowerThird = document.getElementById('lower-third');
+      if (state.overlayText) {
+        lowerThird.textContent = state.overlayText;
+        lowerThird.classList.add('visible');
+      } else {
+        lowerThird.classList.remove('visible');
+      }
+
+      // Update live indicator
+      const liveIndicator = document.getElementById('live-indicator');
+      if (state.isLive) {
+        liveIndicator.classList.add('visible');
+      } else {
+        liveIndicator.classList.remove('visible');
+      }
+
+      // Update participants
+      renderParticipants();
+    }
+
+    function renderParticipants() {
+      const container = document.getElementById('participants-container');
+      const onStageParticipants = state.participants.filter(p => p.isOnStage);
+      const positions = calculateLayout(onStageParticipants, state.layout);
+
+      // Clear existing
+      container.innerHTML = '';
+
+      onStageParticipants.forEach((participant, index) => {
+        const pos = positions[index];
+        if (!pos) return;
+
+        const div = document.createElement('div');
+        div.className = `participant ${!participant.videoEnabled ? 'video-off' : ''} ${index === 0 ? 'spotlight' : ''}`;
+        div.style.cssText = `
+          left: ${pos.x}px;
+          top: ${pos.y}px;
+          width: ${pos.width}px;
+          height: ${pos.height}px;
+        `;
+
+        if (participant.videoEnabled && state.streams.has(participant.streamId)) {
+          const video = document.createElement('video');
+          video.srcObject = state.streams.get(participant.streamId);
+          video.autoplay = true;
+          video.muted = true; // Always muted in compositor, audio handled separately
+          video.playsInline = true;
+          div.appendChild(video);
+        } else {
+          const avatar = document.createElement('div');
+          avatar.className = 'avatar';
+          avatar.textContent = participant.name.charAt(0).toUpperCase();
+          div.appendChild(avatar);
+        }
+
+        // Name tag
+        const nameTag = document.createElement('div');
+        nameTag.className = 'name-tag';
+        nameTag.textContent = participant.name;
+        div.appendChild(nameTag);
+
+        // Muted indicator
+        if (!participant.audioEnabled) {
+          const muted = document.createElement('div');
+          muted.className = 'muted-indicator';
+          muted.innerHTML = '<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>';
+          div.appendChild(muted);
+        }
+
+        container.appendChild(div);
+      });
+    }
+
+    // =========================================================================
+    // WEBRTC - SUBSCRIBE TO ANT MEDIA STREAMS
+    // =========================================================================
+
+    function connectToAntMedia() {
+      ws = new WebSocket(ANTMEDIA_WS_URL);
+
+      ws.onopen = () => {
+        console.log('Connected to Ant Media');
+        // Subscribe to all participant streams
+        state.participants.forEach(p => {
+          if (p.streamId && p.isOnStage) {
+            subscribeToStream(p.streamId);
+          }
+        });
+      };
+
+      ws.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        handleAntMediaMessage(message);
+      };
+
+      ws.onclose = () => {
+        console.log('Disconnected from Ant Media, reconnecting...');
+        setTimeout(connectToAntMedia, 2000);
+      };
+
+      ws.onerror = (error) => {
+        console.error('Ant Media WebSocket error:', error);
+      };
+    }
+
+    function subscribeToStream(streamId) {
+      if (peerConnections.has(streamId)) return;
+
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          {
+            urls: 'turn:turn.streamlick.com:3478',
+            username: 'streamlick',
+            credential: 'Str3aml1ck_TURN_2026!xK9m'
+          }
+        ]
+      });
+
+      pc.ontrack = (event) => {
+        console.log(`Received track for stream ${streamId}`);
+        state.streams.set(streamId, event.streams[0]);
+        updateCompositor();
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          ws.send(JSON.stringify({
+            command: 'takeCandidate',
+            streamId,
+            label: event.candidate.sdpMLineIndex,
+            id: event.candidate.sdpMid,
+            candidate: event.candidate.candidate,
+          }));
+        }
+      };
+
+      peerConnections.set(streamId, pc);
+
+      // Send play request
+      ws.send(JSON.stringify({
+        command: 'play',
+        streamId,
+        token: '',
+      }));
+    }
+
+    function handleAntMediaMessage(message) {
+      switch (message.command) {
+        case 'start':
+          // SDP offer received
+          const pc = peerConnections.get(message.streamId);
+          if (pc) {
+            pc.setRemoteDescription(new RTCSessionDescription({
+              type: 'offer',
+              sdp: message.sdp,
+            })).then(() => {
+              return pc.createAnswer();
+            }).then((answer) => {
+              return pc.setLocalDescription(answer);
+            }).then(() => {
+              ws.send(JSON.stringify({
+                command: 'takeConfiguration',
+                streamId: message.streamId,
+                type: 'answer',
+                sdp: pc.localDescription.sdp,
+              }));
+            });
+          }
+          break;
+
+        case 'takeCandidate':
+          const peerConnection = peerConnections.get(message.streamId);
+          if (peerConnection) {
+            peerConnection.addIceCandidate(new RTCIceCandidate({
+              sdpMLineIndex: message.label,
+              candidate: message.candidate,
+            }));
+          }
+          break;
+
+        case 'notification':
+          console.log('Ant Media notification:', message);
+          break;
+      }
+    }
+
+    // =========================================================================
+    // BACKEND COMMUNICATION
+    // =========================================================================
+
+    function connectToBackend(broadcastId) {
+      // This will be called from the compositor service
+      state.broadcastId = broadcastId;
+
+      // Create EventSource for server-sent events
+      const eventSource = new EventSource(`/api/compositor/${broadcastId}/events`);
+
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        handleBackendEvent(data);
+      };
+    }
+
+    function handleBackendEvent(event) {
+      switch (event.type) {
+        case 'state':
+          state = { ...state, ...event.data };
+          updateCompositor();
+          break;
+
+        case 'participant-updated':
+          const index = state.participants.findIndex(p => p.id === event.data.id);
+          if (index >= 0) {
+            state.participants[index] = event.data;
+          } else {
+            state.participants.push(event.data);
+          }
+          updateCompositor();
+          break;
+
+        case 'participant-removed':
+          state.participants = state.participants.filter(p => p.id !== event.data.id);
+          updateCompositor();
+          break;
+
+        case 'layout-changed':
+          state.layout = event.data.layout;
+          updateCompositor();
+          break;
+
+        case 'branding-updated':
+          state.backgroundColor = event.data.backgroundColor || state.backgroundColor;
+          state.logoUrl = event.data.logoUrl;
+          state.overlayText = event.data.overlayText;
+          updateCompositor();
+          break;
+
+        case 'go-live':
+          state.isLive = true;
+          updateCompositor();
+          break;
+
+        case 'end-broadcast':
+          state.isLive = false;
+          updateCompositor();
+          break;
+      }
+    }
+
+    // =========================================================================
+    // INITIALIZATION
+    // =========================================================================
+
+    // For testing - simulate some participants
+    window.simulateParticipants = function() {
+      state.participants = [
+        { id: '1', name: 'Host', isOnStage: true, audioEnabled: true, videoEnabled: true, streamId: null },
+        { id: '2', name: 'Guest 1', isOnStage: true, audioEnabled: true, videoEnabled: false, streamId: null },
+        { id: '3', name: 'Guest 2', isOnStage: true, audioEnabled: false, videoEnabled: true, streamId: null },
+      ];
+      updateCompositor();
+    };
+
+    // External API for the compositor service
+    window.CompositorAPI = {
+      setState: (newState) => {
+        state = { ...state, ...newState };
+        updateCompositor();
+      },
+      setLayout: (layout) => {
+        state.layout = layout;
+        updateCompositor();
+      },
+      addParticipant: (participant) => {
+        state.participants.push(participant);
+        if (participant.streamId) {
+          subscribeToStream(participant.streamId);
+        }
+        updateCompositor();
+      },
+      removeParticipant: (participantId) => {
+        state.participants = state.participants.filter(p => p.id !== participantId);
+        updateCompositor();
+      },
+      updateParticipant: (participant) => {
+        const index = state.participants.findIndex(p => p.id === participant.id);
+        if (index >= 0) {
+          state.participants[index] = { ...state.participants[index], ...participant };
+        }
+        updateCompositor();
+      },
+      setBranding: (branding) => {
+        state = { ...state, ...branding };
+        updateCompositor();
+      },
+      setLive: (isLive) => {
+        state.isLive = isLive;
+        updateCompositor();
+      },
+      getCanvas: () => document.getElementById('compositor'),
+    };
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('Compositor ready');
+      updateCompositor();
+    });
+  </script>
+</body>
+</html>
