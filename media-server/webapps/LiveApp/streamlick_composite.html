@@ -180,6 +180,7 @@
     let currentLayout = initialLayout;
     let backgroundImage = null;
     let participants = []; // Array of { id, streamId, stream, videoElement, name, videoEnabled }
+    let subscribedStreams = new Set(); // Track streams we've already subscribed to
     let webRTCAdaptor = null;
     let isPublishing = false;
     let isJoined = false;
@@ -535,8 +536,9 @@
           // Subscribe to existing streams
           if (obj.streams && obj.streams.length > 0) {
             obj.streams.forEach(streamId => {
-              if (!streamId.includes('composite')) {
+              if (!streamId.includes('composite') && !subscribedStreams.has(streamId)) {
                 console.log('[Composite] Subscribing to:', streamId);
+                subscribedStreams.add(streamId);
                 webRTCAdaptor.play(streamId, null, roomId);
               }
             });
@@ -568,8 +570,9 @@
           break;
 
         case 'subtrackAdded':
-          if (obj.trackId && !obj.trackId.includes('composite')) {
+          if (obj.trackId && !obj.trackId.includes('composite') && !subscribedStreams.has(obj.trackId)) {
             console.log('[Composite] Subtrack added, subscribing:', obj.trackId);
+            subscribedStreams.add(obj.trackId);
             webRTCAdaptor.play(obj.trackId, null, roomId);
           }
           break;
@@ -582,6 +585,14 @@
 
         case 'play_started':
           console.log('[Composite] Play started:', obj.streamId);
+          // Try to get stream from adaptor since newStreamAvailable may not fire
+          if (obj.streamId && !obj.streamId.includes('composite')) {
+            const stream = webRTCAdaptor.remoteStreams?.[obj.streamId];
+            if (stream) {
+              console.log('[Composite] Got stream from remoteStreams');
+              addParticipant(obj.streamId, stream);
+            }
+          }
           break;
 
         case 'ice_connection_state_changed':
@@ -591,6 +602,11 @@
     }
 
     function handleError(error, message) {
+      // Ignore non-critical errors
+      if (error === 'already_playing' || error === 'no_stream_exist') {
+        console.log('[Composite] Ignoring:', error);
+        return;
+      }
       console.error('[Composite] Error:', error, message);
       updateStatus(`ERROR: ${error} - ${message}`, 'error');
     }
