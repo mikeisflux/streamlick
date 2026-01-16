@@ -1,0 +1,5 @@
+# Project Instructions for Claude
+
+## Code Organization
+
+No file should be over 1300 lines of code. Make sure that you are properly linking files and creating subfiles that have only one job that can be reused as modules. Do not stick all functionality into a single file.
