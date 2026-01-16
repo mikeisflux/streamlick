@@ -95,22 +95,24 @@ class CompositeService {
 
   /**
    * Change the layout of the running composite
+   * Updates both the database (for composite polling) and Ant Media
    */
   async setLayout(layoutId: number): Promise<void> {
-    if (!this.state.isRunning || !this.state.compositeStreamId) {
-      logger.warn('[CompositeService] Cannot set layout - composite not running');
+    if (!this.state.broadcastId) {
+      logger.warn('[CompositeService] Cannot set layout - no broadcast ID');
       return;
     }
 
     try {
       logger.info('[CompositeService] Setting layout:', layoutId);
 
-      await api.post(`/antmedia/composite/${this.state.compositeStreamId}/layout`, {
-        layoutId,
+      // Update database so composite HTML can poll it
+      await api.patch(`/broadcasts/${this.state.broadcastId}/studio-settings`, {
+        layout: layoutId,
       });
 
       this.state.layout = layoutId;
-      logger.info('[CompositeService] Layout updated');
+      logger.info('[CompositeService] Layout updated in database');
     } catch (error: any) {
       logger.error('[CompositeService] Failed to set layout:', error);
       throw new Error(`Failed to set layout: ${error.message}`);
@@ -119,25 +121,58 @@ class CompositeService {
 
   /**
    * Change the background of the running composite
+   * Updates database so composite HTML can poll it
    */
   async setBackground(backgroundUrl: string | null): Promise<void> {
-    if (!this.state.isRunning || !this.state.compositeStreamId) {
-      logger.warn('[CompositeService] Cannot set background - composite not running');
+    if (!this.state.broadcastId) {
+      logger.warn('[CompositeService] Cannot set background - no broadcast ID');
       return;
     }
 
     try {
       logger.info('[CompositeService] Setting background:', backgroundUrl);
 
-      await api.post(`/antmedia/composite/${this.state.compositeStreamId}/background`, {
-        backgroundUrl,
+      // Update database so composite HTML can poll it
+      await api.patch(`/broadcasts/${this.state.broadcastId}/studio-settings`, {
+        backgroundUrl: backgroundUrl,
       });
 
       this.state.backgroundUrl = backgroundUrl;
-      logger.info('[CompositeService] Background updated');
+      logger.info('[CompositeService] Background updated in database');
     } catch (error: any) {
       logger.error('[CompositeService] Failed to set background:', error);
       throw new Error(`Failed to set background: ${error.message}`);
+    }
+  }
+
+  /**
+   * Update participant name for composite display
+   */
+  async setParticipantName(participantId: string, name: string): Promise<void> {
+    if (!this.state.broadcastId) {
+      logger.warn('[CompositeService] Cannot set participant name - no broadcast ID');
+      return;
+    }
+
+    try {
+      logger.info('[CompositeService] Setting participant name:', participantId, name);
+
+      // Get current settings first
+      const response = await api.get(`/broadcasts/${this.state.broadcastId}/studio-settings`);
+      const currentNames = response.data.participantNames || {};
+
+      // Update database with new name
+      await api.patch(`/broadcasts/${this.state.broadcastId}/studio-settings`, {
+        participantNames: {
+          ...currentNames,
+          [participantId]: name,
+        },
+      });
+
+      logger.info('[CompositeService] Participant name updated');
+    } catch (error: any) {
+      logger.error('[CompositeService] Failed to set participant name:', error);
+      // Don't throw - this is not critical
     }
   }
 

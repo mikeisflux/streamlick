@@ -174,17 +174,22 @@
     const initialLayout = parseInt(urlParams.get('layout')) || 1;
     const initialBackground = urlParams.get('bg') || null;
 
+    // Backend API URL for polling settings (configurable via URL param)
+    const API_URL = urlParams.get('api') || 'https://api.streamlick.com';
+
     // ========================================
     // State
     // ========================================
     let currentLayout = initialLayout;
     let backgroundImage = null;
-    let participants = []; // Array of { id, streamId, stream, videoElement, name, videoEnabled }
+    let participants = []; // Array of { id, streamId, stream, videoElement, name, videoEnabled, isScreenShare }
+    let screenShareStream = null; // Current screen share participant (if any)
     let webRTCAdaptor = null;
     let isPublishing = false;
     let isJoined = false;
     let compositeStreamId = null;
     let canvasStream = null;
+    let lastSettingsHash = ''; // Track settings changes
 
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
@@ -251,12 +256,31 @@
           }
           break;
 
-        case 6: // Screen Share - thumbnails on top (12%)
+        case 6: // Screen Share - main content with camera thumbnails on top
           {
-            const topBarH = CANVAS_HEIGHT * 0.12;
-            const thumbW = count > 0 ? CANVAS_WIDTH / count : CANVAS_WIDTH;
-            for (let i = 0; i < count; i++) {
-              positions.push({ x: i * thumbW, y: 0, width: thumbW, height: topBarH });
+            const topBarH = CANVAS_HEIGHT * 0.15; // 15% for thumbnails
+            const mainH = CANVAS_HEIGHT - topBarH;
+            const gap = 8;
+
+            if (count === 1) {
+              // Just screen share, fullscreen
+              positions.push({ x: 0, y: 0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
+            } else {
+              // First position: screen share (main content below thumbnails)
+              positions.push({ x: gap, y: topBarH + gap, width: CANVAS_WIDTH - gap * 2, height: mainH - gap * 2 });
+
+              // Remaining positions: camera thumbnails on top
+              const thumbCount = count - 1;
+              const thumbW = (CANVAS_WIDTH - gap * (thumbCount + 1)) / thumbCount;
+              const thumbH = topBarH - gap * 2;
+              for (let i = 0; i < thumbCount; i++) {
+                positions.push({
+                  x: gap + i * (thumbW + gap),
+                  y: gap,
+                  width: thumbW,
+                  height: thumbH
+                });
+              }
             }
           }
           break;
@@ -354,10 +378,20 @@
       }
 
       // Calculate positions for current layout
-      const positions = calculateLayoutPositions(currentLayout, participants.length);
+      // Reorder participants: screen share first if in screen share layout (6)
+      let orderedParticipants = [...participants];
+      if (currentLayout === 6 && screenShareStream) {
+        // Put screen share first, cameras after
+        orderedParticipants = [
+          screenShareStream,
+          ...participants.filter(p => !p.isScreenShare)
+        ];
+      }
+
+      const positions = calculateLayoutPositions(currentLayout, orderedParticipants.length);
 
       // Draw each participant
-      participants.forEach((p, i) => {
+      orderedParticipants.forEach((p, i) => {
         if (i >= positions.length) return;
         const pos = positions[i];
         const video = p.videoElement;
@@ -599,20 +633,27 @@
       const parts = streamId.split('_');
       const participantId = parts.length >= 2 ? parts.slice(1).join('_') : streamId;
 
+      // Check if this is a screen share stream
+      const isScreenShare = streamId.toLowerCase().includes('screenshare') ||
+                           streamId.toLowerCase().includes('screen_share') ||
+                           streamId.toLowerCase().includes('_screen');
+
       // Update existing or create new
       let participant = participants.find(p => p.id === participantId || p.streamId === streamId);
 
       if (participant) {
-        console.log('[Composite] Updating participant:', participantId);
+        console.log('[Composite] Updating participant:', participantId, isScreenShare ? '(screen share)' : '');
         participant.stream = stream;
+        participant.isScreenShare = isScreenShare;
         if (participant.videoElement) {
           participant.videoElement.srcObject = stream;
           participant.videoElement.play().catch(e => console.warn('Replay error:', e));
         }
+        if (isScreenShare) screenShareStream = participant;
         return;
       }
 
-      console.log('[Composite] Adding participant:', participantId, 'streamId:', streamId);
+      console.log('[Composite] Adding participant:', participantId, 'streamId:', streamId, isScreenShare ? '(SCREEN SHARE)' : '');
 
       // Create hidden video element
       const video = document.createElement('video');
@@ -636,14 +677,23 @@
         }
       }, 500);
 
-      participants.push({
+      const newParticipant = {
         id: participantId,
         streamId: streamId,
         stream: stream,
         videoElement: video,
-        name: null,
-        videoEnabled: true
-      });
+        name: isScreenShare ? 'Screen Share' : null,
+        videoEnabled: true,
+        isScreenShare: isScreenShare
+      };
+
+      participants.push(newParticipant);
+
+      // Track screen share separately
+      if (isScreenShare) {
+        screenShareStream = newParticipant;
+        console.log('[Composite] Screen share detected and tracked');
+      }
 
       updateStatus(`${participants.length} participant(s) | Publishing: ${isPublishing}`, isPublishing ? 'success' : 'warning');
     }
@@ -655,6 +705,13 @@
       const idx = participants.findIndex(p => p.id === participantId || p.streamId === streamId);
       if (idx !== -1) {
         const p = participants[idx];
+
+        // Clear screen share reference if this was the screen share
+        if (p.isScreenShare || screenShareStream?.id === p.id) {
+          screenShareStream = null;
+          console.log('[Composite] Screen share ended');
+        }
+
         if (p.videoElement) {
           p.videoElement.srcObject = null;
           p.videoElement.remove();
@@ -716,13 +773,62 @@
     });
 
     // ========================================
+    // Poll Backend for Studio Settings
+    // ========================================
+    async function pollStudioSettings() {
+      if (!roomId) return;
+
+      try {
+        const response = await fetch(`${API_URL}/api/broadcasts/${roomId}/studio-settings`);
+        if (!response.ok) {
+          console.warn('[Composite] Settings poll failed:', response.status);
+          return;
+        }
+
+        const settings = await response.json();
+        const settingsHash = JSON.stringify(settings);
+
+        // Only update if settings changed
+        if (settingsHash !== lastSettingsHash) {
+          lastSettingsHash = settingsHash;
+          console.log('[Composite] Settings updated:', settings);
+
+          // Update layout
+          if (settings.layout && settings.layout !== currentLayout) {
+            window.setLayout(settings.layout);
+            document.getElementById('layoutSelect').value = settings.layout;
+          }
+
+          // Update background
+          if (settings.backgroundUrl !== (backgroundImage?.src || null)) {
+            window.setBackground(settings.backgroundUrl);
+            document.getElementById('bgInput').value = settings.backgroundUrl || '';
+          }
+
+          // Update participant names
+          if (settings.participantNames) {
+            Object.entries(settings.participantNames).forEach(([id, name]) => {
+              window.setParticipantName(id, name);
+            });
+          }
+        }
+      } catch (error) {
+        console.warn('[Composite] Settings poll error:', error);
+      }
+    }
+
+    // Start polling every 2 seconds
+    setInterval(pollStudioSettings, 2000);
+
+    // ========================================
     // Initialize
     // ========================================
-    window.onload = () => {
+    window.onload = async () => {
       console.log('[Composite] Initializing...');
       console.log('[Composite] Room:', roomId);
       console.log('[Composite] Layout:', initialLayout);
       console.log('[Composite] Background:', initialBackground);
+      console.log('[Composite] API URL:', API_URL);
 
       if (initialBackground) {
         window.setBackground(initialBackground);
@@ -733,6 +839,9 @@
 
       // Then initialize WebRTC
       if (roomId) {
+        // Fetch initial settings from backend
+        await pollStudioSettings();
+
         initWebRTC();
       } else {
         updateStatus('ERROR: No roomId parameter', 'error');

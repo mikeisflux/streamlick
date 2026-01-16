@@ -837,6 +837,83 @@ router.post('/:id/start-rtmp', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+// Get studio settings for composite (PUBLIC - no auth required)
+// Used by Ant Media composite page to get current layout/background
+router.get('/:id/studio-settings', async (req, res) => {
+  try {
+    const broadcast = await prisma.broadcast.findUnique({
+      where: { id: req.params.id },
+      select: {
+        id: true,
+        studioConfig: true,
+        status: true,
+      },
+    });
+
+    if (!broadcast) {
+      return res.status(404).json({ error: 'Broadcast not found' });
+    }
+
+    // Return studio settings with defaults
+    const config = (broadcast.studioConfig as any) || {};
+    res.json({
+      broadcastId: broadcast.id,
+      status: broadcast.status,
+      layout: config.layout || 1,
+      backgroundUrl: config.backgroundUrl || null,
+      showNameTags: config.showNameTags !== false,
+      participantNames: config.participantNames || {},
+    });
+  } catch (error) {
+    logger.error('Get studio settings error:', error);
+    res.status(500).json({ error: 'Failed to get studio settings' });
+  }
+});
+
+// Update studio settings (called by host)
+router.patch('/:id/studio-settings', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const broadcast = await prisma.broadcast.findFirst({
+      where: {
+        id: req.params.id,
+        userId: req.user!.userId,
+      },
+    });
+
+    if (!broadcast) {
+      return res.status(404).json({ error: 'Broadcast not found' });
+    }
+
+    const { layout, backgroundUrl, showNameTags, participantNames } = req.body;
+    const currentConfig = (broadcast.studioConfig as any) || {};
+
+    const updatedConfig = {
+      ...currentConfig,
+      ...(layout !== undefined && { layout }),
+      ...(backgroundUrl !== undefined && { backgroundUrl }),
+      ...(showNameTags !== undefined && { showNameTags }),
+      ...(participantNames !== undefined && { participantNames }),
+    };
+
+    await prisma.broadcast.update({
+      where: { id: req.params.id },
+      data: {
+        studioConfig: updatedConfig as Prisma.InputJsonValue,
+      },
+    });
+
+    logger.info(`[Studio Settings] Updated for broadcast ${req.params.id}: layout=${layout}, bg=${backgroundUrl}`);
+
+    res.json({
+      broadcastId: broadcast.id,
+      ...updatedConfig,
+    });
+  } catch (error) {
+    logger.error('Update studio settings error:', error);
+    res.status(500).json({ error: 'Failed to update studio settings' });
+  }
+});
+
 // Stop RTMP streaming via Ant Media Server
 router.post('/:id/stop-rtmp', authenticate, async (req: AuthRequest, res) => {
   try {
