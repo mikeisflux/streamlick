@@ -253,6 +253,52 @@ class CompositeService {
       return null;
     }
   }
+
+  /**
+   * Add RTMP endpoint to forward composite stream to a destination
+   * This is the key for Streamyard-style architecture - server does all streaming
+   */
+  async addRtmpEndpoint(rtmpUrl: string): Promise<void> {
+    if (!this.state.isRunning || !this.state.compositeStreamId) {
+      throw new Error('Composite not running - cannot add RTMP endpoint');
+    }
+
+    try {
+      logger.info('[CompositeService] Adding RTMP endpoint:', rtmpUrl);
+
+      await api.post(`/antmedia/composite/${this.state.compositeStreamId}/rtmp`, {
+        rtmpUrl,
+      });
+
+      logger.info('[CompositeService] RTMP endpoint added');
+    } catch (error: any) {
+      logger.error('[CompositeService] Failed to add RTMP endpoint:', error);
+      throw new Error(`Failed to add RTMP endpoint: ${error.message}`);
+    }
+  }
+
+  /**
+   * Remove RTMP endpoint from composite stream
+   */
+  async removeRtmpEndpoint(rtmpUrl: string): Promise<void> {
+    if (!this.state.isRunning || !this.state.compositeStreamId) {
+      logger.warn('[CompositeService] Cannot remove RTMP - composite not running');
+      return;
+    }
+
+    try {
+      logger.info('[CompositeService] Removing RTMP endpoint:', rtmpUrl);
+
+      await api.delete(`/antmedia/composite/${this.state.compositeStreamId}/rtmp`, {
+        data: { rtmpUrl },
+      });
+
+      logger.info('[CompositeService] RTMP endpoint removed');
+    } catch (error: any) {
+      logger.error('[CompositeService] Failed to remove RTMP endpoint:', error);
+      // Don't throw - cleanup should be best-effort
+    }
+  }
 }
 
 export const compositeService = new CompositeService();

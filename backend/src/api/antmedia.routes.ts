@@ -734,6 +734,87 @@ router.post('/composite/:compositeStreamId/background', authenticate, async (req
 });
 
 /**
+ * POST /api/antmedia/composite/:compositeStreamId/rtmp
+ * Add RTMP endpoint to forward composite stream to a destination
+ *
+ * This is key for the Streamyard-style architecture:
+ * - Server composite renders all participants
+ * - RTMP forwarding sends composite to YouTube/Facebook/etc
+ * - Host browser does NOT stream directly
+ */
+router.post('/composite/:compositeStreamId/rtmp', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { compositeStreamId } = req.params;
+    const { rtmpUrl } = req.body;
+
+    if (!rtmpUrl) {
+      return res.status(400).json({ error: 'rtmpUrl is required' });
+    }
+
+    logger.info('[AntMedia] Adding RTMP endpoint to composite:', { compositeStreamId, rtmpUrl });
+
+    // Add RTMP endpoint to the composite stream
+    const result = await antmediaRequest(
+      `/broadcasts/${compositeStreamId}/rtmp-endpoint`,
+      'POST',
+      { rtmpUrl }
+    );
+
+    logger.info('[AntMedia] RTMP endpoint added to composite:', result);
+
+    res.json({
+      success: true,
+      compositeStreamId,
+      rtmpUrl,
+      result,
+    });
+  } catch (error: any) {
+    logger.error('[AntMedia] Failed to add RTMP to composite:', error);
+    res.status(500).json({
+      error: 'Failed to add RTMP endpoint to composite',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * DELETE /api/antmedia/composite/:compositeStreamId/rtmp
+ * Remove RTMP endpoint from composite stream
+ */
+router.delete('/composite/:compositeStreamId/rtmp', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { compositeStreamId } = req.params;
+    const { rtmpUrl } = req.body;
+
+    if (!rtmpUrl) {
+      return res.status(400).json({ error: 'rtmpUrl is required' });
+    }
+
+    logger.info('[AntMedia] Removing RTMP endpoint from composite:', { compositeStreamId, rtmpUrl });
+
+    // Remove RTMP endpoint from the composite stream
+    const result = await antmediaRequest(
+      `/broadcasts/${compositeStreamId}/rtmp-endpoint`,
+      'DELETE',
+      { rtmpUrl }
+    );
+
+    res.json({
+      success: true,
+      compositeStreamId,
+      rtmpUrl,
+      result,
+    });
+  } catch (error: any) {
+    logger.error('[AntMedia] Failed to remove RTMP from composite:', error);
+    res.status(500).json({
+      error: 'Failed to remove RTMP endpoint from composite',
+      message: error.message,
+    });
+  }
+});
+
+/**
  * GET /api/antmedia/composite/:compositeStreamId/state
  * Get the current state of a composite stream
  */

@@ -106,7 +106,7 @@ export function GuestJoin() {
 
   // NOTE: useGuestStream (P2P camera) removed in favor of Ant Media SFU
   // Guest publishes/subscribes camera via webrtcService.joinRoom()
-  // BUT usePreviewStream is used for the composed canvas preview (P2P from host)
+  // LIVE preview now comes from server composite via useCompositeStream (not P2P from host)
 
   // Greenroom chat hook
   const {

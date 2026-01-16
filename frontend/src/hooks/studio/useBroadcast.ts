@@ -6,10 +6,11 @@
  * - Recording
  * - Layout changes
  *
- * Architecture (Privacy-First, Zero-Server Media):
- * - Canvas compositing happens in browser (StudioCanvas)
- * - Streaming goes DIRECTLY from browser to platforms via WHIP/RTMP-relay
- * - No media touches our servers - only signaling and metadata
+ * Architecture (Streamyard-style Server-Side Composite):
+ * - Host sends raw camera/mic to Ant Media SFU
+ * - Server-side composite renders all participants with layouts/backgrounds
+ * - RTMP forwarding sends composite to YouTube/Facebook/etc
+ * - Host browser does NOT stream directly - only sends raw camera
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { broadcastService } from '../../services/broadcast.service';
@@ -17,7 +18,6 @@ import { socketService } from '../../services/socket.service';
 import { compositorService } from '../../services/compositor.service';
 import { canvasStreamService } from '../../services/canvas-stream.service';
 import { recordingService } from '../../services/recording.service';
-import { broadcastOutputService, BroadcastDestination } from '../../services/broadcast-output.service';
 import { audioMixerService } from '../../services/audio-mixer.service';
 import { compositeService } from '../../services/composite.service';
 import { useStudioStore } from '../../store/studioStore';
@@ -79,15 +79,8 @@ export function useBroadcast({
         clearInterval(recordingIntervalRef.current);
         recordingIntervalRef.current = null;
       }
-      broadcastOutputService.cleanup();
+      // Server composite cleanup happens via compositeService.stop() in handleEndBroadcast
     };
-  }, []);
-
-  // Set up status callback for streaming
-  useEffect(() => {
-    broadcastOutputService.onStatusChange((statuses) => {
-      setStreamingStatuses(statuses);
-    });
   }, []);
 
   // Recording functions
@@ -148,7 +141,12 @@ export function useBroadcast({
   }, [broadcast, broadcastId, recordingDuration]);
 
   /**
-   * Go Live - Direct browser-to-platform streaming
+   * Go Live - Server-side composite streaming to platforms
+   *
+   * NEW ARCHITECTURE (Streamyard-style):
+   * 1. Ensure server composite is running
+   * 2. Add RTMP endpoints to composite stream (server forwards to YouTube/Facebook)
+   * 3. Host browser does NOT stream directly - only sends raw camera to SFU
    */
   const handleGoLive = useCallback(async () => {
     if (!broadcastId) return false;
@@ -166,40 +164,11 @@ export function useBroadcast({
     }
 
     try {
-      // Get canvas stream from StudioCanvas (video only)
-      const canvasStream = canvasStreamService.getOutputStream();
-      if (!canvasStream) {
-        throw new Error('No canvas stream available - please ensure you are on stage');
+      // Verify server composite is running
+      if (!compositeService.isRunning()) {
+        console.log('[useBroadcast] Server composite not running, starting...');
+        await compositeService.start(broadcastId, selectedLayout);
       }
-
-      // Initialize audio mixer if not already done
-      audioMixerService.initialize();
-
-      // Get mixed audio output (includes host + all guests)
-      const audioOutputStream = audioMixerService.getOutputStream();
-
-      // Combine canvas video with mixed audio
-      let compositeStream: MediaStream;
-      if (audioOutputStream) {
-        const audioTrack = audioOutputStream.getAudioTracks()[0];
-        if (audioTrack) {
-          const combined = canvasStreamService.combineWithAudio(audioTrack);
-          compositeStream = combined || canvasStream;
-          console.log('[useBroadcast] Combined stream with audio:', {
-            videoTracks: compositeStream.getVideoTracks().length,
-            audioTracks: compositeStream.getAudioTracks().length,
-          });
-        } else {
-          console.warn('[useBroadcast] No audio track available from mixer');
-          compositeStream = canvasStream;
-        }
-      } else {
-        console.warn('[useBroadcast] Audio mixer has no output stream');
-        compositeStream = canvasStream;
-      }
-
-      // Initialize broadcast output with combined video+audio stream
-      broadcastOutputService.initialize(compositeStream);
 
       // Prepare destination settings for backend
       const apiDestinationSettings: Record<string, any> = {};
@@ -239,34 +208,35 @@ export function useBroadcast({
         throw new Error('No broadcast destinations were created');
       }
 
-      // Add destinations to broadcast output service
+      // Add RTMP endpoints to server composite (Streamyard-style)
+      // Server composite will forward to all destinations
+      console.log('[useBroadcast] Adding RTMP endpoints to server composite...');
+      const rtmpResults: { success: string[]; failed: string[] } = { success: [], failed: [] };
+
       for (const dest of broadcastDestinations) {
-        const destination: BroadcastDestination = {
-          id: dest.id,
-          platform: dest.platform,
-          rtmpUrl: dest.rtmpUrl,
-          streamKey: dest.streamKey || '',
-        };
-        broadcastOutputService.addDestination(destination);
+        const rtmpUrl = dest.streamKey
+          ? `${dest.rtmpUrl}/${dest.streamKey}`
+          : dest.rtmpUrl;
+
+        try {
+          await compositeService.addRtmpEndpoint(rtmpUrl);
+          rtmpResults.success.push(dest.id);
+          console.log('[useBroadcast] RTMP endpoint added:', dest.platform);
+        } catch (error) {
+          console.error('[useBroadcast] Failed to add RTMP endpoint:', dest.platform, error);
+          rtmpResults.failed.push(dest.id);
+        }
       }
 
-      // Start 30-second countdown on canvas
-      toast.success('Starting countdown...');
-      await compositorService.startCountdown(30);
-
-      // START STREAMING - Direct from browser to platforms!
-      console.log('[useBroadcast] Starting direct browser streaming...');
-      const result = await broadcastOutputService.startAll();
-
-      if (result.failed.length > 0) {
-        const failedPlatforms = result.failed.map(id => {
+      if (rtmpResults.failed.length > 0) {
+        const failedPlatforms = rtmpResults.failed.map(id => {
           const dest = broadcastDestinations.find(d => d.id === id);
           return dest?.platform || id;
         });
         toast.error(`Failed to connect to: ${failedPlatforms.join(', ')}`);
       }
 
-      if (result.success || broadcastOutputService.getConnectedCount() > 0) {
+      if (rtmpResults.success.length > 0) {
         // Transition YouTube broadcasts from testing to live
         try {
           await api.post(`/broadcasts/${broadcastId}/transition-youtube-to-live`);
@@ -276,7 +246,7 @@ export function useBroadcast({
           // Continue anyway
         }
 
-        // Play intro video
+        // Play intro video on local canvas (for host preview)
         try {
           await compositorService.playIntroVideo('/backgrounds/videos/StreamLick.mp4');
         } catch (error) {
@@ -287,7 +257,7 @@ export function useBroadcast({
         socketService.emit('start-chat', { broadcastId });
         compositorService.setShowChat(showChatOnStream);
 
-        // Auto-start recording
+        // Auto-start local recording (for backup)
         try {
           await handleStartRecording();
         } catch (error) {
@@ -306,10 +276,6 @@ export function useBroadcast({
     }
   }, [
     broadcastId,
-    localStream,
-    audioEnabled,
-    videoEnabled,
-    remoteParticipants,
     selectedDestinations,
     destinations,
     showChatOnStream,
@@ -317,10 +283,11 @@ export function useBroadcast({
     handleStartRecording,
     destinationSettings,
     broadcast,
+    selectedLayout,
   ]);
 
   /**
-   * End Broadcast
+   * End Broadcast - Stop server-side composite streaming
    */
   const handleEndBroadcast = useCallback(async () => {
     if (!broadcastId) return false;
@@ -334,12 +301,12 @@ export function useBroadcast({
       // Stop chat
       socketService.emit('stop-chat', { broadcastId });
 
-      // Stop compositor
+      // Stop compositor (local)
       compositorService.stop();
 
-      // STOP STREAMING - Direct browser connections
-      console.log('[useBroadcast] Stopping direct browser streaming...');
-      await broadcastOutputService.stopAll();
+      // Stop server-side composite (stops RTMP forwarding)
+      console.log('[useBroadcast] Stopping server-side composite...');
+      await compositeService.stop();
 
       // End broadcast on backend
       await broadcastService.end(broadcastId);
