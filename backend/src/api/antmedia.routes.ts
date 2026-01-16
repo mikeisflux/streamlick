@@ -467,4 +467,301 @@ router.get('/admin/app-settings', authenticate, async (req: AuthRequest, res: Re
   }
 });
 
+// ============================================
+// Composite Stream Control (Media Push Plugin)
+// ============================================
+
+/**
+ * Get Media Push Plugin API URL (v1, not v2)
+ */
+function getMediaPushApiUrl(): string {
+  return `${ANTMEDIA_URL}/${ANTMEDIA_APP}/rest/v1/media-push`;
+}
+
+/**
+ * Make a request to Media Push Plugin API
+ */
+async function mediaPushRequest(
+  endpoint: string,
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'POST',
+  body?: any,
+  queryParams?: Record<string, string>
+): Promise<any> {
+  let url = `${getMediaPushApiUrl()}${endpoint}`;
+
+  if (queryParams) {
+    const params = new URLSearchParams(queryParams);
+    url += `?${params.toString()}`;
+  }
+
+  const options: RequestInit = {
+    method,
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    },
+  };
+
+  if (body && method !== 'GET') {
+    options.body = JSON.stringify(body);
+  }
+
+  logger.info('[MediaPush] API Request:', { method, url, body });
+
+  const response = await fetch(url, options);
+
+  const responseText = await response.text();
+  logger.info('[MediaPush] API Response:', { status: response.status, body: responseText });
+
+  if (!response.ok) {
+    throw new Error(`Media Push API error: ${response.status} - ${responseText}`);
+  }
+
+  try {
+    return JSON.parse(responseText);
+  } catch {
+    return responseText;
+  }
+}
+
+/**
+ * POST /api/antmedia/composite/start
+ * Start a server-side composite stream for a broadcast
+ *
+ * This uses Ant Media's Media Push Plugin to run headless Chrome
+ * that renders our custom composite HTML and publishes the result
+ */
+router.post('/composite/start', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { broadcastId, layout = 3, backgroundUrl } = req.body;
+
+    if (!broadcastId) {
+      return res.status(400).json({ error: 'broadcastId is required' });
+    }
+
+    // Generate a unique stream ID for the composite output
+    const compositeStreamId = `composite_${broadcastId}_${Date.now()}`;
+
+    // Build the composite HTML URL with parameters
+    const frontendUrl = process.env.FRONTEND_URL || 'https://app.streamlick.com';
+    const compositeUrl = new URL(`${ANTMEDIA_URL.replace('https://', 'https://').replace(':5443', ':5443')}/${ANTMEDIA_APP}/streamlick_composite.html`);
+    compositeUrl.searchParams.set('roomId', broadcastId);
+    compositeUrl.searchParams.set('layout', layout.toString());
+    if (backgroundUrl) {
+      compositeUrl.searchParams.set('bg', backgroundUrl);
+    }
+
+    logger.info('[MediaPush] Starting composite stream:', {
+      broadcastId,
+      compositeStreamId,
+      compositeUrl: compositeUrl.toString(),
+    });
+
+    // Start the Media Push Plugin to render our composite HTML
+    const result = await mediaPushRequest(
+      '/start',
+      'POST',
+      {
+        url: compositeUrl.toString(),
+        width: 1920,
+        height: 1080,
+        recordType: '', // Don't record by default
+        extraChromeSwitches: '--autoplay-policy=no-user-gesture-required,--use-fake-ui-for-media-stream',
+      },
+      { streamId: compositeStreamId }
+    );
+
+    logger.info('[MediaPush] Composite started:', result);
+
+    res.json({
+      success: true,
+      compositeStreamId,
+      broadcastId,
+      message: 'Composite stream started',
+      result,
+    });
+  } catch (error: any) {
+    logger.error('[MediaPush] Failed to start composite:', error);
+    res.status(500).json({
+      error: 'Failed to start composite stream',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/antmedia/composite/stop/:compositeStreamId
+ * Stop a running composite stream
+ */
+router.post('/composite/stop/:compositeStreamId', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { compositeStreamId } = req.params;
+
+    logger.info('[MediaPush] Stopping composite stream:', compositeStreamId);
+
+    const result = await mediaPushRequest(`/stop/${compositeStreamId}`, 'POST');
+
+    logger.info('[MediaPush] Composite stopped:', result);
+
+    res.json({
+      success: true,
+      compositeStreamId,
+      message: 'Composite stream stopped',
+      result,
+    });
+  } catch (error: any) {
+    logger.error('[MediaPush] Failed to stop composite:', error);
+    res.status(500).json({
+      error: 'Failed to stop composite stream',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/antmedia/composite/:compositeStreamId/command
+ * Send a JavaScript command to a running composite stream
+ *
+ * This uses Media Push Plugin's send-command API to execute
+ * JavaScript in the headless Chrome rendering the composite
+ */
+router.post('/composite/:compositeStreamId/command', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { compositeStreamId } = req.params;
+    const { command } = req.body;
+
+    if (!command) {
+      return res.status(400).json({ error: 'command is required' });
+    }
+
+    logger.info('[MediaPush] Sending command to composite:', { compositeStreamId, command });
+
+    const result = await mediaPushRequest(
+      `/send-command/${compositeStreamId}`,
+      'POST',
+      { jsCommand: command }
+    );
+
+    res.json({
+      success: true,
+      compositeStreamId,
+      command,
+      result,
+    });
+  } catch (error: any) {
+    logger.error('[MediaPush] Failed to send command:', error);
+    res.status(500).json({
+      error: 'Failed to send command to composite',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/antmedia/composite/:compositeStreamId/layout
+ * Change the layout of a running composite stream
+ */
+router.post('/composite/:compositeStreamId/layout', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { compositeStreamId } = req.params;
+    const { layoutId } = req.body;
+
+    if (layoutId === undefined) {
+      return res.status(400).json({ error: 'layoutId is required' });
+    }
+
+    logger.info('[MediaPush] Changing composite layout:', { compositeStreamId, layoutId });
+
+    // Send JavaScript command to change layout
+    const command = `window.setLayout(${layoutId})`;
+    const result = await mediaPushRequest(
+      `/send-command/${compositeStreamId}`,
+      'POST',
+      { jsCommand: command }
+    );
+
+    res.json({
+      success: true,
+      compositeStreamId,
+      layoutId,
+      result,
+    });
+  } catch (error: any) {
+    logger.error('[MediaPush] Failed to change layout:', error);
+    res.status(500).json({
+      error: 'Failed to change composite layout',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/antmedia/composite/:compositeStreamId/background
+ * Change the background of a running composite stream
+ */
+router.post('/composite/:compositeStreamId/background', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { compositeStreamId } = req.params;
+    const { backgroundUrl } = req.body;
+
+    logger.info('[MediaPush] Changing composite background:', { compositeStreamId, backgroundUrl });
+
+    // Send JavaScript command to change background
+    const command = backgroundUrl
+      ? `window.setBackground('${backgroundUrl}')`
+      : `window.setBackground(null)`;
+
+    const result = await mediaPushRequest(
+      `/send-command/${compositeStreamId}`,
+      'POST',
+      { jsCommand: command }
+    );
+
+    res.json({
+      success: true,
+      compositeStreamId,
+      backgroundUrl,
+      result,
+    });
+  } catch (error: any) {
+    logger.error('[MediaPush] Failed to change background:', error);
+    res.status(500).json({
+      error: 'Failed to change composite background',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/antmedia/composite/:compositeStreamId/state
+ * Get the current state of a composite stream
+ */
+router.get('/composite/:compositeStreamId/state', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { compositeStreamId } = req.params;
+
+    logger.info('[MediaPush] Getting composite state:', compositeStreamId);
+
+    // Send JavaScript command to get state and capture result
+    const command = `JSON.stringify(window.getState())`;
+    const result = await mediaPushRequest(
+      `/send-command/${compositeStreamId}`,
+      'POST',
+      { jsCommand: command }
+    );
+
+    res.json({
+      success: true,
+      compositeStreamId,
+      state: result,
+    });
+  } catch (error: any) {
+    logger.error('[MediaPush] Failed to get composite state:', error);
+    res.status(500).json({
+      error: 'Failed to get composite state',
+      message: error.message,
+    });
+  }
+});
+
 export default router;

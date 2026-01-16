@@ -80,6 +80,8 @@
     const urlParams = new URLSearchParams(window.location.search);
     const roomId = urlParams.get('roomId');
     const publisherId = urlParams.get('publisherId') || 'composite_' + Date.now();
+    const initialLayout = parseInt(urlParams.get('layout')) || 3;
+    const initialBackground = urlParams.get('bg') || null;
 
     // ========================================
     // State
@@ -613,6 +615,16 @@
       console.log('[Composite] StreamLick Composite Layout loaded');
       console.log('[Composite] Room ID:', roomId);
       console.log('[Composite] Publisher ID:', publisherId);
+      console.log('[Composite] Initial layout:', initialLayout);
+      console.log('[Composite] Initial background:', initialBackground);
+
+      // Apply initial layout from URL parameter
+      currentLayout = initialLayout;
+
+      // Apply initial background from URL parameter
+      if (initialBackground) {
+        window.setBackground(initialBackground);
+      }
 
       // Start render loop
       requestAnimationFrame(renderFrame);
@@ -627,6 +639,9 @@
 
       // Make stream available to Media Push Plugin
       window.compositeStream = compositeStream;
+
+      // Report ready status for Media Push Plugin
+      console.log('[Composite] Ready for Media Push Plugin');
     };
 
     // ========================================
