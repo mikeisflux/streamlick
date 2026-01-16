@@ -571,7 +571,7 @@
           break;
 
         case 'newStreamAvailable':
-          console.log('[Composite] New stream:', obj.streamId, obj);
+          console.log('[Composite] New stream available:', obj);
           const newStreamParticipant = extractParticipantId(obj.streamId);
           if (newStreamParticipant && obj.stream) {
             addParticipant(newStreamParticipant, obj.stream);
@@ -579,10 +579,18 @@
           break;
 
         case 'newTrackAvailable':
-          console.log('[Composite] New track:', obj.streamId, obj.track?.kind);
+          console.log('[Composite] New track available:', obj);
+          // Handle both stream and track cases
           const newTrackParticipant = extractParticipantId(obj.streamId);
-          if (newTrackParticipant && obj.stream) {
-            addParticipant(newTrackParticipant, obj.stream);
+          if (newTrackParticipant) {
+            if (obj.stream) {
+              addParticipant(newTrackParticipant, obj.stream);
+            } else if (obj.track) {
+              // Build MediaStream from track
+              console.log('[Composite] Building stream from track:', obj.track.kind);
+              const stream = new MediaStream([obj.track]);
+              addParticipant(newTrackParticipant, stream);
+            }
           }
           break;
 
@@ -609,6 +617,13 @@
 
         case 'ice_connection_state_changed':
           console.log('[Composite] ICE state:', obj.state, obj.streamId);
+          break;
+
+        default:
+          // Log any unhandled callbacks
+          if (info !== 'pong' && info !== 'bitrateMeasurement') {
+            console.log('[Composite] UNHANDLED callback:', info, obj);
+          }
           break;
       }
     }
