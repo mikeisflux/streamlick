@@ -337,7 +337,25 @@
         const pos = positions[index];
         const video = participant.videoElement;
 
-        if (video && video.readyState >= 2 && video.videoWidth > 0 && participant.videoEnabled !== false) {
+        // Debug: Log why video might not draw (only once per participant per second)
+        if (!participant._lastDebug || now - participant._lastDebug > 1000) {
+          participant._lastDebug = now;
+          if (!video) {
+            console.log(`[Composite] Participant ${index}: No video element`);
+          } else if (video.readyState < 2) {
+            console.log(`[Composite] Participant ${index}: readyState=${video.readyState} (need >=2)`);
+          } else if (video.videoWidth === 0) {
+            console.log(`[Composite] Participant ${index}: videoWidth=0`);
+          } else if (video.paused) {
+            console.log(`[Composite] Participant ${index}: video paused, trying to play`);
+            video.play().catch(e => console.warn('Play failed:', e));
+          }
+        }
+
+        // Try to draw even if conditions are slightly off - readyState 1 might work
+        const canDraw = video && video.videoWidth > 0 && participant.videoEnabled !== false;
+
+        if (canDraw) {
           // Calculate aspect-ratio-preserving fit
           const videoAspect = video.videoWidth / video.videoHeight;
           const boxAspect = pos.width / pos.height;
