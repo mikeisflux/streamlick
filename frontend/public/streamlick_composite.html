@@ -33,7 +33,6 @@
       display: block !important;
       visibility: visible !important;
       background-color: #111;
-      border: 5px solid red;
     }
     .hidden-video {
       position: fixed !important;
@@ -355,6 +354,22 @@
         // Try to draw even if conditions are slightly off - readyState 1 might work
         const canDraw = video && video.videoWidth > 0 && participant.videoEnabled !== false;
 
+        // Helper to draw rounded rect clip
+        const cornerRadius = 12;
+        function clipRoundedRect(x, y, w, h, r) {
+          ctx.beginPath();
+          ctx.moveTo(x + r, y);
+          ctx.lineTo(x + w - r, y);
+          ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+          ctx.lineTo(x + w, y + h - r);
+          ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+          ctx.lineTo(x + r, y + h);
+          ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+          ctx.lineTo(x, y + r);
+          ctx.quadraticCurveTo(x, y, x + r, y);
+          ctx.closePath();
+        }
+
         if (canDraw) {
           // Calculate aspect-ratio-preserving fit
           const videoAspect = video.videoWidth / video.videoHeight;
@@ -376,47 +391,107 @@
             drawY = pos.y - (drawHeight - pos.height) / 2;
           }
 
-          // Clip to box bounds
+          // Clip to rounded rect bounds
           ctx.save();
-          ctx.beginPath();
-          ctx.rect(pos.x, pos.y, pos.width, pos.height);
+          clipRoundedRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
           ctx.clip();
 
           ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
 
           ctx.restore();
 
-          // Draw name tag if available
+          // Draw name tag pill
           if (participant.name) {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-            ctx.fillRect(pos.x + 8, pos.y + pos.height - 32, participant.name.length * 10 + 16, 24);
+            const tagHeight = 28;
+            const tagPadding = 12;
+            const tagY = pos.y + pos.height - tagHeight - 12;
+            const tagX = pos.x + 12;
+
+            ctx.font = 'bold 14px system-ui, sans-serif';
+            const textWidth = ctx.measureText(participant.name).width;
+            const tagWidth = textWidth + tagPadding * 2;
+            const tagRadius = tagHeight / 2;
+
+            // Draw pill background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.beginPath();
+            ctx.moveTo(tagX + tagRadius, tagY);
+            ctx.lineTo(tagX + tagWidth - tagRadius, tagY);
+            ctx.arc(tagX + tagWidth - tagRadius, tagY + tagRadius, tagRadius, -Math.PI/2, Math.PI/2);
+            ctx.lineTo(tagX + tagRadius, tagY + tagHeight);
+            ctx.arc(tagX + tagRadius, tagY + tagRadius, tagRadius, Math.PI/2, -Math.PI/2);
+            ctx.closePath();
+            ctx.fill();
+
+            // Draw text
             ctx.fillStyle = '#fff';
-            ctx.font = '14px system-ui, sans-serif';
-            ctx.fillText(participant.name, pos.x + 16, pos.y + pos.height - 14);
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(participant.name, tagX + tagPadding, tagY + tagHeight / 2);
           }
         } else {
-          // Draw placeholder for no video
-          ctx.fillStyle = '#1a1a2e';
-          ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+          // Draw placeholder with rounded corners - camera off state
+          ctx.save();
+          clipRoundedRect(pos.x, pos.y, pos.width, pos.height, cornerRadius);
+          ctx.clip();
 
-          // Draw avatar circle
+          // Dark tile background (matching reference image)
+          ctx.fillStyle = '#1e2330';
+          ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+          ctx.restore();
+
+          // Draw large avatar circle (60% of tile, like reference image)
           const centerX = pos.x + pos.width / 2;
           const centerY = pos.y + pos.height / 2;
-          const radius = Math.min(pos.width, pos.height) * 0.2;
+          const circleSize = Math.min(pos.width, pos.height) * 0.6;
+          const radius = circleSize / 2;
 
+          // Draw subtle border/shadow ring
           ctx.beginPath();
-          ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-          ctx.fillStyle = '#4a4a6a';
+          ctx.arc(centerX, centerY, radius + 4, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
           ctx.fill();
 
-          // Draw initial if name available
-          if (participant.name) {
-            ctx.fillStyle = '#fff';
-            ctx.font = `${radius}px system-ui, sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(participant.name.charAt(0).toUpperCase(), centerX, centerY);
-          }
+          // Draw circle background
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+          ctx.fillStyle = '#374151';
+          ctx.fill();
+
+          // Draw initial letter (large, centered)
+          const displayName = participant.name || 'Guest';
+          const fontSize = Math.min(radius * 0.8, 120);
+          ctx.fillStyle = '#fff';
+          ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(displayName.charAt(0).toUpperCase(), centerX, centerY);
+
+          // Draw name tag pill at bottom left
+          const tagHeight = 28;
+          const tagPadding = 12;
+          const tagY = pos.y + pos.height - tagHeight - 12;
+          const tagX = pos.x + 12;
+
+          ctx.font = 'bold 14px system-ui, sans-serif';
+          const textWidth = ctx.measureText(displayName).width;
+          const tagWidth = textWidth + tagPadding * 2;
+          const tagRadius = tagHeight / 2;
+
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          ctx.beginPath();
+          ctx.moveTo(tagX + tagRadius, tagY);
+          ctx.lineTo(tagX + tagWidth - tagRadius, tagY);
+          ctx.arc(tagX + tagWidth - tagRadius, tagY + tagRadius, tagRadius, -Math.PI/2, Math.PI/2);
+          ctx.lineTo(tagX + tagRadius, tagY + tagHeight);
+          ctx.arc(tagX + tagRadius, tagY + tagRadius, tagRadius, Math.PI/2, -Math.PI/2);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.fillStyle = '#fff';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(displayName, tagX + tagPadding, tagY + tagHeight / 2);
         }
       });
 

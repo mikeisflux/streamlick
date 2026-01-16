@@ -330,15 +330,16 @@ function HTMLPreviewVideo({
           style={{ transform: isLocal ? 'scaleX(-1)' : 'none' }}
         />
       ) : showAvatar ? (
-        <div className="w-full h-full flex items-center justify-center bg-gray-800">
+        <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: '#1e2330' }}>
           <div
-            className="rounded-full overflow-hidden"
+            className="rounded-full overflow-hidden border-4 border-white/10"
             style={{
-              width: '50%',
+              width: '70%',
               height: 'auto',
               aspectRatio: '1',
-              maxWidth: '200px',
-              maxHeight: '200px',
+              maxWidth: '400px',
+              maxHeight: '400px',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
             }}
           >
             <img
@@ -349,9 +350,20 @@ function HTMLPreviewVideo({
           </div>
         </div>
       ) : (
-        <div className="w-full h-full flex items-center justify-center bg-gray-800">
-          <div className="w-16 h-16 rounded-full bg-gray-600 flex items-center justify-center">
-            <span className="text-xl text-white font-semibold">
+        <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: '#1e2330' }}>
+          <div
+            className="rounded-full flex items-center justify-center border-4 border-white/10"
+            style={{
+              width: '60%',
+              height: 'auto',
+              aspectRatio: '1',
+              maxWidth: '300px',
+              maxHeight: '300px',
+              backgroundColor: '#374151',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <span className="text-6xl text-white font-bold" style={{ fontSize: 'clamp(2rem, 10vw, 6rem)' }}>
               {name.charAt(0).toUpperCase()}
             </span>
           </div>
@@ -883,23 +895,61 @@ export function StudioCanvas({
               ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
             }
           } else if (shouldDrawAvatar) {
-            const size = Math.min(pos.width, pos.height) * 0.5;
+            // Draw dark background for avatar tile
+            ctx.fillStyle = '#1e2330';
+            ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+
+            // Draw larger circular avatar (70% of tile)
+            const size = Math.min(pos.width, pos.height) * 0.7;
             const avatarX = pos.x + (pos.width - size) / 2;
             const avatarY = pos.y + (pos.height - size) / 2;
+
+            // Draw subtle border/shadow ring
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(avatarX + size / 2, avatarY + size / 2, size / 2 + 4, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.fill();
+            ctx.restore();
+
+            // Draw circular avatar
             ctx.save();
             ctx.beginPath();
             ctx.arc(avatarX + size / 2, avatarY + size / 2, size / 2, 0, Math.PI * 2);
             ctx.clip();
             ctx.drawImage(avatarImageRef.current!, avatarX, avatarY, size, size);
             ctx.restore();
-          } else if (p.type === 'remote') {
-            // Remote participant waiting for video - draw placeholder
-            ctx.fillStyle = '#1a1a1a';
+          } else if (p.type === 'remote' || (p.type === 'local' && !p.videoEnabled)) {
+            // Remote participant OR local user without avatar - draw placeholder with initial
+            ctx.fillStyle = '#1e2330';
             ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+
             if (!p.videoEnabled) {
-              // Video disabled - show darker background
-              ctx.fillStyle = '#111';
-              ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+              // Video disabled - show large circular initial
+              const size = Math.min(pos.width, pos.height) * 0.6;
+              const circleX = pos.x + (pos.width - size) / 2;
+              const circleY = pos.y + (pos.height - size) / 2;
+
+              // Draw subtle border/shadow ring
+              ctx.beginPath();
+              ctx.arc(circleX + size / 2, circleY + size / 2, size / 2 + 4, 0, Math.PI * 2);
+              ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+              ctx.fill();
+
+              // Draw circle background
+              ctx.beginPath();
+              ctx.arc(circleX + size / 2, circleY + size / 2, size / 2, 0, Math.PI * 2);
+              ctx.fillStyle = '#374151';
+              ctx.fill();
+
+              // Draw initial letter
+              const name = p.type === 'local' ? 'You' : (p.participant?.name || 'Guest');
+              const fontSize = Math.min(size * 0.5, 120);
+              ctx.font = `bold ${fontSize}px Inter, system-ui, sans-serif`;
+              ctx.fillStyle = 'white';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(name.charAt(0).toUpperCase(), circleX + size / 2, circleY + size / 2);
             }
           }
 
