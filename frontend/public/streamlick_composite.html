@@ -274,15 +274,51 @@
     // ========================================
     // Canvas Rendering
     // ========================================
+    let frameCount = 0;
+    let lastDebugTime = Date.now();
+
     function renderFrame() {
-      // Clear canvas
-      ctx.fillStyle = '#000';
+      frameCount++;
+
+      // Debug output every 5 seconds
+      const now = Date.now();
+      if (now - lastDebugTime > 5000) {
+        console.log('[Composite] Render stats:', {
+          frameCount,
+          fps: Math.round(frameCount / ((now - lastDebugTime) / 1000)),
+          participantCount: participants.length,
+          layout: currentLayout,
+          hasBackground: !!backgroundImage,
+          participants: participants.map(p => ({
+            id: p.id,
+            readyState: p.videoElement?.readyState,
+            videoWidth: p.videoElement?.videoWidth,
+            videoHeight: p.videoElement?.videoHeight,
+            paused: p.videoElement?.paused
+          }))
+        });
+        frameCount = 0;
+        lastDebugTime = now;
+      }
+
+      // Clear canvas with dark background
+      ctx.fillStyle = '#111';
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+      // Draw a subtle border to show canvas is rendering
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(2, 2, CANVAS_WIDTH - 4, CANVAS_HEIGHT - 4);
 
       // Draw background if set
       if (backgroundImage && backgroundImage.complete) {
         ctx.drawImage(backgroundImage, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       }
+
+      // Draw frame counter in corner to prove canvas is updating
+      ctx.fillStyle = '#0f0';
+      ctx.font = '14px monospace';
+      ctx.fillText(`Frame: ${frameCount} | Participants: ${participants.length} | Layout: ${currentLayout}`, 10, 20);
 
       // Calculate positions for current layout
       const positions = calculateLayoutPositions(currentLayout, participants.length);
