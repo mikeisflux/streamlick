@@ -179,8 +179,7 @@
     // ========================================
     let currentLayout = initialLayout;
     let backgroundImage = null;
-    let participants = []; // Array of { id, streamId, stream, videoElement, name, videoEnabled, isScreenShare }
-    let screenShareStream = null; // Current screen share participant (if any)
+    let participants = []; // Array of { id, streamId, stream, videoElement, name, videoEnabled }
     let webRTCAdaptor = null;
     let isPublishing = false;
     let isJoined = false;
@@ -252,31 +251,12 @@
           }
           break;
 
-        case 6: // Screen Share - main content with camera thumbnails on top
+        case 6: // Screen Share - thumbnails on top (12%)
           {
-            const topBarH = CANVAS_HEIGHT * 0.15; // 15% for thumbnails
-            const mainH = CANVAS_HEIGHT - topBarH;
-            const gap = 8;
-
-            if (count === 1) {
-              // Just screen share, fullscreen
-              positions.push({ x: 0, y: 0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
-            } else {
-              // First position: screen share (main content below thumbnails)
-              positions.push({ x: gap, y: topBarH + gap, width: CANVAS_WIDTH - gap * 2, height: mainH - gap * 2 });
-
-              // Remaining positions: camera thumbnails on top
-              const thumbCount = count - 1;
-              const thumbW = (CANVAS_WIDTH - gap * (thumbCount + 1)) / thumbCount;
-              const thumbH = topBarH - gap * 2;
-              for (let i = 0; i < thumbCount; i++) {
-                positions.push({
-                  x: gap + i * (thumbW + gap),
-                  y: gap,
-                  width: thumbW,
-                  height: thumbH
-                });
-              }
+            const topBarH = CANVAS_HEIGHT * 0.12;
+            const thumbW = count > 0 ? CANVAS_WIDTH / count : CANVAS_WIDTH;
+            for (let i = 0; i < count; i++) {
+              positions.push({ x: i * thumbW, y: 0, width: thumbW, height: topBarH });
             }
           }
           break;
@@ -359,8 +339,7 @@
       // Log stats every 5 seconds
       if (now - lastStatTime > 5000) {
         const fps = Math.round(frameCount / 5);
-        const bgStatus = backgroundImage ? `${backgroundImage.width}x${backgroundImage.height}` : 'none';
-        console.log(`[Composite] Stats: ${fps} fps, ${participants.length} participants, layout=${currentLayout}, publishing=${isPublishing}, bg=${bgStatus}`);
+        console.log(`[Composite] Stats: ${fps} fps, ${participants.length} participants, layout=${currentLayout}, publishing=${isPublishing}`);
         frameCount = 0;
         lastStatTime = now;
       }
@@ -375,20 +354,10 @@
       }
 
       // Calculate positions for current layout
-      // Reorder participants: screen share first if in screen share layout (6)
-      let orderedParticipants = [...participants];
-      if (currentLayout === 6 && screenShareStream) {
-        // Put screen share first, cameras after
-        orderedParticipants = [
-          screenShareStream,
-          ...participants.filter(p => !p.isScreenShare)
-        ];
-      }
-
-      const positions = calculateLayoutPositions(currentLayout, orderedParticipants.length);
+      const positions = calculateLayoutPositions(currentLayout, participants.length);
 
       // Draw each participant
-      orderedParticipants.forEach((p, i) => {
+      participants.forEach((p, i) => {
         if (i >= positions.length) return;
         const pos = positions[i];
         const video = p.videoElement;
@@ -515,30 +484,6 @@
     }
 
     // ========================================
-    // Room Polling - detect streams that join after composite
-    // ========================================
-    let roomPollingInterval = null;
-
-    function startRoomPolling() {
-      if (roomPollingInterval) return;
-
-      console.log('[Composite] Starting room polling every 3 seconds');
-      roomPollingInterval = setInterval(() => {
-        if (webRTCAdaptor && isJoined) {
-          console.log('[Composite] Polling room info...');
-          webRTCAdaptor.getRoomInfo(roomId, compositeStreamId);
-        }
-      }, 3000);
-    }
-
-    function stopRoomPolling() {
-      if (roomPollingInterval) {
-        clearInterval(roomPollingInterval);
-        roomPollingInterval = null;
-      }
-    }
-
-    // ========================================
     // WebRTC Connection
     // ========================================
     function initWebRTC() {
@@ -556,8 +501,7 @@
 
       webRTCAdaptor = new WebRTCAdaptor({
         websocket_url: WS_URL,
-        // Set constraints to match our canvas stream (video only)
-        mediaConstraints: { video: true, audio: false },
+        mediaConstraints: { video: false, audio: false },
         localStream: canvasStream,
         peerconnection_config: {
           iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
@@ -569,20 +513,6 @@
         callback: handleCallback,
         callbackError: handleError
       });
-
-      // IMPORTANT: Override the adaptor's track handler to catch incoming streams
-      // Ant Media sometimes doesn't fire newStreamAvailable in conference mode
-      const originalOnTrack = webRTCAdaptor.onTrack?.bind(webRTCAdaptor);
-      webRTCAdaptor.onTrack = function(event, streamId) {
-        console.log('[Composite] Adaptor onTrack override:', streamId, event.track?.kind, event.streams?.length);
-        if (originalOnTrack) originalOnTrack(event, streamId);
-
-        // Manually add participant if we got a stream
-        if (event.streams?.[0] && streamId && !streamId.includes('composite')) {
-          console.log('[Composite] Adding participant from onTrack override');
-          addParticipant(streamId, event.streams[0]);
-        }
-      };
     }
 
     function handleCallback(info, obj) {
@@ -611,9 +541,6 @@
               }
             });
           }
-
-          // Start polling for room info to catch streams that join after us
-          startRoomPolling();
           break;
 
         case 'publish_started':
@@ -641,15 +568,9 @@
           break;
 
         case 'subtrackAdded':
-          // Only subscribe if we haven't already (avoid already_playing error)
           if (obj.trackId && !obj.trackId.includes('composite')) {
-            const alreadySubscribed = participants.some(p => p.streamId === obj.trackId);
-            if (!alreadySubscribed) {
-              console.log('[Composite] Subtrack added, subscribing:', obj.trackId);
-              webRTCAdaptor.play(obj.trackId, null, roomId);
-            } else {
-              console.log('[Composite] Subtrack already subscribed:', obj.trackId);
-            }
+            console.log('[Composite] Subtrack added, subscribing:', obj.trackId);
+            webRTCAdaptor.play(obj.trackId, null, roomId);
           }
           break;
 
@@ -661,144 +582,15 @@
 
         case 'play_started':
           console.log('[Composite] Play started:', obj.streamId);
-          // In conference mode, we need to get the stream from the adaptor
-          if (obj.streamId && !obj.streamId.includes('composite')) {
-            // Debug: log ALL adaptor properties to find where streams are stored
-            console.log('[Composite] Full adaptor debug:', {
-              remoteStreams: webRTCAdaptor.remoteStreams,
-              remotePeerConnection: webRTCAdaptor.remotePeerConnection,
-              remotePeerConnectionStats: webRTCAdaptor.remotePeerConnectionStats,
-              playStreamIds: webRTCAdaptor.playStreamIds,
-              remoteDescriptionSet: webRTCAdaptor.remoteDescriptionSet,
-              playedStream: webRTCAdaptor.playedStream,
-            });
-
-            // Try multiple methods to get the stream
-            let remoteStream = null;
-
-            // Method 1: remoteStreams map
-            if (webRTCAdaptor.remoteStreams?.[obj.streamId]) {
-              remoteStream = webRTCAdaptor.remoteStreams[obj.streamId];
-              console.log('[Composite] Got stream from remoteStreams');
-            }
-
-            // Method 2: playedStream (Ant Media sometimes uses this)
-            if (!remoteStream && webRTCAdaptor.playedStream?.[obj.streamId]) {
-              remoteStream = webRTCAdaptor.playedStream[obj.streamId];
-              console.log('[Composite] Got stream from playedStream');
-            }
-
-            // Method 3: remotePeerConnection receivers
-            if (!remoteStream && webRTCAdaptor.remotePeerConnection?.[obj.streamId]) {
-              const pc = webRTCAdaptor.remotePeerConnection[obj.streamId];
-              console.log('[Composite] PC state:', pc.connectionState, 'signalingState:', pc.signalingState);
-              const receivers = pc.getReceivers?.() || [];
-              console.log('[Composite] PC receivers:', receivers.length, receivers.map(r => ({ kind: r.track?.kind, readyState: r.track?.readyState, id: r.track?.id })));
-
-              if (receivers.length > 0) {
-                remoteStream = new MediaStream();
-                receivers.forEach(r => {
-                  if (r.track) {
-                    console.log('[Composite] Adding track from receiver:', r.track.kind, r.track.readyState);
-                    remoteStream.addTrack(r.track);
-                  }
-                });
-              }
-
-              // Also add a track event listener for future tracks
-              if (!pc._compositeTrackListener) {
-                pc._compositeTrackListener = true;
-                pc.ontrack = (event) => {
-                  console.log('[Composite] PC ontrack event:', event.track.kind, event.streams);
-                  if (event.streams?.[0]) {
-                    addParticipant(obj.streamId, event.streams[0]);
-                  } else if (event.track) {
-                    const newStream = new MediaStream([event.track]);
-                    addParticipant(obj.streamId, newStream);
-                  }
-                };
-              }
-            }
-
-            // Method 4: Check if stream is in obj itself
-            if (!remoteStream && obj.stream) {
-              remoteStream = obj.stream;
-              console.log('[Composite] Got stream from obj.stream');
-            }
-
-            if (remoteStream && remoteStream.getTracks().length > 0) {
-              console.log('[Composite] Adding participant from play_started:', obj.streamId, remoteStream.getTracks().map(t => t.kind));
-              addParticipant(obj.streamId, remoteStream);
-            } else {
-              console.warn('[Composite] No stream found after play_started for:', obj.streamId);
-              console.warn('[Composite] Starting track polling for:', obj.streamId);
-
-              // Poll for tracks every 500ms for up to 10 seconds
-              let pollCount = 0;
-              const maxPolls = 20;
-              const trackPollInterval = setInterval(() => {
-                pollCount++;
-
-                // Debug: Log ALL keys on the adaptor to find where streams might be stored
-                if (pollCount === 1) {
-                  console.log('[Composite] Adaptor keys:', Object.keys(webRTCAdaptor));
-                  console.log('[Composite] remotePeerConnection type:', typeof webRTCAdaptor.remotePeerConnection);
-                  console.log('[Composite] remotePeerConnection keys:', webRTCAdaptor.remotePeerConnection ? Object.keys(webRTCAdaptor.remotePeerConnection) : 'null');
-                }
-
-                const pc = webRTCAdaptor.remotePeerConnection?.[obj.streamId];
-                console.log(`[Composite] Track poll #${pollCount}: pc exists=${!!pc}, pc type=${pc?.constructor?.name}`);
-
-                if (pc) {
-                  const receivers = pc.getReceivers?.() || [];
-                  const senders = pc.getSenders?.() || [];
-                  console.log(`[Composite] Track poll #${pollCount}: receivers=${receivers.length}, senders=${senders.length}, connectionState=${pc.connectionState}, iceConnectionState=${pc.iceConnectionState}`);
-
-                  if (receivers.length > 0 && receivers.some(r => r.track)) {
-                    const stream = new MediaStream();
-                    receivers.forEach(r => {
-                      if (r.track) {
-                        console.log('[Composite] Poll found track:', r.track.kind, r.track.readyState);
-                        stream.addTrack(r.track);
-                      }
-                    });
-                    if (stream.getTracks().length > 0) {
-                      console.log('[Composite] Adding participant from track polling:', obj.streamId);
-                      addParticipant(obj.streamId, stream);
-                      clearInterval(trackPollInterval);
-                    }
-                  }
-                }
-                if (pollCount >= maxPolls) {
-                  console.error('[Composite] Track polling timed out for:', obj.streamId);
-                  clearInterval(trackPollInterval);
-                }
-              }, 500);
-            }
-          }
           break;
 
         case 'ice_connection_state_changed':
           console.log('[Composite] ICE state:', obj.state, obj.streamId);
           break;
-
-        case 'data_received':
-          console.log('[Composite] Data received from:', obj.streamId);
-          handleDataMessage(obj.data);
-          break;
       }
     }
 
     function handleError(error, message) {
-      // Ignore non-critical errors
-      if (error === 'already_playing') {
-        console.log('[Composite] Stream already playing (safe to ignore):', message);
-        return;
-      }
-      if (error === 'no_stream_exist') {
-        console.log('[Composite] Stream does not exist yet:', message);
-        return;
-      }
       console.error('[Composite] Error:', error, message);
       updateStatus(`ERROR: ${error} - ${message}`, 'error');
     }
@@ -807,27 +599,20 @@
       const parts = streamId.split('_');
       const participantId = parts.length >= 2 ? parts.slice(1).join('_') : streamId;
 
-      // Check if this is a screen share stream
-      const isScreenShare = streamId.toLowerCase().includes('screenshare') ||
-                           streamId.toLowerCase().includes('screen_share') ||
-                           streamId.toLowerCase().includes('_screen');
-
       // Update existing or create new
       let participant = participants.find(p => p.id === participantId || p.streamId === streamId);
 
       if (participant) {
-        console.log('[Composite] Updating participant:', participantId, isScreenShare ? '(screen share)' : '');
+        console.log('[Composite] Updating participant:', participantId);
         participant.stream = stream;
-        participant.isScreenShare = isScreenShare;
         if (participant.videoElement) {
           participant.videoElement.srcObject = stream;
           participant.videoElement.play().catch(e => console.warn('Replay error:', e));
         }
-        if (isScreenShare) screenShareStream = participant;
         return;
       }
 
-      console.log('[Composite] Adding participant:', participantId, 'streamId:', streamId, isScreenShare ? '(SCREEN SHARE)' : '');
+      console.log('[Composite] Adding participant:', participantId, 'streamId:', streamId);
 
       // Create hidden video element
       const video = document.createElement('video');
@@ -851,23 +636,14 @@
         }
       }, 500);
 
-      const newParticipant = {
+      participants.push({
         id: participantId,
         streamId: streamId,
         stream: stream,
         videoElement: video,
-        name: isScreenShare ? 'Screen Share' : null,
-        videoEnabled: true,
-        isScreenShare: isScreenShare
-      };
-
-      participants.push(newParticipant);
-
-      // Track screen share separately
-      if (isScreenShare) {
-        screenShareStream = newParticipant;
-        console.log('[Composite] Screen share detected and tracked');
-      }
+        name: null,
+        videoEnabled: true
+      });
 
       updateStatus(`${participants.length} participant(s) | Publishing: ${isPublishing}`, isPublishing ? 'success' : 'warning');
     }
@@ -879,13 +655,6 @@
       const idx = participants.findIndex(p => p.id === participantId || p.streamId === streamId);
       if (idx !== -1) {
         const p = participants[idx];
-
-        // Clear screen share reference if this was the screen share
-        if (p.isScreenShare || screenShareStream?.id === p.id) {
-          screenShareStream = null;
-          console.log('[Composite] Screen share ended');
-        }
-
         if (p.videoElement) {
           p.videoElement.srcObject = null;
           p.videoElement.remove();
@@ -903,32 +672,12 @@
       console.log('[Composite] Setting background:', url);
       if (!url) {
         backgroundImage = null;
-        console.log('[Composite] Background cleared');
         return;
       }
       const img = new Image();
-      // Try without crossOrigin first for local/same-origin images
-      // img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        backgroundImage = img;
-        console.log('[Composite] Background loaded successfully:', img.width, 'x', img.height);
-      };
-      img.onerror = (e) => {
-        console.error('[Composite] Background load FAILED:', url);
-        console.error('[Composite] Error details:', e);
-        // Try again with crossOrigin if it failed
-        if (!img.crossOrigin) {
-          console.log('[Composite] Retrying with crossOrigin...');
-          const img2 = new Image();
-          img2.crossOrigin = 'anonymous';
-          img2.onload = () => {
-            backgroundImage = img2;
-            console.log('[Composite] Background loaded with CORS:', img2.width, 'x', img2.height);
-          };
-          img2.onerror = () => console.error('[Composite] Background CORS retry also failed');
-          img2.src = url;
-        }
-      };
+      img.crossOrigin = 'anonymous';
+      img.onload = () => { backgroundImage = img; console.log('[Composite] Background loaded'); };
+      img.onerror = () => console.error('[Composite] Background failed:', url);
       img.src = url;
     };
 
@@ -967,82 +716,22 @@
     });
 
     // ========================================
-    // Handle Data Channel Messages (Real-time from Host)
-    // ========================================
-    function handleDataMessage(data) {
-      try {
-        const msg = JSON.parse(data);
-        console.log('[Composite] Data channel message:', msg);
-
-        switch (msg.type) {
-          case 'layout':
-            window.setLayout(msg.value);
-            document.getElementById('layoutSelect').value = msg.value;
-            break;
-
-          case 'background':
-            window.setBackground(msg.value);
-            document.getElementById('bgInput').value = msg.value || '';
-            break;
-
-          case 'participantName':
-            window.setParticipantName(msg.participantId, msg.name);
-            break;
-
-          case 'participantVideo':
-            window.setParticipantVideo(msg.participantId, msg.enabled);
-            break;
-
-          default:
-            console.log('[Composite] Unknown message type:', msg.type);
-        }
-      } catch (e) {
-        console.warn('[Composite] Failed to parse data message:', data, e);
-      }
-    }
-
-    // ========================================
     // Initialize
     // ========================================
     window.onload = () => {
       console.log('[Composite] Initializing...');
-      console.log('[Composite] URL params:', window.location.search);
       console.log('[Composite] Room:', roomId);
       console.log('[Composite] Layout:', initialLayout);
-      console.log('[Composite] Background from URL:', initialBackground);
-
-      // Test with a gradient background drawn directly to verify canvas works
-      const testGradient = ctx.createLinearGradient(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      testGradient.addColorStop(0, '#1a1a2e');
-      testGradient.addColorStop(0.5, '#16213e');
-      testGradient.addColorStop(1, '#0f3460');
-      ctx.fillStyle = testGradient;
-      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      console.log('[Composite] Initial gradient drawn to verify canvas');
+      console.log('[Composite] Background:', initialBackground);
 
       if (initialBackground) {
-        console.log('[Composite] Loading background from URL param:', initialBackground);
         window.setBackground(initialBackground);
-      } else {
-        // Test: Try loading a known-good public image to verify loading works
-        console.log('[Composite] No bg param - testing with a public image...');
-        const testUrl = 'https://picsum.photos/1920/1080';
-        console.log('[Composite] Testing image load from:', testUrl);
-        const testImg = new Image();
-        testImg.onload = () => {
-          console.log('[Composite] TEST IMAGE LOADED:', testImg.width, 'x', testImg.height);
-          backgroundImage = testImg;
-        };
-        testImg.onerror = (e) => {
-          console.error('[Composite] TEST IMAGE FAILED:', e);
-        };
-        testImg.src = testUrl;
       }
 
       // Start render loop FIRST
       requestAnimationFrame(renderFrame);
 
-      // Then initialize WebRTC (receives settings via data channel in real-time)
+      // Then initialize WebRTC
       if (roomId) {
         initWebRTC();
       } else {
