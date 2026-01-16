@@ -563,9 +563,15 @@
           break;
 
         case 'newTrackAvailable':
-          console.log('[Composite] New track:', obj.streamId, obj.track?.kind);
-          if (!obj.streamId.includes('composite') && obj.stream) {
-            addParticipant(obj.streamId, obj.stream);
+          console.log('[Composite] New track:', obj.streamId, obj.track?.kind, obj.trackId);
+          // In multitrack conference mode, tracks arrive individually
+          if (obj.track && obj.trackId && !obj.trackId.includes('composite')) {
+            // Extract participant ID from trackId (format: ARDAMSx + streamId)
+            let streamId = obj.trackId;
+            if (streamId.startsWith('ARDAMS')) {
+              streamId = streamId.substring(7); // Remove ARDAMSv or ARDAMSa prefix
+            }
+            addTrackToParticipant(streamId, obj.track);
           }
           break;
 
@@ -609,6 +615,34 @@
       }
       console.error('[Composite] Error:', error, message);
       updateStatus(`ERROR: ${error} - ${message}`, 'error');
+    }
+
+    function addTrackToParticipant(streamId, track) {
+      const parts = streamId.split('_');
+      const participantId = parts.length >= 2 ? parts.slice(1).join('_') : streamId;
+
+      console.log('[Composite] addTrackToParticipant:', participantId, track.kind);
+
+      // Find existing participant or create new one
+      let participant = participants.find(p => p.id === participantId || p.streamId === streamId);
+
+      if (participant) {
+        // Add track to existing stream
+        if (participant.videoElement && participant.videoElement.srcObject) {
+          participant.videoElement.srcObject.addTrack(track);
+          console.log('[Composite] Added', track.kind, 'track to existing participant:', participantId);
+        }
+      } else {
+        // Create new participant with new MediaStream
+        console.log('[Composite] Creating new participant for track:', participantId);
+        const stream = new MediaStream([track]);
+        addParticipant(streamId, stream);
+      }
+
+      // Handle track ended
+      track.onended = () => {
+        console.log('[Composite] Track ended:', track.kind, participantId);
+      };
     }
 
     function addParticipant(streamId, stream) {
