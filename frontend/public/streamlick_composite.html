@@ -103,13 +103,14 @@
 
     // ========================================
     // Layout Engine (from layoutEngine.ts)
+    // All 10 layouts matching frontend
     // ========================================
     function calculateLayoutPositions(layout, count) {
       const positions = [];
       if (count === 0) return positions;
 
       switch (layout) {
-        case 1: // Solo
+        case 1: // Solo - single participant centered at 60%
           if (count === 1) {
             const w = CANVAS_WIDTH * 0.6;
             const h = w * (9/16);
@@ -118,16 +119,19 @@
             return calculateGridPositions(count);
           }
           break;
-        case 2: // 2x2 Cropped
+
+        case 2: // Cropped - 2x2 grid
           const cols2 = 2, rows2 = 2;
           const bw2 = CANVAS_WIDTH/cols2, bh2 = CANVAS_HEIGHT/rows2;
           for (let i = 0; i < count && i < 4; i++) {
             positions.push({ x: (i%cols2)*bw2, y: Math.floor(i/cols2)*bh2, width: bw2, height: bh2 });
           }
           break;
+
         case 3: // Group (auto grid)
           return calculateGridPositions(count);
-        case 4: // Spotlight
+
+        case 4: // Spotlight - one large + small boxes above
           if (count === 1) {
             positions.push({ x: 0, y: 0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
           } else {
@@ -140,12 +144,72 @@
             }
           }
           break;
-        case 5: // News (side by side)
+
+        case 5: // News - side by side
           const newsW = CANVAS_WIDTH / Math.max(2, count);
           for (let i = 0; i < count; i++) {
             positions.push({ x: i*newsW, y: 0, width: newsW, height: CANVAS_HEIGHT });
           }
           break;
+
+        case 6: // Screen Share - thumbnails on top (12%), screen share below
+          {
+            const topBarH = CANVAS_HEIGHT * 0.12;
+            const thumbW = count > 0 ? CANVAS_WIDTH / count : CANVAS_WIDTH;
+            for (let i = 0; i < count; i++) {
+              positions.push({ x: i * thumbW, y: 0, width: thumbW, height: topBarH });
+            }
+          }
+          break;
+
+        case 7: // Picture-in-Picture - main fullscreen + corner overlays
+          if (count === 1) {
+            positions.push({ x: 0, y: 0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
+          } else {
+            // First participant fullscreen
+            positions.push({ x: 0, y: 0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT });
+            // Others in bottom-right corner, stacked
+            const pipW = 240, pipH = 180, gap = 10;
+            for (let i = 1; i < count; i++) {
+              positions.push({
+                x: CANVAS_WIDTH - pipW - gap,
+                y: CANVAS_HEIGHT - (pipH + gap) * i,
+                width: pipW,
+                height: pipH
+              });
+            }
+          }
+          break;
+
+        case 8: // Cinema - wide format (split horizontally)
+          {
+            const boxW = count > 1 ? CANVAS_WIDTH / 2 : CANVAS_WIDTH;
+            for (let i = 0; i < count; i++) {
+              positions.push({ x: i * boxW, y: 0, width: boxW, height: CANVAS_HEIGHT });
+            }
+          }
+          break;
+
+        case 9: // Video Grid - auto grid with gaps
+          {
+            const cols = Math.ceil(Math.sqrt(count));
+            const rows = Math.ceil(count / cols);
+            const gap = 4;
+            const boxW = (CANVAS_WIDTH - gap * (cols + 1)) / cols;
+            const boxH = (CANVAS_HEIGHT - gap * (rows + 1)) / rows;
+            for (let i = 0; i < count; i++) {
+              const col = i % cols;
+              const row = Math.floor(i / cols);
+              positions.push({
+                x: gap + col * (boxW + gap),
+                y: gap + row * (boxH + gap),
+                width: boxW,
+                height: boxH
+              });
+            }
+          }
+          break;
+
         default:
           return calculateGridPositions(count);
       }
