@@ -43,6 +43,8 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const data = createBroadcastSchema.parse(req.body);
 
+    console.log('Creating broadcast with data:', data, 'for user:', req.user?.id);
+
     const broadcast = await prisma.broadcast.create({
       data: {
         ...data,
@@ -62,13 +64,17 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
       },
     });
 
+    console.log('Broadcast created:', broadcast.id);
     res.status(201).json(broadcast);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: error.errors });
+      console.error('Validation error:', error.errors);
+      return res.status(400).json({ error: error.errors[0]?.message || 'Validation failed' });
     }
+    // Log full error details for debugging
     console.error('Create broadcast error:', error);
-    res.status(500).json({ error: 'Failed to create broadcast' });
+    const message = error instanceof Error ? error.message : 'Failed to create broadcast';
+    res.status(500).json({ error: message });
   }
 });
 
