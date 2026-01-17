@@ -21,10 +21,14 @@ const router = Router();
 // Get all broadcasts for user (with pagination)
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
+    logger.info(`[GET /broadcasts] User: ${req.user?.userId}, Query: ${JSON.stringify(req.query)}`);
+
     // Pagination parameters
     const page = parseInt(req.query.page as string) || 1;
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100); // Max 100 per page
     const skip = (page - 1) * limit;
+
+    logger.info(`[GET /broadcasts] Fetching broadcasts with pagination: page=${page}, limit=${limit}, skip=${skip}`);
 
     // CRITICAL FIX: Add pagination to prevent performance issues with large datasets
     const [broadcasts, total] = await Promise.all([
@@ -46,6 +50,8 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
       }),
     ]);
 
+    logger.info(`[GET /broadcasts] Found ${broadcasts.length} broadcasts, total: ${total}`);
+
     // Return paginated response with metadata
     res.json({
       broadcasts,
@@ -57,8 +63,9 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
         hasMore: page * limit < total,
       },
     });
-  } catch (error) {
-    logger.error('Get broadcasts error:', error);
+  } catch (error: any) {
+    logger.error(`[GET /broadcasts] Error: ${error.message}`);
+    logger.error(`[GET /broadcasts] Stack: ${error.stack}`);
     res.status(500).json({ error: 'Failed to get broadcasts' });
   }
 });
