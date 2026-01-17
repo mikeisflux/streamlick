@@ -124,14 +124,36 @@ export class AntMediaClient {
   private async handleMessage(message: any) {
     switch (message.command) {
       case 'start':
-        // SDP received
-        try {
-          await this.pc?.setRemoteDescription(new RTCSessionDescription({
-            type: this.config.mode === 'publish' ? 'answer' : 'offer',
-            sdp: message.sdp,
-          }));
+        // Server is ready - create and send offer for publish mode
+        if (this.config.mode === 'publish') {
+          try {
+            const offer = await this.pc?.createOffer();
+            await this.pc?.setLocalDescription(offer);
 
-          if (this.config.mode === 'play') {
+            this.ws?.send(JSON.stringify({
+              command: 'takeConfiguration',
+              streamId: this.config.streamId,
+              type: 'offer',
+              sdp: this.pc?.localDescription?.sdp,
+            }));
+          } catch (error) {
+            console.error('[AntMedia] Offer creation error:', error);
+            this.config.onError?.('Failed to create offer');
+          }
+        } else {
+          // Play mode - server sends offer, we respond with answer
+          if (!message.sdp || typeof message.sdp !== 'string' || !message.sdp.startsWith('v=')) {
+            console.error('[AntMedia] Invalid SDP received:', message.sdp);
+            this.config.onError?.('Invalid SDP from server');
+            return;
+          }
+
+          try {
+            await this.pc?.setRemoteDescription(new RTCSessionDescription({
+              type: 'offer',
+              sdp: message.sdp,
+            }));
+
             const answer = await this.pc?.createAnswer();
             await this.pc?.setLocalDescription(answer);
 
@@ -141,12 +163,34 @@ export class AntMediaClient {
               type: 'answer',
               sdp: this.pc?.localDescription?.sdp,
             }));
+
+            this.config.onStateChange?.('connected');
+          } catch (error) {
+            console.error('[AntMedia] SDP handling error:', error);
+            this.config.onError?.('SDP handling failed');
+          }
+        }
+        break;
+
+      case 'takeConfiguration':
+        // Server's answer to our offer (publish mode)
+        if (message.type === 'answer' && this.config.mode === 'publish') {
+          if (!message.sdp || typeof message.sdp !== 'string' || !message.sdp.startsWith('v=')) {
+            console.error('[AntMedia] Invalid answer SDP received:', message.sdp);
+            this.config.onError?.('Invalid answer SDP from server');
+            return;
           }
 
-          this.config.onStateChange?.('connected');
-        } catch (error) {
-          console.error('[AntMedia] SDP handling error:', error);
-          this.config.onError?.('SDP handling failed');
+          try {
+            await this.pc?.setRemoteDescription(new RTCSessionDescription({
+              type: 'answer',
+              sdp: message.sdp,
+            }));
+            this.config.onStateChange?.('connected');
+          } catch (error) {
+            console.error('[AntMedia] Answer handling error:', error);
+            this.config.onError?.('Failed to set remote description');
+          }
         }
         break;
 
@@ -174,6 +218,34 @@ export class AntMediaClient {
 
       case 'error':
         console.error('[AntMedia] Error:', message.definition);
+
+        // Handle specific errors
+        if (message.definition === 'streamIdInUse') {
+          // Stream ID already in use - try to stop and restart with new ID
+          console.log('[AntMedia] Stream ID in use, attempting cleanup...');
+          this.ws?.send(JSON.stringify({
+            command: 'stop',
+            streamId: this.config.streamId,
+          }));
+          // Wait a moment then retry
+          setTimeout(() => {
+            this.startConnection();
+          }, 1000);
+          return;
+        }
+
+        if (message.definition === 'noStreamNameSpecified') {
+          this.config.onError?.('No stream name specified');
+          return;
+        }
+
+        if (message.definition === 'notSetLocalDescription') {
+          // Server couldn't set local description - retry
+          console.log('[AntMedia] Server SDP issue, retrying...');
+          setTimeout(() => this.startConnection(), 500);
+          return;
+        }
+
         this.config.onError?.(message.definition);
         break;
     }
@@ -225,5 +297,12 @@ export class AntMediaClient {
 
 // Helper to generate unique stream IDs
 export function generateStreamId(broadcastId: string, participantId: string): string {
+  // Include timestamp to avoid collisions with stale streams
+  const timestamp = Date.now().toString(36);
+  return `${broadcastId}_${participantId}_${timestamp}`;
+}
+
+// Generate stream ID without timestamp (for consistent playback)
+export function generateStaticStreamId(broadcastId: string, participantId: string): string {
   return `${broadcastId}_${participantId}`;
 }
