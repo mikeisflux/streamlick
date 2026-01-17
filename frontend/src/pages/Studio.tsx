@@ -55,18 +55,53 @@ export default function Studio() {
   useEffect(() => {
     if (!broadcastData) return;
 
-    setBroadcast({
-      id: broadcastData.id,
-      title: broadcastData.title,
-      status: broadcastData.status,
-      layout: broadcastData.layout,
-      backgroundColor: broadcastData.backgroundColor,
-      logoUrl: broadcastData.logoUrl,
-      overlayText: broadcastData.overlayText,
-      previewUrl: broadcastData.previewUrl,
-    });
+    // If broadcast is IDLE, transition to GREENROOM
+    const initializeBroadcast = async () => {
+      if (broadcastData.status === 'IDLE') {
+        try {
+          const updated = await broadcastAPI.start(broadcastId!);
+          setBroadcast({
+            id: updated.id,
+            title: updated.title,
+            status: updated.status,
+            layout: updated.layout,
+            backgroundColor: updated.backgroundColor,
+            logoUrl: updated.logoUrl,
+            overlayText: updated.overlayText,
+            previewUrl: updated.previewUrl,
+          });
+          setParticipants(updated.participants || broadcastData.participants);
+        } catch (error) {
+          console.error('Failed to start broadcast:', error);
+          // Fall back to current data
+          setBroadcast({
+            id: broadcastData.id,
+            title: broadcastData.title,
+            status: broadcastData.status,
+            layout: broadcastData.layout,
+            backgroundColor: broadcastData.backgroundColor,
+            logoUrl: broadcastData.logoUrl,
+            overlayText: broadcastData.overlayText,
+            previewUrl: broadcastData.previewUrl,
+          });
+          setParticipants(broadcastData.participants);
+        }
+      } else {
+        setBroadcast({
+          id: broadcastData.id,
+          title: broadcastData.title,
+          status: broadcastData.status,
+          layout: broadcastData.layout,
+          backgroundColor: broadcastData.backgroundColor,
+          logoUrl: broadcastData.logoUrl,
+          overlayText: broadcastData.overlayText,
+          previewUrl: broadcastData.previewUrl,
+        });
+        setParticipants(broadcastData.participants);
+      }
+    };
 
-    setParticipants(broadcastData.participants);
+    initializeBroadcast();
 
     // Connect socket
     const socket = getSocket();

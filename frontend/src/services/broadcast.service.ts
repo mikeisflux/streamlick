@@ -1,26 +1,25 @@
 import api from './api';
 import { Broadcast } from '../types';
 
+// Note: api.get/post/patch/delete return JSON data directly, not axios-style response objects
+
 export const broadcastService = {
   async getAll(): Promise<Broadcast[]> {
-    const response = await api.get('/broadcasts');
+    const data = await api.get<any>('/broadcasts');
     // Handle paginated response from backend
-    return response.data.broadcasts || response.data;
+    return data.broadcasts || data;
   },
 
   async getById(id: string): Promise<Broadcast> {
-    const response = await api.get(`/broadcasts/${id}`);
-    return response.data;
+    return api.get<Broadcast>(`/broadcasts/${id}`);
   },
 
   async create(data: Partial<Broadcast>): Promise<Broadcast> {
-    const response = await api.post('/broadcasts', data);
-    return response.data;
+    return api.post<Broadcast>('/broadcasts', data);
   },
 
   async update(id: string, data: Partial<Broadcast>): Promise<Broadcast> {
-    const response = await api.patch(`/broadcasts/${id}`, data);
-    return response.data;
+    return api.patch<Broadcast>(`/broadcasts/${id}`, data);
   },
 
   async delete(id: string): Promise<void> {
@@ -36,17 +35,14 @@ export const broadcastService = {
       destinationIds,
       destinationSettings,
     };
-    const response = await api.post(`/broadcasts/${id}/start`, requestBody);
-    return response.data;
+    return api.post<Broadcast>(`/broadcasts/${id}/start`, requestBody);
   },
 
   async end(id: string): Promise<Broadcast> {
-    const response = await api.post(`/broadcasts/${id}/end`);
-    return response.data;
+    return api.post<Broadcast>(`/broadcasts/${id}/end`);
   },
 
   async getStats(id: string): Promise<any> {
-    const response = await api.get(`/broadcasts/${id}/stats`);
-    return response.data;
+    return api.get<any>(`/broadcasts/${id}/stats`);
   },
 };
