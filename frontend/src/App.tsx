@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './store/authStore';
+import { BrandingProvider } from './context/BrandingContext';
 import { Landing } from './pages/Landing';
 import { Login } from './pages/Login';
 import Register from './pages/Register';
@@ -15,43 +17,46 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Public routes */}
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/join/:token" element={<GuestJoin />} />
+    <BrandingProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Public routes */}
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/join/:token" element={<GuestJoin />} />
 
-        {/* Protected routes */}
-        <Route
-          path="/dashboard"
-          element={
-            <PrivateRoute>
-              <Dashboard />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/studio/:broadcastId"
-          element={
-            <PrivateRoute>
-              <Studio />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/destinations"
-          element={
-            <PrivateRoute>
-              <Destinations />
-            </PrivateRoute>
-          }
-        />
+          {/* Protected routes */}
+          <Route
+            path="/dashboard"
+            element={
+              <PrivateRoute>
+                <Dashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/studio/:broadcastId"
+            element={
+              <PrivateRoute>
+                <Studio />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/destinations"
+            element={
+              <PrivateRoute>
+                <Destinations />
+              </PrivateRoute>
+            }
+          />
 
-        {/* Catch all */}
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </BrowserRouter>
+          {/* Catch all */}
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+        <Toaster position="top-right" />
+      </BrowserRouter>
+    </BrandingProvider>
   );
 }
