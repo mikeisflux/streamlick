@@ -111,3 +111,18 @@ export function sendChatMessage(message: string) {
   const s = getSocket();
   s.emit('chat-message', { message });
 }
+
+export function kickParticipant(participantId: string) {
+  const s = getSocket();
+  s.emit('kick-participant', participantId);
+}
+
+export function startRecording() {
+  const s = getSocket();
+  s.emit('start-recording');
+}
+
+export function stopRecording() {
+  const s = getSocket();
+  s.emit('stop-recording');
+}

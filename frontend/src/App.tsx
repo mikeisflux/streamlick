@@ -7,6 +7,8 @@ import Dashboard from './pages/Dashboard';
 import Studio from './pages/Studio';
 import GuestJoin from './pages/GuestJoin';
 import Destinations from './pages/Destinations';
+import Admin from './pages/Admin';
+import AdminSettings from './pages/AdminSettings';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -45,6 +47,24 @@ export default function App() {
           element={
             <PrivateRoute>
               <Destinations />
+            </PrivateRoute>
+          }
+        />
+
+        {/* Admin routes */}
+        <Route
+          path="/admin"
+          element={
+            <PrivateRoute>
+              <Admin />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin/settings"
+          element={
+            <PrivateRoute>
+              <AdminSettings />
             </PrivateRoute>
           }
         />
