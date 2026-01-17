@@ -6,11 +6,36 @@ class WebRTCService {
   private localStream: MediaStream | null = null;
   private broadcastId: string | null = null;
   private closed: boolean = false;
+  private device: object | null = null;
+  private producers: Map<string, MediaStreamTrack> = new Map();
 
   async initialize(broadcastId: string): Promise<void> {
     this.broadcastId = broadcastId;
     this.closed = false;
+    this.device = {}; // Mark as initialized
     logger.info(`[WebRTCService] Initialized for broadcast ${broadcastId}`);
+  }
+
+  getDevice(): object | null {
+    return this.device;
+  }
+
+  async createSendTransport(): Promise<void> {
+    logger.info('[WebRTCService] Creating send transport');
+    // Transport creation handled by Ant Media WebRTC adaptor
+  }
+
+  async produceMedia(track: MediaStreamTrack): Promise<string> {
+    const producerId = `producer-${track.kind}-${Date.now()}`;
+    this.producers.set(producerId, track);
+    logger.info(`[WebRTCService] Producing ${track.kind} track: ${producerId}`);
+    // Actual media production handled by Ant Media
+    return producerId;
+  }
+
+  async closeProducer(producerId: string): Promise<void> {
+    logger.info(`[WebRTCService] Closing producer: ${producerId}`);
+    this.producers.delete(producerId);
   }
 
   async publishStream(stream: MediaStream): Promise<string> {
@@ -37,6 +62,8 @@ class WebRTCService {
 
   async close(): Promise<void> {
     this.closed = true;
+    this.device = null;
+    this.producers.clear();
     if (this.peerConnection) {
       this.peerConnection.close();
       this.peerConnection = null;
