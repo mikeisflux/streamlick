@@ -19,7 +19,7 @@ export function Button({
       className={clsx(
         'rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2',
         {
-          'bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500':
+          'bg-brand-600 text-white hover:bg-brand-700 focus:ring-brand-500':
             variant === 'primary',
           'bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500':
             variant === 'secondary',
