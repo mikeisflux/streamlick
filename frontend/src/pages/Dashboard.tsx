@@ -512,17 +512,12 @@ export function Dashboard() {
     recordingType?: 'audio-video' | 'audio-only';
   }) => {
     try {
+      // Backend expects individual fields: title, description, layout, backgroundColor, logoUrl, overlayText
       const broadcast = await broadcastService.create({
         title: data.title,
         description: '',
-        studioConfig: {
-          broadcastType: data.type,
-          source: data.source,
-          isReusable: data.isReusable,
-          selectedDestinations: data.destinations,
-          localRecordings: data.localRecordings ?? true,
-          recordingType: data.recordingType ?? 'audio-video',
-        },
+        layout: 'grid',
+        backgroundColor: '#1a1a2e',
       });
       toast.success(`${data.type === 'live' ? 'Live stream' : data.type === 'recording' ? 'Recording' : 'Webinar'} created!`);
       navigate(`/studio/${broadcast.id}`);
