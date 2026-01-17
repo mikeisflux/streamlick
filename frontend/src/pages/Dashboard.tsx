@@ -7,16 +7,16 @@ import {
 } from 'lucide-react';
 import { broadcastAPI } from '../services/api';
 import { useAuthStore } from '../store/authStore';
-
-type CreateType = 'live' | 'recording' | 'webinar' | null;
+import { CreateModal, CreateType } from '../components/dashboard/CreateModal';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user, logout } = useAuthStore();
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createType, setCreateType] = useState<CreateType>(null);
-  const [newTitle, setNewTitle] = useState('');
+  const [createModal, setCreateModal] = useState<{ isOpen: boolean; type: CreateType }>({
+    isOpen: false,
+    type: 'live',
+  });
   const [activeNav, setActiveNav] = useState('home');
   const [editingBroadcast, setEditingBroadcast] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -27,15 +27,29 @@ export default function Dashboard() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (title: string) => broadcastAPI.create({ title }),
+    mutationFn: (data: { title: string; type?: CreateType }) => broadcastAPI.create({ title: data.title }),
     onSuccess: (broadcast) => {
       queryClient.invalidateQueries({ queryKey: ['broadcasts'] });
-      setShowCreateModal(false);
-      setCreateType(null);
-      setNewTitle('');
+      setCreateModal({ isOpen: false, type: 'live' });
       navigate(`/studio/${broadcast.id}`);
     },
   });
+
+  const handleCreateSubmit = (data: {
+    title: string;
+    isReusable: boolean;
+    destinations: string[];
+    source: 'studio' | 'prerecorded';
+    type: CreateType;
+    localRecordings?: boolean;
+    recordingType?: 'audio-video' | 'audio-only';
+  }) => {
+    createMutation.mutate({ title: data.title, type: data.type });
+  };
+
+  const openCreateModal = (type: CreateType) => {
+    setCreateModal({ isOpen: true, type });
+  };
 
   const deleteMutation = useMutation({
     mutationFn: broadcastAPI.delete,
@@ -53,12 +67,6 @@ export default function Dashboard() {
     },
   });
 
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newTitle.trim()) {
-      createMutation.mutate(newTitle.trim());
-    }
-  };
 
   const copyInviteLink = (broadcastId: string) => {
     const url = `${window.location.origin}/join/${broadcastId}`;
@@ -187,30 +195,21 @@ export default function Dashboard() {
                 label="Live Stream"
                 description="Go live to your audience"
                 color="red"
-                onClick={() => {
-                  setCreateType('live');
-                  setShowCreateModal(true);
-                }}
+                onClick={() => openCreateModal('live')}
               />
               <CreateButton
                 icon={Video}
                 label="Recording"
                 description="Record without going live"
                 color="brand"
-                onClick={() => {
-                  setCreateType('recording');
-                  setShowCreateModal(true);
-                }}
+                onClick={() => openCreateModal('recording')}
               />
               <CreateButton
                 icon={Calendar}
                 label="Webinar"
                 description="Schedule a live event"
                 color="green"
-                onClick={() => {
-                  setCreateType('webinar');
-                  setShowCreateModal(true);
-                }}
+                onClick={() => openCreateModal('webinar')}
               />
             </div>
           </section>
@@ -220,10 +219,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">Your Studios</h2>
               <button
-                onClick={() => {
-                  setCreateType('live');
-                  setShowCreateModal(true);
-                }}
+                onClick={() => openCreateModal('live')}
                 className="flex items-center gap-2 px-3 py-1.5 bg-dark-800 hover:bg-dark-700 rounded-lg text-sm transition"
               >
                 <Plus className="w-4 h-4" />
@@ -237,7 +233,7 @@ export default function Dashboard() {
                 Loading...
               </div>
             ) : broadcasts.length === 0 ? (
-              <EmptyState onCreateClick={() => setShowCreateModal(true)} />
+              <EmptyState onCreateClick={() => openCreateModal('live')} />
             ) : (
               <div className="bg-dark-900 rounded-xl border border-dark-800 overflow-hidden">
                 <table className="w-full">
@@ -341,57 +337,13 @@ export default function Dashboard() {
       </main>
 
       {/* Create Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-dark-900 rounded-2xl p-6 w-full max-w-md border border-dark-800">
-            <h2 className="text-xl font-bold mb-2">
-              {createType === 'live' && 'Create Live Stream'}
-              {createType === 'recording' && 'Create Recording'}
-              {createType === 'webinar' && 'Schedule Webinar'}
-            </h2>
-            <p className="text-dark-400 text-sm mb-6">
-              {createType === 'live' && 'Start a new live broadcast studio'}
-              {createType === 'recording' && 'Record content without going live'}
-              {createType === 'webinar' && 'Schedule a live event for later'}
-            </p>
-
-            <form onSubmit={handleCreate}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">Title</label>
-                <input
-                  type="text"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Enter a title for your broadcast"
-                  className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-lg focus:outline-none focus:border-brand-500"
-                  autoFocus
-                />
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    setCreateType(null);
-                    setNewTitle('');
-                  }}
-                  className="flex-1 py-2.5 bg-dark-800 hover:bg-dark-700 rounded-lg transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!newTitle.trim() || createMutation.isPending}
-                  className="flex-1 py-2.5 bg-brand-600 hover:bg-brand-700 rounded-lg font-medium transition disabled:opacity-50"
-                >
-                  {createMutation.isPending ? 'Creating...' : 'Create Studio'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <CreateModal
+        isOpen={createModal.isOpen}
+        onClose={() => setCreateModal({ ...createModal, isOpen: false })}
+        type={createModal.type}
+        onSubmit={handleCreateSubmit}
+        isLoading={createMutation.isPending}
+      />
     </div>
   );
 }
