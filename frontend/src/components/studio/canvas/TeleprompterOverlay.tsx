@@ -12,7 +12,7 @@ export const TeleprompterOverlay = memo(function TeleprompterOverlay({
   notes,
   fontSize,
   isScrolling,
-  scrollSpeed,
+  scrollSpeed: _scrollSpeed,
   scrollPosition,
 }: TeleprompterOverlayProps) {
   const contentRef = useRef<HTMLDivElement>(null);

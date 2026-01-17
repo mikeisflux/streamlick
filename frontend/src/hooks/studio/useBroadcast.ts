@@ -18,7 +18,7 @@ import { socketService } from '../../services/socket.service';
 import { compositorService } from '../../services/compositor.service';
 import { canvasStreamService } from '../../services/canvas-stream.service';
 import { recordingService } from '../../services/recording.service';
-import { audioMixerService } from '../../services/audio-mixer.service';
+import { audioMixerService as _audioMixerService } from '../../services/audio-mixer.service';
 import { compositeService } from '../../services/composite.service';
 import { useStudioStore } from '../../store/studioStore';
 import api from '../../services/api';
@@ -53,21 +53,21 @@ interface UseBroadcastProps {
 
 export function useBroadcast({
   broadcastId,
-  localStream,
-  audioEnabled,
-  videoEnabled,
-  remoteParticipants,
+  localStream: _localStream,
+  audioEnabled: _audioEnabled,
+  videoEnabled: _videoEnabled,
+  remoteParticipants: _remoteParticipants,
   destinations,
   selectedDestinations,
   showChatOnStream,
-  initializeWebRTC,
+  initializeWebRTC: _initializeWebRTC,
   destinationSettings,
 }: UseBroadcastProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [currentLayout, setCurrentLayout] = useState<'grid' | 'spotlight' | 'sidebar' | 'pip'>('grid');
   const [selectedLayout, setSelectedLayout] = useState<number>(1); // Default to Solo layout
-  const [streamingStatuses, setStreamingStatuses] = useState<any[]>([]);
+  const [streamingStatuses, _setStreamingStatuses] = useState<any[]>([]);
 
   const { broadcast, setIsLive } = useStudioStore();
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);

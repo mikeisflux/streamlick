@@ -16,7 +16,7 @@ interface ClipManagerProps {
   onClose?: () => void;
 }
 
-export function ClipManager({ broadcastId, onClose }: ClipManagerProps) {
+export function ClipManager({ broadcastId: _broadcastId, onClose }: ClipManagerProps) {
   const [clips, setClips] = useState<Clip[]>([
     {
       id: '1',

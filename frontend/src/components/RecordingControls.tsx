@@ -24,7 +24,7 @@ interface SavedRecording {
   blob: Blob;
 }
 
-export function RecordingControls({ broadcastId }: RecordingControlsProps) {
+export function RecordingControls({ broadcastId: _broadcastId }: RecordingControlsProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);

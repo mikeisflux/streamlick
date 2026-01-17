@@ -235,7 +235,7 @@ class AudioMixerService {
     this.currentMasterVolume = clampedVolume;
 
     // Apply to all existing streams
-    this.gainNodes.forEach((gainNode, id) => {
+    this.gainNodes.forEach((gainNode, _id) => {
       gainNode.gain.value = clampedVolume;
     });
   }

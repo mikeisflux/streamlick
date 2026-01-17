@@ -15,14 +15,16 @@ interface AntMediaConfig {
   onError?: (error: string) => void;
 }
 
-const ICE_SERVERS = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  {
-    urls: import.meta.env.VITE_TURN_URL || 'turn:turn.streamlick.com:3478',
-    username: import.meta.env.VITE_TURN_USERNAME || 'streamlick',
-    credential: import.meta.env.VITE_TURN_PASSWORD || '',
-  },
-];
+const ICE_SERVERS: RTCConfiguration = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    {
+      urls: import.meta.env.VITE_TURN_URL || 'turn:turn.streamlick.com:3478',
+      username: import.meta.env.VITE_TURN_USERNAME || 'streamlick',
+      credential: import.meta.env.VITE_TURN_PASSWORD || '',
+    },
+  ],
+};
 
 // Validate SDP format - must start with "v=" line
 function isValidSdp(sdp: string | undefined | null): boolean {
@@ -163,7 +165,7 @@ export class AntMediaClient {
 
   private async startConnection() {
     // Create peer connection
-    this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    this.pc = new RTCPeerConnection(ICE_SERVERS);
 
     this.pc.onicecandidate = (event) => {
       if (event.candidate && this.ws && this.ws.readyState === WebSocket.OPEN) {

@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { GuestSettingsModal } from './GuestSettingsModal';
+import { GuestSettingsModal as _GuestSettingsModal } from './GuestSettingsModal';
 
 interface Participant {
   id: string;

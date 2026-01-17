@@ -36,7 +36,7 @@ export function drawParticipant(
   options: RenderOptions
 ): void {
   const { ctx, position, avatarImage, isSpeaking, now, showNameTag, participantName } = options;
-  const { x, y, width, height } = position;
+  const { x: _x, y: _y, width: _width, height: _height } = position;
 
   // Draw video only when camera is enabled and video is ready
   if (participant.videoEnabled && participant.video && participant.video.readyState >= 2) {

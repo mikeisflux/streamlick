@@ -79,7 +79,7 @@ export function useGuestStream({
       hostStreamSocketIdRef.current = null;
       guestStreamAnswerReceivedRef.current = false;
 
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      const pc = new RTCPeerConnection(ICE_SERVERS);
       guestStreamPcRef.current = pc;
 
       // Add local tracks and monitor for track ending

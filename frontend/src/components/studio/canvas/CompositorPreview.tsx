@@ -14,7 +14,7 @@ export function CompositorPreview({ orientation = 'landscape' }: CompositorPrevi
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasInserted = useRef(false);
   const [volume, setVolume] = useState(100);
-  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const [_showVolumeSlider, setShowVolumeSlider] = useState(false);
 
   useEffect(() => {
     // Get the compositor canvas

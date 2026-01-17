@@ -44,7 +44,7 @@ export const ChatModeration: React.FC<ChatModerationProps> = ({
   const [selectedMessage, setSelectedMessage] = useState<ChatMessage | null>(null);
   const [showBanModal, setShowBanModal] = useState(false);
   const [banReason, setBanReason] = useState('');
-  const [timeoutDuration, setTimeoutDuration] = useState(600); // 10 minutes default
+  const [_timeoutDuration, _setTimeoutDuration] = useState(600); // 10 minutes default
   const [crossPlatform, setCrossPlatform] = useState(false);
 
   useEffect(() => {

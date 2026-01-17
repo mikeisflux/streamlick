@@ -107,7 +107,7 @@ export function usePreviewStream(broadcastId: string | undefined) {
     }
 
     // Create a new peer connection for this guest
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection(ICE_SERVERS);
 
     // Add canvas video track to the peer connection
     const videoTrack = canvasStream.getVideoTracks()[0];

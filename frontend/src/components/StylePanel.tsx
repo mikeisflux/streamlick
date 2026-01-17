@@ -5,7 +5,7 @@ interface StylePanelProps {
   broadcastId?: string;
 }
 
-export function StylePanel({ broadcastId }: StylePanelProps) {
+export function StylePanel({ broadcastId: _broadcastId }: StylePanelProps) {
   // Load styles from localStorage
   const [primaryColor, setPrimaryColor] = useState(() =>
     localStorage.getItem('style_primaryColor') || '#0066ff'

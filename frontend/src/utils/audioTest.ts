@@ -45,3 +45,6 @@ export function playTestSound(deviceId?: string): Promise<void> {
     }, 500);
   });
 }
+
+// Alias for backwards compatibility
+export const playTestTone = playTestSound;

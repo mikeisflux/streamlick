@@ -27,7 +27,7 @@ export interface ChatLayoutConfig {
   hideCommands: boolean;
 }
 
-const DEFAULT_CONFIG: ChatLayoutConfig = {
+const _DEFAULT_CONFIG: ChatLayoutConfig = {
   layout: 'side',
   position: 'right',
   size: 'medium',

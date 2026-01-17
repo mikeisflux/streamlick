@@ -3,11 +3,13 @@ import { User } from '../types';
 import { authService } from '../services/auth.service';
 import { fetchCsrfToken } from '../services/api';
 
-interface AuthState {
+export interface AuthState {
   user: User | null;
+  token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   setUser: (user: User | null) => void;
+  setAuth: (user: User, token?: string) => void;
   login: (user: User) => void;
   logout: () => void;
   checkAuth: () => Promise<void>;
@@ -15,10 +17,16 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: authService.getUser(),
+  token: authService.getToken(),
   isAuthenticated: authService.isAuthenticated(),
   isLoading: false,
 
   setUser: (user) => set({ user, isAuthenticated: !!user }),
+
+  setAuth: (user, token) => {
+    authService.setAuth(user, token);
+    set({ user, token: token || null, isAuthenticated: true });
+  },
 
   login: (user) => {
     authService.setAuth(user);

@@ -18,7 +18,7 @@ interface CommentsPanelProps {
   onCommentClick?: (comment: Comment) => void;
 }
 
-export function CommentsPanel({ broadcastId, onCommentClick }: CommentsPanelProps) {
+export function CommentsPanel({ broadcastId: _broadcastId, onCommentClick }: CommentsPanelProps) {
   const [filter, setFilter] = useState<'all' | 'youtube' | 'facebook' | 'twitch' | 'linkedin' | 'x' | 'rumble'>('all');
   const [inputMessage, setInputMessage] = useState('');
   const [isPosting, setIsPosting] = useState(false);

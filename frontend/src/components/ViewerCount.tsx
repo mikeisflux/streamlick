@@ -18,7 +18,7 @@ interface ViewerCountProps {
 }
 
 export const ViewerCount: React.FC<ViewerCountProps> = ({
-  broadcastId,
+  broadcastId: _broadcastId,
   platforms,
   onRefresh,
   showTrends = true,

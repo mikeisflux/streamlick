@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   VideoCameraIcon,
   CheckCircleIcon,
-  XCircleIcon,
+  XCircleIcon as _XCircleIcon,
   PlusIcon,
   EyeIcon,
 } from '@heroicons/react/24/outline';

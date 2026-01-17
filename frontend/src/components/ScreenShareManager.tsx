@@ -96,7 +96,7 @@ export const ScreenShareManager: React.FC<ScreenShareManagerProps> = ({
 
   const startBroadcasterShare = async () => {
     try {
-      const stream = await screenShareService.startBroadcasterScreenShare({
+      const _stream = await screenShareService.startBroadcasterScreenShare({
         includeCamera: hasCamera,
         includeSystemAudio: hasSystemAudio,
       });

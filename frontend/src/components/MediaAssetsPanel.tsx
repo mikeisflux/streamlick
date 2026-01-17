@@ -63,8 +63,8 @@ interface Asset {
 
 export function MediaAssetsPanel({ broadcastId }: MediaAssetsPanelProps) {
   const [activeTab, setActiveTab] = useState<AssetTab>('logos');
-  const logoInputRef = useRef<HTMLInputElement>(null);
-  const overlayInputRef = useRef<HTMLInputElement>(null);
+  const _logoInputRef = useRef<HTMLInputElement>(null);
+  const _overlayInputRef = useRef<HTMLInputElement>(null);
   const [isLoadingAssets, setIsLoadingAssets] = useState(true);
   const objectURLsRef = useRef<string[]>([]);
 

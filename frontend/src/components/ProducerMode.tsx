@@ -35,7 +35,7 @@ interface ProducerModeProps {
 
 export function ProducerMode({
   broadcastId,
-  producerId,
+  producerId: _producerId,
   onClose,
   remoteParticipants,
   onPromoteToLive,

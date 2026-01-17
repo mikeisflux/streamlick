@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { useDrag } from 'react-dnd';
+import { useDrag as _useDrag } from 'react-dnd';
 
 interface ParticipantPosition {
   id: string;
@@ -38,7 +38,7 @@ export const DraggableParticipant: React.FC<DraggableParticipantProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
+  const [_isResizing, setIsResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
 
   // Setup video stream
@@ -263,7 +263,7 @@ export const DraggableParticipant: React.FC<DraggableParticipantProps> = ({
 
 // Layout presets
 export const LAYOUT_PRESETS = {
-  solo: (containerWidth: number, containerHeight: number, participantCount: number): ParticipantPosition[] => {
+  solo: (containerWidth: number, containerHeight: number, _participantCount: number): ParticipantPosition[] => {
     return [{
       id: '0',
       x: 0,

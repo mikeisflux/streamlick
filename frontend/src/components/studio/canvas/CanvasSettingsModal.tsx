@@ -913,7 +913,7 @@ function VisualEffectsSettings({ props }: { props: CanvasSettingsModalProps }) {
 }
 
 // Recording Settings Tab
-function RecordingSettings({ props }: { props: CanvasSettingsModalProps }) {
+function RecordingSettings({ props: _props }: { props: CanvasSettingsModalProps }) {
   return (
     <div className="space-y-6">
       <div>
@@ -1125,7 +1125,7 @@ function LayoutsSettings({ props }: { props: CanvasSettingsModalProps }) {
 }
 
 // Guests Settings Tab
-function GuestsSettings({ props }: { props: CanvasSettingsModalProps }) {
+function GuestsSettings({ props: _props }: { props: CanvasSettingsModalProps }) {
   return (
     <div className="space-y-6">
       <div>

@@ -2,6 +2,25 @@ import { useAuthStore } from '../store/authStore';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
+// CSRF token for state-changing requests
+let csrfToken: string | null = null;
+
+export async function fetchCsrfToken(): Promise<string | null> {
+  try {
+    const response = await fetch(`${API_URL}/api/auth/csrf`, {
+      credentials: 'include',
+    });
+    if (response.ok) {
+      const data = await response.json();
+      csrfToken = data.csrfToken;
+      return csrfToken;
+    }
+  } catch (error) {
+    console.warn('Failed to fetch CSRF token:', error);
+  }
+  return null;
+}
+
 async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = useAuthStore.getState().token;
 

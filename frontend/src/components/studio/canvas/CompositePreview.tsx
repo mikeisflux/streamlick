@@ -6,7 +6,8 @@
  */
 
 import { useRef, useEffect, useState } from 'react';
-import { compositeService } from '../../../services/composite.service';
+// compositeService imported for future use
+import { compositeService as _compositeService } from '../../../services/composite.service';
 
 interface CompositePreviewProps {
   compositeStreamId: string | null;

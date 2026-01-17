@@ -185,7 +185,7 @@ class BroadcastOutputService {
     await rtmpRelayService.stopAll();
 
     // Update all statuses
-    for (const [id, status] of this.statuses) {
+    for (const [_id, status] of this.statuses) {
       status.status = 'stopped';
     }
 

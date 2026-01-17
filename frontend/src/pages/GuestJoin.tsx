@@ -70,7 +70,7 @@ export function GuestJoin() {
   // Media hook
   const {
     localStream,
-    screenStream,
+    screenStream: _screenStream,
     audioEnabled,
     videoEnabled,
     startCamera,
@@ -119,7 +119,7 @@ export function GuestJoin() {
   // Server composite stream hook - subscribes to server-side composite via Ant Media
   // This shows the FULL broadcast preview (all participants, overlays, backgrounds)
   // Host disconnect no longer breaks guest preview!
-  const { compositeStream: broadcastStream, isConnecting: isCompositeConnecting, error: compositeError } = useCompositeStream({
+  const { compositeStream: broadcastStream, isConnecting: _isCompositeConnecting, error: _compositeError } = useCompositeStream({
     hasJoined,
     broadcastId: broadcastInfo?.id,
   });

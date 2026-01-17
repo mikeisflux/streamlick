@@ -73,7 +73,7 @@ export function useStudioInitialization({
     }
   }, [selectedDestinations, broadcastId]);
 
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [_isInitialized, setIsInitialized] = useState(false);
   const { setBroadcast } = useStudioStore();
 
   // Use ref to prevent re-initialization

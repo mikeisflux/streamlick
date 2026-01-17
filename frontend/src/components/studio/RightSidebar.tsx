@@ -1,4 +1,4 @@
-import { RefObject, useState } from 'react';
+import { RefObject } from 'react';
 import { CommentsPanel } from '../CommentsPanel';
 import { MediaAssetsPanel } from '../MediaAssetsPanel';
 import { StylePanel } from '../StylePanel';
@@ -8,8 +8,9 @@ import { PrivateChatPanel } from '../PrivateChatPanel';
 import { RecordingControls } from '../RecordingControls';
 import { BitrateControl } from '../BitrateControl';
 import { StreamHealthMonitor } from '../StreamHealthMonitor';
-import { ChatModeration, ChatMessage } from '../ChatModeration';
-import { TeleprompterSettings } from '../../hooks/studio/useTeleprompter';
+import { ChatModeration } from '../ChatModeration';
+import type { ChatMessage as _ChatMessage } from '../ChatModeration';
+import type { TeleprompterSettings as _TeleprompterSettings } from '../../hooks/studio/useTeleprompter';
 
 interface Comment {
   id: string;

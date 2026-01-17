@@ -18,7 +18,7 @@ interface StudioHeaderProps {
 
 export function StudioHeader({
   broadcastTitle,
-  broadcastId,
+  broadcastId: _broadcastId,
   isLive,
   onProducerModeClick,
   onResetStackClick,

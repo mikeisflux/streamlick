@@ -1,90 +1,85 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { authService } from '../services/auth.service';
 import { useAuthStore } from '../store/authStore';
-import { authAPI } from '../services/api';
+import { Button } from '../components/Button';
+import toast from 'react-hot-toast';
 
-export default function Login() {
-  const navigate = useNavigate();
-  const setAuth = useAuthStore((s) => s.setAuth);
+export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
+  const login = useAuthStore((state) => state.login);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setLoading(true);
+    setIsLoading(true);
 
     try {
-      const { user, token } = await authAPI.login(email, password);
-      setAuth(user, token);
+      const { user } = await authService.login(email, password);
+      login(user);
+      toast.success(`Welcome back, ${user.name || user.email}!`);
+
+      // All users go to dashboard (admins can access /admin by typing URL)
       navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
+    } catch (error: any) {
+      console.error('Login error:', error);
+      toast.error(error.response?.data?.error || 'Invalid email or password');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-dark-950 flex items-center justify-center px-4">
-      <div className="max-w-md w-full">
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8">
         <div className="text-center mb-8">
-          <Link to="/" className="text-3xl font-bold bg-gradient-to-r from-brand-400 to-brand-600 text-transparent bg-clip-text">
-            Streamlick
-          </Link>
-          <h2 className="mt-6 text-2xl font-bold">Welcome back</h2>
-          <p className="mt-2 text-dark-400">Sign in to your account</p>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">🎥 Streamlick</h1>
+          <p className="text-gray-600">Browser-based Live Streaming Studio</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-dark-900 rounded-2xl p-8 border border-dark-800">
-          {error && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-lg focus:outline-none focus:border-brand-500"
-                placeholder="you@example.com"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-lg focus:outline-none focus:border-brand-500"
-                placeholder="••••••••"
-                required
-              />
-            </div>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              Email Address
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="you@example.com"
+              autoComplete="email"
+            />
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full mt-6 py-3 bg-brand-600 hover:bg-brand-700 rounded-lg font-semibold transition disabled:opacity-50"
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="••••••••"
+              autoComplete="current-password"
+            />
+          </div>
 
-          <p className="mt-6 text-center text-dark-400">
-            Don't have an account?{' '}
-            <Link to="/register" className="text-brand-400 hover:text-brand-300">
-              Sign up
-            </Link>
-          </p>
+          <Button
+            type="submit"
+            disabled={isLoading}
+            className="w-full"
+            size="lg"
+          >
+            {isLoading ? 'Signing in...' : 'Sign In'}
+          </Button>
         </form>
       </div>
     </div>

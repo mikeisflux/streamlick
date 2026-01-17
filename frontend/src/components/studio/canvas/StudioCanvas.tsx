@@ -766,7 +766,7 @@ export function StudioCanvas({
     }
 
     let lastFrameTime = performance.now();
-    const videoStableFrames = new Map<string, number>();
+    const _videoStableFrames = new Map<string, number>();
     let frameCount = 0;
     let lastDebugTime = performance.now();
 

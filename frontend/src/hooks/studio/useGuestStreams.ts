@@ -64,7 +64,7 @@ export function useGuestStreams(
     }
 
     // Create new peer connection
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection(ICE_SERVERS);
 
     const connection: GuestConnection = {
       pc,

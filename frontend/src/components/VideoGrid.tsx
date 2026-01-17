@@ -14,7 +14,7 @@ export function VideoGrid({ children, participantCount }: VideoGridProps) {
     return 'grid-cols-4';
   };
 
-  const getAspectClass = () => {
+  const _getAspectClass = () => {
     if (participantCount === 1) return 'aspect-video';
     if (participantCount === 2) return 'aspect-video';
     return 'aspect-square';

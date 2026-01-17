@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { clipRecordingService } from '../../services/clip-recording.service';
+import { clipRecordingService as _clipRecordingService } from '../../services/clip-recording.service';
 import { captionService, Caption, POPULAR_LANGUAGES } from '../../services/caption.service';
 import { backgroundRemovalService, BackgroundOptions } from '../../services/background-removal.service';
 import { verticalCompositorService } from '../../services/vertical-compositor.service';
@@ -162,8 +162,8 @@ export function useBackgroundRemoval(
           }
 
           // Verify localStream is active before processing
-          const videoTracks = localStream.getVideoTracks();
-          if (videoTracks.length === 0 || videoTracks[0].readyState !== 'live') {
+          const _videoTracks = localStream.getVideoTracks();
+          if (_videoTracks.length === 0 || _videoTracks[0].readyState !== 'live') {
             console.error('Local stream is not active, cannot start background removal');
             if (isMounted) toast.error('Camera not active');
             return;
@@ -200,7 +200,7 @@ export function useBackgroundRemoval(
 
       // Verify localStream is still valid
       if (localStream) {
-        const videoTracks = localStream.getVideoTracks();
+        const _videoTracks = localStream.getVideoTracks();
       }
 
       if (backgroundRemovalService.isActive()) {

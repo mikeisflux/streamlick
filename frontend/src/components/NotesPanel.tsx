@@ -74,7 +74,7 @@ Closing:
   },
 ];
 
-export function NotesPanel({ broadcastId, teleprompterState }: NotesPanelProps) {
+export function NotesPanel({ broadcastId: _broadcastId, teleprompterState }: NotesPanelProps) {
   const {
     notes,
     setNotes,

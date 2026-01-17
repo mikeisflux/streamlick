@@ -67,7 +67,7 @@ export function usePreviewStream({
       }
 
       // Create peer connection
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      const pc = new RTCPeerConnection(ICE_SERVERS);
       previewPcRef.current = pc;
 
       // Handle incoming tracks
