@@ -1,5 +1,18 @@
 # Streamlick v2.0 - StreamYard Competitor
 
+## IMPORTANT: Architecture Constraints
+
+### NO CLIENT-SIDE CANVAS RENDERING
+
+**The frontend MUST NOT perform any canvas compositing.** All video compositing happens on the server-side headless browser at `media-server/webapps/LiveApp/streamlick_composite.html`.
+
+The Studio/Dashboard is a **CONTROL PANEL** that:
+- Sends commands to the server compositor (layout, background, overlays)
+- Receives the pre-composed video stream from Ant Media and displays it
+- Does NOT render or composite any video locally
+
+If you find any client-side canvas rendering code in the frontend, **remove it immediately**.
+
 ## Architecture Overview
 
 ```

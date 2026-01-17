@@ -33,6 +33,10 @@ export default function Dashboard() {
       setCreateModal({ isOpen: false, type: 'live' });
       navigate(`/studio/${broadcast.id}`);
     },
+    onError: (error: Error) => {
+      console.error('Failed to create broadcast:', error);
+      alert(error.message || 'Failed to create studio. Make sure the backend is running.');
+    },
   });
 
   const handleCreateSubmit = (data: {

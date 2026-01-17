@@ -1,3 +1,18 @@
+/**
+ * CompositePreview Component
+ *
+ * IMPORTANT: NO CLIENT-SIDE CANVAS RENDERING
+ *
+ * This component ONLY displays the pre-composed video stream from the server.
+ * It subscribes to the Ant Media stream (play mode) and shows it in a video element.
+ *
+ * All compositing is done server-side at:
+ * media-server/webapps/LiveApp/streamlick_composite.html
+ *
+ * DO NOT add any canvas rendering, drawImage, or local compositing code here.
+ * The Studio is a CONTROL PANEL - it sends commands and receives the final output.
+ */
+
 import { useEffect, useRef, useState } from 'react';
 import { Maximize2, Minimize2, Volume2, VolumeX } from 'lucide-react';
 import { AntMediaClient } from '../../services/antmedia';
