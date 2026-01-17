@@ -1,6 +1,18 @@
 import { useState } from 'react';
 import { Mic, MicOff, Video, VideoOff, Plus, Minus, X, MoreVertical } from 'lucide-react';
-import { Participant } from '../../../types';
+
+// Local participant type (subset of full type used in this component)
+export interface Participant {
+  id: string;
+  name: string;
+  role: 'HOST' | 'COHOST' | 'GUEST';
+  status: 'WAITING' | 'GREENROOM' | 'ONSTAGE' | 'LEFT';
+  streamId?: string | null;
+  isOnStage: boolean;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
+  position: number;
+}
 
 interface PeoplePanelProps {
   participants: Participant[];

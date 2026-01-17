@@ -417,7 +417,7 @@ export default function Studio() {
             broadcastId={broadcastId!}
             compositeStreamId={compositeStreamId}
             backgroundColor={broadcast?.backgroundColor}
-            logoUrl={broadcast?.logoUrl}
+            logoUrl={broadcast?.logoUrl ?? undefined}
           />
         </div>
 
@@ -462,7 +462,6 @@ export default function Studio() {
       <RightSidebar
         activeTab={activeRightTab}
         onTabChange={setActiveRightTab}
-        broadcastId={broadcastId!}
         participants={participants}
         onBringOnStage={handleBringOnStage}
         onRemoveFromStage={handleRemoveFromStage}

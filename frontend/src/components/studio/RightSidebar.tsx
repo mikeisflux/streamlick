@@ -3,9 +3,8 @@ import {
   MessageSquare, FileText, Image, Palette, StickyNote,
   Users, MessageCircle, Video, BarChart3, Activity, X
 } from 'lucide-react';
-import { PeoplePanel } from './panels/PeoplePanel';
+import { PeoplePanel, Participant } from './panels/PeoplePanel';
 import { StylePanel } from './panels/StylePanel';
-import { Participant } from '../../types';
 import { LayoutType } from '../../store/studioStore';
 
 export type RightTab = 'comments' | 'banners' | 'media' | 'style' | 'notes' | 'people' | 'chat' | 'recording' | 'quality' | 'health' | null;
@@ -13,7 +12,6 @@ export type RightTab = 'comments' | 'banners' | 'media' | 'style' | 'notes' | 'p
 interface RightSidebarProps {
   activeTab: RightTab;
   onTabChange: (tab: RightTab) => void;
-  broadcastId: string;
   participants: Participant[];
   onBringOnStage: (participantId: string) => void;
   onRemoveFromStage: (participantId: string) => void;
@@ -41,7 +39,6 @@ const TABS = [
 export function RightSidebar({
   activeTab,
   onTabChange,
-  broadcastId,
   participants,
   onBringOnStage,
   onRemoveFromStage,

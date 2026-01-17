@@ -64,44 +64,44 @@ const initialState = {
 export const useStudioStore = create<StudioState>((set) => ({
   ...initialState,
 
-  setBroadcast: (broadcast) => set({ broadcast }),
+  setBroadcast: (broadcast: Broadcast) => set({ broadcast }),
 
-  setParticipants: (participants) => set({ participants }),
+  setParticipants: (participants: Participant[]) => set({ participants }),
 
-  updateParticipant: (updated) =>
-    set((state) => ({
-      participants: state.participants.map((p) =>
+  updateParticipant: (updated: Partial<Participant> & { id: string }) =>
+    set((state: StudioState) => ({
+      participants: state.participants.map((p: Participant) =>
         p.id === updated.id ? { ...p, ...updated } : p
       ),
     })),
 
-  addParticipant: (participant) =>
-    set((state) => ({
+  addParticipant: (participant: Participant) =>
+    set((state: StudioState) => ({
       participants: [...state.participants, participant],
     })),
 
-  removeParticipant: (id) =>
-    set((state) => ({
-      participants: state.participants.filter((p) => p.id !== id),
+  removeParticipant: (id: string) =>
+    set((state: StudioState) => ({
+      participants: state.participants.filter((p: Participant) => p.id !== id),
     })),
 
-  setLocalStream: (stream) => set({ localStream: stream }),
+  setLocalStream: (stream: MediaStream | null) => set({ localStream: stream }),
 
-  setPreviewStream: (stream) => set({ previewStream: stream }),
+  setPreviewStream: (stream: MediaStream | null) => set({ previewStream: stream }),
 
-  setAudioEnabled: (enabled) => set({ isAudioEnabled: enabled }),
+  setAudioEnabled: (enabled: boolean) => set({ isAudioEnabled: enabled }),
 
-  setVideoEnabled: (enabled) => set({ isVideoEnabled: enabled }),
+  setVideoEnabled: (enabled: boolean) => set({ isVideoEnabled: enabled }),
 
-  setScreenSharing: (enabled) => set({ isScreenSharing: enabled }),
+  setScreenSharing: (enabled: boolean) => set({ isScreenSharing: enabled }),
 
-  setLayout: (layout) =>
-    set((state) => ({
+  setLayout: (layout: LayoutType) =>
+    set((state: StudioState) => ({
       broadcast: state.broadcast ? { ...state.broadcast, layout } : null,
     })),
 
-  setBranding: (branding) =>
-    set((state) => ({
+  setBranding: (branding: { backgroundColor?: string; logoUrl?: string | null; overlayText?: string | null }) =>
+    set((state: StudioState) => ({
       broadcast: state.broadcast ? { ...state.broadcast, ...branding } : null,
     })),
 

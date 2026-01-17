@@ -1,6 +1,18 @@
 import { useRef, useEffect, useState } from 'react';
 import { UserPlus, Plus, Minus, X, MoreVertical } from 'lucide-react';
-import { Participant } from '../../types';
+
+// Local participant type (subset of full type)
+interface Participant {
+  id: string;
+  name: string;
+  role: 'HOST' | 'COHOST' | 'GUEST';
+  status: 'WAITING' | 'GREENROOM' | 'ONSTAGE' | 'LEFT';
+  streamId?: string | null;
+  isOnStage: boolean;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
+  position: number;
+}
 
 interface PreviewStripProps {
   participants: Participant[];
