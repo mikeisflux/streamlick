@@ -6,19 +6,23 @@ import { AuthenticatedRequest } from '../types/index.js';
 
 const router = Router();
 
+// Helper to get studioConfig as object
+function getStudioConfig(studioConfig: unknown): Record<string, unknown> {
+  return (studioConfig as Record<string, unknown>) || {};
+}
+
 // GET /api/participants/join/:token - Get participant info by invite token (no auth required)
 router.get('/join/:token', async (req, res) => {
   try {
     const participant = await prisma.participant.findUnique({
-      where: { inviteToken: req.params.token },
+      where: { joinLinkToken: req.params.token },
       include: {
         broadcast: {
           select: {
             id: true,
             title: true,
             status: true,
-            backgroundColor: true,
-            logoUrl: true,
+            studioConfig: true,
           },
         },
       },
@@ -32,7 +36,18 @@ router.get('/join/:token', async (req, res) => {
       return res.status(400).json({ error: 'This invite has expired' });
     }
 
-    res.json(participant);
+    // Extract branding info from studioConfig for frontend compatibility
+    const config = getStudioConfig(participant.broadcast.studioConfig);
+    const response = {
+      ...participant,
+      broadcast: {
+        ...participant.broadcast,
+        backgroundColor: config.backgroundColor || '#1a1a2e',
+        logoUrl: config.logoUrl || null,
+      },
+    };
+
+    res.json(response);
   } catch (error) {
     console.error('Get participant error:', error);
     res.status(500).json({ error: 'Failed to get participant' });
@@ -47,7 +62,7 @@ router.post('/join/:token', async (req, res) => {
     }).parse(req.body);
 
     const participant = await prisma.participant.findUnique({
-      where: { inviteToken: req.params.token },
+      where: { joinLinkToken: req.params.token },
       include: {
         broadcast: {
           select: { id: true, title: true, status: true },
@@ -96,10 +111,7 @@ router.patch('/:id', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const data = z.object({
       name: z.string().min(1).optional(),
-      position: z.number().int().min(0).optional(),
-      isOnStage: z.boolean().optional(),
-      audioEnabled: z.boolean().optional(),
-      videoEnabled: z.boolean().optional(),
+      status: z.enum(['WAITING', 'GREENROOM', 'ONSTAGE', 'LEFT']).optional(),
     }).parse(req.body);
 
     // Verify the participant belongs to a broadcast owned by the user
@@ -115,8 +127,8 @@ router.patch('/:id', async (req: AuthenticatedRequest, res: Response) => {
     const updated = await prisma.participant.update({
       where: { id: req.params.id },
       data: {
-        ...data,
-        status: data.isOnStage ? 'ONSTAGE' : participant.status,
+        name: data.name,
+        status: data.status,
       },
     });
 
@@ -146,7 +158,6 @@ router.post('/:id/bring-on-stage', async (req: AuthenticatedRequest, res: Respon
       where: { id: req.params.id },
       data: {
         status: 'ONSTAGE',
-        isOnStage: true,
       },
     });
 
@@ -173,7 +184,6 @@ router.post('/:id/remove-from-stage', async (req: AuthenticatedRequest, res: Res
       where: { id: req.params.id },
       data: {
         status: 'GREENROOM',
-        isOnStage: false,
       },
     });
 

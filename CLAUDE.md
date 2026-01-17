@@ -83,6 +83,17 @@ npm run build
 
 See `.env.example` files in root, backend, and frontend directories.
 
+## Development Rules
+
+### Backend Code - IMPORTANT
+
+**Always check `backend/prisma/schema.prisma` before writing or modifying backend code that interacts with the database.** The schema is the source of truth for available fields. Do not assume fields exist - verify them first.
+
+Key schema notes:
+- `Broadcast.studioConfig` is a JSON field containing layout, backgroundColor, logoUrl, overlayText
+- `Participant.joinLinkToken` (not `inviteToken`) for guest invite links
+- Participant ephemeral state (streamId, audioEnabled, videoEnabled, isOnStage, position) should be managed via Socket.io or in-memory state, NOT database fields
+
 ## Key Workflows
 
 ### Creating a Broadcast

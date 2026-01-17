@@ -12,25 +12,25 @@ datasource db {
 // ============================================================================
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  passwordHash  String
-  name          String
-  avatar        String?
-  role          UserRole  @default(USER)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                      String    @id @default(cuid())
+  email                   String    @unique
+  password                String    // Hashed password
+  name                    String?
+  avatarUrl               String?
+  role                    String    @default("USER")
+  planType                String    @default("free")
+  emailVerified           Boolean   @default(false)
+  emailVerificationToken  String?
+  emailVerificationExpiry DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   // Relations
   broadcasts    Broadcast[]
   destinations  Destination[]
+  participants  Participant[]
 
   @@index([email])
-}
-
-enum UserRole {
-  USER
-  ADMIN
 }
 
 // ============================================================================
@@ -38,48 +38,33 @@ enum UserRole {
 // ============================================================================
 
 model Broadcast {
-  id            String          @id @default(cuid())
-  title         String
-  description   String?
-  status        BroadcastStatus @default(IDLE)
+  id              String    @id @default(cuid())
+  title           String
+  description     String?
+  status          String    @default("IDLE")
 
-  // Stream configuration
-  streamKey     String          @unique @default(cuid())
-  previewUrl    String?         // WebRTC preview URL for clients
-
-  // Layout & branding
-  layout        String          @default("grid") // grid, spotlight, side-by-side, etc.
-  backgroundColor String        @default("#1a1a2e")
-  logoUrl       String?
-  overlayText   String?
+  // Studio configuration stored as JSON
+  studioConfig    Json?     @default("{}")
 
   // Timing
-  scheduledAt   DateTime?
-  startedAt     DateTime?
-  endedAt       DateTime?
+  scheduledAt     DateTime?
+  startedAt       DateTime?
+  endedAt         DateTime?
+  durationSeconds Int?
 
   // Owner
-  userId        String
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Relations
-  participants  Participant[]
-  outputs       BroadcastOutput[]
-  recordings    Recording[]
+  participants    Participant[]
+  destinations    BroadcastDestination[]
 
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([userId])
   @@index([status])
-  @@index([streamKey])
-}
-
-enum BroadcastStatus {
-  IDLE        // Not started
-  GREENROOM   // Participants can join, not live
-  LIVE        // Broadcasting to destinations
-  ENDED       // Broadcast finished
 }
 
 // ============================================================================
@@ -87,52 +72,29 @@ enum BroadcastStatus {
 // ============================================================================
 
 model Participant {
-  id            String            @id @default(cuid())
-  name          String
-  email         String?
-  role          ParticipantRole   @default(GUEST)
-  status        ParticipantStatus @default(WAITING)
-
-  // Ant Media stream identifiers
-  streamId      String?           // Unique stream ID in Ant Media
-  audioEnabled  Boolean           @default(true)
-  videoEnabled  Boolean           @default(true)
-
-  // Position in layout
-  position      Int               @default(0)
-  isOnStage     Boolean           @default(false)
+  id              String    @id @default(cuid())
+  name            String?
+  role            String?   @default("GUEST")
+  status          String?   @default("WAITING")
 
   // Invite link
-  inviteToken   String            @unique @default(cuid())
+  joinLinkToken   String?   @unique @default(cuid())
+  joinLinkExpiry  DateTime?
 
   // Parent broadcast
-  broadcastId   String
-  broadcast     Broadcast         @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  broadcastId     String
+  broadcast       Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
 
   // If this is the host, link to user
-  userId        String?
+  userId          String?
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  joinedAt      DateTime?
-  leftAt        DateTime?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  joinedAt        DateTime?
+  leftAt          DateTime?
+  createdAt       DateTime  @default(now())
 
   @@index([broadcastId])
-  @@index([inviteToken])
-  @@index([streamId])
-}
-
-enum ParticipantRole {
-  HOST
-  COHOST
-  GUEST
-}
-
-enum ParticipantStatus {
-  WAITING     // Invited but not connected
-  GREENROOM   // In greenroom, not on stage
-  ONSTAGE     // Visible in broadcast
-  LEFT        // Disconnected
+  @@index([joinLinkToken])
 }
 
 // ============================================================================
@@ -140,104 +102,58 @@ enum ParticipantStatus {
 // ============================================================================
 
 model Destination {
-  id            String          @id @default(cuid())
-  name          String          // e.g., "My YouTube Channel"
-  platform      Platform
+  id            String    @id @default(cuid())
+  name          String
+  platform      String    @default("CUSTOM_RTMP")
 
   // RTMP credentials
   rtmpUrl       String
   streamKey     String
 
   // Platform-specific
-  platformId    String?         // External platform ID
-  accessToken   String?         // OAuth token if needed
+  platformId    String?
+  accessToken   String?
   refreshToken  String?
   tokenExpiry   DateTime?
 
   // Owner
   userId        String
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Outputs using this destination
-  outputs       BroadcastOutput[]
+  broadcasts    BroadcastDestination[]
 
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([userId])
   @@index([platform])
 }
 
-enum Platform {
-  YOUTUBE
-  TWITCH
-  FACEBOOK
-  CUSTOM_RTMP
-}
-
 // ============================================================================
-// BROADCAST OUTPUTS (Active streams to destinations)
+// BROADCAST DESTINATIONS (Junction table for multi-streaming)
 // ============================================================================
 
-model BroadcastOutput {
-  id            String        @id @default(cuid())
-  status        OutputStatus  @default(IDLE)
+model BroadcastDestination {
+  id            String      @id @default(cuid())
+  status        String      @default("IDLE")
 
   // Parent broadcast
   broadcastId   String
-  broadcast     Broadcast     @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  broadcast     Broadcast   @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
 
   // Target destination
   destinationId String
-  destination   Destination   @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  destination   Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
 
   // Stream info
   startedAt     DateTime?
   endedAt       DateTime?
 
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   @@unique([broadcastId, destinationId])
   @@index([broadcastId])
   @@index([destinationId])
-}
-
-enum OutputStatus {
-  IDLE
-  STARTING
-  LIVE
-  ERROR
-  STOPPED
-}
-
-// ============================================================================
-// RECORDINGS
-// ============================================================================
-
-model Recording {
-  id            String          @id @default(cuid())
-  filename      String
-  fileUrl       String?
-  fileSize      BigInt?
-  duration      Int?            // Duration in seconds
-  status        RecordingStatus @default(RECORDING)
-
-  // Parent broadcast
-  broadcastId   String
-  broadcast     Broadcast       @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
-
-  startedAt     DateTime        @default(now())
-  endedAt       DateTime?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-
-  @@index([broadcastId])
-}
-
-enum RecordingStatus {
-  RECORDING
-  PROCESSING
-  READY
-  FAILED
 }
