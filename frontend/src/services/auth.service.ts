@@ -5,6 +5,7 @@
 
 import { User } from '../types';
 
+const API_URL = import.meta.env.VITE_API_URL || '';
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
 
@@ -49,7 +50,7 @@ class AuthService {
   }
 
   async login(email: string, password: string): Promise<{ user: User; token: string }> {
-    const response = await fetch('/api/auth/login', {
+    const response = await fetch(`${API_URL}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -68,7 +69,7 @@ class AuthService {
 
   async logout(): Promise<void> {
     try {
-      await fetch('/api/auth/logout', {
+      await fetch(`${API_URL}/api/auth/logout`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -79,7 +80,7 @@ class AuthService {
   }
 
   async getMe(): Promise<User> {
-    const response = await fetch('/api/auth/me', {
+    const response = await fetch(`${API_URL}/api/auth/me`, {
       credentials: 'include',
       headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
     });
