@@ -1,76 +1,93 @@
-import { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useRef, useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import {
-  Mic, MicOff, Video, VideoOff, Users, Layout,
-  ArrowLeft, Copy, Radio, Square, UserPlus
-} from 'lucide-react';
 import { broadcastAPI } from '../services/api';
-import { useStudioStore, LayoutType } from '../store/studioStore';
+import { broadcastService } from '../services/broadcast.service';
+import { useMedia } from '../hooks/useMedia';
+import { useStudioStore } from '../store/studioStore';
+import { useAuthStore } from '../store/authStore';
+import toast from 'react-hot-toast';
+import { StudioHeader } from '../components/studio/StudioHeader';
+import { RightSidebar } from '../components/studio/RightSidebar';
+import { BottomControlBar } from '../components/studio/BottomControlBar';
+import { PreviewArea } from '../components/studio/canvas/PreviewArea';
+import { CompositePreview } from '../components/studio/canvas/CompositePreview';
+import { LayoutSelector } from '../components/studio/canvas/LayoutSelector';
 import {
-  getSocket, joinBroadcast, leaveBroadcast, setLayout as emitSetLayout,
-  bringOnStage, removeFromStage, goLive, endBroadcast, publishStream
+  getSocket, joinBroadcast, leaveBroadcast,
+  setLayout as emitSetLayout, bringOnStage, removeFromStage,
+  goLive as emitGoLive, endBroadcast as emitEndBroadcast, publishStream
 } from '../services/socket';
 import { AntMediaClient, generateStreamId } from '../services/antmedia';
-import { PreviewArea } from '../components/studio/canvas/PreviewArea';
 
-const LAYOUTS: { value: LayoutType; label: string; icon: string }[] = [
-  { value: 'grid', label: 'Grid', icon: '⊞' },
-  { value: 'spotlight', label: 'Spotlight', icon: '◐' },
-  { value: 'side-by-side', label: 'Side by Side', icon: '⊟' },
-  { value: 'picture-in-picture', label: 'Picture in Picture', icon: '◲' },
-  { value: 'single', label: 'Single', icon: '□' },
-];
+/**
+ * Studio Page - Control Panel for Live Streaming
+ *
+ * This is a CONTROL PANEL that:
+ * - Shows the server composite preview (receives only, no local compositing)
+ * - Manages participants (bring on/off stage)
+ * - Controls layout, branding, and overlays
+ * - Handles go-live and end broadcast actions
+ *
+ * All actual compositing happens on the SERVER, not in the browser.
+ */
 
-export default function Studio() {
+export function Studio() {
   const { broadcastId } = useParams<{ broadcastId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
 
+  // Studio store
   const {
     broadcast, participants, localStream, isAudioEnabled, isVideoEnabled,
     setBroadcast, setParticipants, updateParticipant, removeParticipant,
     setLocalStream, setAudioEnabled, setVideoEnabled, setLayout, reset
   } = useStudioStore();
 
+  // Local state
+  const [isConnecting, setIsConnecting] = useState(true);
+  const [compositorConnected, setCompositorConnected] = useState(false);
+  const [compositeStreamId, setCompositeStreamId] = useState<string | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteUrl, setInviteUrl] = useState('');
-  const [guestName, setGuestName] = useState('');
-  const [showLayoutPanel, setShowLayoutPanel] = useState(false);
-  const [, setIsConnecting] = useState(true);
-  const [screenShareStream, _setScreenShareStream] = useState<MediaStream | null>(null);
-  const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
+  const [selectedLayout, setSelectedLayout] = useState('grid');
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
+  const [activeRightPanel, setActiveRightPanel] = useState<string | null>(null);
 
-  const localVideoRef = useRef<HTMLVideoElement>(null);
+  // Media
+  const { rawStream, audioEnabled, videoEnabled, startCamera, stopCamera, toggleAudio, toggleVideo } = useMedia();
+
+  // Refs
   const antMediaRef = useRef<AntMediaClient | null>(null);
-  const remoteClientsRef = useRef<Map<string, AntMediaClient>>(new Map());
+  const socketConnectedRef = useRef(false);
 
   // Fetch broadcast data
-  const { data: broadcastData, isLoading } = useQuery({
+  const { data: broadcastData, isLoading, refetch } = useQuery({
     queryKey: ['broadcast', broadcastId],
     queryFn: () => broadcastAPI.get(broadcastId!),
     enabled: !!broadcastId,
   });
 
-  // Initialize studio
+  // Initialize broadcast and socket connection
   useEffect(() => {
-    if (!broadcastData) return;
+    if (!broadcastData || !broadcastId) return;
 
-    // If broadcast is IDLE, transition to GREENROOM
     const initializeBroadcast = async () => {
+      // If broadcast is IDLE, transition to GREENROOM
       if (broadcastData.status === 'IDLE') {
         try {
-          const updated = await broadcastAPI.start(broadcastId!);
+          const updated = await broadcastAPI.start(broadcastId);
           setBroadcast({
             id: updated.id,
             title: updated.title,
             status: updated.status,
-            layout: updated.layout,
+            layout: updated.layout || 'grid',
             backgroundColor: updated.backgroundColor,
             logoUrl: updated.logoUrl,
             overlayText: updated.overlayText,
             previewUrl: updated.previewUrl,
           });
-          setParticipants(updated.participants || broadcastData.participants);
+          setParticipants(updated.participants || []);
+          setSelectedLayout(updated.layout || 'grid');
         } catch (error) {
           console.error('Failed to start broadcast:', error);
           // Fall back to current data
@@ -78,629 +95,326 @@ export default function Studio() {
             id: broadcastData.id,
             title: broadcastData.title,
             status: broadcastData.status,
-            layout: broadcastData.layout,
+            layout: broadcastData.layout || 'grid',
             backgroundColor: broadcastData.backgroundColor,
             logoUrl: broadcastData.logoUrl,
             overlayText: broadcastData.overlayText,
             previewUrl: broadcastData.previewUrl,
           });
-          setParticipants(broadcastData.participants);
+          setParticipants(broadcastData.participants || []);
+          setSelectedLayout(broadcastData.layout || 'grid');
         }
       } else {
         setBroadcast({
           id: broadcastData.id,
           title: broadcastData.title,
           status: broadcastData.status,
-          layout: broadcastData.layout,
+          layout: broadcastData.layout || 'grid',
           backgroundColor: broadcastData.backgroundColor,
           logoUrl: broadcastData.logoUrl,
           overlayText: broadcastData.overlayText,
           previewUrl: broadcastData.previewUrl,
         });
-        setParticipants(broadcastData.participants);
+        setParticipants(broadcastData.participants || []);
+        setSelectedLayout(broadcastData.layout || 'grid');
+      }
+
+      // Connect to socket
+      if (!socketConnectedRef.current) {
+        const socket = getSocket();
+        socket.connect();
+        socketConnectedRef.current = true;
+
+        socket.on('connect', () => {
+          console.log('[Studio] Socket connected');
+          joinBroadcast(broadcastId);
+          setIsConnecting(false);
+        });
+
+        socket.on('broadcast-state', (data) => {
+          console.log('[Studio] Broadcast state:', data);
+          setCompositorConnected(data.compositorConnected);
+          if (data.broadcast) {
+            setBroadcast({
+              ...data.broadcast,
+              layout: data.broadcast.layout || 'grid',
+            });
+            setSelectedLayout(data.broadcast.layout || 'grid');
+          }
+          if (data.participants) {
+            setParticipants(data.participants);
+          }
+        });
+
+        socket.on('compositor-connected', () => {
+          console.log('[Studio] Compositor connected');
+          setCompositorConnected(true);
+          // Set composite stream ID based on broadcast ID
+          setCompositeStreamId(`composite-${broadcastId}`);
+        });
+
+        socket.on('compositor-disconnected', () => {
+          console.log('[Studio] Compositor disconnected');
+          setCompositorConnected(false);
+          setCompositeStreamId(null);
+        });
+
+        socket.on('participant-joined', (data) => {
+          console.log('[Studio] Participant joined:', data);
+          refetch();
+        });
+
+        socket.on('participant-left', (data) => {
+          console.log('[Studio] Participant left:', data);
+          if (data.participantId) {
+            removeParticipant(data.participantId);
+          }
+        });
+
+        socket.on('participant-updated', (data) => {
+          console.log('[Studio] Participant updated:', data);
+          updateParticipant(data.id, data);
+        });
+
+        socket.on('layout-changed', (data) => {
+          console.log('[Studio] Layout changed:', data);
+          setLayout(data.layout);
+          setSelectedLayout(data.layout);
+        });
+
+        socket.on('broadcast-live', (data) => {
+          console.log('[Studio] Broadcast went live:', data);
+          setBroadcast({ ...broadcast!, status: 'LIVE' });
+          toast.success('You are now LIVE!');
+        });
+
+        socket.on('broadcast-ended', (data) => {
+          console.log('[Studio] Broadcast ended:', data);
+          setBroadcast({ ...broadcast!, status: 'ENDED' });
+          toast.success('Broadcast ended');
+        });
+
+        socket.on('error', (data) => {
+          console.error('[Studio] Socket error:', data);
+          toast.error(data.message || 'Connection error');
+        });
       }
     };
 
     initializeBroadcast();
 
-    // Connect socket
-    const socket = getSocket();
-    socket.connect();
-
-    socket.on('connect', () => {
-      joinBroadcast(broadcastId!);
-      setIsConnecting(false);
-    });
-
-    socket.on('broadcast-state', (state) => {
-      setBroadcast(state.broadcast);
-      setParticipants(state.participants);
-    });
-
-    socket.on('participant-joined', () => {
-      // Refetch participants
-    });
-
-    socket.on('participant-updated', (participant) => {
-      updateParticipant(participant);
-    });
-
-    socket.on('participant-left', (data) => {
-      if (data.participantId) {
-        removeParticipant(data.participantId);
-      }
-    });
-
-    socket.on('layout-changed', (data) => {
-      setLayout(data.layout);
-    });
-
-    socket.on('broadcast-live', () => {
-      setBroadcast({ ...broadcast!, status: 'LIVE' });
-    });
-
-    socket.on('broadcast-ended', () => {
-      setBroadcast({ ...broadcast!, status: 'ENDED' });
-    });
-
-    // Listen for participant stream events
-    socket.on('participant-stream-published', (data: { participantId: string; streamId: string }) => {
-      console.log('[Studio] Participant stream published:', data);
-      subscribeToParticipantStream(data.participantId, data.streamId);
-    });
-
-    socket.on('participant-stream-stopped', (data: { participantId: string }) => {
-      console.log('[Studio] Participant stream stopped:', data);
-      unsubscribeFromParticipantStream(data.participantId);
-    });
-
     return () => {
-      leaveBroadcast();
-      socket.disconnect();
-      // Cleanup all remote clients
-      remoteClientsRef.current.forEach(client => client.disconnect());
-      remoteClientsRef.current.clear();
-      reset();
+      if (socketConnectedRef.current) {
+        leaveBroadcast();
+        const socket = getSocket();
+        socket.off('connect');
+        socket.off('broadcast-state');
+        socket.off('compositor-connected');
+        socket.off('compositor-disconnected');
+        socket.off('participant-joined');
+        socket.off('participant-left');
+        socket.off('participant-updated');
+        socket.off('layout-changed');
+        socket.off('broadcast-live');
+        socket.off('broadcast-ended');
+        socket.off('error');
+      }
     };
   }, [broadcastData, broadcastId]);
 
-  // Get local media - only runs once on mount
+  // Start camera when component mounts
   useEffect(() => {
-    let mounted = true;
-    let mediaStream: MediaStream | null = null;
-
-    async function getMedia() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        });
-
-        if (!mounted) {
-          stream.getTracks().forEach(t => t.stop());
-          return;
-        }
-
-        mediaStream = stream;
-        setLocalStream(stream);
-
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-      } catch (error) {
-        console.error('Failed to get media:', error);
-      }
-    }
-
-    getMedia();
-
+    startCamera();
     return () => {
-      mounted = false;
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(t => t.stop());
-      }
+      stopCamera();
     };
   }, []);
 
-  // Publish to Ant Media - separate effect that depends on participants
+  // Publish local stream to AntMedia when camera starts
   useEffect(() => {
-    if (!broadcastId || !localStream) return;
+    if (!rawStream || !broadcastId || !user) return;
 
-    const hostParticipant = participants.find(p => p.role === 'HOST');
-    if (!hostParticipant) return;
+    const publishToAntMedia = async () => {
+      try {
+        const streamId = generateStreamId(broadcastId, user.id);
+        antMediaRef.current = new AntMediaClient();
 
-    // Don't create new client if one already exists and is not stopped
-    if (antMediaRef.current && !antMediaRef.current.isStopping()) {
-      return;
-    }
+        await antMediaRef.current.publish(streamId, rawStream, {
+          onPublishStarted: () => {
+            console.log('[Studio] Publishing to AntMedia:', streamId);
+            publishStream(streamId);
+          },
+          onPublishEnded: () => {
+            console.log('[Studio] Publish ended');
+          },
+          onError: (error) => {
+            console.error('[Studio] AntMedia error:', error);
+          }
+        });
 
-    const streamId = generateStreamId(broadcastId, hostParticipant.id);
+        setLocalStream(rawStream);
+      } catch (error) {
+        console.error('[Studio] Failed to publish:', error);
+      }
+    };
 
-    antMediaRef.current = new AntMediaClient({
-      streamId,
-      mode: 'publish',
-      localStream,
-      onStateChange: (state) => {
-        console.log('[Studio] Host stream state:', state);
-        // Notify server when publishing starts
-        if (state === 'publishing') {
-          publishStream(streamId);
-        }
-      },
-      onError: (error) => console.error('[Studio] Host stream error:', error),
-    });
-
-    antMediaRef.current.connect().catch(console.error);
+    publishToAntMedia();
 
     return () => {
-      antMediaRef.current?.disconnect();
+      if (antMediaRef.current) {
+        antMediaRef.current.stop();
+        antMediaRef.current = null;
+      }
     };
-  }, [broadcastId, localStream, participants]);
+  }, [rawStream, broadcastId, user]);
 
-  // Toggle audio/video
-  const toggleAudio = () => {
-    if (localStream) {
-      localStream.getAudioTracks().forEach(t => { t.enabled = !isAudioEnabled; });
-      setAudioEnabled(!isAudioEnabled);
-    }
-  };
-
-  const toggleVideo = () => {
-    if (localStream) {
-      localStream.getVideoTracks().forEach(t => { t.enabled = !isVideoEnabled; });
-      setVideoEnabled(!isVideoEnabled);
-    }
-  };
-
-  // Create invite
-  const handleCreateInvite = async () => {
-    if (!guestName.trim()) return;
-    try {
-      const result = await broadcastAPI.invite(broadcastId!, { name: guestName });
-      setInviteUrl(result.inviteUrl);
-      setGuestName('');
-    } catch (error) {
-      console.error('Failed to create invite:', error);
-    }
-  };
-
-  // Copy invite URL
-  const copyInviteUrl = () => {
-    navigator.clipboard.writeText(inviteUrl);
-  };
+  // Handle layout change
+  const handleLayoutChange = useCallback((layout: string) => {
+    setSelectedLayout(layout);
+    emitSetLayout(layout);
+  }, []);
 
   // Handle go live
-  const handleGoLive = async () => {
+  const handleGoLive = useCallback(async () => {
+    if (!broadcastId) return;
     try {
-      await broadcastAPI.goLive(broadcastId!);
-      goLive();
+      emitGoLive();
     } catch (error) {
       console.error('Failed to go live:', error);
+      toast.error('Failed to go live');
     }
-  };
+  }, [broadcastId]);
 
   // Handle end broadcast
-  const handleEnd = async () => {
-    if (!confirm('Are you sure you want to end this broadcast?')) return;
+  const handleEndBroadcast = useCallback(async () => {
+    if (!broadcastId) return;
     try {
-      await broadcastAPI.end(broadcastId!);
-      endBroadcast();
-      navigate('/dashboard');
+      emitEndBroadcast();
     } catch (error) {
       console.error('Failed to end broadcast:', error);
+      toast.error('Failed to end broadcast');
     }
-  };
+  }, [broadcastId]);
 
-  // Subscribe to a participant's stream via Ant Media
-  const subscribeToParticipantStream = (participantId: string, streamId: string) => {
-    // Don't subscribe if already subscribed
-    if (remoteClientsRef.current.has(participantId)) {
-      console.log('[Studio] Already subscribed to participant:', participantId);
-      return;
-    }
+  // Handle add to stage
+  const handleAddToStage = useCallback((participantId: string) => {
+    bringOnStage(participantId);
+  }, []);
 
-    console.log('[Studio] Subscribing to participant stream:', { participantId, streamId });
+  // Handle remove from stage
+  const handleRemoveFromStage = useCallback((participantId: string) => {
+    removeFromStage(participantId);
+  }, []);
 
-    const client = new AntMediaClient({
-      streamId,
-      mode: 'play',
-      onRemoteStream: (stream) => {
-        console.log('[Studio] Received remote stream for participant:', participantId);
-        setRemoteStreams(prev => {
-          const newMap = new Map(prev);
-          newMap.set(participantId, stream);
-          return newMap;
-        });
-      },
-      onStateChange: (state) => {
-        console.log(`[Studio] Remote stream state for ${participantId}:`, state);
-      },
-      onError: (error) => {
-        console.error(`[Studio] Remote stream error for ${participantId}:`, error);
-      },
-    });
+  // Handle invite guests
+  const handleInviteGuests = useCallback(() => {
+    setShowInviteModal(true);
+    setActiveRightPanel('people');
+    setRightSidebarOpen(true);
+  }, []);
 
-    remoteClientsRef.current.set(participantId, client);
-    client.connect().catch(console.error);
-  };
-
-  // Unsubscribe from a participant's stream
-  const unsubscribeFromParticipantStream = (participantId: string) => {
-    const client = remoteClientsRef.current.get(participantId);
-    if (client) {
-      console.log('[Studio] Unsubscribing from participant:', participantId);
-      client.disconnect();
-      remoteClientsRef.current.delete(participantId);
-      setRemoteStreams(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(participantId);
-        return newMap;
-      });
-    }
-  };
-
+  // Loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-dark-950 flex items-center justify-center">
-        <div className="text-dark-400">Loading studio...</div>
+      <div className="h-screen flex items-center justify-center bg-gray-900">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto mb-4"></div>
+          <p className="text-white">Loading studio...</p>
+        </div>
       </div>
     );
   }
 
-  const onStageParticipants = participants.filter(p => p.isOnStage);
-  const backstageParticipants = participants.filter(p => !p.isOnStage && p.status !== 'LEFT');
+  const isLive = broadcast?.status === 'LIVE';
+  const isGreenroom = broadcast?.status === 'GREENROOM';
 
   return (
-    <div className="min-h-screen bg-dark-950 flex flex-col">
+    <div className="h-screen flex flex-col bg-gray-900 overflow-hidden">
       {/* Header */}
-      <header className="h-14 bg-dark-900 border-b border-dark-800 flex items-center justify-between px-4">
-        <div className="flex items-center gap-4">
-          <Link to="/dashboard" className="p-2 hover:bg-dark-800 rounded-lg transition">
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <div>
-            <h1 className="font-semibold">{broadcast?.title || 'Loading...'}</h1>
-            <div className="flex items-center gap-2 text-sm">
-              {broadcast?.status === 'LIVE' ? (
-                <span className="flex items-center gap-1 text-red-400">
-                  <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                  LIVE
-                </span>
-              ) : (
-                <span className="text-dark-400">{broadcast?.status}</span>
-              )}
-            </div>
-          </div>
-        </div>
+      <StudioHeader
+        title={broadcast?.title || 'Studio'}
+        isLive={isLive}
+        onGoLive={handleGoLive}
+        onEndBroadcast={handleEndBroadcast}
+        onInviteGuests={handleInviteGuests}
+        onOpenDestinations={() => setActiveRightPanel('destinations')}
+        canGoLive={isGreenroom && compositorConnected}
+      />
 
-        <div className="flex items-center gap-2">
-          {broadcast?.status === 'GREENROOM' && (
-            <button
-              onClick={handleGoLive}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition"
-            >
-              <Radio className="w-4 h-4" />
-              Go Live
-            </button>
-          )}
-          {broadcast?.status === 'LIVE' && (
-            <button
-              onClick={handleEnd}
-              className="flex items-center gap-2 px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg font-medium transition"
-            >
-              <Square className="w-4 h-4" />
-              End Broadcast
-            </button>
-          )}
-        </div>
-      </header>
-
-      {/* Main content */}
-      <div className="flex-1 flex">
-        {/* Preview area */}
-        <div className="flex-1 p-4">
-          <div
-            className="aspect-video rounded-xl overflow-hidden relative"
-            style={{ backgroundColor: broadcast?.backgroundColor || '#1a1a2e' }}
-          >
-            {/* Live Preview - Shows composite output */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              {onStageParticipants.length === 0 ? (
-                <div className="text-dark-500 text-center">
-                  <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>No participants on stage</p>
-                </div>
-              ) : (
-                <div className="w-full h-full grid grid-cols-2 gap-2 p-2">
-                  {onStageParticipants.map((participant) => {
-                    const remoteStream = remoteStreams.get(participant.id);
-
-                    return (
-                      <div
-                        key={participant.id}
-                        className="bg-dark-800 rounded-lg flex items-center justify-center relative overflow-hidden"
-                      >
-                        {participant.role === 'HOST' && localStream && isVideoEnabled ? (
-                          <video
-                            ref={localVideoRef}
-                            autoPlay
-                            muted
-                            playsInline
-                            className="w-full h-full object-cover rounded-lg"
-                          />
-                        ) : remoteStream && participant.videoEnabled ? (
-                          <video
-                            autoPlay
-                            playsInline
-                            ref={(el) => {
-                              if (el && remoteStream) el.srcObject = remoteStream;
-                            }}
-                            className="w-full h-full object-cover rounded-lg"
-                          />
-                        ) : (
-                          <div className="w-20 h-20 bg-brand-600 rounded-full flex items-center justify-center text-2xl font-bold">
-                            {participant.name.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 rounded text-sm">
-                          {participant.name}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Logo */}
-            {broadcast?.logoUrl && (
-              <img
-                src={broadcast.logoUrl}
-                alt="Logo"
-                className="absolute top-4 right-4 max-w-[150px] max-h-[60px]"
-              />
-            )}
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Main Area */}
+        <div className="flex-1 flex flex-col">
+          {/* Composite Preview - Main Canvas (RECEIVES server composite) */}
+          <div className="flex-1 flex items-center justify-center p-4 bg-gray-950">
+            <CompositePreview
+              compositeStreamId={compositeStreamId}
+              orientation="landscape"
+              showControls={true}
+            />
           </div>
 
-          {/* Controls */}
-          <div className="mt-4 flex items-center justify-center gap-4">
-            <button
-              onClick={toggleAudio}
-              className={`p-3 rounded-full transition ${
-                isAudioEnabled ? 'bg-dark-700 hover:bg-dark-600' : 'bg-red-600 hover:bg-red-700'
-              }`}
-            >
-              {isAudioEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-            </button>
-            <button
-              onClick={toggleVideo}
-              className={`p-3 rounded-full transition ${
-                isVideoEnabled ? 'bg-dark-700 hover:bg-dark-600' : 'bg-red-600 hover:bg-red-700'
-              }`}
-            >
-              {isVideoEnabled ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-            </button>
-            <button
-              onClick={() => setShowLayoutPanel(!showLayoutPanel)}
-              className="p-3 bg-dark-700 hover:bg-dark-600 rounded-full transition"
-            >
-              <Layout className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setShowInviteModal(true)}
-              className="p-3 bg-dark-700 hover:bg-dark-600 rounded-full transition"
-            >
-              <UserPlus className="w-5 h-5" />
-            </button>
+          {/* Layout Selector */}
+          <div className="bg-gray-800 border-t border-gray-700 px-4 py-2">
+            <LayoutSelector
+              selectedLayout={selectedLayout}
+              onLayoutChange={handleLayoutChange}
+            />
           </div>
 
-          {/* Preview / Backstage Area */}
+          {/* Preview Area - Local camera + participants */}
           <PreviewArea
-            localStream={localStream}
-            rawStream={localStream}
-            videoEnabled={isVideoEnabled}
-            audioEnabled={isAudioEnabled}
-            isLocalUserOnStage={onStageParticipants.some(p => p.role === 'HOST')}
-            backstageParticipants={backstageParticipants.map(p => ({
+            localStream={rawStream}
+            rawStream={rawStream}
+            videoEnabled={videoEnabled}
+            audioEnabled={audioEnabled}
+            isLocalUserOnStage={true}
+            backstageParticipants={participants.filter(p => p.status === 'BACKSTAGE' || p.status === 'ONSTAGE').map(p => ({
               id: p.id,
               name: p.name,
-              stream: remoteStreams.get(p.id) || null,
+              stream: null,
               audioEnabled: p.audioEnabled ?? true,
               videoEnabled: p.videoEnabled ?? true,
-              role: p.role === 'HOST' ? 'host' : p.role === 'GUEST' ? 'guest' : 'backstage',
-              status: p.status === 'GREENROOM' ? 'greenroom' : p.status === 'WAITING' ? 'backstage' : 'live',
+              role: p.role === 'HOST' ? 'host' : 'guest',
             }))}
-            greenroomParticipants={participants
-              .filter(p => p.status === 'GREENROOM' && !p.isOnStage)
-              .map(p => ({
-                id: p.id,
-                name: p.name,
-                stream: remoteStreams.get(p.id) || null,
-                audioEnabled: p.audioEnabled ?? true,
-                videoEnabled: p.videoEnabled ?? true,
-                role: p.role === 'HOST' ? 'host' : 'guest',
-                status: 'greenroom' as const,
-              }))}
-            screenShareStream={screenShareStream}
-            onAddToStage={(participantId) => {
-              if (participantId === 'local-user') {
-                const host = participants.find(p => p.role === 'HOST');
-                if (host) bringOnStage(host.id);
-              } else {
-                bringOnStage(participantId);
-              }
-            }}
-            onRemoveFromStage={(participantId) => {
-              if (participantId === 'local-user') {
-                const host = participants.find(p => p.role === 'HOST');
-                if (host) removeFromStage(host.id);
-              } else {
-                removeFromStage(participantId);
-              }
-            }}
-            onInviteGuests={() => setShowInviteModal(true)}
+            greenroomParticipants={participants.filter(p => p.status === 'GREENROOM').map(p => ({
+              id: p.id,
+              name: p.name,
+              stream: null,
+              audioEnabled: p.audioEnabled ?? true,
+              videoEnabled: p.videoEnabled ?? true,
+              role: 'guest',
+            }))}
+            screenShareStream={null}
+            onAddToStage={handleAddToStage}
+            onRemoveFromStage={handleRemoveFromStage}
+            onInviteGuests={handleInviteGuests}
           />
         </div>
 
-        {/* Sidebar */}
-        <div className="w-80 bg-dark-900 border-l border-dark-800 flex flex-col">
-          {/* Participants */}
-          <div className="p-4 border-b border-dark-800">
-            <h3 className="font-semibold mb-3 flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              Participants ({participants.length})
-            </h3>
-
-            {/* On Stage */}
-            {onStageParticipants.length > 0 && (
-              <div className="mb-4">
-                <div className="text-xs text-dark-500 mb-2">ON STAGE</div>
-                <div className="space-y-2">
-                  {onStageParticipants.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between p-2 bg-dark-800 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-brand-600 rounded-full flex items-center justify-center text-sm font-medium">
-                          {p.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium">{p.name}</div>
-                          <div className="text-xs text-dark-500">{p.role}</div>
-                        </div>
-                      </div>
-                      {p.role !== 'HOST' && (
-                        <button
-                          onClick={() => removeFromStage(p.id)}
-                          className="text-xs text-dark-400 hover:text-white"
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Backstage */}
-            {backstageParticipants.length > 0 && (
-              <div>
-                <div className="text-xs text-dark-500 mb-2">BACKSTAGE</div>
-                <div className="space-y-2">
-                  {backstageParticipants.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between p-2 bg-dark-800/50 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-dark-700 rounded-full flex items-center justify-center text-sm">
-                          {p.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="text-sm">{p.name}</div>
-                          <div className="text-xs text-dark-500">{p.status}</div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => bringOnStage(p.id)}
-                        className="px-2 py-1 bg-brand-600 hover:bg-brand-700 rounded text-xs"
-                      >
-                        Add to Stage
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Layout Panel */}
-          {showLayoutPanel && (
-            <div className="p-4 border-b border-dark-800">
-              <h3 className="font-semibold mb-3">Layout</h3>
-              <div className="grid grid-cols-2 gap-2">
-                {LAYOUTS.map((l) => (
-                  <button
-                    key={l.value}
-                    onClick={() => {
-                      setLayout(l.value);
-                      emitSetLayout(l.value);
-                    }}
-                    className={`p-3 rounded-lg text-center transition ${
-                      broadcast?.layout === l.value
-                        ? 'bg-brand-600'
-                        : 'bg-dark-800 hover:bg-dark-700'
-                    }`}
-                  >
-                    <div className="text-2xl mb-1">{l.icon}</div>
-                    <div className="text-xs">{l.label}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        {/* Right Sidebar */}
+        {rightSidebarOpen && (
+          <RightSidebar
+            activePanel={activeRightPanel}
+            onPanelChange={setActiveRightPanel}
+            broadcastId={broadcastId!}
+            participants={participants}
+            onAddToStage={handleAddToStage}
+            onRemoveFromStage={handleRemoveFromStage}
+          />
+        )}
       </div>
 
-      {/* Invite Modal */}
-      {showInviteModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-dark-900 rounded-2xl p-6 w-full max-w-md border border-dark-800">
-            <h2 className="text-xl font-bold mb-4">Invite Guest</h2>
-
-            {!inviteUrl ? (
-              <div>
-                <input
-                  type="text"
-                  value={guestName}
-                  onChange={(e) => setGuestName(e.target.value)}
-                  placeholder="Guest name"
-                  className="w-full px-4 py-3 bg-dark-800 border border-dark-700 rounded-lg focus:outline-none focus:border-brand-500 mb-4"
-                  autoFocus
-                />
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setShowInviteModal(false)}
-                    className="flex-1 py-2 bg-dark-800 hover:bg-dark-700 rounded-lg transition"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleCreateInvite}
-                    disabled={!guestName.trim()}
-                    className="flex-1 py-2 bg-brand-600 hover:bg-brand-700 rounded-lg font-medium transition disabled:opacity-50"
-                  >
-                    Create Link
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <p className="text-dark-400 mb-4">Share this link with your guest:</p>
-                <div className="flex gap-2 mb-4">
-                  <input
-                    type="text"
-                    value={inviteUrl}
-                    readOnly
-                    className="flex-1 px-4 py-3 bg-dark-800 border border-dark-700 rounded-lg text-sm"
-                  />
-                  <button
-                    onClick={copyInviteUrl}
-                    className="px-4 py-3 bg-brand-600 hover:bg-brand-700 rounded-lg transition"
-                  >
-                    <Copy className="w-5 h-5" />
-                  </button>
-                </div>
-                <button
-                  onClick={() => {
-                    setInviteUrl('');
-                    setShowInviteModal(false);
-                  }}
-                  className="w-full py-2 bg-dark-800 hover:bg-dark-700 rounded-lg transition"
-                >
-                  Done
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Bottom Control Bar */}
+      <BottomControlBar
+        audioEnabled={audioEnabled}
+        videoEnabled={videoEnabled}
+        onToggleAudio={toggleAudio}
+        onToggleVideo={toggleVideo}
+        onToggleRightSidebar={() => setRightSidebarOpen(!rightSidebarOpen)}
+      />
     </div>
   );
 }
+
+export default Studio;
