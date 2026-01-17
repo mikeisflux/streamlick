@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
+import { randomBytes } from 'crypto';
 import { prisma } from '../services/prisma.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { AuthenticatedRequest } from '../types/index.js';
@@ -13,7 +14,10 @@ router.use(authenticateToken);
 const createBroadcastSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().optional(),
-  studioConfig: z.record(z.unknown()).optional(),
+  layout: z.string().optional(),
+  backgroundColor: z.string().optional(),
+  logoUrl: z.string().url().nullable().optional(),
+  overlayText: z.string().nullable().optional(),
 });
 
 const updateBroadcastSchema = createBroadcastSchema.partial();
@@ -25,7 +29,7 @@ router.get('/', async (req: AuthenticatedRequest, res: Response) => {
       where: { userId: req.user!.id },
       include: {
         participants: { select: { id: true, name: true, role: true, status: true } },
-        destinations: { include: { destination: { select: { name: true, platform: true } } } },
+        outputs: { include: { destination: { select: { name: true, platform: true } } } },
         _count: { select: { participants: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -42,24 +46,40 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const data = createBroadcastSchema.parse(req.body);
 
+    // Generate unique stream key
+    const streamKey = randomBytes(16).toString('hex');
+
+    // Get user name for host participant
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { name: true, email: true },
+    });
+
     const broadcast = await prisma.broadcast.create({
       data: {
         title: data.title,
         description: data.description,
-        studioConfig: data.studioConfig || {},
+        layout: data.layout || 'grid',
+        backgroundColor: data.backgroundColor || '#1a1a2e',
+        logoUrl: data.logoUrl,
+        overlayText: data.overlayText,
+        streamKey,
         userId: req.user!.id,
         // Create the host as a participant
         participants: {
           create: {
-            name: req.user!.email.split('@')[0],
+            name: user?.name || user?.email?.split('@')[0] || 'Host',
             role: 'HOST',
             status: 'WAITING',
+            isOnStage: true,
+            inviteToken: randomBytes(16).toString('hex'),
             userId: req.user!.id,
           },
         },
       },
       include: {
         participants: true,
+        outputs: { include: { destination: true } },
       },
     });
 
@@ -83,9 +103,9 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
       },
       include: {
         participants: {
-          orderBy: { createdAt: 'asc' },
+          orderBy: { position: 'asc' },
         },
-        destinations: {
+        outputs: {
           include: { destination: true },
         },
       },
@@ -95,18 +115,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
       return res.status(404).json({ error: 'Broadcast not found' });
     }
 
-    // Parse studioConfig and add legacy fields for frontend compatibility
-    const config = (broadcast.studioConfig as Record<string, unknown>) || {};
-    const response = {
-      ...broadcast,
-      layout: config.layout || 'grid',
-      backgroundColor: config.backgroundColor || '#1a1a2e',
-      logoUrl: config.logoUrl || null,
-      overlayText: config.overlayText || null,
-      outputs: broadcast.destinations, // Legacy alias
-    };
-
-    res.json(response);
+    res.json(broadcast);
   } catch (error) {
     console.error('Get broadcast error:', error);
     res.status(500).json({ error: 'Failed to get broadcast' });
@@ -126,7 +135,10 @@ router.patch('/:id', async (req: AuthenticatedRequest, res: Response) => {
       data: {
         title: data.title,
         description: data.description,
-        studioConfig: data.studioConfig,
+        layout: data.layout,
+        backgroundColor: data.backgroundColor,
+        logoUrl: data.logoUrl,
+        overlayText: data.overlayText,
       },
     });
 
@@ -136,7 +148,7 @@ router.patch('/:id', async (req: AuthenticatedRequest, res: Response) => {
 
     const updated = await prisma.broadcast.findUnique({
       where: { id: req.params.id },
-      include: { participants: true },
+      include: { participants: true, outputs: { include: { destination: true } } },
     });
 
     res.json(updated);
@@ -209,7 +221,7 @@ router.post('/:id/go-live', async (req: AuthenticatedRequest, res: Response) => 
         userId: req.user!.id,
         status: 'GREENROOM',
       },
-      include: { destinations: { include: { destination: true } } },
+      include: { outputs: { include: { destination: true } } },
     });
 
     if (!broadcast) {
@@ -223,16 +235,16 @@ router.post('/:id/go-live', async (req: AuthenticatedRequest, res: Response) => 
         status: 'LIVE',
         startedAt: new Date(),
       },
-      include: { participants: true, destinations: { include: { destination: true } } },
+      include: { participants: true, outputs: { include: { destination: true } } },
     });
 
-    // Update all destinations to starting
-    await prisma.broadcastDestination.updateMany({
+    // Update all outputs to starting
+    await prisma.broadcastOutput.updateMany({
       where: { broadcastId: req.params.id, status: 'IDLE' },
       data: { status: 'STARTING', startedAt: new Date() },
     });
 
-    res.json({ ...updated, outputs: updated.destinations });
+    res.json(updated);
   } catch (error) {
     console.error('Go live error:', error);
     res.status(500).json({ error: 'Failed to go live' });
@@ -258,8 +270,8 @@ router.post('/:id/end', async (req: AuthenticatedRequest, res: Response) => {
       return res.status(400).json({ error: 'Broadcast not found or already ended' });
     }
 
-    // Update all destinations to stopped
-    await prisma.broadcastDestination.updateMany({
+    // Update all outputs to stopped
+    await prisma.broadcastOutput.updateMany({
       where: { broadcastId: req.params.id },
       data: { status: 'STOPPED', endedAt: new Date() },
     });
@@ -278,8 +290,9 @@ router.post('/:id/end', async (req: AuthenticatedRequest, res: Response) => {
 // POST /api/broadcasts/:id/invite - Create guest invite link
 router.post('/:id/invite', async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { name } = z.object({
+    const { name, email } = z.object({
       name: z.string().min(1),
+      email: z.string().email().optional(),
     }).parse(req.body);
 
     // Verify ownership
@@ -292,17 +305,20 @@ router.post('/:id/invite', async (req: AuthenticatedRequest, res: Response) => {
     }
 
     // Create participant with invite token
+    const inviteToken = randomBytes(16).toString('hex');
     const participant = await prisma.participant.create({
       data: {
         name,
+        email,
         role: 'GUEST',
         status: 'WAITING',
+        inviteToken,
         broadcastId: req.params.id,
       },
     });
 
-    // Generate invite URL using joinLinkToken
-    const inviteUrl = `${process.env.FRONTEND_URL}/join/${participant.joinLinkToken}`;
+    // Generate invite URL
+    const inviteUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/join/${inviteToken}`;
 
     res.json({
       participant,
@@ -317,8 +333,8 @@ router.post('/:id/invite', async (req: AuthenticatedRequest, res: Response) => {
   }
 });
 
-// POST /api/broadcasts/:id/destinations - Add destination to broadcast
-router.post('/:id/destinations', async (req: AuthenticatedRequest, res: Response) => {
+// POST /api/broadcasts/:id/outputs - Add output destination
+router.post('/:id/outputs', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { destinationId } = z.object({
       destinationId: z.string(),
@@ -343,7 +359,7 @@ router.post('/:id/destinations', async (req: AuthenticatedRequest, res: Response
     }
 
     // Create output
-    const output = await prisma.broadcastDestination.create({
+    const output = await prisma.broadcastOutput.create({
       data: {
         broadcastId: req.params.id,
         destinationId,
@@ -356,8 +372,31 @@ router.post('/:id/destinations', async (req: AuthenticatedRequest, res: Response
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors });
     }
-    console.error('Add destination error:', error);
-    res.status(500).json({ error: 'Failed to add destination' });
+    console.error('Add output error:', error);
+    res.status(500).json({ error: 'Failed to add output' });
+  }
+});
+
+// DELETE /api/broadcasts/:id/outputs/:outputId - Remove output
+router.delete('/:id/outputs/:outputId', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    // Verify ownership through broadcast
+    const broadcast = await prisma.broadcast.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+    });
+
+    if (!broadcast) {
+      return res.status(404).json({ error: 'Broadcast not found' });
+    }
+
+    await prisma.broadcastOutput.delete({
+      where: { id: req.params.outputId, broadcastId: broadcast.id },
+    });
+
+    res.json({ message: 'Output removed' });
+  } catch (error) {
+    console.error('Remove output error:', error);
+    res.status(500).json({ error: 'Failed to remove output' });
   }
 });
 

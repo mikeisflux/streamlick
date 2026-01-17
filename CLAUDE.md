@@ -90,9 +90,11 @@ See `.env.example` files in root, backend, and frontend directories.
 **Always check `backend/prisma/schema.prisma` before writing or modifying backend code that interacts with the database.** The schema is the source of truth for available fields. Do not assume fields exist - verify them first.
 
 Key schema notes:
-- `Broadcast.studioConfig` is a JSON field containing layout, backgroundColor, logoUrl, overlayText
-- `Participant.joinLinkToken` (not `inviteToken`) for guest invite links
-- Participant ephemeral state (streamId, audioEnabled, videoEnabled, isOnStage, position) should be managed via Socket.io or in-memory state, NOT database fields
+- User: `passwordHash` (not `password`), `avatar` (not `avatarUrl`)
+- Broadcast: Has individual fields `layout`, `backgroundColor`, `logoUrl`, `overlayText`, `streamKey`
+- Participant: `inviteToken` for guest invite links, all state fields exist (`streamId`, `audioEnabled`, `videoEnabled`, `isOnStage`, `position`)
+- Destination: `outputs` relation to BroadcastOutput
+- Uses enums: `BroadcastStatus`, `ParticipantStatus`, `ParticipantRole`, `OutputStatus`, `Platform`, `UserRole`
 
 ## Key Workflows
 

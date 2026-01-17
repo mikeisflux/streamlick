@@ -7,153 +7,170 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================================================
-// USERS & AUTHENTICATION
-// ============================================================================
-
 model User {
-  id                      String    @id @default(cuid())
-  email                   String    @unique
-  password                String    // Hashed password
-  name                    String?
-  avatarUrl               String?
-  role                    String    @default("USER")
-  planType                String    @default("free")
-  emailVerified           Boolean   @default(false)
-  emailVerificationToken  String?
-  emailVerificationExpiry DateTime?
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
-
-  // Relations
-  broadcasts    Broadcast[]
-  destinations  Destination[]
-  participants  Participant[]
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  name         String
+  avatar       String?
+  role         UserRole      @default(USER)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  broadcasts   Broadcast[]
+  destinations Destination[]
 
   @@index([email])
 }
 
-// ============================================================================
-// BROADCASTS (Live Streaming Sessions)
-// ============================================================================
-
 model Broadcast {
-  id              String    @id @default(cuid())
+  id              String            @id @default(cuid())
   title           String
   description     String?
-  status          String    @default("IDLE")
-
-  // Studio configuration stored as JSON
-  studioConfig    Json?     @default("{}")
-
-  // Timing
+  status          BroadcastStatus   @default(IDLE)
+  streamKey       String            @unique
+  previewUrl      String?
+  layout          String            @default("grid")
+  backgroundColor String            @default("#1a1a2e")
+  logoUrl         String?
+  overlayText     String?
   scheduledAt     DateTime?
   startedAt       DateTime?
   endedAt         DateTime?
-  durationSeconds Int?
-
-  // Owner
   userId          String
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Relations
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  outputs         BroadcastOutput[]
   participants    Participant[]
-  destinations    BroadcastDestination[]
-
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  recordings      Recording[]
 
   @@index([userId])
   @@index([status])
+  @@index([streamKey])
 }
-
-// ============================================================================
-// PARTICIPANTS (Host + Guests in a broadcast)
-// ============================================================================
 
 model Participant {
-  id              String    @id @default(cuid())
-  name            String?
-  role            String?   @default("GUEST")
-  status          String?   @default("WAITING")
-
-  // Invite link
-  joinLinkToken   String?   @unique @default(cuid())
-  joinLinkExpiry  DateTime?
-
-  // Parent broadcast
-  broadcastId     String
-  broadcast       Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
-
-  // If this is the host, link to user
-  userId          String?
-  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  joinedAt        DateTime?
-  leftAt          DateTime?
-  createdAt       DateTime  @default(now())
+  id           String            @id @default(cuid())
+  name         String
+  email        String?
+  role         ParticipantRole   @default(GUEST)
+  status       ParticipantStatus @default(WAITING)
+  streamId     String?
+  audioEnabled Boolean           @default(true)
+  videoEnabled Boolean           @default(true)
+  position     Int               @default(0)
+  isOnStage    Boolean           @default(false)
+  inviteToken  String            @unique
+  broadcastId  String
+  userId       String?
+  joinedAt     DateTime?
+  leftAt       DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  broadcast    Broadcast         @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
 
   @@index([broadcastId])
-  @@index([joinLinkToken])
+  @@index([inviteToken])
+  @@index([streamId])
 }
 
-// ============================================================================
-// DESTINATIONS (RTMP outputs to platforms)
-// ============================================================================
-
 model Destination {
-  id            String    @id @default(cuid())
-  name          String
-  platform      String    @default("CUSTOM_RTMP")
-
-  // RTMP credentials
-  rtmpUrl       String
-  streamKey     String
-
-  // Platform-specific
-  platformId    String?
-  accessToken   String?
-  refreshToken  String?
-  tokenExpiry   DateTime?
-
-  // Owner
-  userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // Outputs using this destination
-  broadcasts    BroadcastDestination[]
-
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id           String            @id @default(cuid())
+  name         String
+  platform     Platform
+  rtmpUrl      String
+  streamKey    String
+  platformId   String?
+  accessToken  String?
+  refreshToken String?
+  tokenExpiry  DateTime?
+  userId       String
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  outputs      BroadcastOutput[]
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([platform])
 }
 
-// ============================================================================
-// BROADCAST DESTINATIONS (Junction table for multi-streaming)
-// ============================================================================
-
-model BroadcastDestination {
-  id            String      @id @default(cuid())
-  status        String      @default("IDLE")
-
-  // Parent broadcast
+model BroadcastOutput {
+  id            String       @id @default(cuid())
+  status        OutputStatus @default(IDLE)
   broadcastId   String
-  broadcast     Broadcast   @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
-
-  // Target destination
   destinationId String
-  destination   Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
-
-  // Stream info
   startedAt     DateTime?
   endedAt       DateTime?
-
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  broadcast     Broadcast    @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  destination   Destination  @relation(fields: [destinationId], references: [id], onDelete: Cascade)
 
   @@unique([broadcastId, destinationId])
   @@index([broadcastId])
   @@index([destinationId])
+}
+
+model Recording {
+  id          String          @id @default(cuid())
+  filename    String
+  fileUrl     String?
+  fileSize    BigInt?
+  duration    Int?
+  status      RecordingStatus @default(RECORDING)
+  broadcastId String
+  startedAt   DateTime        @default(now())
+  endedAt     DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  broadcast   Broadcast       @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+
+  @@index([broadcastId])
+}
+
+enum BroadcastStatus {
+  IDLE
+  GREENROOM
+  LIVE
+  ENDED
+}
+
+enum OutputStatus {
+  IDLE
+  STARTING
+  LIVE
+  ERROR
+  STOPPED
+}
+
+enum ParticipantRole {
+  HOST
+  COHOST
+  GUEST
+}
+
+enum ParticipantStatus {
+  WAITING
+  GREENROOM
+  ONSTAGE
+  LEFT
+}
+
+enum Platform {
+  YOUTUBE
+  TWITCH
+  FACEBOOK
+  CUSTOM_RTMP
+}
+
+enum RecordingStatus {
+  RECORDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum UserRole {
+  USER
+  ADMIN
 }

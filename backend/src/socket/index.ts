@@ -11,36 +11,6 @@ const broadcastRooms = new Map<string, Set<string>>();
 // Track compositor sockets per broadcast
 const compositorSockets = new Map<string, Socket>();
 
-// In-memory participant state (for ephemeral data not in DB)
-interface ParticipantState {
-  streamId?: string;
-  audioEnabled: boolean;
-  videoEnabled: boolean;
-  isOnStage: boolean;
-  position: number;
-  borderColor?: string;
-}
-
-const participantStates = new Map<string, ParticipantState>();
-
-// Helper to get or create participant state
-function getParticipantState(participantId: string): ParticipantState {
-  if (!participantStates.has(participantId)) {
-    participantStates.set(participantId, {
-      audioEnabled: true,
-      videoEnabled: true,
-      isOnStage: false,
-      position: 0,
-    });
-  }
-  return participantStates.get(participantId)!;
-}
-
-// Helper to get studioConfig as object
-function getStudioConfig(studioConfig: unknown): Record<string, unknown> {
-  return (studioConfig as Record<string, unknown>) || {};
-}
-
 export function setupSocketHandlers(io: Server) {
   // Authentication middleware
   io.use(async (socket: AuthenticatedSocket, next) => {
@@ -64,9 +34,9 @@ export function setupSocketHandlers(io: Server) {
         const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
         socket.userId = decoded.id;
       } else if (inviteToken) {
-        // Guest with invite token - use joinLinkToken
+        // Guest with invite token
         const participant = await prisma.participant.findUnique({
-          where: { joinLinkToken: inviteToken },
+          where: { inviteToken },
           include: { broadcast: true },
         });
 
@@ -103,39 +73,31 @@ export function setupSocketHandlers(io: Server) {
         // Send full state to compositor
         const broadcast = await prisma.broadcast.findUnique({
           where: { id: broadcastId },
-          include: { participants: true },
+          include: { participants: { orderBy: { position: 'asc' } } },
         });
 
         if (broadcast) {
-          const config = getStudioConfig(broadcast.studioConfig);
-
           socket.emit('full-state', {
             state: {
               isLive: broadcast.status === 'LIVE',
-              layout: config.layout || 'grid',
-              backgroundColor: config.backgroundColor || '#1a1a2e',
+              layout: broadcast.layout,
+              backgroundColor: broadcast.backgroundColor,
               backgroundType: 'color',
               backgroundUrl: null,
-              logoUrl: config.logoUrl || null,
-              logoVisible: !!config.logoUrl,
+              logoUrl: broadcast.logoUrl,
+              logoVisible: !!broadcast.logoUrl,
               lowerThird: { visible: false, title: '', subtitle: '' },
               ticker: { visible: false, text: '' },
               countdown: { visible: false, seconds: 0 },
-              participants: broadcast.participants.map((p: { id: string; name: string | null; status: string | null }, index: number) => {
-                const state = getParticipantState(p.id);
-                // Sync isOnStage from DB status
-                state.isOnStage = p.status === 'ONSTAGE';
-                state.position = index;
-                return {
-                  id: p.id,
-                  name: p.name,
-                  streamId: state.streamId,
-                  isOnStage: state.isOnStage,
-                  audioEnabled: state.audioEnabled,
-                  videoEnabled: state.videoEnabled,
-                  borderColor: state.borderColor || '#10b981',
-                };
-              }),
+              participants: broadcast.participants.map((p: typeof broadcast.participants[number]) => ({
+                id: p.id,
+                name: p.name,
+                streamId: p.streamId,
+                isOnStage: p.isOnStage,
+                audioEnabled: p.audioEnabled,
+                videoEnabled: p.videoEnabled,
+                borderColor: '#10b981',
+              })),
             },
           });
         }
@@ -164,12 +126,12 @@ export function setupSocketHandlers(io: Server) {
         if (socket.userId) {
           broadcast = await prisma.broadcast.findFirst({
             where: { id: broadcastId, userId: socket.userId },
-            include: { participants: true },
+            include: { participants: { orderBy: { position: 'asc' } } },
           });
         } else if (socket.participantId) {
           const participant = await prisma.participant.findUnique({
             where: { id: socket.participantId },
-            include: { broadcast: { include: { participants: true } } },
+            include: { broadcast: { include: { participants: { orderBy: { position: 'asc' } } } } },
           });
           broadcast = participant?.broadcast;
         }
@@ -187,33 +149,26 @@ export function setupSocketHandlers(io: Server) {
         }
         broadcastRooms.get(broadcastId)?.add(socket.id);
 
-        const config = getStudioConfig(broadcast.studioConfig);
-
         // Send current state
         socket.emit('broadcast-state', {
           broadcast: {
             id: broadcast.id,
             title: broadcast.title,
             status: broadcast.status,
-            layout: config.layout || 'grid',
-            backgroundColor: config.backgroundColor || '#1a1a2e',
-            logoUrl: config.logoUrl || null,
+            layout: broadcast.layout,
+            backgroundColor: broadcast.backgroundColor,
+            logoUrl: broadcast.logoUrl,
           },
-          participants: broadcast.participants.map((p: { id: string; name: string | null; role: string | null; status: string | null }, index: number) => {
-            const state = getParticipantState(p.id);
-            state.isOnStage = p.status === 'ONSTAGE';
-            state.position = index;
-            return {
-              id: p.id,
-              name: p.name,
-              role: p.role,
-              status: p.status,
-              streamId: state.streamId,
-              isOnStage: state.isOnStage,
-              audioEnabled: state.audioEnabled,
-              videoEnabled: state.videoEnabled,
-            };
-          }),
+          participants: broadcast.participants.map((p: typeof broadcast.participants[number]) => ({
+            id: p.id,
+            name: p.name,
+            role: p.role,
+            status: p.status,
+            streamId: p.streamId,
+            isOnStage: p.isOnStage,
+            audioEnabled: p.audioEnabled,
+            videoEnabled: p.videoEnabled,
+          })),
           compositorConnected: compositorSockets.has(broadcastId),
         });
 
@@ -250,25 +205,21 @@ export function setupSocketHandlers(io: Server) {
 
       try {
         if (socket.participantId) {
-          // Update in-memory state
-          const state = getParticipantState(socket.participantId);
-          state.streamId = data.streamId;
-
-          // Get participant from DB for name
-          const participant = await prisma.participant.findUnique({
+          const participant = await prisma.participant.update({
             where: { id: socket.participantId },
+            data: { streamId: data.streamId },
           });
 
           // Notify compositor
           sendToCompositor(socket.broadcastId, 'participant-updated', {
             participant: {
-              id: socket.participantId,
-              name: participant?.name,
-              streamId: state.streamId,
-              isOnStage: state.isOnStage,
-              audioEnabled: state.audioEnabled,
-              videoEnabled: state.videoEnabled,
-              borderColor: state.borderColor || '#10b981',
+              id: participant.id,
+              name: participant.name,
+              streamId: participant.streamId,
+              isOnStage: participant.isOnStage,
+              audioEnabled: participant.audioEnabled,
+              videoEnabled: participant.videoEnabled,
+              borderColor: '#10b981',
             },
           });
         }
@@ -286,9 +237,10 @@ export function setupSocketHandlers(io: Server) {
       if (!socket.broadcastId) return;
 
       if (socket.participantId) {
-        // Update in-memory state
-        const state = getParticipantState(socket.participantId);
-        state.streamId = undefined;
+        await prisma.participant.update({
+          where: { id: socket.participantId },
+          data: { streamId: null },
+        });
       }
 
       io.to(`broadcast:${socket.broadcastId}`).emit('stream-unpublished', {
@@ -304,23 +256,18 @@ export function setupSocketHandlers(io: Server) {
       if (!socket.userId || !socket.broadcastId) return;
 
       try {
-        // Update DB status
-        await prisma.participant.update({
+        const participant = await prisma.participant.update({
           where: { id: participantId },
-          data: { status: 'ONSTAGE' },
+          data: { isOnStage: true, status: 'ONSTAGE' },
         });
-
-        // Update in-memory state
-        const state = getParticipantState(participantId);
-        state.isOnStage = true;
 
         // Notify compositor
         sendToCompositor(socket.broadcastId, 'bring-on-stage', { participantId });
 
         io.to(`broadcast:${socket.broadcastId}`).emit('participant-updated', {
           id: participantId,
-          status: 'ONSTAGE',
-          isOnStage: true,
+          isOnStage: participant.isOnStage,
+          status: participant.status,
         });
       } catch (error) {
         console.error('Bring on stage error:', error);
@@ -331,23 +278,18 @@ export function setupSocketHandlers(io: Server) {
       if (!socket.userId || !socket.broadcastId) return;
 
       try {
-        // Update DB status
-        await prisma.participant.update({
+        const participant = await prisma.participant.update({
           where: { id: participantId },
-          data: { status: 'GREENROOM' },
+          data: { isOnStage: false, status: 'GREENROOM' },
         });
-
-        // Update in-memory state
-        const state = getParticipantState(participantId);
-        state.isOnStage = false;
 
         // Notify compositor
         sendToCompositor(socket.broadcastId, 'remove-from-stage', { participantId });
 
         io.to(`broadcast:${socket.broadcastId}`).emit('participant-updated', {
           id: participantId,
-          status: 'GREENROOM',
-          isOnStage: false,
+          isOnStage: participant.isOnStage,
+          status: participant.status,
         });
       } catch (error) {
         console.error('Remove from stage error:', error);
@@ -358,20 +300,10 @@ export function setupSocketHandlers(io: Server) {
       if (!socket.userId || !socket.broadcastId) return;
 
       try {
-        // Get current config and update layout
-        const broadcast = await prisma.broadcast.findUnique({
+        await prisma.broadcast.update({
           where: { id: socket.broadcastId },
+          data: { layout },
         });
-
-        if (broadcast) {
-          const config = getStudioConfig(broadcast.studioConfig);
-          const updatedConfig = { ...config, layout };
-
-          await prisma.broadcast.update({
-            where: { id: socket.broadcastId },
-            data: { studioConfig: updatedConfig },
-          });
-        }
 
         // Notify compositor
         sendToCompositor(socket.broadcastId, 'set-layout', { layout });
@@ -391,20 +323,10 @@ export function setupSocketHandlers(io: Server) {
 
       try {
         if (data.type === 'color') {
-          // Get current config and update background color
-          const broadcast = await prisma.broadcast.findUnique({
+          await prisma.broadcast.update({
             where: { id: socket.broadcastId },
+            data: { backgroundColor: data.value },
           });
-
-          if (broadcast) {
-            const config = getStudioConfig(broadcast.studioConfig);
-            const updatedConfig = { ...config, backgroundColor: data.value };
-
-            await prisma.broadcast.update({
-              where: { id: socket.broadcastId },
-              data: { studioConfig: updatedConfig },
-            });
-          }
         }
 
         // Notify compositor
@@ -428,20 +350,10 @@ export function setupSocketHandlers(io: Server) {
       if (!socket.userId || !socket.broadcastId) return;
 
       try {
-        // Get current config and update logo
-        const broadcast = await prisma.broadcast.findUnique({
+        await prisma.broadcast.update({
           where: { id: socket.broadcastId },
+          data: { logoUrl: data.url },
         });
-
-        if (broadcast) {
-          const config = getStudioConfig(broadcast.studioConfig);
-          const updatedConfig = { ...config, logoUrl: data.url };
-
-          await prisma.broadcast.update({
-            where: { id: socket.broadcastId },
-            data: { studioConfig: updatedConfig },
-          });
-        }
 
         sendToCompositor(socket.broadcastId, 'set-logo', {
           logoUrl: data.url,
@@ -482,10 +394,6 @@ export function setupSocketHandlers(io: Server) {
     socket.on('set-participant-border', (data: { participantId: string; color: string | null }) => {
       if (!socket.userId || !socket.broadcastId) return;
 
-      // Update in-memory state
-      const state = getParticipantState(data.participantId);
-      state.borderColor = data.color || undefined;
-
       sendToCompositor(socket.broadcastId, 'participant-updated', {
         participant: { id: data.participantId, borderColor: data.color },
       });
@@ -495,23 +403,27 @@ export function setupSocketHandlers(io: Server) {
       if (!socket.userId || !socket.broadcastId) return;
 
       try {
-        // Update in-memory state only
-        const state = getParticipantState(data.participantId);
-        if (data.audio !== undefined) state.audioEnabled = data.audio;
-        if (data.video !== undefined) state.videoEnabled = data.video;
+        const updateData: { audioEnabled?: boolean; videoEnabled?: boolean } = {};
+        if (data.audio !== undefined) updateData.audioEnabled = data.audio;
+        if (data.video !== undefined) updateData.videoEnabled = data.video;
+
+        const participant = await prisma.participant.update({
+          where: { id: data.participantId },
+          data: updateData,
+        });
 
         sendToCompositor(socket.broadcastId, 'participant-updated', {
           participant: {
-            id: data.participantId,
-            audioEnabled: state.audioEnabled,
-            videoEnabled: state.videoEnabled,
+            id: participant.id,
+            audioEnabled: participant.audioEnabled,
+            videoEnabled: participant.videoEnabled,
           },
         });
 
         io.to(`broadcast:${socket.broadcastId}`).emit('participant-updated', {
-          id: data.participantId,
-          audioEnabled: state.audioEnabled,
-          videoEnabled: state.videoEnabled,
+          id: participant.id,
+          audioEnabled: participant.audioEnabled,
+          videoEnabled: participant.videoEnabled,
         });
       } catch (error) {
         console.error('Mute participant error:', error);
@@ -587,16 +499,10 @@ export function setupSocketHandlers(io: Server) {
         broadcastRooms.get(socket.broadcastId)?.delete(socket.id);
 
         if (socket.participantId) {
-          // Update DB status
           await prisma.participant.update({
             where: { id: socket.participantId },
-            data: { status: 'LEFT', leftAt: new Date() },
+            data: { status: 'LEFT', isOnStage: false, leftAt: new Date() },
           });
-
-          // Update in-memory state
-          const state = getParticipantState(socket.participantId);
-          state.isOnStage = false;
-          state.streamId = undefined;
 
           sendToCompositor(socket.broadcastId, 'participant-updated', {
             participant: { id: socket.participantId, isOnStage: false },
