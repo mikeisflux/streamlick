@@ -35,24 +35,29 @@ model User {
 }
 
 model Broadcast {
-  id             String   @id @default(uuid())
-  userId         String   @map("user_id")
-  title          String
-  description    String?
-  status         String   @default("scheduled") // scheduled, live, ended, recording
-  scheduledAt    DateTime? @map("scheduled_at")
-  startedAt      DateTime? @map("started_at")
-  endedAt        DateTime? @map("ended_at")
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  title           String
+  description     String?
+  status          String   @default("scheduled") // scheduled, live, ended, recording
+  layout          String?  @default("grid") // Layout type for compositor
+  backgroundColor String?  @map("background_color")
+  logoUrl         String?  @map("logo_url")
+  overlayText     String?  @map("overlay_text")
+  scheduledAt     DateTime? @map("scheduled_at")
+  startedAt       DateTime? @map("started_at")
+  endedAt         DateTime? @map("ended_at")
   durationSeconds Int?    @map("duration_seconds")
-  studioConfig   Json?    @map("studio_config") // Layout, branding, settings
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  studioConfig    Json?    @map("studio_config") // Layout, branding, settings
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   participants          Participant[]
   recordings            Recording[]
   chatMessages          ChatMessage[]
   broadcastDestinations BroadcastDestination[]
+  outputs               BroadcastOutput[]
 
   @@map("broadcasts")
 }
@@ -77,6 +82,7 @@ model Destination {
 
   user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   broadcastDestinations BroadcastDestination[]
+  outputs               BroadcastOutput[]
 
   @@map("destinations")
 }
@@ -100,6 +106,22 @@ model BroadcastDestination {
   @@map("broadcast_destinations")
 }
 
+model BroadcastOutput {
+  id            String    @id @default(uuid())
+  broadcastId   String    @map("broadcast_id")
+  destinationId String    @map("destination_id")
+  status        String    @default("IDLE") // IDLE, STREAMING, ENDED, ERROR
+  streamUrl     String?   @map("stream_url")
+  streamKey     String?   @map("stream_key")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  broadcast   Broadcast   @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  destination Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+
+  @@map("broadcast_outputs")
+}
+
 model OAuthPKCE {
   id           String   @id @default(uuid())
   userId       String   @map("user_id")
@@ -119,10 +141,17 @@ model Participant {
   broadcastId       String    @map("broadcast_id")
   userId            String?   @map("user_id")
   joinLinkToken     String?   @unique @map("join_link_token")
+  inviteToken       String?   @unique @map("invite_token")
   joinLinkExpiry    DateTime? @map("join_link_expiry")
   name              String?
+  email             String?
   role              String?   // host, guest, backstage
   status            String?   // invited, joined, disconnected
+  isOnStage         Boolean   @default(false) @map("is_on_stage")
+  position          Int?      // Position in layout
+  streamId          String?   @map("stream_id")
+  audioEnabled      Boolean   @default(true) @map("audio_enabled")
+  videoEnabled      Boolean   @default(true) @map("video_enabled")
   joinedAt          DateTime? @map("joined_at")
   leftAt            DateTime? @map("left_at")
   createdAt         DateTime  @default(now()) @map("created_at")
