@@ -181,12 +181,12 @@ export function PreviewStrip({
 }: PreviewStripProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Filter participants by status
+  // Filter participants by status (exclude HOST as they're shown separately with local stream)
   const backstageParticipants = participants.filter(
     p => !p.isOnStage && p.status !== 'LEFT' && p.role !== 'HOST'
   );
   const greenroomParticipants = participants.filter(
-    p => p.status === 'GREENROOM' || p.status === 'WAITING'
+    p => (p.status === 'GREENROOM' || p.status === 'WAITING') && p.role !== 'HOST'
   );
 
   return (
