@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Mic, MicOff, Video, VideoOff, Monitor, MonitorOff,
-  Volume2, VolumeX, Layout, MessageSquare, Circle
+  Volume2, VolumeX, Layout, MessageSquare,
+  Image, Film, Sparkles, AppWindow, Settings
 } from 'lucide-react';
 import { LayoutType } from '../../store/studioStore';
 
@@ -27,6 +28,13 @@ interface BottomControlBarProps {
   onToggleRecording: () => void;
   showChatOverlay: boolean;
   onToggleChatOverlay: () => void;
+
+  // Additional features
+  onShareWindow?: () => void;
+  onShareImage?: () => void;
+  onShareMedia?: () => void;
+  onShowEffects?: () => void;
+  onSettingsClick?: () => void;
 
   // Device selection
   audioDevices: MediaDeviceInfo[];
@@ -56,10 +64,15 @@ export function BottomControlBar({
   onToggleSpeaker,
   currentLayout,
   onLayoutChange,
-  isRecording,
-  onToggleRecording,
+  isRecording: _isRecording,
+  onToggleRecording: _onToggleRecording,
   showChatOverlay,
   onToggleChatOverlay,
+  onShareWindow,
+  onShareImage,
+  onShareMedia,
+  onShowEffects,
+  onSettingsClick,
   audioDevices,
   videoDevices,
   selectedAudioDevice,
@@ -70,10 +83,12 @@ export function BottomControlBar({
   const [showMicSelector, setShowMicSelector] = useState(false);
   const [showCameraSelector, setShowCameraSelector] = useState(false);
   const [showLayoutSelector, setShowLayoutSelector] = useState(false);
+  const [showSpeakerSelector, setShowSpeakerSelector] = useState(false);
 
   const micRef = useRef<HTMLDivElement>(null);
   const cameraRef = useRef<HTMLDivElement>(null);
   const layoutRef = useRef<HTMLDivElement>(null);
+  const speakerRef = useRef<HTMLDivElement>(null);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -87,6 +102,9 @@ export function BottomControlBar({
       if (layoutRef.current && !layoutRef.current.contains(e.target as Node)) {
         setShowLayoutSelector(false);
       }
+      if (speakerRef.current && !speakerRef.current.contains(e.target as Node)) {
+        setShowSpeakerSelector(false);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -94,21 +112,18 @@ export function BottomControlBar({
   }, []);
 
   return (
-    <div
-      className="fixed bottom-0 left-0 right-[64px] h-20 bg-dark-900 border-t border-dark-800 flex items-center justify-center px-6 z-40"
-    >
-      <div className="flex items-center gap-4">
-        {/* Left Section - Features */}
+    <div className="h-20 bg-dark-900 border-t border-dark-800 flex items-center justify-center px-6">
+      <div className="flex items-center gap-3">
+        {/* Left Section - Share & Features */}
         <div className="flex items-center gap-2">
           {/* Layout Selector */}
           <div ref={layoutRef} className="relative">
             <button
               onClick={() => setShowLayoutSelector(!showLayoutSelector)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-dark-700 hover:bg-dark-600 rounded-lg transition"
+              className="flex items-center gap-2 px-3 py-2.5 bg-dark-700 hover:bg-dark-600 rounded-lg transition"
               title="Change Layout"
             >
               <Layout className="w-5 h-5" />
-              <span className="text-sm">{LAYOUTS.find(l => l.value === currentLayout)?.label}</span>
               <svg className="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
@@ -137,26 +152,61 @@ export function BottomControlBar({
             )}
           </div>
 
-          {/* Recording Toggle */}
+          {/* Screen Share */}
           <button
-            onClick={onToggleRecording}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg transition ${
-              isRecording
-                ? 'bg-red-600 hover:bg-red-700 text-white'
+            onClick={onToggleScreenShare}
+            className={`p-2.5 rounded-lg transition ${
+              isSharingScreen
+                ? 'bg-brand-600 hover:bg-brand-700'
                 : 'bg-dark-700 hover:bg-dark-600'
             }`}
-            title={isRecording ? 'Stop Recording' : 'Start Recording'}
+            title={isSharingScreen ? 'Stop Screen Share' : 'Share Screen'}
           >
-            <Circle className={`w-4 h-4 ${isRecording ? 'fill-current animate-pulse' : ''}`} />
-            <span className="text-sm">{isRecording ? 'Recording' : 'Record'}</span>
+            {isSharingScreen ? <MonitorOff className="w-5 h-5" /> : <Monitor className="w-5 h-5" />}
           </button>
 
-          {/* Chat Overlay Toggle */}
+          {/* Window Share */}
+          <button
+            onClick={onShareWindow}
+            className="p-2.5 rounded-lg bg-dark-700 hover:bg-dark-600 transition"
+            title="Share Window"
+          >
+            <AppWindow className="w-5 h-5" />
+          </button>
+
+          {/* Image Share */}
+          <button
+            onClick={onShareImage}
+            className="p-2.5 rounded-lg bg-dark-700 hover:bg-dark-600 transition"
+            title="Share Image"
+          >
+            <Image className="w-5 h-5" />
+          </button>
+
+          {/* Media/Video Share */}
+          <button
+            onClick={onShareMedia}
+            className="p-2.5 rounded-lg bg-dark-700 hover:bg-dark-600 transition"
+            title="Share Media/Video"
+          >
+            <Film className="w-5 h-5" />
+          </button>
+
+          {/* Effects */}
+          <button
+            onClick={onShowEffects}
+            className="p-2.5 rounded-lg bg-dark-700 hover:bg-dark-600 transition"
+            title="Effects & Filters"
+          >
+            <Sparkles className="w-5 h-5" />
+          </button>
+
+          {/* Chat Overlay Toggle - Orange when active */}
           <button
             onClick={onToggleChatOverlay}
             className={`p-2.5 rounded-lg transition ${
               showChatOverlay
-                ? 'bg-brand-600 hover:bg-brand-700'
+                ? 'bg-orange-500 hover:bg-orange-600 text-white'
                 : 'bg-dark-700 hover:bg-dark-600'
             }`}
             title={showChatOverlay ? 'Hide Chat Overlay' : 'Show Chat Overlay'}
@@ -169,7 +219,7 @@ export function BottomControlBar({
         <div className="h-10 w-px bg-dark-700" />
 
         {/* Center Section - Media Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {/* Microphone */}
           <div ref={micRef} className="relative flex items-center">
             <button
@@ -187,6 +237,7 @@ export function BottomControlBar({
               onClick={() => {
                 setShowMicSelector(!showMicSelector);
                 setShowCameraSelector(false);
+                setShowSpeakerSelector(false);
               }}
               className={`p-3 pr-4 rounded-r-full border-l border-dark-600 transition ${
                 audioEnabled
@@ -201,7 +252,7 @@ export function BottomControlBar({
             </button>
 
             {showMicSelector && audioDevices.length > 0 && (
-              <div className="absolute bottom-full left-0 mb-2 w-64 bg-dark-800 border border-dark-700 rounded-lg shadow-xl overflow-hidden">
+              <div className="absolute bottom-full left-0 mb-2 w-64 bg-dark-800 border border-dark-700 rounded-lg shadow-xl overflow-hidden z-50">
                 <div className="px-3 py-2 text-xs text-dark-400 uppercase border-b border-dark-700">
                   Select Microphone
                 </div>
@@ -225,18 +276,37 @@ export function BottomControlBar({
             )}
           </div>
 
-          {/* Speaker */}
-          <button
-            onClick={onToggleSpeaker}
-            className={`p-3 rounded-full transition ${
-              speakerMuted
-                ? 'bg-red-600 hover:bg-red-700'
-                : 'bg-dark-700 hover:bg-dark-600'
-            }`}
-            title={speakerMuted ? 'Unmute Speaker' : 'Mute Speaker'}
-          >
-            {speakerMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-          </button>
+          {/* Speaker with dropdown */}
+          <div ref={speakerRef} className="relative flex items-center">
+            <button
+              onClick={onToggleSpeaker}
+              className={`p-3 rounded-l-full transition ${
+                speakerMuted
+                  ? 'bg-red-600 hover:bg-red-700'
+                  : 'bg-dark-700 hover:bg-dark-600'
+              }`}
+              title={speakerMuted ? 'Unmute Speaker' : 'Mute Speaker'}
+            >
+              {speakerMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            </button>
+            <button
+              onClick={() => {
+                setShowSpeakerSelector(!showSpeakerSelector);
+                setShowMicSelector(false);
+                setShowCameraSelector(false);
+              }}
+              className={`p-3 pr-4 rounded-r-full border-l border-dark-600 transition ${
+                speakerMuted
+                  ? 'bg-red-600 hover:bg-red-700'
+                  : 'bg-dark-700 hover:bg-dark-600'
+              }`}
+              title="Select Speaker"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
 
           {/* Camera */}
           <div ref={cameraRef} className="relative flex items-center">
@@ -255,6 +325,7 @@ export function BottomControlBar({
               onClick={() => {
                 setShowCameraSelector(!showCameraSelector);
                 setShowMicSelector(false);
+                setShowSpeakerSelector(false);
               }}
               className={`p-3 pr-4 rounded-r-full border-l border-dark-600 transition ${
                 videoEnabled
@@ -269,7 +340,7 @@ export function BottomControlBar({
             </button>
 
             {showCameraSelector && videoDevices.length > 0 && (
-              <div className="absolute bottom-full left-0 mb-2 w-64 bg-dark-800 border border-dark-700 rounded-lg shadow-xl overflow-hidden">
+              <div className="absolute bottom-full left-0 mb-2 w-64 bg-dark-800 border border-dark-700 rounded-lg shadow-xl overflow-hidden z-50">
                 <div className="px-3 py-2 text-xs text-dark-400 uppercase border-b border-dark-700">
                   Select Camera
                 </div>
@@ -293,7 +364,7 @@ export function BottomControlBar({
             )}
           </div>
 
-          {/* Screen Share */}
+          {/* Screen Share Toggle */}
           <button
             onClick={onToggleScreenShare}
             className={`p-3 rounded-full transition ${
@@ -303,9 +374,23 @@ export function BottomControlBar({
             }`}
             title={isSharingScreen ? 'Stop Screen Share' : 'Share Screen'}
           >
-            {isSharingScreen ? <MonitorOff className="w-5 h-5" /> : <Monitor className="w-5 h-5" />}
+            <Monitor className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Settings */}
+        {onSettingsClick && (
+          <>
+            <div className="h-10 w-px bg-dark-700" />
+            <button
+              onClick={onSettingsClick}
+              className="p-2.5 rounded-lg bg-dark-700 hover:bg-dark-600 transition"
+              title="Settings"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

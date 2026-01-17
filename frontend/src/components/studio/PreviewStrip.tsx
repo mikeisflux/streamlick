@@ -85,7 +85,7 @@ function PreviewTile({
       <div className="absolute bottom-0 left-0 right-0 px-2 py-1 bg-gradient-to-t from-black/80 to-transparent">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium truncate">
-            {isLocal ? 'You' : participant.name}
+            {isLocal ? 'You (Preview)' : participant.name}
           </span>
           <div className="flex items-center gap-1">
             {!participant.audioEnabled && (
@@ -192,9 +192,9 @@ export function PreviewStrip({
   return (
     <div className="bg-dark-900 border-t border-dark-800 px-4 py-3">
       <div className="flex items-center gap-3 mb-2">
-        <h3 className="text-xs font-semibold text-dark-400 uppercase">Backstage & Greenroom</h3>
+        <h3 className="text-xs font-semibold text-dark-400 uppercase">Preview / Backstage</h3>
         <span className="text-xs text-dark-500">
-          {backstageParticipants.length + greenroomParticipants.length} participants
+          {backstageParticipants.length + greenroomParticipants.length + 1} participants
         </span>
       </div>
 
@@ -238,13 +238,13 @@ export function PreviewStrip({
             />
           ))}
 
-        {/* Invite Button */}
+        {/* Invite Button - Green filled */}
         <button
           onClick={onInviteClick}
-          className="flex-shrink-0 w-40 h-24 rounded-lg border-2 border-dashed border-dark-700 bg-dark-800/50 hover:bg-dark-800 hover:border-dark-600 flex flex-col items-center justify-center gap-2 transition"
+          className="flex-shrink-0 w-40 h-24 rounded-lg bg-green-600/20 border-2 border-green-600/50 hover:bg-green-600/30 hover:border-green-500 flex flex-col items-center justify-center gap-2 transition"
         >
-          <UserPlus className="w-6 h-6 text-dark-500" />
-          <span className="text-xs text-dark-500">Invite Guest</span>
+          <UserPlus className="w-6 h-6 text-green-500" />
+          <span className="text-xs text-green-500 font-medium">Invite Guests</span>
         </button>
       </div>
     </div>

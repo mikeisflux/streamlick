@@ -23,6 +23,7 @@ import {
   PreviewStrip,
   RightSidebar,
   RightTab,
+  LayoutSelectorBar,
 } from '../components/studio';
 
 export default function Studio() {
@@ -58,6 +59,9 @@ export default function Studio() {
   const [speakerMuted, setSpeakerMuted] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [showChatOverlay, setShowChatOverlay] = useState(false);
+  const [selectedVisualLayout, setSelectedVisualLayout] = useState(1);
+  const [layoutEditMode, setLayoutEditMode] = useState(false);
+  const [_showDestinationsModal, setShowDestinationsModal] = useState(false);
 
   // Device state
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
@@ -400,25 +404,57 @@ export default function Studio() {
         broadcastTitle={broadcast?.title || 'Untitled Broadcast'}
         isLive={isLive}
         status={broadcast?.status || 'IDLE'}
-        participantCount={participants.length}
         onGoLive={handleGoLive}
         onEndBroadcast={handleEndBroadcast}
         onTitleChange={(title) => updateTitleMutation.mutate(title)}
         onSettingsClick={() => setActiveRightTab('style')}
         onInviteClick={() => setShowInviteModal(true)}
+        onProducerModeClick={() => console.log('Producer Mode clicked')}
+        onResetStackClick={() => console.log('Reset Stack clicked')}
+        onDestinationsClick={() => setShowDestinationsModal(true)}
         isInitializing={isInitializing}
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col pr-16 pb-20">
+      <div className="flex-1 flex flex-col mr-16">
         {/* Preview Area */}
-        <div className="flex-1 p-4">
-          <CompositePreview
-            broadcastId={broadcastId!}
-            compositeStreamId={compositeStreamId}
-            backgroundColor={broadcast?.backgroundColor}
-            logoUrl={broadcast?.logoUrl ?? undefined}
-          />
+        <div className="flex-1 p-4 flex flex-col">
+          <div className="flex-1 relative">
+            <CompositePreview
+              broadcastId={broadcastId!}
+              compositeStreamId={compositeStreamId}
+              backgroundColor={broadcast?.backgroundColor}
+              logoUrl={broadcast?.logoUrl ?? undefined}
+            />
+          </div>
+
+          {/* Visual Layout Selector Bar */}
+          <div className="flex justify-center py-3">
+            <LayoutSelectorBar
+              selectedLayout={selectedVisualLayout}
+              onLayoutChange={(layoutId) => {
+                setSelectedVisualLayout(layoutId);
+                // Map visual layout to LayoutType
+                const layoutMap: Record<number, LayoutType> = {
+                  1: 'single',
+                  2: 'grid',
+                  3: 'grid',
+                  4: 'grid',
+                  5: 'side-by-side',
+                  6: 'spotlight',
+                  7: 'spotlight',
+                  8: 'picture-in-picture',
+                  9: 'spotlight',
+                  10: 'grid',
+                };
+                handleLayoutChange(layoutMap[layoutId] || 'grid');
+              }}
+              editMode={layoutEditMode}
+              onEditModeToggle={() => setLayoutEditMode(!layoutEditMode)}
+              onAddLayout={() => console.log('Add custom layout')}
+              onSettingsClick={() => setActiveRightTab('style')}
+            />
+          </div>
         </div>
 
         {/* Backstage/Greenroom Strip */}
@@ -432,31 +468,36 @@ export default function Studio() {
           onKickParticipant={handleKickParticipant}
           onInviteClick={() => setShowInviteModal(true)}
         />
-      </div>
 
-      {/* Bottom Control Bar */}
-      <BottomControlBar
-        audioEnabled={isAudioEnabled}
-        videoEnabled={isVideoEnabled}
-        isSharingScreen={isSharingScreen}
-        speakerMuted={speakerMuted}
-        onToggleAudio={toggleAudio}
-        onToggleVideo={toggleVideo}
-        onToggleScreenShare={toggleScreenShare}
-        onToggleSpeaker={toggleSpeaker}
-        currentLayout={(broadcast?.layout as LayoutType) || 'grid'}
-        onLayoutChange={handleLayoutChange}
-        isRecording={isRecording}
-        onToggleRecording={() => setIsRecording(!isRecording)}
-        showChatOverlay={showChatOverlay}
-        onToggleChatOverlay={() => setShowChatOverlay(!showChatOverlay)}
-        audioDevices={audioDevices}
-        videoDevices={videoDevices}
-        selectedAudioDevice={selectedAudioDevice}
-        selectedVideoDevice={selectedVideoDevice}
-        onAudioDeviceChange={handleAudioDeviceChange}
-        onVideoDeviceChange={handleVideoDeviceChange}
-      />
+        {/* Bottom Control Bar */}
+        <BottomControlBar
+          audioEnabled={isAudioEnabled}
+          videoEnabled={isVideoEnabled}
+          isSharingScreen={isSharingScreen}
+          speakerMuted={speakerMuted}
+          onToggleAudio={toggleAudio}
+          onToggleVideo={toggleVideo}
+          onToggleScreenShare={toggleScreenShare}
+          onToggleSpeaker={toggleSpeaker}
+          currentLayout={(broadcast?.layout as LayoutType) || 'grid'}
+          onLayoutChange={handleLayoutChange}
+          isRecording={isRecording}
+          onToggleRecording={() => setIsRecording(!isRecording)}
+          showChatOverlay={showChatOverlay}
+          onToggleChatOverlay={() => setShowChatOverlay(!showChatOverlay)}
+          onShareWindow={() => console.log('Share window')}
+          onShareImage={() => console.log('Share image')}
+          onShareMedia={() => console.log('Share media')}
+          onShowEffects={() => console.log('Show effects')}
+          onSettingsClick={() => setActiveRightTab('style')}
+          audioDevices={audioDevices}
+          videoDevices={videoDevices}
+          selectedAudioDevice={selectedAudioDevice}
+          selectedVideoDevice={selectedVideoDevice}
+          onAudioDeviceChange={handleAudioDeviceChange}
+          onVideoDeviceChange={handleVideoDeviceChange}
+        />
+      </div>
 
       {/* Right Sidebar */}
       <RightSidebar
