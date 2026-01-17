@@ -1,6 +1,20 @@
-import { useRef, useState, useEffect } from 'react';
+/**
+ * Studio Page - Live streaming studio interface
+ *
+ * IMPORTANT: NO CLIENT-SIDE CANVAS COMPOSITING
+ * =============================================
+ * All video compositing happens on the Ant Media Server.
+ * This page displays the server-side composite via CompositePreview.
+ *
+ * DO NOT add any canvas.drawImage() or local video compositing.
+ * DO NOT import or use StudioCanvas.
+ *
+ * See: .claude/ARCHITECTURE_NO_CLIENT_COMPOSITING.md
+ */
+
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { compositorService } from '../services/compositor.service';
+// REMOVED: compositorService - NO CLIENT-SIDE COMPOSITING
 import { broadcastService } from '../services/broadcast.service';
 import { useMedia } from '../hooks/useMedia';
 import { useStudioStore } from '../store/studioStore';
@@ -11,7 +25,8 @@ import { LeftSidebar } from '../components/studio/LeftSidebar';
 import { RightSidebar } from '../components/studio/RightSidebar';
 import { BottomControlBar } from '../components/studio/BottomControlBar';
 import { DeviceSelectors } from '../components/studio/DeviceSelectors';
-import { StudioCanvas, LayoutSelector, PreviewArea, CanvasSettingsModal, CountdownOverlay } from '../components/studio/canvas';
+// REMOVED: StudioCanvas - NO CLIENT-SIDE COMPOSITING
+import { LayoutSelector, PreviewArea, CanvasSettingsModal, CountdownOverlay, CompositePreview } from '../components/studio/canvas';
 import { StudioHeader } from '../components/studio/StudioHeader';
 import { StudioDrawers } from '../components/studio/StudioDrawers';
 import { StudioModals } from '../components/studio/StudioModals';
@@ -49,6 +64,9 @@ export function Studio() {
 
   // Countdown state
   const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
+
+  // Composite stream ID - server-side composite output (no local compositing)
+  const [compositeStreamId, setCompositeStreamId] = useState<string | null>(null);
 
   // Refs
   const micButtonRef = useRef<HTMLDivElement>(null);
@@ -259,7 +277,8 @@ export function Studio() {
   // Teleprompter
   const teleprompterState = useTeleprompter();
   const { showHotkeyReference } = useStudioHotkeys({ audioEnabled, videoEnabled, isLive, isRecording, isSharingScreen, toggleAudio, toggleVideo, handleGoLive, handleEndBroadcast, handleStartRecording, handleStopRecording, handleToggleScreenShare, handleLayoutChange, setShowChatOnStream });
-  const { handleCreateClip } = useClipRecording(clipRecordingEnabled, localStream, () => compositorService.getOutputStream());
+  // Clip recording uses the local camera stream (not composite - server handles compositing)
+  const { handleCreateClip } = useClipRecording(clipRecordingEnabled, localStream, () => localStream);
 
   // Canvas Settings (persisted to localStorage)
   const canvasSettings = useCanvasSettings();
@@ -352,44 +371,12 @@ export function Studio() {
 
         {/* Main Canvas Area */}
         <main className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#F5F5F5' }}>
-          {/* Canvas Container - constrained to leave room for Layout Selector and Preview Area */}
+          {/* Canvas Container - Server-side composite preview only (no local compositing) */}
           <div className="flex items-center justify-center px-6 pb-20 relative" style={{ minHeight: 0, maxHeight: 'calc(100% - 350px)', flexShrink: 1, paddingTop: '144px' }}>
-            <StudioCanvas
-              localStream={processedStream || localStream}
-              videoEnabled={videoEnabled}
-              audioEnabled={audioEnabled}
-              isLocalUserOnStage={isLocalUserOnStage}
-              remoteParticipants={remoteParticipants}
-              isSharingScreen={isSharingScreen}
-              screenShareStream={screenShareStream}
-              selectedLayout={selectedLayout}
-              chatMessages={chatMessages}
-              showChatOnStream={showChatOnStream}
-              chatOverlayPosition={chatOverlayPosition}
-              chatOverlaySize={chatOverlaySize}
-              isDraggingChat={isDraggingChat}
-              isResizingChat={isResizingChat}
-              chatOverlayRef={chatOverlayRef}
-              onChatOverlayDragStart={handleChatOverlayDragStart}
-              onChatOverlayResizeStart={handleChatOverlayResizeStart}
-              captionsEnabled={captionsEnabled}
-              currentCaption={currentCaption}
-              editMode={editMode}
-              backgroundColor={canvasSettings.canvasBackgroundColor}
-              showResolutionBadge={canvasSettings.showResolutionBadge}
-              showPositionNumbers={canvasSettings.showPositionNumbers}
-              showConnectionQuality={canvasSettings.showConnectionQuality}
-              showLowerThirds={canvasSettings.showLowerThirds}
+            {/* Server-side composite preview - NO CLIENT-SIDE COMPOSITING */}
+            <CompositePreview
+              compositeStreamId={compositeStreamId}
               orientation={canvasSettings.orientation}
-              onRemoveFromStage={handleRemoveFromStage}
-              teleprompterNotes={teleprompterState.notes}
-              teleprompterFontSize={teleprompterState.fontSize}
-              teleprompterIsScrolling={teleprompterState.isScrolling}
-              teleprompterScrollSpeed={teleprompterState.scrollSpeed}
-              teleprompterScrollPosition={teleprompterState.scrollPosition}
-              showTeleprompterOnCanvas={teleprompterState.showOnCanvas}
-              displayedComment={displayedComment}
-              onDismissComment={() => setDisplayedComment(null)}
             />
             {/* Countdown Overlay */}
             <CountdownOverlay seconds={countdownSeconds} />
