@@ -1,0 +1,275 @@
+// # WEBCAM-ISSUE - recording state not properly reset
+/**
+ * Recording Service
+ *
+ * Records composite video stream to local files using MediaRecorder API
+ */
+
+import { localRecordingsService } from './local-recordings.service';
+
+interface RecordingConfig {
+  mimeType?: string;
+  videoBitsPerSecond?: number;
+  audioBitsPerSecond?: number;
+}
+
+class RecordingService {
+  private mediaRecorder: MediaRecorder | null = null;
+  private recordedChunks: Blob[] = [];
+  private startTime: number = 0;
+  private isRecording = false;
+
+  /**
+   * Start recording a media stream
+   */
+  async startRecording(
+    stream: MediaStream,
+    config: RecordingConfig = {}
+  ): Promise<void> {
+    if (this.isRecording) {
+      throw new Error('Recording already in progress');
+    }
+
+    // Determine best mime type
+    const mimeType = this.getSupportedMimeType(config.mimeType);
+    if (!mimeType) {
+      throw new Error('No supported video MIME types found');
+    }
+
+
+    // Create MediaRecorder
+    this.mediaRecorder = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: config.videoBitsPerSecond || 5000000, // 5 Mbps
+      audioBitsPerSecond: config.audioBitsPerSecond || 128000, // 128 kbps
+    });
+
+    // Reset state
+    this.recordedChunks = [];
+    this.startTime = Date.now();
+
+    // Handle data available
+    this.mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        this.recordedChunks.push(event.data);
+      }
+    };
+
+    // Handle recording stop
+    this.mediaRecorder.onstop = () => {
+    };
+
+    // Handle errors
+    this.mediaRecorder.onerror = (event: Event) => {
+      console.error('MediaRecorder error:', event);
+    };
+
+    // Start recording (request data every 1 second)
+    this.mediaRecorder.start(1000);
+    this.isRecording = true;
+
+  }
+
+  /**
+   * Stop recording and return the recorded blob
+   */
+  async stopRecording(): Promise<Blob> {
+    if (!this.isRecording || !this.mediaRecorder) {
+      throw new Error('No recording in progress');
+    }
+
+    return new Promise((resolve, reject) => {
+      if (!this.mediaRecorder) {
+        reject(new Error('MediaRecorder not initialized'));
+        return;
+      }
+
+      // Store mimeType before cleanup
+      const mimeType = this.mediaRecorder.mimeType;
+
+      this.mediaRecorder.onstop = () => {
+
+        const blob = new Blob(this.recordedChunks, { type: mimeType });
+
+        // Clean up MediaRecorder and state
+        this.cleanup();
+
+        resolve(blob);
+      };
+
+      this.mediaRecorder.stop();
+    });
+  }
+
+  /**
+   * Clean up MediaRecorder and associated resources
+   */
+  private cleanup(): void {
+    if (this.mediaRecorder) {
+      // Remove event listeners to prevent memory leaks
+      this.mediaRecorder.ondataavailable = null;
+      this.mediaRecorder.onstop = null;
+      this.mediaRecorder.onerror = null;
+      this.mediaRecorder = null;
+    }
+
+    this.isRecording = false;
+    this.recordedChunks = [];
+    this.startTime = 0;
+  }
+
+  /**
+   * Pause recording
+   */
+  pauseRecording(): void {
+    if (!this.isRecording || !this.mediaRecorder) {
+      throw new Error('No recording in progress');
+    }
+
+    if (this.mediaRecorder.state === 'recording') {
+      this.mediaRecorder.pause();
+    }
+  }
+
+  /**
+   * Resume recording
+   */
+  resumeRecording(): void {
+    if (!this.isRecording || !this.mediaRecorder) {
+      throw new Error('No recording in progress');
+    }
+
+    if (this.mediaRecorder.state === 'paused') {
+      this.mediaRecorder.resume();
+    }
+  }
+
+  /**
+   * Get recording duration in seconds
+   */
+  getDuration(): number {
+    if (!this.isRecording) return 0;
+    return Math.floor((Date.now() - this.startTime) / 1000);
+  }
+
+  /**
+   * Check if currently recording
+   */
+  isCurrentlyRecording(): boolean {
+    return this.isRecording;
+  }
+
+  /**
+   * Download the recorded blob as a file and save metadata
+   */
+  async downloadRecording(
+    blob: Blob,
+    filename: string,
+    options: {
+      title?: string;
+      broadcastId?: string;
+      duration?: number;
+    } = {}
+  ): Promise<void> {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = filename;
+
+    document.body.appendChild(a);
+    a.click();
+
+    // Cleanup
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+
+    // Save metadata to IndexedDB
+    try {
+      await localRecordingsService.saveRecording({
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        title: options.title || filename,
+        broadcastId: options.broadcastId,
+        filename,
+        size: blob.size,
+        duration: options.duration || 0,
+        mimeType: blob.type,
+        createdAt: new Date().toISOString(),
+      });
+
+    } catch (error) {
+      console.error('Failed to save recording metadata:', error);
+    }
+
+  }
+
+  /**
+   * Upload recording to backend
+   */
+  async uploadRecording(
+    blob: Blob,
+    broadcastId: string,
+    title: string
+  ): Promise<void> {
+    const formData = new FormData();
+    formData.append('file', blob, `${broadcastId}-${Date.now()}.webm`);
+    formData.append('title', title);
+    formData.append('broadcastId', broadcastId);
+
+    const response = await fetch('/api/recordings', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to upload recording');
+    }
+
+  }
+
+  /**
+   * Get supported MIME type for recording
+   */
+  private getSupportedMimeType(preferredType?: string): string | null {
+    const types = [
+      preferredType,
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm;codecs=h264,opus',
+      'video/webm',
+      'video/mp4',
+    ].filter(Boolean) as string[];
+
+    for (const type of types) {
+      if (MediaRecorder.isTypeSupported(type)) {
+        return type;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Get list of supported MIME types
+   */
+  getSupportedMimeTypes(): string[] {
+    const types = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm;codecs=h264,opus',
+      'video/webm',
+      'video/mp4',
+      'video/x-matroska;codecs=avc1',
+    ];
+
+    return types.filter((type) => MediaRecorder.isTypeSupported(type));
+  }
+}
+
+// Export singleton instance
+export const recordingService = new RecordingService();

@@ -1,109 +1,104 @@
 import { create } from 'zustand';
-
-export type LayoutType = 'grid' | 'spotlight' | 'side-by-side' | 'picture-in-picture' | 'single';
-export type BroadcastStatus = 'IDLE' | 'GREENROOM' | 'LIVE' | 'ENDED';
-
-interface Participant {
-  id: string;
-  name: string;
-  role: 'HOST' | 'COHOST' | 'GUEST';
-  status: 'WAITING' | 'GREENROOM' | 'ONSTAGE' | 'LEFT';
-  streamId: string | null;
-  isOnStage: boolean;
-  audioEnabled: boolean;
-  videoEnabled: boolean;
-  position: number;
-}
-
-interface Broadcast {
-  id: string;
-  title: string;
-  status: BroadcastStatus;
-  layout: LayoutType;
-  backgroundColor: string;
-  logoUrl: string | null;
-  overlayText: string | null;
-  previewUrl: string | null;
-}
+import { Broadcast, Participant, MediaState } from '../types';
 
 interface StudioState {
   broadcast: Broadcast | null;
-  participants: Participant[];
+  participants: Map<string, Participant>;
+  mediaStates: Map<string, MediaState>;
   localStream: MediaStream | null;
-  previewStream: MediaStream | null;
-  isAudioEnabled: boolean;
-  isVideoEnabled: boolean;
-  isScreenSharing: boolean;
+  screenStream: MediaStream | null;
+  isLive: boolean;
+  isRecording: boolean;
 
-  // Actions
   setBroadcast: (broadcast: Broadcast) => void;
-  setParticipants: (participants: Participant[]) => void;
-  updateParticipant: (participant: Partial<Participant> & { id: string }) => void;
   addParticipant: (participant: Participant) => void;
-  removeParticipant: (id: string) => void;
+  removeParticipant: (participantId: string) => void;
+  updateMediaState: (participantId: string, state: MediaState) => void;
   setLocalStream: (stream: MediaStream | null) => void;
-  setPreviewStream: (stream: MediaStream | null) => void;
-  setAudioEnabled: (enabled: boolean) => void;
-  setVideoEnabled: (enabled: boolean) => void;
-  setScreenSharing: (enabled: boolean) => void;
-  setLayout: (layout: LayoutType) => void;
-  setBranding: (branding: { backgroundColor?: string; logoUrl?: string | null; overlayText?: string | null }) => void;
+  setScreenStream: (stream: MediaStream | null) => void;
+  setIsLive: (isLive: boolean) => void;
+  setIsRecording: (isRecording: boolean) => void;
   reset: () => void;
 }
 
-const initialState = {
+export const useStudioStore = create<StudioState>((set, get) => ({
   broadcast: null,
-  participants: [],
+  participants: new Map(),
+  mediaStates: new Map(),
   localStream: null,
-  previewStream: null,
-  isAudioEnabled: true,
-  isVideoEnabled: true,
-  isScreenSharing: false,
-};
-
-export const useStudioStore = create<StudioState>((set) => ({
-  ...initialState,
+  screenStream: null,
+  isLive: false,
+  isRecording: false,
 
   setBroadcast: (broadcast) => set({ broadcast }),
 
-  setParticipants: (participants) => set({ participants }),
+  addParticipant: (participant: Participant) =>
+    set((state: StudioState) => {
+      const participants = new Map(state.participants);
+      participants.set(participant.id, participant);
+      return { participants };
+    }),
 
-  updateParticipant: (updated) =>
-    set((state) => ({
-      participants: state.participants.map((p) =>
-        p.id === updated.id ? { ...p, ...updated } : p
-      ),
-    })),
+  removeParticipant: (participantId: string) =>
+    set((state: StudioState) => {
+      const participants = new Map(state.participants);
+      participants.delete(participantId);
+      return { participants };
+    }),
 
-  addParticipant: (participant) =>
-    set((state) => ({
-      participants: [...state.participants, participant],
-    })),
+  updateMediaState: (participantId: string, mediaState: MediaState) =>
+    set((state: StudioState) => {
+      const mediaStates = new Map(state.mediaStates);
+      mediaStates.set(participantId, mediaState);
+      return { mediaStates };
+    }),
 
-  removeParticipant: (id) =>
-    set((state) => ({
-      participants: state.participants.filter((p) => p.id !== id),
-    })),
+  setLocalStream: (stream: MediaStream | null) =>
+    set((state: StudioState) => {
+      // Stop all tracks from previous stream to prevent memory leak
+      if (state.localStream) {
+        state.localStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+      }
+      return { localStream: stream };
+    }),
 
-  setLocalStream: (stream) => set({ localStream: stream }),
+  setScreenStream: (stream: MediaStream | null) =>
+    set((state: StudioState) => {
+      // Stop all tracks from previous stream to prevent memory leak
+      if (state.screenStream) {
+        state.screenStream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+      }
+      return { screenStream: stream };
+    }),
+  setIsLive: (isLive: boolean) => set({ isLive }),
+  setIsRecording: (isRecording: boolean) => set({ isRecording }),
 
-  setPreviewStream: (stream) => set({ previewStream: stream }),
+  // MAJOR FIX: Stop media tracks before resetting to prevent camera/mic LED staying on
+  reset: () => {
+    const state = get();
 
-  setAudioEnabled: (enabled) => set({ isAudioEnabled: enabled }),
+    // Stop all local stream tracks (camera/mic)
+    if (state.localStream) {
+      state.localStream.getTracks().forEach((track: MediaStreamTrack) => {
+        track.stop();
+      });
+    }
 
-  setVideoEnabled: (enabled) => set({ isVideoEnabled: enabled }),
+    // Stop all screen share tracks
+    if (state.screenStream) {
+      state.screenStream.getTracks().forEach((track: MediaStreamTrack) => {
+        track.stop();
+      });
+    }
 
-  setScreenSharing: (enabled) => set({ isScreenSharing: enabled }),
-
-  setLayout: (layout) =>
-    set((state) => ({
-      broadcast: state.broadcast ? { ...state.broadcast, layout } : null,
-    })),
-
-  setBranding: (branding) =>
-    set((state) => ({
-      broadcast: state.broadcast ? { ...state.broadcast, ...branding } : null,
-    })),
-
-  reset: () => set(initialState),
+    set({
+      broadcast: null,
+      participants: new Map(),
+      mediaStates: new Map(),
+      localStream: null,
+      screenStream: null,
+      isLive: false,
+      isRecording: false,
+    });
+  },
 }));

@@ -1,0 +1,379 @@
+/**
+ * usePreviewStream - Hook to send canvas preview stream to guests
+ *
+ * This hook handles WebRTC peer connections to send the composed canvas
+ * output to guests in the greenroom so they can see the live broadcast.
+ *
+ * KEY BEHAVIOR: Even before "Go Live", when a guest joins the greenroom,
+ * we start P2P streaming the canvas preview to them. This allows guests
+ * to see what the stream will look like before going live.
+ */
+import { useEffect, useRef, useCallback } from 'react';
+import { socketService } from '../../services/socket.service';
+import { canvasStreamService } from '../../services/canvas-stream.service';
+import { audioMixerService } from '../../services/audio-mixer.service';
+import { ICE_SERVERS } from '../../utils/webrtc';
+
+interface PeerConnection {
+  pc: RTCPeerConnection;
+  guestSocketId: string;
+  guestId: string;
+  videoSender: RTCRtpSender | null;
+  isOnStage: boolean;
+}
+
+interface PendingRequest {
+  guestId: string;
+  guestSocketId: string;
+}
+
+// Encoding presets for preview stream quality
+const ENCODING_GREENROOM = {
+  scaleResolutionDownBy: 4, // 1920x1080 -> 480x270
+  maxBitrate: 500000, // 500 kbps
+  maxFramerate: 24,
+};
+
+const ENCODING_STAGE = {
+  scaleResolutionDownBy: 1, // Full resolution
+  maxBitrate: 2500000, // 2.5 Mbps
+  maxFramerate: 30,
+};
+
+// Helper to apply encoding parameters to a video sender
+async function applyEncodingParams(
+  videoSender: RTCRtpSender,
+  encoding: typeof ENCODING_GREENROOM,
+  guestId: string
+): Promise<boolean> {
+  try {
+    const params = videoSender.getParameters();
+    if (!params.encodings || params.encodings.length === 0) {
+      params.encodings = [{}];
+    }
+    params.encodings[0].scaleResolutionDownBy = encoding.scaleResolutionDownBy;
+    params.encodings[0].maxBitrate = encoding.maxBitrate;
+    params.encodings[0].maxFramerate = encoding.maxFramerate;
+    await videoSender.setParameters(params);
+    console.log('[PreviewStream] Applied encoding for guest ' + guestId + ':', {
+      scaleDown: encoding.scaleResolutionDownBy + 'x',
+      maxBitrate: encoding.maxBitrate / 1000 + 'kbps',
+      maxFps: encoding.maxFramerate,
+    });
+    return true;
+  } catch (e) {
+    console.warn('[PreviewStream] Could not apply encoding for guest ' + guestId + ':', e);
+    return false;
+  }
+}
+
+export function usePreviewStream(broadcastId: string | undefined) {
+  // Map of guest socket IDs to their peer connections
+  const peerConnectionsRef = useRef<Map<string, PeerConnection>>(new Map());
+  // Map of guest IDs to socket IDs for status change handling
+  const guestIdToSocketIdRef = useRef<Map<string, string>>(new Map());
+  // Queue of pending preview requests waiting for canvas stream
+  const pendingRequestsRef = useRef<PendingRequest[]>([]);
+  // Track unsubscribe function for canvas stream ready callback
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+
+  // Create peer connection and send offer to guest
+  const createPeerConnectionForGuest = useCallback(async (guestId: string, guestSocketId: string, canvasStream: MediaStream) => {
+    console.log('[PreviewStream] Creating peer connection for guest:', guestId, guestSocketId);
+
+    // DEBUG: Log detailed canvas stream info (explicit values)
+    console.log('[PreviewStream] Canvas stream details: streamId=' + canvasStream.id +
+      ', active=' + canvasStream.active +
+      ', videoTracks=' + canvasStream.getVideoTracks().length +
+      ', audioTracks=' + canvasStream.getAudioTracks().length);
+
+    // DEBUG: Test if canvas stream produces frames by creating a test video element
+    const testVideo = document.createElement('video');
+    testVideo.srcObject = canvasStream;
+    testVideo.muted = true;
+    testVideo.play().then(() => {
+      setTimeout(() => {
+        console.log('[PreviewStream] Canvas stream test: videoWidth=' + testVideo.videoWidth +
+          ', videoHeight=' + testVideo.videoHeight +
+          ' (should be 1920x1080 or 1080x1920)');
+        testVideo.srcObject = null;
+      }, 500);
+    }).catch(e => console.error('[PreviewStream] Canvas stream test failed:', e));
+
+    // Check if we already have a connection for this guest
+    if (peerConnectionsRef.current.has(guestSocketId)) {
+      console.log('[PreviewStream] Already have connection for guest, skipping:', guestSocketId);
+      return;
+    }
+
+    // Create a new peer connection for this guest
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+    // Add canvas video track to the peer connection
+    const videoTrack = canvasStream.getVideoTracks()[0];
+    let videoSender: RTCRtpSender | null = null;
+    if (videoTrack) {
+      // DEBUG: Log video track details (explicit values)
+      console.log('[PreviewStream] Video track details: trackId=' + videoTrack.id +
+        ', kind=' + videoTrack.kind +
+        ', label=' + videoTrack.label +
+        ', enabled=' + videoTrack.enabled +
+        ', muted=' + videoTrack.muted +
+        ', readyState=' + videoTrack.readyState);
+      videoSender = pc.addTrack(videoTrack, canvasStream);
+      console.log('[PreviewStream] Added video track to peer connection');
+    } else {
+      console.warn('[PreviewStream] No video track in canvas stream');
+    }
+
+    // Add audio track from the audio mixer (so guests can hear the host and other audio)
+    const audioStream = audioMixerService.getOutputStream();
+    if (audioStream) {
+      const audioTrack = audioStream.getAudioTracks()[0];
+      if (audioTrack) {
+        pc.addTrack(audioTrack, audioStream);
+        console.log('[PreviewStream] Added audio track to peer connection');
+      } else {
+        console.warn('[PreviewStream] No audio track in audio mixer output');
+      }
+    } else {
+      console.warn('[PreviewStream] Audio mixer output not available');
+    }
+
+    // Handle ICE candidates
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socketService.emit('preview-ice-candidate', {
+          targetSocketId: guestSocketId,
+          candidate: event.candidate.toJSON(),
+        });
+      }
+    };
+
+    // Handle ICE connection state changes (detects issues earlier than connection state)
+    pc.oniceconnectionstatechange = () => {
+      console.log('[PreviewStream] ICE connection state:', pc.iceConnectionState, 'for guest:', guestSocketId);
+      if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+        console.log('[PreviewStream] ICE connection issue detected for guest:', guestSocketId);
+      }
+    };
+
+    // Monitor video track for ending (prevents frozen video)
+    if (videoTrack) {
+      videoTrack.onended = () => {
+        console.log('[PreviewStream] Video track ended for guest:', guestSocketId, '- this may cause freeze!');
+        // The canvas track may have been replaced - close and let guest reconnect
+        const connection = peerConnectionsRef.current.get(guestSocketId);
+        if (connection) {
+          peerConnectionsRef.current.delete(guestSocketId);
+          connection.pc.close();
+        }
+      };
+    }
+
+    // Store the peer connection with all metadata
+    peerConnectionsRef.current.set(guestSocketId, {
+      pc,
+      guestSocketId,
+      guestId,
+      videoSender,
+      isOnStage: false, // Guests start in greenroom
+    });
+    // Also map guestId to socketId for status change lookups
+    guestIdToSocketIdRef.current.set(guestId, guestSocketId);
+
+    // DEBUG: Monitor WebRTC stats to verify frames are being sent
+    const statsInterval = setInterval(async () => {
+      try {
+        const stats = await pc.getStats();
+        stats.forEach(report => {
+          if (report.type === 'outbound-rtp' && report.kind === 'video') {
+            // Log explicit values, not object reference
+            console.log('[PreviewStream] Video send stats: framesSent=' + report.framesSent +
+              ', framesEncoded=' + report.framesEncoded +
+              ', bytesSent=' + report.bytesSent +
+              ', packetsSent=' + report.packetsSent +
+              ', for guest=' + guestSocketId);
+          }
+        });
+      } catch (e) {
+        // Ignore errors when connection is closed
+      }
+    }, 5000);
+
+    // Clean up stats interval when connection changes
+    pc.onconnectionstatechange = () => {
+      console.log('[PreviewStream] Connection state:', pc.connectionState, 'for guest:', guestSocketId);
+      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        clearInterval(statsInterval);
+        peerConnectionsRef.current.delete(guestSocketId);
+        guestIdToSocketIdRef.current.delete(guestId);
+        pc.close();
+      }
+    };
+
+    // Create and send offer
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      // Apply greenroom encoding (low quality) - will upgrade when promoted to stage
+      if (videoSender) {
+        await applyEncodingParams(videoSender, ENCODING_GREENROOM, guestId);
+      }
+
+      socketService.emit('preview-offer', {
+        guestSocketId,
+        offer: pc.localDescription?.toJSON(),
+      });
+      console.log('[PreviewStream] Sent offer to guest:', guestSocketId);
+    } catch (error) {
+      console.error('[PreviewStream] Error creating offer:', error);
+      peerConnectionsRef.current.delete(guestSocketId);
+      pc.close();
+    }
+  }, []);
+
+  // Handle guest requesting preview stream
+  const handlePreviewStreamRequested = useCallback(async ({ guestId, guestSocketId }: { guestId: string; guestSocketId: string }) => {
+    console.log('[PreviewStream] Guest requested preview:', guestId, guestSocketId);
+
+    // Get the canvas output stream
+    const canvasStream = canvasStreamService.getOutputStream();
+
+    if (canvasStream) {
+      // Canvas stream is ready, create peer connection immediately
+      console.log('[PreviewStream] Canvas stream ready, creating peer connection for guest:', guestSocketId);
+      await createPeerConnectionForGuest(guestId, guestSocketId, canvasStream);
+    } else {
+      // Canvas stream not ready yet - check if already in pending requests
+      const alreadyPending = pendingRequestsRef.current.some(r => r.guestSocketId === guestSocketId);
+      if (alreadyPending) {
+        console.log('[PreviewStream] Request already pending for guest:', guestSocketId);
+        return;
+      }
+
+      // Queue the request
+      console.log('[PreviewStream] Canvas stream not ready, queuing request for guest:', guestSocketId);
+      pendingRequestsRef.current.push({ guestId, guestSocketId });
+
+      // Subscribe to be notified when canvas becomes ready (if not already subscribed)
+      if (!unsubscribeRef.current) {
+        console.log('[PreviewStream] Subscribing to canvas stream ready callback');
+        unsubscribeRef.current = canvasStreamService.onStreamReady(async (stream) => {
+          console.log('[PreviewStream] Canvas stream now ready, processing', pendingRequestsRef.current.length, 'pending requests');
+
+          // Process all pending requests
+          const pending = [...pendingRequestsRef.current];
+          pendingRequestsRef.current = [];
+
+          for (const request of pending) {
+            await createPeerConnectionForGuest(request.guestId, request.guestSocketId, stream);
+          }
+        });
+      }
+    }
+  }, [createPeerConnectionForGuest]);
+
+  // Handle answer from guest
+  const handlePreviewAnswer = useCallback(async ({ answer, guestSocketId }: { answer: RTCSessionDescriptionInit; guestSocketId: string }) => {
+    console.log('[PreviewStream] Received answer from guest:', guestSocketId);
+
+    const connection = peerConnectionsRef.current.get(guestSocketId);
+    if (!connection) {
+      console.warn('[PreviewStream] No peer connection found for guest:', guestSocketId);
+      return;
+    }
+
+    try {
+      await connection.pc.setRemoteDescription(new RTCSessionDescription(answer));
+    } catch (error) {
+      console.error('[PreviewStream] Error setting remote description:', error);
+    }
+  }, []);
+
+  // Handle ICE candidate from guest
+  const handlePreviewIceCandidate = useCallback(async ({ candidate, fromSocketId }: { candidate: RTCIceCandidateInit; fromSocketId: string }) => {
+    const connection = peerConnectionsRef.current.get(fromSocketId);
+    if (!connection) {
+      console.warn('[PreviewStream] No peer connection found for:', fromSocketId);
+      return;
+    }
+
+    try {
+      await connection.pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (error) {
+      console.error('[PreviewStream] Error adding ICE candidate:', error);
+    }
+  }, []);
+
+  // Handle guest status change (promotion to stage or demotion to greenroom)
+  // Updates P2P preview stream quality accordingly
+  const handleGuestStatusChange = useCallback(async ({ participantId, newStatus }: { participantId: string; newStatus: string }) => {
+    // Look up socket ID from guest ID
+    const socketId = guestIdToSocketIdRef.current.get(participantId);
+    if (!socketId) {
+      // Guest might not have an active P2P connection (e.g., they haven't requested preview yet)
+      return;
+    }
+
+    const connection = peerConnectionsRef.current.get(socketId);
+    if (!connection || !connection.videoSender) {
+      return;
+    }
+
+    const isPromotedToStage = newStatus === 'live' || newStatus === 'guest';
+    const wasOnStage = connection.isOnStage;
+
+    // Only update if status actually changed
+    if (isPromotedToStage !== wasOnStage) {
+      connection.isOnStage = isPromotedToStage;
+
+      if (isPromotedToStage) {
+        console.log('[PreviewStream] Guest promoted to stage, upgrading preview quality:', participantId);
+        await applyEncodingParams(connection.videoSender, ENCODING_STAGE, participantId);
+      } else {
+        console.log('[PreviewStream] Guest moved to greenroom, downgrading preview quality:', participantId);
+        await applyEncodingParams(connection.videoSender, ENCODING_GREENROOM, participantId);
+      }
+    }
+  }, []);
+
+  // Set up socket event listeners
+  useEffect(() => {
+    if (!broadcastId) return;
+
+    socketService.on('preview-stream-requested', handlePreviewStreamRequested);
+    socketService.on('preview-answer', handlePreviewAnswer);
+    socketService.on('preview-ice-candidate', handlePreviewIceCandidate);
+    // Listen for guest status changes to upgrade/downgrade preview quality
+    socketService.on('participant-status-changed', handleGuestStatusChange);
+
+    return () => {
+      socketService.off('preview-stream-requested', handlePreviewStreamRequested);
+      socketService.off('preview-answer', handlePreviewAnswer);
+      socketService.off('preview-ice-candidate', handlePreviewIceCandidate);
+      socketService.off('participant-status-changed', handleGuestStatusChange);
+
+      // Clean up canvas stream ready subscription
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
+
+      // Clear pending requests
+      pendingRequestsRef.current = [];
+
+      // Close all peer connections
+      peerConnectionsRef.current.forEach(({ pc }) => {
+        pc.close();
+      });
+      peerConnectionsRef.current.clear();
+
+      // Clear guest ID to socket ID mapping
+      guestIdToSocketIdRef.current.clear();
+    };
+  }, [broadcastId, handlePreviewStreamRequested, handlePreviewAnswer, handlePreviewIceCandidate, handleGuestStatusChange]);
+
+  return {};
+}

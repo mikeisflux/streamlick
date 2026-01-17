@@ -4,8 +4,8 @@ import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
-import Studio from './pages/Studio';
-import GuestJoin from './pages/GuestJoin';
+import { Studio } from './pages/Studio';
+import { GuestJoin } from './pages/GuestJoin';
 import Destinations from './pages/Destinations';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {

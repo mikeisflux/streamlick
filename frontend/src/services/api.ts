@@ -156,3 +156,22 @@ export const compositorAPI = {
   getState: (broadcastId: string) =>
     fetchAPI<any>(`/api/compositor/${broadcastId}/state`),
 };
+
+// Default export for backwards compatibility
+const api = {
+  auth: authAPI,
+  broadcasts: broadcastAPI,
+  participants: participantAPI,
+  destinations: destinationAPI,
+  compositor: compositorAPI,
+  // Helper methods for direct fetch
+  get: <T>(endpoint: string) => fetchAPI<T>(endpoint),
+  post: <T>(endpoint: string, data?: any) =>
+    fetchAPI<T>(endpoint, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
+  patch: <T>(endpoint: string, data?: any) =>
+    fetchAPI<T>(endpoint, { method: 'PATCH', body: data ? JSON.stringify(data) : undefined }),
+  delete: <T>(endpoint: string) => fetchAPI<T>(endpoint, { method: 'DELETE' }),
+};
+
+export { API_URL };
+export default api;
