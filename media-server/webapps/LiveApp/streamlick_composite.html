@@ -369,6 +369,11 @@
     let publishPc = null;
     let outputStreamId = null;
     let isPublishing = false;
+    let publishRetryCount = 0;
+    const PUBLISH_MAX_RETRIES = 8;
+
+    // Countdown interval (module-level to prevent memory leaks on repeated set-countdown calls)
+    let countdownInterval = null;
 
     // ==========================================================================
     // LAYOUT ENGINE
@@ -719,7 +724,7 @@
       outputCanvas.height = 1080;
       outputCanvas.style.display = 'none';
       document.body.appendChild(outputCanvas);
-      outputCtx = outputCanvas.getContext('2d', { willReadFrequently: false });
+      outputCtx = outputCanvas.getContext('2d', { willReadFrequently: true });
 
       // Web Audio context for mixing participant audio
       audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -866,9 +871,6 @@
       if (!streamId || streamWebSockets.has(streamId)) return;
       console.log('[AntMedia] Subscribing to stream:', streamId);
 
-      const ws = new WebSocket(CONFIG.antmediaWs);
-      streamWebSockets.set(streamId, ws);
-
       const pc = new RTCPeerConnection({
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
@@ -876,6 +878,14 @@
         ],
       });
       streamPeerConnections.set(streamId, pc);
+
+      // Set up transceivers BEFORE opening the WebSocket so the PC is ready
+      // when the WS connection opens and signaling begins immediately.
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+
+      const ws = new WebSocket(CONFIG.antmediaWs);
+      streamWebSockets.set(streamId, ws);
 
       pc.ontrack = (event) => {
         console.log('[AntMedia] Track received for stream:', streamId);
@@ -915,9 +925,6 @@
           }));
         }
       };
-
-      pc.addTransceiver('video', { direction: 'recvonly' });
-      pc.addTransceiver('audio', { direction: 'recvonly' });
 
       ws.onopen = () => {
         ws.send(JSON.stringify({ command: 'play', streamId, token: '' }));
@@ -1095,6 +1102,7 @@
             console.log('[Compositor] Publish notification:', msg.definition);
             if (msg.definition === 'publish_started') {
               isPublishing = true;
+              publishRetryCount = 0; // reset backoff counter on success
               console.log('[Compositor] Composite stream is LIVE on AMS:', outputStreamId);
               // Notify backend that composite output is ready
               if (backendSocket && backendSocket.connected) {
@@ -1112,9 +1120,15 @@
           case 'error':
             console.error('[Compositor] Publish error:', msg.definition);
             if (msg.definition === 'streamIdInUse') {
-              // Stop old stream and retry with same ID
-              publishWs.send(JSON.stringify({ command: 'stop', streamId: outputStreamId }));
-              setTimeout(startCompositeOutput, 2000);
+              if (publishRetryCount < PUBLISH_MAX_RETRIES) {
+                const delay = Math.min(1000 * Math.pow(2, publishRetryCount), 30000);
+                publishRetryCount++;
+                console.warn(`[Compositor] streamIdInUse – retry ${publishRetryCount}/${PUBLISH_MAX_RETRIES} in ${delay}ms`);
+                publishWs.send(JSON.stringify({ command: 'stop', streamId: outputStreamId }));
+                setTimeout(() => { stopCompositeOutput(); startCompositeOutput(); }, delay);
+              } else {
+                console.error('[Compositor] streamIdInUse – max retries reached, giving up');
+              }
             }
             break;
         }
@@ -1142,6 +1156,17 @@
 
       if (publishPc) { publishPc.close(); publishPc = null; }
       isPublishing = false;
+
+      // Disconnect and remove all audio sources
+      audioSources.forEach((source, sid) => {
+        try { source.disconnect(); } catch (e) {}
+      });
+      audioSources.clear();
+
+      // Tear down audio graph so it can be rebuilt cleanly on restart
+      if (audioMixer) { try { audioMixer.disconnect(); } catch (e) {} audioMixer = null; }
+      if (audioDestination) { try { audioDestination.disconnect(); } catch (e) {} audioDestination = null; }
+      if (audioContext) { audioContext.close().catch(() => {}); audioContext = null; }
     }
 
     // ==========================================================================
@@ -1302,13 +1327,16 @@
           };
           render();
 
-          // Auto-countdown
+          // Auto-countdown (clear any existing interval to prevent leaks)
+          clearInterval(countdownInterval);
+          countdownInterval = null;
           if (msg.visible && msg.seconds > 0) {
-            const interval = setInterval(() => {
+            countdownInterval = setInterval(() => {
               state.countdown.seconds--;
               if (state.countdown.seconds <= 0) {
                 state.countdown.visible = false;
-                clearInterval(interval);
+                clearInterval(countdownInterval);
+                countdownInterval = null;
               }
               render();
             }, 1000);

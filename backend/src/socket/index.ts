@@ -16,6 +16,9 @@ const compositorSockets = new Map<string, Socket>();
 // Track composite output stream IDs
 const compositeStreamIds = new Map<string, string>(); // broadcastId -> compositeStreamId
 
+// Guard against concurrent compositor launches for the same broadcast
+const launchingCompositors = new Set<string>();
+
 // Helper: start RTMP restreaming from AMS composite to all destinations
 async function startRtmpRestreaming(broadcastId: string, compositeStreamId: string, outputs: any[]) {
   for (const output of outputs) {
@@ -183,7 +186,7 @@ export function setupSocketHandlers(io: Server) {
             where: { id: data.broadcastId },
             include: { outputs: { include: { destination: true } } },
           });
-          if (broadcast?.status === 'LIVE' && broadcast.outputs.length > 0) {
+          if (broadcast && broadcast.status === 'LIVE' && broadcast.outputs.length > 0) {
             console.log(`[Compositor] Broadcast is LIVE, starting RTMP restream for ${broadcast.outputs.length} destination(s)`);
             await startRtmpRestreaming(data.broadcastId, data.streamId, broadcast.outputs);
           }
@@ -272,12 +275,17 @@ export function setupSocketHandlers(io: Server) {
           });
         }
 
-        // If host joins and compositor is not yet running, launch it
-        if (socket.userId && !compositorSockets.has(broadcastId)) {
+        // If host joins and compositor is not yet running, launch it (guarded against races)
+        if (socket.userId && !compositorSockets.has(broadcastId) && !launchingCompositors.has(broadcastId)) {
           console.log(`[Socket] Host joined broadcast ${broadcastId}, launching compositor`);
-          launchCompositor(broadcastId).catch(err => {
-            console.error(`[Socket] Failed to launch compositor for ${broadcastId}:`, err);
-          });
+          launchingCompositors.add(broadcastId);
+          launchCompositor(broadcastId)
+            .catch(err => {
+              console.error(`[Socket] Failed to launch compositor for ${broadcastId}:`, err);
+            })
+            .finally(() => {
+              launchingCompositors.delete(broadcastId);
+            });
         }
 
         socket.to(`broadcast:${broadcastId}`).emit('participant-joined', {
