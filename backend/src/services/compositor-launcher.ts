@@ -99,14 +99,18 @@ export async function launchCompositor(broadcastId: string): Promise<boolean> {
       }
     });
 
-    process.on('exit', (code) => {
-      console.log(`[Compositor:${broadcastId}] Chrome exited with code ${code}`);
+    let cleanedUp = false;
+    const cleanup = (label: string, code?: number | null) => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      console.log(`[Compositor:${broadcastId}] Chrome ${label}${code != null ? ` with code ${code}` : ''}`);
       compositorProcesses.delete(broadcastId);
-    });
+    };
 
+    process.on('exit', (code) => cleanup('exited', code));
     process.on('error', (err) => {
       console.error(`[Compositor:${broadcastId}] Chrome error:`, err.message);
-      compositorProcesses.delete(broadcastId);
+      cleanup('errored');
     });
 
     compositorProcesses.set(broadcastId, process);
@@ -123,6 +127,16 @@ export function stopCompositor(broadcastId: string): void {
     console.log(`[Compositor] Stopping Chrome for broadcast ${broadcastId}`);
     proc.kill('SIGTERM');
     compositorProcesses.delete(broadcastId);
+
+    // SIGKILL fallback: if the process hasn't exited within 5 seconds, force kill it
+    const killTimer = setTimeout(() => {
+      if (!proc.killed && proc.exitCode === null) {
+        console.warn(`[Compositor:${broadcastId}] Process did not exit after SIGTERM, sending SIGKILL`);
+        try { proc.kill('SIGKILL'); } catch (e) { /* already dead */ }
+      }
+    }, 5000);
+    // Don't block the event loop
+    if (killTimer.unref) killTimer.unref();
   }
 }
 

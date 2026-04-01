@@ -47,10 +47,16 @@ class AntMediaService {
     return headers;
   }
 
+  private fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 10000): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+  }
+
   /** Create a new live stream entry in Ant Media */
   async createBroadcast(streamId: string, name: string): Promise<BroadcastInfo | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/broadcasts/create`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/broadcasts/create`, {
         method: 'POST',
         headers: this.authHeaders(),
         body: JSON.stringify({ streamId, name, type: 'liveStream' }),
@@ -69,7 +75,7 @@ class AntMediaService {
   /** Get broadcast info */
   async getBroadcast(streamId: string): Promise<BroadcastInfo | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/broadcasts/${streamId}`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/broadcasts/${streamId}`, {
         headers: this.authHeaders(),
       });
       if (!response.ok) return null;
@@ -83,7 +89,7 @@ class AntMediaService {
   /** Delete a stream from AMS */
   async deleteBroadcast(streamId: string): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/broadcasts/${streamId}`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/broadcasts/${streamId}`, {
         method: 'DELETE',
         headers: this.authHeaders(),
       });
@@ -99,25 +105,34 @@ class AntMediaService {
    * Uses the correct AMS v2 REST API: PUT /rest/v2/broadcasts/{streamId}/rtmp-endpoint
    * The stream (compositeStreamId) must already be publishing on AMS before calling this.
    */
-  async startRtmpStream(streamId: string, rtmpUrl: string): Promise<boolean> {
-    try {
-      console.log(`[AMS] Starting RTMP restream: ${streamId} -> ${rtmpUrl}`);
-      const response = await fetch(`${this.baseUrl}/broadcasts/${streamId}/rtmp-endpoint`, {
-        method: 'PUT',
-        headers: this.authHeaders(),
-        body: JSON.stringify({ rtmpUrl }),
-      });
-      if (!response.ok) {
-        const body = await response.text();
-        console.error(`[AMS] startRtmpStream failed (${response.status}):`, body);
-        return false;
+  async startRtmpStream(streamId: string, rtmpUrl: string, maxRetries = 3): Promise<boolean> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[AMS] Starting RTMP restream (attempt ${attempt}/${maxRetries}): ${streamId} -> ${rtmpUrl}`);
+        const response = await this.fetchWithTimeout(`${this.baseUrl}/broadcasts/${streamId}/rtmp-endpoint`, {
+          method: 'PUT',
+          headers: this.authHeaders(),
+          body: JSON.stringify({ rtmpUrl }),
+        });
+        if (!response.ok) {
+          const body = await response.text();
+          console.error(`[AMS] startRtmpStream failed (${response.status}):`, body);
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
+          }
+          return false;
+        }
+        console.log(`[AMS] RTMP restream started successfully for ${streamId}`);
+        return true;
+      } catch (error) {
+        console.error(`[AMS] startRtmpStream error (attempt ${attempt}/${maxRetries}):`, error);
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
-      console.log(`[AMS] RTMP restream started successfully for ${streamId}`);
-      return true;
-    } catch (error) {
-      console.error('[AMS] startRtmpStream error:', error);
-      return false;
     }
+    return false;
   }
 
   /**
@@ -126,7 +141,7 @@ class AntMediaService {
    */
   async stopRtmpStream(streamId: string, rtmpUrl: string): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/broadcasts/${streamId}/rtmp-endpoint`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/broadcasts/${streamId}/rtmp-endpoint`, {
         method: 'DELETE',
         headers: this.authHeaders(),
         body: JSON.stringify({ rtmpUrl }),
@@ -141,7 +156,7 @@ class AntMediaService {
   /** Get stream statistics */
   async getStreamStats(streamId: string): Promise<StreamInfo | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/broadcasts/${streamId}/broadcast-statistics`, {
+      const response = await this.fetchWithTimeout(`${this.baseUrl}/broadcasts/${streamId}/broadcast-statistics`, {
         headers: this.authHeaders(),
       });
       if (!response.ok) return null;
@@ -155,7 +170,7 @@ class AntMediaService {
   /** Generate a one-time token for stream publish/play */
   async generateToken(streamId: string, type: 'publish' | 'play', expireTime = 3600): Promise<string | null> {
     try {
-      const response = await fetch(
+      const response = await this.fetchWithTimeout(
         `${this.baseUrl}/broadcasts/${streamId}/token?type=${type}&expireDate=${Date.now() + expireTime * 1000}`,
         { method: 'GET', headers: this.authHeaders() }
       );

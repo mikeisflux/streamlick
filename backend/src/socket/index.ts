@@ -596,7 +596,6 @@ export function setupSocketHandlers(io: Server) {
           if (broadcastWithOutputs?.outputs) {
             await stopRtmpRestreaming(compositeStreamId, broadcastWithOutputs.outputs);
           }
-          compositeStreamIds.delete(socket.broadcastId);
         }
 
         const broadcast = await prisma.broadcast.update({
@@ -615,6 +614,8 @@ export function setupSocketHandlers(io: Server) {
         });
       } catch (error) {
         console.error('End broadcast error:', error);
+      } finally {
+        compositeStreamIds.delete(socket.broadcastId);
       }
     });
 

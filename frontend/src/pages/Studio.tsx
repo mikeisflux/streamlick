@@ -90,6 +90,9 @@ export default function Studio() {
     },
   });
 
+  // Deduplication ref for composite-ready events
+  const lastCompositeStreamIdRef = useRef<string | null>(null);
+
   // Initialize studio when broadcast data is loaded
   useEffect(() => {
     if (!broadcastData) return;
@@ -111,47 +114,69 @@ export default function Studio() {
     const socket = getSocket();
     socket.connect();
 
-    socket.on('connect', () => {
+    const handleConnect = () => {
       joinBroadcast(broadcastId!);
       setIsInitializing(false);
-    });
+    };
 
-    socket.on('broadcast-state', (state) => {
+    const handleBroadcastState = (state: any) => {
       setBroadcast(state.broadcast);
       setParticipants(state.participants);
-    });
+    };
 
-    socket.on('participant-joined', (participant) => {
+    const handleParticipantJoined = (participant: any) => {
       setParticipants([...participants, participant]);
-    });
+    };
 
-    socket.on('participant-updated', (participant) => {
+    const handleParticipantUpdated = (participant: any) => {
       updateParticipant(participant);
-    });
+    };
 
-    socket.on('participant-left', (data) => {
+    const handleParticipantLeft = (data: any) => {
       if (data.participantId) {
         removeParticipant(data.participantId);
       }
-    });
+    };
 
-    socket.on('layout-changed', (data) => {
+    const handleLayoutChanged = (data: any) => {
       setLayout(data.layout);
-    });
+    };
 
-    socket.on('broadcast-live', () => {
+    const handleBroadcastLive = () => {
       setBroadcast({ ...broadcast!, status: 'LIVE' });
-    });
+    };
 
-    socket.on('broadcast-ended', () => {
+    const handleBroadcastEnded = () => {
       setBroadcast({ ...broadcast!, status: 'ENDED' });
-    });
+    };
 
-    socket.on('composite-ready', (data) => {
+    const handleCompositeReady = (data: any) => {
+      // Deduplicate: skip if same streamId was already received
+      if (data.streamId === lastCompositeStreamIdRef.current) return;
+      lastCompositeStreamIdRef.current = data.streamId;
       setCompositeStreamId(data.streamId);
-    });
+    };
+
+    socket.on('connect', handleConnect);
+    socket.on('broadcast-state', handleBroadcastState);
+    socket.on('participant-joined', handleParticipantJoined);
+    socket.on('participant-updated', handleParticipantUpdated);
+    socket.on('participant-left', handleParticipantLeft);
+    socket.on('layout-changed', handleLayoutChanged);
+    socket.on('broadcast-live', handleBroadcastLive);
+    socket.on('broadcast-ended', handleBroadcastEnded);
+    socket.on('composite-ready', handleCompositeReady);
 
     return () => {
+      socket.off('connect', handleConnect);
+      socket.off('broadcast-state', handleBroadcastState);
+      socket.off('participant-joined', handleParticipantJoined);
+      socket.off('participant-updated', handleParticipantUpdated);
+      socket.off('participant-left', handleParticipantLeft);
+      socket.off('layout-changed', handleLayoutChanged);
+      socket.off('broadcast-live', handleBroadcastLive);
+      socket.off('broadcast-ended', handleBroadcastEnded);
+      socket.off('composite-ready', handleCompositeReady);
       leaveBroadcast();
       socket.disconnect();
       reset();
