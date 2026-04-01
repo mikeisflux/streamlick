@@ -1,6 +1,8 @@
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../services/prisma.js';
+import { antMediaService } from '../services/antmedia.js';
+import { launchCompositor, stopCompositor } from '../services/compositor-launcher.js';
 import { AuthenticatedSocket } from '../types/index.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'development-secret';
@@ -10,6 +12,54 @@ const broadcastRooms = new Map<string, Set<string>>();
 
 // Track compositor sockets per broadcast
 const compositorSockets = new Map<string, Socket>();
+
+// Track composite output stream IDs
+const compositeStreamIds = new Map<string, string>(); // broadcastId -> compositeStreamId
+
+// Helper: start RTMP restreaming from AMS composite to all destinations
+async function startRtmpRestreaming(broadcastId: string, compositeStreamId: string, outputs: any[]) {
+  for (const output of outputs) {
+    const dest = output.destination;
+    if (!dest?.rtmpUrl || !dest?.streamKey) continue;
+    const fullRtmpUrl = `${dest.rtmpUrl}/${dest.streamKey}`;
+    try {
+      const ok = await antMediaService.startRtmpStream(compositeStreamId, fullRtmpUrl);
+      if (ok) {
+        await prisma.broadcastOutput.update({
+          where: { id: output.id },
+          data: { status: 'LIVE', startedAt: new Date() },
+        });
+        console.log(`[AMS] RTMP restream started: ${dest.name || dest.platform} -> ${dest.rtmpUrl}`);
+      } else {
+        console.error(`[AMS] RTMP restream failed for: ${dest.name || dest.platform}`);
+        await prisma.broadcastOutput.update({
+          where: { id: output.id },
+          data: { status: 'ERROR' },
+        });
+      }
+    } catch (e) {
+      console.error(`[AMS] RTMP restream error for ${dest.name}:`, e);
+    }
+  }
+}
+
+// Helper: stop RTMP restreaming
+async function stopRtmpRestreaming(compositeStreamId: string, outputs: any[]) {
+  for (const output of outputs) {
+    const dest = output.destination;
+    if (!dest?.rtmpUrl || !dest?.streamKey) continue;
+    const fullRtmpUrl = `${dest.rtmpUrl}/${dest.streamKey}`;
+    try {
+      await antMediaService.stopRtmpStream(compositeStreamId, fullRtmpUrl);
+      await prisma.broadcastOutput.update({
+        where: { id: output.id },
+        data: { status: 'STOPPED', endedAt: new Date() },
+      });
+    } catch (e) {
+      console.error('[AMS] Stop RTMP error:', e);
+    }
+  }
+}
 
 export function setupSocketHandlers(io: Server) {
   // Authentication middleware
@@ -106,6 +156,42 @@ export function setupSocketHandlers(io: Server) {
         io.to(`broadcast:${broadcastId}`).emit('compositor-connected', { broadcastId });
       });
 
+      // Compositor notifies us when composite output stream is ready on AMS
+      socket.on('composite-ready', async (data: { broadcastId: string; streamId: string }) => {
+        console.log(`[Compositor] Composite output ready for broadcast ${data.broadcastId}: stream ${data.streamId}`);
+        compositeStreamIds.set(data.broadcastId, data.streamId);
+
+        // Save composite stream ID to broadcast record
+        try {
+          await prisma.broadcast.update({
+            where: { id: data.broadcastId },
+            data: { compositeStreamId: data.streamId },
+          });
+        } catch (e) {
+          console.warn('[Socket] Could not save compositeStreamId to DB (field may not exist yet):', e);
+        }
+
+        // Notify studio clients so they can play the composite preview
+        io.to(`broadcast:${data.broadcastId}`).emit('composite-ready', {
+          streamId: data.streamId,
+          broadcastId: data.broadcastId,
+        });
+
+        // If broadcast is already LIVE, start RTMP restreaming now
+        try {
+          const broadcast = await prisma.broadcast.findUnique({
+            where: { id: data.broadcastId },
+            include: { outputs: { include: { destination: true } } },
+          });
+          if (broadcast?.status === 'LIVE' && broadcast.outputs.length > 0) {
+            console.log(`[Compositor] Broadcast is LIVE, starting RTMP restream for ${broadcast.outputs.length} destination(s)`);
+            await startRtmpRestreaming(data.broadcastId, data.streamId, broadcast.outputs);
+          }
+        } catch (e) {
+          console.error('[Socket] Error starting RTMP after composite-ready:', e);
+        }
+      });
+
       socket.on('disconnect', () => {
         if (socket.broadcastId) {
           compositorSockets.delete(socket.broadcastId);
@@ -149,6 +235,10 @@ export function setupSocketHandlers(io: Server) {
         }
         broadcastRooms.get(broadcastId)?.add(socket.id);
 
+        // Retrieve compositeStreamId for reconnecting hosts
+        const compositeStreamId = compositeStreamIds.get(broadcastId) ||
+          (broadcast as any).compositeStreamId || null;
+
         // Send current state
         socket.emit('broadcast-state', {
           broadcast: {
@@ -170,7 +260,25 @@ export function setupSocketHandlers(io: Server) {
             videoEnabled: p.videoEnabled,
           })),
           compositorConnected: compositorSockets.has(broadcastId),
+          // Send compositeStreamId so reconnecting host can see the live preview
+          compositeStreamId,
         });
+
+        // If host joins and broadcast is LIVE, send composite-ready so they see the stream
+        if (socket.userId && compositeStreamId && broadcast.status === 'LIVE') {
+          socket.emit('composite-ready', {
+            streamId: compositeStreamId,
+            broadcastId,
+          });
+        }
+
+        // If host joins and compositor is not yet running, launch it
+        if (socket.userId && !compositorSockets.has(broadcastId)) {
+          console.log(`[Socket] Host joined broadcast ${broadcastId}, launching compositor`);
+          launchCompositor(broadcastId).catch(err => {
+            console.error(`[Socket] Failed to launch compositor for ${broadcastId}:`, err);
+          });
+        }
 
         socket.to(`broadcast:${broadcastId}`).emit('participant-joined', {
           socketId: socket.id,
@@ -204,13 +312,27 @@ export function setupSocketHandlers(io: Server) {
       if (!socket.broadcastId) return;
 
       try {
+        // Find participant record - works for both hosts (userId) and guests (participantId)
+        let participant = null;
         if (socket.participantId) {
-          const participant = await prisma.participant.update({
+          participant = await prisma.participant.update({
             where: { id: socket.participantId },
-            data: { streamId: data.streamId },
+            data: { streamId: data.streamId, isOnStage: true, status: 'ONSTAGE' },
           });
+        } else if (socket.userId) {
+          // Host: find their HOST participant record for this broadcast
+          participant = await prisma.participant.updateMany({
+            where: { broadcastId: socket.broadcastId, userId: socket.userId, role: 'HOST' },
+            data: { streamId: data.streamId, isOnStage: true, status: 'ONSTAGE' },
+          }).then(async () => {
+            return prisma.participant.findFirst({
+              where: { broadcastId: socket.broadcastId, userId: socket.userId, role: 'HOST' },
+            });
+          });
+        }
 
-          // Notify compositor
+        if (participant) {
+          // Notify compositor so it subscribes to this participant's AMS stream
           sendToCompositor(socket.broadcastId, 'participant-updated', {
             participant: {
               id: participant.id,
@@ -428,9 +550,20 @@ export function setupSocketHandlers(io: Server) {
         const broadcast = await prisma.broadcast.update({
           where: { id: socket.broadcastId },
           data: { status: 'LIVE', startedAt: new Date() },
+          include: { outputs: { include: { destination: true } } },
         });
 
+        // Tell compositor to go live (starts canvas render + AMS publish)
         sendToCompositor(socket.broadcastId, 'go-live', {});
+
+        // Start RTMP restreaming from AMS composite output to all destinations
+        // The composite stream ID may not be ready yet (compositor is connecting to AMS)
+        // We schedule RTMP start once composite-ready fires, handled above.
+        // But also attempt immediately if compositeStreamId is already known.
+        const existingCompositeId = compositeStreamIds.get(socket.broadcastId);
+        if (existingCompositeId && broadcast.outputs.length > 0) {
+          await startRtmpRestreaming(socket.broadcastId, existingCompositeId, broadcast.outputs);
+        }
 
         io.to(`broadcast:${socket.broadcastId}`).emit('broadcast-live', {
           status: 'LIVE',
@@ -445,12 +578,28 @@ export function setupSocketHandlers(io: Server) {
       if (!socket.userId || !socket.broadcastId) return;
 
       try {
+        // Stop RTMP restreaming first
+        const compositeStreamId = compositeStreamIds.get(socket.broadcastId);
+        if (compositeStreamId) {
+          const broadcastWithOutputs = await prisma.broadcast.findUnique({
+            where: { id: socket.broadcastId },
+            include: { outputs: { include: { destination: true } } },
+          });
+          if (broadcastWithOutputs?.outputs) {
+            await stopRtmpRestreaming(compositeStreamId, broadcastWithOutputs.outputs);
+          }
+          compositeStreamIds.delete(socket.broadcastId);
+        }
+
         const broadcast = await prisma.broadcast.update({
           where: { id: socket.broadcastId },
           data: { status: 'ENDED', endedAt: new Date() },
         });
 
         sendToCompositor(socket.broadcastId, 'end-broadcast', {});
+
+        // Stop the headless Chrome compositor process
+        stopCompositor(socket.broadcastId);
 
         io.to(`broadcast:${socket.broadcastId}`).emit('broadcast-ended', {
           status: 'ENDED',

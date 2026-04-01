@@ -1,14 +1,21 @@
 /**
  * Ant Media Server Integration Service
  *
- * This service manages communication with Ant Media Server for:
- * - Creating/managing WebRTC streams
- * - Getting stream status
- * - Managing RTMP outputs from the compositor
+ * Manages communication with Ant Media Server REST API v2 for:
+ * - Creating/managing live streams
+ * - RTMP restreaming to YouTube, Facebook, Twitch, etc.
+ * - Stream status queries
+ *
+ * The composite stream from the server compositor is published to AMS via WebRTC,
+ * then AMS restreams it to all RTMP destinations. This means the broadcast is
+ * fully server-side and independent of any host browser connection.
  */
 
 const ANTMEDIA_URL = process.env.ANTMEDIA_URL || 'https://media.streamlick.com:5443';
 const ANTMEDIA_APP = process.env.ANTMEDIA_APP || 'LiveApp';
+// AMS REST API credentials (set in AMS management panel)
+const ANTMEDIA_REST_USER = process.env.ANTMEDIA_REST_USER || '';
+const ANTMEDIA_REST_PASS = process.env.ANTMEDIA_REST_PASS || '';
 
 interface StreamInfo {
   streamId: string;
@@ -31,174 +38,132 @@ class AntMediaService {
     this.baseUrl = `${ANTMEDIA_URL}/${ANTMEDIA_APP}/rest/v2`;
   }
 
-  /**
-   * Create a new broadcast/stream in Ant Media
-   */
+  private authHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (ANTMEDIA_REST_USER && ANTMEDIA_REST_PASS) {
+      const creds = Buffer.from(`${ANTMEDIA_REST_USER}:${ANTMEDIA_REST_PASS}`).toString('base64');
+      headers['Authorization'] = `Basic ${creds}`;
+    }
+    return headers;
+  }
+
+  /** Create a new live stream entry in Ant Media */
   async createBroadcast(streamId: string, name: string): Promise<BroadcastInfo | null> {
     try {
       const response = await fetch(`${this.baseUrl}/broadcasts/create`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          streamId,
-          name,
-          type: 'liveStream',
-        }),
+        headers: this.authHeaders(),
+        body: JSON.stringify({ streamId, name, type: 'liveStream' }),
       });
-
       if (!response.ok) {
-        console.error('Failed to create broadcast:', await response.text());
+        console.error('[AMS] Failed to create broadcast:', await response.text());
         return null;
       }
-
       return await response.json();
     } catch (error) {
-      console.error('Ant Media create broadcast error:', error);
+      console.error('[AMS] createBroadcast error:', error);
       return null;
     }
   }
 
-  /**
-   * Get broadcast info
-   */
+  /** Get broadcast info */
   async getBroadcast(streamId: string): Promise<BroadcastInfo | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/broadcasts/${streamId}`);
-
-      if (!response.ok) {
-        return null;
-      }
-
+      const response = await fetch(`${this.baseUrl}/broadcasts/${streamId}`, {
+        headers: this.authHeaders(),
+      });
+      if (!response.ok) return null;
       return await response.json();
     } catch (error) {
-      console.error('Ant Media get broadcast error:', error);
+      console.error('[AMS] getBroadcast error:', error);
       return null;
     }
   }
 
-  /**
-   * Delete a broadcast
-   */
+  /** Delete a stream from AMS */
   async deleteBroadcast(streamId: string): Promise<boolean> {
     try {
       const response = await fetch(`${this.baseUrl}/broadcasts/${streamId}`, {
         method: 'DELETE',
+        headers: this.authHeaders(),
       });
-
       return response.ok;
     } catch (error) {
-      console.error('Ant Media delete broadcast error:', error);
+      console.error('[AMS] deleteBroadcast error:', error);
       return false;
     }
   }
 
   /**
-   * Start RTMP streaming from Ant Media to a destination
+   * Start RTMP restreaming from an AMS stream to an external RTMP destination.
+   * Uses the correct AMS v2 REST API: PUT /rest/v2/broadcasts/{streamId}/rtmp-endpoint
+   * The stream (compositeStreamId) must already be publishing on AMS before calling this.
    */
   async startRtmpStream(streamId: string, rtmpUrl: string): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/broadcasts/${streamId}/rtmp?rtmpUrl=${encodeURIComponent(rtmpUrl)}`, {
-        method: 'POST',
+      console.log(`[AMS] Starting RTMP restream: ${streamId} -> ${rtmpUrl}`);
+      const response = await fetch(`${this.baseUrl}/broadcasts/${streamId}/rtmp-endpoint`, {
+        method: 'PUT',
+        headers: this.authHeaders(),
+        body: JSON.stringify({ rtmpUrl }),
       });
-
-      return response.ok;
+      if (!response.ok) {
+        const body = await response.text();
+        console.error(`[AMS] startRtmpStream failed (${response.status}):`, body);
+        return false;
+      }
+      console.log(`[AMS] RTMP restream started successfully for ${streamId}`);
+      return true;
     } catch (error) {
-      console.error('Ant Media start RTMP error:', error);
+      console.error('[AMS] startRtmpStream error:', error);
       return false;
     }
   }
 
   /**
-   * Stop RTMP streaming
+   * Stop RTMP restreaming.
+   * Uses: DELETE /rest/v2/broadcasts/{streamId}/rtmp-endpoint
    */
   async stopRtmpStream(streamId: string, rtmpUrl: string): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/broadcasts/${streamId}/rtmp?rtmpUrl=${encodeURIComponent(rtmpUrl)}`, {
+      const response = await fetch(`${this.baseUrl}/broadcasts/${streamId}/rtmp-endpoint`, {
         method: 'DELETE',
+        headers: this.authHeaders(),
+        body: JSON.stringify({ rtmpUrl }),
       });
-
       return response.ok;
     } catch (error) {
-      console.error('Ant Media stop RTMP error:', error);
+      console.error('[AMS] stopRtmpStream error:', error);
       return false;
     }
   }
 
-  /**
-   * Get conference room info (for SFU mode)
-   */
-  async getConferenceRoom(roomId: string): Promise<any> {
-    try {
-      const response = await fetch(`${this.baseUrl}/broadcasts/conference-rooms/${roomId}`);
-
-      if (!response.ok) {
-        return null;
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Ant Media get conference room error:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Create a conference room for multi-party streams
-   */
-  async createConferenceRoom(roomId: string): Promise<boolean> {
-    try {
-      const response = await fetch(`${this.baseUrl}/broadcasts/conference-rooms`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roomId,
-          mode: 'sfu',
-        }),
-      });
-
-      return response.ok;
-    } catch (error) {
-      console.error('Ant Media create conference room error:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Get stream statistics
-   */
+  /** Get stream statistics */
   async getStreamStats(streamId: string): Promise<StreamInfo | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/broadcasts/${streamId}/broadcast-statistics`);
-
-      if (!response.ok) {
-        return null;
-      }
-
+      const response = await fetch(`${this.baseUrl}/broadcasts/${streamId}/broadcast-statistics`, {
+        headers: this.authHeaders(),
+      });
+      if (!response.ok) return null;
       return await response.json();
     } catch (error) {
-      console.error('Ant Media get stats error:', error);
+      console.error('[AMS] getStreamStats error:', error);
       return null;
     }
   }
 
-  /**
-   * Generate a one-time token for stream publish/play
-   */
+  /** Generate a one-time token for stream publish/play */
   async generateToken(streamId: string, type: 'publish' | 'play', expireTime = 3600): Promise<string | null> {
     try {
       const response = await fetch(
         `${this.baseUrl}/broadcasts/${streamId}/token?type=${type}&expireDate=${Date.now() + expireTime * 1000}`,
-        { method: 'GET' }
+        { method: 'GET', headers: this.authHeaders() }
       );
-
-      if (!response.ok) {
-        return null;
-      }
-
+      if (!response.ok) return null;
       const data = await response.json();
       return data.tokenId;
     } catch (error) {
-      console.error('Ant Media generate token error:', error);
+      console.error('[AMS] generateToken error:', error);
       return null;
     }
   }

@@ -14,6 +14,7 @@ import {
   goLive,
   endBroadcast,
   kickParticipant,
+  publishStream,
 } from '../services/socket';
 import { AntMediaClient, generateStreamId } from '../services/antmedia';
 import {
@@ -183,7 +184,7 @@ export default function Studio() {
           localVideoRef.current.srcObject = stream;
         }
 
-        // Publish to Ant Media (host publishes their stream for the compositor)
+        // Publish to Ant Media (host publishes their stream for the server compositor)
         if (broadcastId && participants.length > 0) {
           const hostParticipant = participants.find(p => p.role === 'HOST');
           if (hostParticipant) {
@@ -192,10 +193,18 @@ export default function Studio() {
               streamId,
               mode: 'publish',
               localStream: stream,
-              onStateChange: (state) => console.log('Host stream state:', state),
+              onStateChange: (antState) => {
+                console.log('Host AMS stream state:', antState);
+                if (antState === 'publishing') {
+                  // Notify backend of our stream ID so compositor can subscribe to us
+                  publishStream(streamId);
+                }
+              },
               onError: (error) => console.error('Host stream error:', error),
             });
-            antMediaRef.current.connect();
+            antMediaRef.current.connect().catch(err => {
+              console.error('Failed to connect to Ant Media:', err);
+            });
           }
         }
       } catch (error) {

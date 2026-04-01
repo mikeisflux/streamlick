@@ -47,6 +47,10 @@ model Broadcast {
   streamKey     String          @unique @default(cuid())
   previewUrl    String?         // WebRTC preview URL for clients
 
+  // Ant Media Server composite stream ID (set when compositor starts publishing)
+  // This is the AMS stream ID for the mixed output - used for RTMP restreaming
+  compositeStreamId String?
+
   // Layout & branding
   layout        String          @default("grid") // grid, spotlight, side-by-side, etc.
   backgroundColor String        @default("#1a1a2e")

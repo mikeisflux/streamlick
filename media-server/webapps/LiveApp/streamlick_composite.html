@@ -312,8 +312,10 @@
      *
      * Runs in headless Chrome on Ant Media server.
      * Receives commands via WebSocket from backend.
-     * Subscribes to participant streams and composites them.
-     * Publishes composite output back to Ant Media.
+     * Subscribes to participant streams via per-stream WebSocket connections.
+     * Composites them on a hidden canvas with audio mixing.
+     * Publishes composite output back to Ant Media as a single stream.
+     * Stream persists independently of any host connection.
      */
 
     // ==========================================================================
@@ -321,11 +323,9 @@
     // ==========================================================================
 
     const CONFIG = {
-      // Get from URL params or defaults
       broadcastId: new URLSearchParams(window.location.search).get('broadcastId') || 'test',
       backendWs: new URLSearchParams(window.location.search).get('backendWs') || 'ws://localhost:3001',
       antmediaWs: new URLSearchParams(window.location.search).get('antmediaWs') || 'wss://media.streamlick.com:5443/LiveApp/websocket',
-      outputStreamId: new URLSearchParams(window.location.search).get('outputStreamId') || null,
       compositorSecret: new URLSearchParams(window.location.search).get('compositorSecret') || 'hHr20r6DjMVVen5RJfmOzzorFOyitmiK',
     };
 
@@ -339,22 +339,36 @@
       isLive: false,
       layout: 'grid',
       backgroundColor: '#1a1a2e',
-      backgroundType: 'color', // 'color', 'image', 'video'
+      backgroundType: 'color',
       backgroundUrl: null,
       logoUrl: null,
       logoVisible: false,
       lowerThird: { visible: false, title: '', subtitle: '' },
       ticker: { visible: false, text: '' },
       countdown: { visible: false, seconds: 0 },
-      participants: [], // { id, name, streamId, isOnStage, audioEnabled, videoEnabled, borderColor }
-      streams: new Map(), // streamId -> MediaStream
+      participants: [],
+      streams: new Map(),      // streamId -> MediaStream
+      videoElements: new Map(), // streamId -> HTMLVideoElement (for canvas drawing)
     };
 
-    // WebRTC connections
-    const peerConnections = new Map();
-    let antmediaWs = null;
-    let backendWs = null;
+    // Per-stream WebRTC + WebSocket connections (one per subscribed stream)
+    const streamPeerConnections = new Map(); // streamId -> RTCPeerConnection
+    const streamWebSockets = new Map();      // streamId -> WebSocket
+
+    // Composite output
+    let outputCanvas = null;
+    let outputCtx = null;
+    let audioContext = null;
+    let audioMixer = null;       // GainNode -> destinationNode
+    let audioDestination = null; // MediaStreamAudioDestinationNode
+    const audioSources = new Map(); // streamId -> MediaStreamAudioSourceNode
+    let canvasRenderLoop = null;
+
+    // AMS publish connection (for composite output)
+    let publishWs = null;
     let publishPc = null;
+    let outputStreamId = null;
+    let isPublishing = false;
 
     // ==========================================================================
     // LAYOUT ENGINE
@@ -696,58 +710,203 @@
     }
 
     // ==========================================================================
-    // ANT MEDIA - SUBSCRIBE TO STREAMS
+    // CANVAS OUTPUT + AUDIO MIXER - COMPOSITE RENDERING
     // ==========================================================================
 
-    function connectToAntMedia() {
-      console.log('[AntMedia] Connecting to:', CONFIG.antmediaWs);
+    function initOutputCanvas() {
+      outputCanvas = document.createElement('canvas');
+      outputCanvas.width = 1920;
+      outputCanvas.height = 1080;
+      outputCanvas.style.display = 'none';
+      document.body.appendChild(outputCanvas);
+      outputCtx = outputCanvas.getContext('2d', { willReadFrequently: false });
 
-      antmediaWs = new WebSocket(CONFIG.antmediaWs);
+      // Web Audio context for mixing participant audio
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      audioDestination = audioContext.createMediaStreamDestination();
+      audioMixer = audioContext.createGain();
+      audioMixer.gain.value = 1.0;
+      audioMixer.connect(audioDestination);
 
-      antmediaWs.onopen = () => {
-        console.log('[AntMedia] Connected');
-        // Subscribe to all on-stage participant streams
-        state.participants.filter(p => p.isOnStage && p.streamId).forEach(p => {
-          subscribeToStream(p.streamId);
-        });
-      };
-
-      antmediaWs.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        handleAntMediaMessage(msg);
-      };
-
-      antmediaWs.onclose = () => {
-        console.log('[AntMedia] Disconnected, reconnecting...');
-        setTimeout(connectToAntMedia, 3000);
-      };
-
-      antmediaWs.onerror = (err) => {
-        console.error('[AntMedia] Error:', err);
-      };
+      console.log('[Compositor] Canvas and audio mixer initialized');
     }
 
-    function subscribeToStream(streamId) {
-      if (!streamId || peerConnections.has(streamId)) return;
+    function renderToCanvas() {
+      if (!outputCtx) return;
 
+      const W = 1920, H = 1080;
+
+      // Background
+      if (state.backgroundType === 'color') {
+        outputCtx.fillStyle = state.backgroundColor || '#1a1a2e';
+        outputCtx.fillRect(0, 0, W, H);
+      } else {
+        outputCtx.fillStyle = '#000';
+        outputCtx.fillRect(0, 0, W, H);
+      }
+
+      // Participants
+      const onStage = state.participants.filter(p => p.isOnStage);
+      const positions = calculateLayout(state.participants, state.layout);
+
+      onStage.forEach((participant, index) => {
+        const pos = positions[index];
+        if (!pos) return;
+
+        const videoEl = state.videoElements.get(participant.streamId);
+
+        if (participant.videoEnabled && videoEl && videoEl.readyState >= 2) {
+          // Draw video frame
+          outputCtx.drawImage(videoEl, pos.x, pos.y, pos.width, pos.height);
+        } else {
+          // Draw avatar gradient
+          const grad = outputCtx.createLinearGradient(pos.x, pos.y, pos.x + pos.width, pos.y + pos.height);
+          grad.addColorStop(0, '#667eea');
+          grad.addColorStop(1, '#764ba2');
+          outputCtx.fillStyle = grad;
+          outputCtx.beginPath();
+          const r = 16;
+          outputCtx.moveTo(pos.x + r, pos.y);
+          outputCtx.lineTo(pos.x + pos.width - r, pos.y);
+          outputCtx.arcTo(pos.x + pos.width, pos.y, pos.x + pos.width, pos.y + r, r);
+          outputCtx.lineTo(pos.x + pos.width, pos.y + pos.height - r);
+          outputCtx.arcTo(pos.x + pos.width, pos.y + pos.height, pos.x + pos.width - r, pos.y + pos.height, r);
+          outputCtx.lineTo(pos.x + r, pos.y + pos.height);
+          outputCtx.arcTo(pos.x, pos.y + pos.height, pos.x, pos.y + pos.height - r, r);
+          outputCtx.lineTo(pos.x, pos.y + r);
+          outputCtx.arcTo(pos.x, pos.y, pos.x + r, pos.y, r);
+          outputCtx.closePath();
+          outputCtx.fill();
+
+          // Avatar letter
+          const fontSize = Math.min(pos.width, pos.height) * 0.35;
+          outputCtx.fillStyle = 'white';
+          outputCtx.font = `bold ${fontSize}px -apple-system, sans-serif`;
+          outputCtx.textAlign = 'center';
+          outputCtx.textBaseline = 'middle';
+          outputCtx.fillText(participant.name.charAt(0).toUpperCase(), pos.x + pos.width / 2, pos.y + pos.height / 2);
+        }
+
+        // Name tag
+        const tagText = participant.name;
+        const tagPad = 12;
+        const tagH = 36;
+        outputCtx.font = 'bold 18px -apple-system, sans-serif';
+        const tagW = Math.min(outputCtx.measureText(tagText).width + tagPad * 2, pos.width - 32);
+        outputCtx.fillStyle = 'rgba(0,0,0,0.75)';
+        outputCtx.beginPath();
+        outputCtx.roundRect(pos.x + 16, pos.y + pos.height - tagH - 16, tagW, tagH, 8);
+        outputCtx.fill();
+        outputCtx.fillStyle = 'white';
+        outputCtx.textAlign = 'left';
+        outputCtx.textBaseline = 'middle';
+        outputCtx.fillText(tagText, pos.x + 16 + tagPad, pos.y + pos.height - tagH / 2 - 16, tagW - tagPad * 2);
+
+        // Muted indicator
+        if (!participant.audioEnabled) {
+          outputCtx.fillStyle = 'rgba(239,68,68,0.9)';
+          outputCtx.beginPath();
+          outputCtx.arc(pos.x + pos.width - 34, pos.y + 34, 18, 0, Math.PI * 2);
+          outputCtx.fill();
+        }
+      });
+
+      // Live indicator overlay
+      if (state.isLive) {
+        outputCtx.fillStyle = '#ef4444';
+        outputCtx.beginPath();
+        outputCtx.roundRect(32, 32, 90, 42, 8);
+        outputCtx.fill();
+        outputCtx.fillStyle = 'white';
+        outputCtx.font = 'bold 16px -apple-system, sans-serif';
+        outputCtx.textAlign = 'center';
+        outputCtx.textBaseline = 'middle';
+        outputCtx.fillText('● LIVE', 77, 53);
+      }
+
+      // Lower third overlay
+      if (state.lowerThird.visible && state.lowerThird.title) {
+        const ltX = 80, ltY = H - 200, ltW = 700;
+        outputCtx.fillStyle = 'rgba(102,126,234,0.92)';
+        outputCtx.beginPath();
+        outputCtx.roundRect(ltX, ltY, ltW, state.lowerThird.subtitle ? 90 : 60, 12);
+        outputCtx.fill();
+        outputCtx.fillStyle = 'white';
+        outputCtx.font = 'bold 28px -apple-system, sans-serif';
+        outputCtx.textAlign = 'left';
+        outputCtx.textBaseline = 'top';
+        outputCtx.fillText(state.lowerThird.title, ltX + 24, ltY + 12);
+        if (state.lowerThird.subtitle) {
+          outputCtx.font = '18px -apple-system, sans-serif';
+          outputCtx.globalAlpha = 0.9;
+          outputCtx.fillText(state.lowerThird.subtitle, ltX + 24, ltY + 48);
+          outputCtx.globalAlpha = 1;
+        }
+      }
+    }
+
+    function startCanvasRenderLoop() {
+      if (canvasRenderLoop) return;
+      console.log('[Compositor] Starting canvas render loop at 30fps');
+      canvasRenderLoop = setInterval(renderToCanvas, 1000 / 30);
+    }
+
+    function stopCanvasRenderLoop() {
+      if (canvasRenderLoop) {
+        clearInterval(canvasRenderLoop);
+        canvasRenderLoop = null;
+      }
+    }
+
+    // ==========================================================================
+    // ANT MEDIA - SUBSCRIBE TO STREAMS (one WebSocket per stream)
+    // ==========================================================================
+
+    function subscribeToStream(streamId) {
+      if (!streamId || streamWebSockets.has(streamId)) return;
       console.log('[AntMedia] Subscribing to stream:', streamId);
+
+      const ws = new WebSocket(CONFIG.antmediaWs);
+      streamWebSockets.set(streamId, ws);
 
       const pc = new RTCPeerConnection({
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'turn:turn.streamlick.com:3478', username: 'streamlick', credential: 'Str3aml1ck_TURN_2026!xK9m' }
-        ]
+          { urls: 'turn:turn.streamlick.com:3478', username: 'streamlick', credential: 'Str3aml1ck_TURN_2026!xK9m' },
+        ],
       });
+      streamPeerConnections.set(streamId, pc);
 
       pc.ontrack = (event) => {
-        console.log('[AntMedia] Received track for:', streamId);
-        state.streams.set(streamId, event.streams[0]);
-        render();
+        console.log('[AntMedia] Track received for stream:', streamId);
+        const stream = event.streams[0];
+        state.streams.set(streamId, stream);
+
+        // Create video element for canvas drawing
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.autoplay = true;
+        video.muted = true;
+        video.playsInline = true;
+        state.videoElements.set(streamId, video);
+
+        // Mix audio into composite output
+        if (audioContext && audioMixer && stream.getAudioTracks().length > 0) {
+          try {
+            const source = audioContext.createMediaStreamSource(stream);
+            source.connect(audioMixer);
+            audioSources.set(streamId, source);
+          } catch (e) {
+            console.warn('[Compositor] Audio mix error:', e);
+          }
+        }
+
+        render(); // Update DOM display too
       };
 
       pc.onicecandidate = (event) => {
-        if (event.candidate && antmediaWs?.readyState === WebSocket.OPEN) {
-          antmediaWs.send(JSON.stringify({
+        if (event.candidate && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
             command: 'takeCandidate',
             streamId,
             label: event.candidate.sdpMLineIndex,
@@ -760,62 +919,229 @@
       pc.addTransceiver('video', { direction: 'recvonly' });
       pc.addTransceiver('audio', { direction: 'recvonly' });
 
-      peerConnections.set(streamId, pc);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ command: 'play', streamId, token: '' }));
+      };
 
-      antmediaWs.send(JSON.stringify({
-        command: 'play',
-        streamId,
-        token: '',
-      }));
-    }
-
-    function unsubscribeFromStream(streamId) {
-      const pc = peerConnections.get(streamId);
-      if (pc) {
-        pc.close();
-        peerConnections.delete(streamId);
-        state.streams.delete(streamId);
-      }
-    }
-
-    function handleAntMediaMessage(msg) {
-      const pc = peerConnections.get(msg.streamId);
-
-      switch (msg.command) {
-        case 'start':
-          if (pc) {
-            pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: msg.sdp }))
-              .then(() => pc.createAnswer())
-              .then(answer => pc.setLocalDescription(answer))
-              .then(() => {
-                antmediaWs.send(JSON.stringify({
+      ws.onmessage = async (event) => {
+        const msg = JSON.parse(event.data);
+        switch (msg.command) {
+          case 'start':
+            // AMS sends offer for play mode
+            if (msg.sdp) {
+              try {
+                await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: msg.sdp }));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                ws.send(JSON.stringify({
                   command: 'takeConfiguration',
-                  streamId: msg.streamId,
+                  streamId,
                   type: 'answer',
                   sdp: pc.localDescription.sdp,
                 }));
-              })
-              .catch(err => console.error('[AntMedia] SDP error:', err));
-          }
-          break;
+              } catch (err) {
+                console.error('[AntMedia] SDP error for stream', streamId, err);
+              }
+            }
+            break;
+          case 'takeCandidate':
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate({
+                sdpMLineIndex: msg.label,
+                candidate: msg.candidate,
+              }));
+            } catch (e) {}
+            break;
+          case 'notification':
+            console.log('[AntMedia] Stream', streamId, 'notification:', msg.definition);
+            break;
+          case 'error':
+            console.error('[AntMedia] Stream', streamId, 'error:', msg.definition);
+            break;
+        }
+      };
 
-        case 'takeCandidate':
-          if (pc) {
-            pc.addIceCandidate(new RTCIceCandidate({
-              sdpMLineIndex: msg.label,
-              candidate: msg.candidate,
-            })).catch(err => console.error('[AntMedia] ICE error:', err));
-          }
-          break;
+      ws.onclose = () => {
+        console.log('[AntMedia] Stream WebSocket closed for:', streamId);
+      };
+    }
 
-        case 'notification':
-          console.log('[AntMedia] Notification:', msg.definition);
-          break;
+    function unsubscribeFromStream(streamId) {
+      const pc = streamPeerConnections.get(streamId);
+      if (pc) { pc.close(); streamPeerConnections.delete(streamId); }
 
-        case 'error':
-          console.error('[AntMedia] Error:', msg.definition);
-          break;
+      const ws = streamWebSockets.get(streamId);
+      if (ws) { ws.close(); streamWebSockets.delete(streamId); }
+
+      const source = audioSources.get(streamId);
+      if (source) { source.disconnect(); audioSources.delete(streamId); }
+
+      const videoEl = state.videoElements.get(streamId);
+      if (videoEl) { videoEl.srcObject = null; state.videoElements.delete(streamId); }
+
+      state.streams.delete(streamId);
+    }
+
+    // ==========================================================================
+    // ANT MEDIA - PUBLISH COMPOSITE OUTPUT
+    // ==========================================================================
+
+    function startCompositeOutput() {
+      if (isPublishing) {
+        console.log('[Compositor] Already publishing composite output');
+        return;
       }
+
+      if (!outputCanvas) {
+        console.error('[Compositor] Canvas not initialized');
+        return;
+      }
+
+      // Resume audio context if suspended
+      if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume().catch(console.error);
+      }
+
+      // Start canvas render loop
+      startCanvasRenderLoop();
+
+      // Create composite MediaStream: canvas video + mixed audio
+      const videoStream = outputCanvas.captureStream(30);
+      const compositeStream = new MediaStream([
+        ...videoStream.getVideoTracks(),
+        ...audioDestination.stream.getAudioTracks(),
+      ]);
+
+      // Generate unique output stream ID
+      outputStreamId = 'composite_' + CONFIG.broadcastId;
+      console.log('[Compositor] Publishing composite stream:', outputStreamId);
+
+      publishWs = new WebSocket(CONFIG.antmediaWs);
+      publishPc = new RTCPeerConnection({
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'turn:turn.streamlick.com:3478', username: 'streamlick', credential: 'Str3aml1ck_TURN_2026!xK9m' },
+        ],
+      });
+
+      // Add composite tracks to publish connection
+      compositeStream.getTracks().forEach(track => {
+        publishPc.addTrack(track, compositeStream);
+      });
+
+      publishPc.onicecandidate = (event) => {
+        if (event.candidate && publishWs.readyState === WebSocket.OPEN) {
+          publishWs.send(JSON.stringify({
+            command: 'takeCandidate',
+            streamId: outputStreamId,
+            label: event.candidate.sdpMLineIndex,
+            id: event.candidate.sdpMid,
+            candidate: event.candidate.candidate,
+          }));
+        }
+      };
+
+      publishWs.onopen = () => {
+        console.log('[Compositor] Publish WebSocket open, sending publish command');
+        publishWs.send(JSON.stringify({
+          command: 'publish',
+          streamId: outputStreamId,
+          token: '',
+          video: true,
+          audio: true,
+        }));
+      };
+
+      publishWs.onmessage = async (event) => {
+        const msg = JSON.parse(event.data);
+        switch (msg.command) {
+          case 'start':
+            // AMS ready to receive - create and send offer
+            try {
+              const offer = await publishPc.createOffer();
+              await publishPc.setLocalDescription(offer);
+              publishWs.send(JSON.stringify({
+                command: 'takeConfiguration',
+                streamId: outputStreamId,
+                type: 'offer',
+                sdp: publishPc.localDescription.sdp,
+              }));
+            } catch (err) {
+              console.error('[Compositor] Publish offer error:', err);
+            }
+            break;
+
+          case 'takeConfiguration':
+            if (msg.type === 'answer') {
+              try {
+                await publishPc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: msg.sdp }));
+                console.log('[Compositor] Publish WebRTC connected');
+              } catch (err) {
+                console.error('[Compositor] Publish answer error:', err);
+              }
+            }
+            break;
+
+          case 'takeCandidate':
+            try {
+              await publishPc.addIceCandidate(new RTCIceCandidate({
+                sdpMLineIndex: msg.label,
+                candidate: msg.candidate,
+              }));
+            } catch (e) {}
+            break;
+
+          case 'notification':
+            console.log('[Compositor] Publish notification:', msg.definition);
+            if (msg.definition === 'publish_started') {
+              isPublishing = true;
+              console.log('[Compositor] Composite stream is LIVE on AMS:', outputStreamId);
+              // Notify backend that composite output is ready
+              if (backendSocket && backendSocket.connected) {
+                backendSocket.emit('composite-ready', {
+                  broadcastId: CONFIG.broadcastId,
+                  streamId: outputStreamId,
+                });
+              }
+            } else if (msg.definition === 'publish_finished') {
+              isPublishing = false;
+              console.log('[Compositor] Composite stream ended');
+            }
+            break;
+
+          case 'error':
+            console.error('[Compositor] Publish error:', msg.definition);
+            if (msg.definition === 'streamIdInUse') {
+              // Stop old stream and retry with same ID
+              publishWs.send(JSON.stringify({ command: 'stop', streamId: outputStreamId }));
+              setTimeout(startCompositeOutput, 2000);
+            }
+            break;
+        }
+      };
+
+      publishWs.onclose = () => {
+        console.log('[Compositor] Publish WebSocket closed');
+        isPublishing = false;
+        // Reconnect if still live
+        if (state.isLive) {
+          console.log('[Compositor] Reconnecting publish in 3s...');
+          setTimeout(startCompositeOutput, 3000);
+        }
+      };
+    }
+
+    function stopCompositeOutput() {
+      stopCanvasRenderLoop();
+
+      if (publishWs && publishWs.readyState === WebSocket.OPEN) {
+        publishWs.send(JSON.stringify({ command: 'stop', streamId: outputStreamId }));
+        publishWs.close();
+      }
+      publishWs = null;
+
+      if (publishPc) { publishPc.close(); publishPc = null; }
+      isPublishing = false;
     }
 
     // ==========================================================================
@@ -992,11 +1318,13 @@
         case 'go-live':
           state.isLive = true;
           render();
+          startCompositeOutput();
           break;
 
         case 'end-broadcast':
           state.isLive = false;
           render();
+          stopCompositeOutput();
           break;
       }
     }
@@ -1006,10 +1334,13 @@
     // ==========================================================================
 
     function init() {
-      console.log('[Compositor] Initializing...');
+      console.log('[Compositor] Initializing with config:', CONFIG);
+      initOutputCanvas();
       render();
-      connectToAntMedia();
       connectToBackend();
+      // NOTE: We do NOT pre-connect to AMS here.
+      // Stream subscriptions happen on demand as participants join.
+      // Composite output starts when 'go-live' is received.
     }
 
     // Expose API for testing/debugging
